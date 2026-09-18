@@ -445,6 +445,7 @@ class Command(GregoryBaseCommand):
 				exclusion_criteria=extras.get("exclusion_criteria"),
 				intervention=extras.get("intervention"),
 				secondary_id=extras.get("secondary_id"),
+				ctg_secondary_ids=extras.get("ctg_secondary_ids"),
 				condition=extras.get("condition"),
 				primary_outcome=extras.get("primary_outcome"),
 				secondary_outcome=extras.get("secondary_outcome"),
@@ -629,6 +630,24 @@ class Command(GregoryBaseCommand):
 			existing_trial.acronym = new_acronym
 			has_changes = True
 			updated_fields.append("acronym")
+
+		# ctg_secondary_ids has a single source (ClinicalTrials.gov), unlike every
+		# other field above: the latest answer always wins, including an empty list
+		# (a study that used to list secondary ids can legitimately drop to none).
+		# So this writes on any list value that differs — the generic
+		# extra_field_mapping loop above can't do that, since its `if new_value`
+		# guard treats [] as "nothing to write".
+		new_ctg_secondary_ids = extras.get("ctg_secondary_ids")
+		if (
+			isinstance(new_ctg_secondary_ids, list)
+			and new_ctg_secondary_ids != existing_trial.ctg_secondary_ids
+		):
+			# Compared against the raw current value (not `or []`): None -> []
+			# is itself a real transition worth writing ("never fetched" ->
+			# "fetched, none listed").
+			existing_trial.ctg_secondary_ids = new_ctg_secondary_ids
+			has_changes = True
+			updated_fields.append("ctg_secondary_ids")
 
 		# Save if changes were detected
 		if has_changes:

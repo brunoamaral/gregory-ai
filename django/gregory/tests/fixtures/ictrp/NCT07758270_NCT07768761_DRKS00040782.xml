@@ -1,0 +1,233 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<!--
+  Trimmed for tests from a real WHO ICTRP XML export (trialsearch.who.int),
+  captured 2026-09-18, keeping only three of its trials: NCT07758270,
+  NCT07768761 and DRKS00040782. Every contact field (name, email, phone —
+  Contact_* and Ethics_review_contact_*) has been removed from all three;
+  every other field is unmodified from the export.
+
+  Two of the three carry a free-text Secondary_ID that is NOT a registry
+  identifier ("1583821/ 17043-H33" for NCT07768761, "23-232 BO" for
+  DRKS00040782), part of the negative test set for
+  gregory.utils.trial_identifiers.normalize_trial_identifiers (see
+  TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §2.6): after import, each of these
+  three trials' identifiers_normalized must hold only its own registry id,
+  nothing picked up from Secondary_ID or Acronym.
+-->
+<Trials_downloaded_from_ICTRP>
+  <Trial><Export_date>09/18/2026 10:42:00</Export_date>
+    <Internal_Number>16044847
+    </Internal_Number>
+    <TrialID>NCT07758270
+    </TrialID>
+    <Last_Refreshed_on>24 August 2026
+    </Last_Refreshed_on>
+    <Public_title>Brain Imaging and Immune Changes During Remibrutinib Treatment in Multiple Sclerosis.
+    </Public_title>
+    <Scientific_title>REMIBRUTINIB: EVALUATION OF FLUID AND INFLAMMATORY NEUROIMAGING ENDPOINTS IN MULTIPLE SCLEROSIS (REDEFINE-MS)
+    </Scientific_title>
+    <Acronym>REDIFINE MS
+    </Acronym>
+    <Primary_sponsor>Washington University School of Medicine
+    </Primary_sponsor>
+    <Prospective_registration>Yes
+    </Prospective_registration>
+    <Date_registration3>20260805
+    </Date_registration3>
+    <Date_registration>05/08/2026
+    </Date_registration>
+    <Source_Register>ClinicalTrials.gov
+    </Source_Register>
+    <web_address>https://clinicaltrials.gov/study/NCT07758270
+    </web_address>
+    <Recruitment_Status>Recruiting
+    </Recruitment_Status>
+    <other_records>No
+    </other_records>
+    <Inclusion_agemin>40 Years
+    </Inclusion_agemin>
+    <Inclusion_agemax>70 Years
+    </Inclusion_agemax>
+    <Inclusion_gender>All
+    </Inclusion_gender>
+    <Date_enrollement>August 15, 2026
+    </Date_enrollement>
+    <Target_size>15
+    </Target_size>
+    <Study_type>Observational
+    </Study_type>
+    <Study_design/>
+    <Phase/>
+    <Countries>United States
+    </Countries>
+    <Condition>Multiple Sclerosis (MS) - Relapsing-remitting
+    </Condition>
+    <Intervention>Drug: Remibrutinib;Drug: Ocrelizumab (US)
+    </Intervention>
+    <Primary_outcome>Change in Microglial Activity Measured by [11C]-DPA-713 PET
+    </Primary_outcome>
+    <Secondary_ID>REDIFINE MS
+    </Secondary_ID>
+    <Source_Support>Please refer to primary and secondary sponsors
+    </Source_Support>
+    <Secondary_Sponsor>Novartis
+    </Secondary_Sponsor>
+    <results_date_posted/>
+    <results_date_completed/>
+    <results_date_first_publication/>
+
+  </Trial>
+
+  <Trial><Export_date>09/18/2026 10:42:00</Export_date>
+    <Internal_Number>16045654
+    </Internal_Number>
+    <TrialID>NCT07768761
+    </TrialID>
+    <Last_Refreshed_on>24 August 2026
+    </Last_Refreshed_on>
+    <Public_title>Electrical Stimulation Exercise for Individuals With Lower Limb Paralysis
+    </Public_title>
+    <Scientific_title>Efficacy of Electrical Stimulation Exercise Training for Those With Lower Limb Paralysis
+    </Scientific_title>
+    <Acronym/>
+    <Primary_sponsor>Louis Stokes VA Medical Center
+    </Primary_sponsor>
+    <Prospective_registration>No
+    </Prospective_registration>
+    <Date_registration3>20260803
+    </Date_registration3>
+    <Date_registration>03/08/2026
+    </Date_registration>
+    <Source_Register>ClinicalTrials.gov
+    </Source_Register>
+    <web_address>https://clinicaltrials.gov/study/NCT07768761
+    </web_address>
+    <Recruitment_Status>Recruiting
+    </Recruitment_Status>
+    <other_records>No
+    </other_records>
+    <Inclusion_agemin>18 Years
+    </Inclusion_agemin>
+    <Inclusion_agemax>N/A
+    </Inclusion_agemax>
+    <Inclusion_gender>All
+    </Inclusion_gender>
+    <Date_enrollement>January 19, 2018
+    </Date_enrollement>
+    <Target_size>60
+    </Target_size>
+    <Study_type>Interventional
+    </Study_type>
+    <Study_design>Allocation: N/A. Intervention model: Single Group Assignment. Primary purpose: Treatment. Masking: None (Open Label).
+    </Study_design>
+    <Phase>N/A
+    </Phase>
+    <Countries>United States
+    </Countries>
+    <Inclusion_Criteria>Inclusion Criteria:&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Lower limb paralysis due to SCI or other neurological disorder&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Greater than 18 years of age&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Innervated and excitable lower extremity muscles&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;Exclusion Criteria:&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Females that are pregnant&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Ventilator dependent&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Current pressure injuries that would be exacerbated by exercise&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  History of spontaneous fractures&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Cardiovascular or pulmonary disease that would limit the ability to exercise&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Uncontrolled diabetes or hypertension&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Large body frame that would prevent participant from comfortably fitting the&#x0D;&lt;br&gt;     exercise equipment&#x0D;&lt;br&gt;&#x0D;&lt;br&gt;  -  Any other medical or psychological condition that would be a contraindication to&#x0D;&lt;br&gt;     participating in an exercise program
+    </Inclusion_Criteria>
+    <Condition>Spinal Cord Injury/Disorder;Stroke;Multiple Sclerosis;Traumatic Brain Injury
+    </Condition>
+    <Intervention>Other: Exercise with Electrical Stimulation
+    </Intervention>
+    <Primary_outcome>Exercise Time;Electrically Stimulated Muscle Strength
+    </Primary_outcome>
+    <Secondary_outcome>Exercise Power
+    </Secondary_outcome>
+    <Secondary_ID>1583821/ 17043-H33
+    </Secondary_ID>
+    <Source_Support>Please refer to primary and secondary sponsors
+    </Source_Support>
+    <results_date_posted/>
+    <results_date_completed/>
+    <results_date_first_publication/>
+
+  </Trial>
+
+  <Trial><Export_date>09/18/2026 10:42:00</Export_date>
+    <Internal_Number>16004099
+    </Internal_Number>
+    <TrialID>DRKS00040782
+    </TrialID>
+    <Last_Refreshed_on>3 August 2026
+    </Last_Refreshed_on>
+    <Public_title>NeuroMSleepModeD&#x0D;
+Neuromodulation in patients with early stage depression and sleeping disturbances as well as multiple sclerosis
+    </Public_title>
+    <Scientific_title>NeuroMSleepModeD&#x0D;
+Neuromodulation in patients with early stage depression and sleeping disturbances as well as multiple sclerosis - NeuroMSleepModeD
+    </Scientific_title>
+    <Primary_sponsor>Edda und Helmut Laich Stiftung
+    </Primary_sponsor>
+    <Prospective_registration>No
+    </Prospective_registration>
+    <Date_registration3>20260716
+    </Date_registration3>
+    <Date_registration>16/07/2026
+    </Date_registration>
+    <Source_Register>German Clinical Trials Register
+    </Source_Register>
+    <web_address>http://drks.de/search/en/trial/DRKS00040782
+    </web_address>
+    <Recruitment_Status>Recruiting
+    </Recruitment_Status>
+    <other_records>No
+    </other_records>
+    <Inclusion_agemin>18 Years
+    </Inclusion_agemin>
+    <Inclusion_agemax>70 Years
+    </Inclusion_agemax>
+    <Inclusion_gender>All
+    </Inclusion_gender>
+    <Date_enrollement>15/04/2025
+    </Date_enrollement>
+    <Target_size>60
+    </Target_size>
+    <Study_type>interventional
+    </Study_type>
+    <Study_design>Allocation: N/A: single arm study; Masking: Open (masking not used); Control: uncontrolled; Assignment: single; Study design purpose: basic science
+    </Study_design>
+    <Phase>1
+    </Phase>
+    <Countries>Germany
+    </Countries>
+    <Inclusion_Criteria>Inclusion criteria: •    Mild to moderate depressive symptoms, acute depressive episode (including sleep disturbances)&#x0D;&lt;br&gt;•    (MS diagnosis)&#x0D;&lt;br&gt;•    If applicable, diagnosis of depression for no more than 4 years
+    </Inclusion_Criteria>
+    <Exclusion_Criteria>Exclusion criteria: •    Use of psychiatric medications or sedative sleep aids&#x0D;&lt;br&gt;•    Severe visual impairment&#x0D;&lt;br&gt;•    Severe physical or other psychiatric conditions&#x0D;&lt;br&gt;•    Alcohol or drug dependence&#x0D;&lt;br&gt;•    Metal objects that are not compatible with MRI scans
+    </Exclusion_Criteria>
+    <Condition> &lt;br&gt;F32.0 &lt;br&gt;F32.1 &lt;br&gt;F32.8 &lt;br&gt;G35;Mild depressive episode;Moderate depressive episode;Other depressive episodes;Multiple sclerosis
+    </Condition>
+    <Intervention>Group 1: Patients with mild to moderate early-stage depressive symptoms, four-week treatment with transcutaneous vagus nerve stimulation
+    </Intervention>
+    <Primary_outcome>Change in depressive symptoms (External assessment using the Hamilton Depression Rating Scale weekly at t0, t1, t2, t3, and t4, t5; self-assessment using the BDI-II every two weeks at t0, t2, and t4, t5)
+    </Primary_outcome>
+    <Secondary_outcome>cortical activation, functional connectivity, sleep quality, quality of life, immune parameters
+    </Secondary_outcome>
+    <Secondary_ID>23-232 BO
+    </Secondary_ID>
+    <Source_Support>Gemeinnützige Hertiestiftung
+    </Source_Support>
+    <Ethics_review_status>Approved
+    </Ethics_review_status>
+    <Ethics_review_approval_date>31/10/2023
+    </Ethics_review_approval_date>
+    <results_date_posted/>
+    <results_url_link>http://drks.de/search/en/trial/DRKS00040782#studyResults
+    </results_url_link>
+    <results_url_protocol>http://drks.de/search/en/trial/DRKS00040782#studyProtocols
+    </results_url_protocol>
+    <results_date_completed/>
+    <results_date_first_publication/>
+    <results_summary/>
+    <results_baseline_char>http://drks.de/search/en/trial/DRKS00040782#basicReporting
+    </results_baseline_char>
+    <results_adverse_events>http://drks.de/search/en/trial/DRKS00040782#basicReporting
+    </results_adverse_events>
+    <results_outcome_measures>http://drks.de/search/en/trial/DRKS00040782#basicReporting
+    </results_outcome_measures>
+    <results_ipd_plan>No
+    </results_ipd_plan>
+    <results_ipd_description/>
+
+  </Trial>
+</Trials_downloaded_from_ICTRP>
