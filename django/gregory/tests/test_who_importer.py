@@ -301,6 +301,13 @@ class WHODateConventionsTest(TestCase):
 		self.assertEqual(t.date_enrollement, datetime.date(2020, 4, 10))
 		self.assertEqual(t.results_date_completed, datetime.date(2021, 7, 5))
 
+	def test_month_only_date_lands_on_the_first(self):
+		# ICTRP gives "May 2015" for some ClinicalTrials.gov records. dateutil
+		# filled in today's day, so every import stored a different date, while
+		# ClinicalTrials.gov's own importer stores the 1st.
+		t = self._import(date_enrollement="May 2015")
+		self.assertEqual(t.date_enrollement, datetime.date(2015, 5, 1))
+
 	def test_textual_dates_still_parse(self):
 		t = self._import(
 			date_enrollement="August 15, 2026",

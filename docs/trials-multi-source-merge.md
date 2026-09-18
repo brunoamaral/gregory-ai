@@ -44,15 +44,15 @@ Fields produced by a single source (no conflict — safe to keep as-is):
 - **WHO ICTRP only**: `ethics_review_*`, `results_yes_no`, `results_ipd_plan`,
   `results_ipd_description`, `acronym`, `secondary_sponsor`, `source_support`,
   `contact_address`, `contact_affiliation`, `export_date`, `other_records`,
-  `prospective_registration`, `date_enrollement`
+  `prospective_registration`
 
 Genuinely **shared / contested** fields (policy applies here):
 `title`, `scientific_title`, `condition`, `intervention`, `primary_outcome`,
 `secondary_outcome`, `primary_sponsor`, `recruitment_status`, `phase`, `study_type`,
 `countries`, `inclusion_criteria`, `inclusion_agemin/agemax`, `inclusion_gender`,
 `target_size`, `contact_firstname/lastname/email/tel`, `secondary_id`, `source_register`,
-`published_date`, `date_registration`, `last_refreshed_on`, `results_posted`,
-`results_date_completed`.
+`published_date`, `date_registration`, `date_enrollement`, `last_refreshed_on`,
+`results_posted`, `results_date_completed`.
 
 ## Options
 
@@ -197,7 +197,7 @@ ICTRP portal (which shows the same strings as the export):
 | `Export_date` | month-first | `09/18/2026 10:42:00` |
 | `Date_registration3` | `yyyymmdd` | `20260805` |
 | `Date_registration` | day-first; year-first for some registries (ChiCTR, IRCT, NL-OMON) | `05/08/2026`, `2022-12-23` |
-| `Date_enrollement` | day-first; year-first (ChiCTR, IRCT, NL-OMON, JPRN/UMIN); textual (ClinicalTrials.gov) | `08/07/2026`, `2020-04-10`, `2021/07/27`, `August 15, 2026` |
+| `Date_enrollement` | day-first; year-first (ChiCTR, IRCT, NL-OMON, JPRN/UMIN); textual (ClinicalTrials.gov), sometimes month-only | `08/07/2026`, `2020-04-10`, `2021/07/27`, `August 15, 2026`, `May 2015` |
 | `Ethics_review_approval_date` | day-first | `31/10/2023` |
 | `results_date_completed` | day-first | `03/02/2025` |
 | `Last_Refreshed_on` | textual | `24 August 2026` |
@@ -209,7 +209,11 @@ So the importer:
 - reads the other registry dates day-first, except a value that opens with a four-digit
   year, which is year-month-day (dateutil applies day-first to those too, which would
   turn `2020-04-10` into 4 October);
-- keeps `Export_date` month-first.
+- keeps `Export_date` month-first;
+- puts a month-only date (`May 2015`) on the 1st, as the ClinicalTrials.gov importer
+  does for `2015-05`. dateutil would fill in today's day instead, so every WHO import
+  used to store a different `date_enrollement` and every ClinicalTrials.gov import
+  reset it.
 
 ICTRP's `Date_registration` for a ClinicalTrials.gov record is the "first submitted"
 date that `feedreader_trials_ctgov.py` stores, so now that both importers read it

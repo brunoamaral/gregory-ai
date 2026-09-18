@@ -73,7 +73,15 @@ class Command(BaseCommand):
 		if YEAR_FIRST_DATE.match(date_str):
 			dayfirst = False
 		try:
-			naive_date = parse(date_str, dayfirst=dayfirst).date()
+			# A month-only date ("May 2015", which ICTRP gives for some
+			# ClinicalTrials.gov records) has no day, and dateutil would fill in
+			# today's, so the stored date changed with every import. Use the 1st,
+			# as the ClinicalTrials.gov importer does.
+			naive_date = parse(
+				date_str,
+				dayfirst=dayfirst,
+				default=datetime.datetime(datetime.date.today().year, 1, 1),
+			).date()
 			aware_datetime = timezone.make_aware(
 				datetime.datetime.combine(naive_date, datetime.time(0, 0)), pytz.UTC
 			)
