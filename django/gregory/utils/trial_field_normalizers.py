@@ -28,6 +28,8 @@ from functools import lru_cache
 
 from django.db import models
 
+from gregory.utils.trial_identifiers import normalize_trial_identifiers
+
 logger = logging.getLogger(__name__)
 
 
@@ -997,6 +999,11 @@ NORMALIZED_TRIAL_FIELDS = (
 		),
 		"regions_normalized",
 		_compute_regions_from_raw,
+	),
+	(
+		("identifiers", "secondary_id", "ctg_secondary_ids"),
+		"identifiers_normalized",
+		normalize_trial_identifiers,
 	),
 )
 
