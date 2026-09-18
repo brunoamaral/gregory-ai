@@ -49,6 +49,7 @@ def compact_trial(trial: dict[str, Any]) -> dict[str, Any]:
 		"link": trial.get("link"),
 		"summary": _truncate(trial.get("summary")),
 		"identifiers": trial.get("identifiers"),
+		"identifiers_normalized": trial.get("identifiers_normalized"),
 	}
 
 

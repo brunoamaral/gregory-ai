@@ -512,6 +512,120 @@ isn't a single scalar — it's a set of per-country rows plus a derived region l
   `regions_normalized`; `?country=DE` and `?region=europe` filters in `api/filters.py`. The
   legacy `countries` field is unchanged.
 
+## Field: `identifiers` + `secondary_id` + `ctg_secondary_ids` → `identifiers_normalized` (multi-input)
+
+The registry-identifier filters (`?nct=`, `?eudract=`, `?euct=`, `?ctis=`, `?identifiers=`)
+used to compare a query value against one raw `identifiers` JSON key, exactly. That missed
+almost everything: keys and formats are inconsistent across importers (`nl` vs `nl-omon`,
+`irct` vs `irctn`, a literal `null` key on 15 rows), stored values keep their source's own
+prefix (`EUCTR2020-…-DE`, `CTIS2023-…`), and a registry id sitting only in `secondary_id`
+or the sponsor's `org_study_id` was never reachable at all. Before this field existed, only 79
+of 926 EudraCT numbers and 285 of 346 CTIS numbers stored in `identifiers` could be found by
+their plain number (dev database audit, 2026-09-18).
+`identifiers_normalized` is the fix: one canonical, searchable list per trial, recomputed on
+every save like every other field on this page — but with three raw inputs and a
+trust-tiered merge, not a straight one-input mapping.
+
+### Sources and trust tiers
+
+`gregory.utils.trial_identifiers.normalize_trial_identifiers(identifiers, secondary_id,
+ctg_secondary_ids)` sorts its inputs into two tiers before merging them:
+
+- **Registry-sourced — always counts:**
+  - every value under every `identifiers` key **except** `org_study_id` (a sponsor's own
+    study code, not a registry's own record of the trial);
+  - `ctg_secondary_ids` entries ClinicalTrials.gov itself typed as a registration:
+    `EUDRACT_NUMBER`, `CTIS`, or `REGISTRY` (plus the JAPIC domain rule below).
+- **Free text — counts unless it clashes:**
+  - `secondary_id`, `identifiers["org_study_id"]`, and `ctg_secondary_ids` entries typed
+    `OTHER` or left untyped;
+  - a free-text id is dropped only when the registry-sourced set already holds a
+    *different* id of the same canonical type. This is what keeps a sponsor's accidental
+    reuse of a foreign trial's NCT number (as its own `org_study_id`) from merging two
+    unrelated trials, while still admitting a free-text id of a type nothing
+    registry-sourced claims — the OCTOPUS regression case this field exists to fix: trial
+    519's EudraCT number sits only in `secondary_id`, and there's no registry-sourced
+    `eudract` key to clash with, so it's kept.
+- **Skipped outright:** `ctg_secondary_ids` entries typed as grants — `NIH`, `OTHER_GRANT`,
+  `AHRQ`, `FDA`, `SAMHSA`, `VA`, `CDC` — whatever their value looks like.
+
+Every value, from either tier, is run through `gregory.utils.trial_identifiers.
+extract_identifiers` — the same regex-based parser `detect_trial_references` uses for
+article text — so the value's own **shape** decides its canonical type, never a source's
+type label. A CTIS-shaped number ClinicalTrials.gov typed `EUDRACT_NUMBER` still lands as
+`ctis:…`; an EUCTR-prefixed value under any `identifiers` key still lands as `eudract:…`
+with the prefix and member-state suffix stripped.
+
+### JAPIC domain rule
+
+One exception lives in the normalizer rather than the text patterns: a `ctg_secondary_ids`
+entry typed `REGISTRY` whose `domain` matches `japi?c|japac` (case-insensitive) and whose
+`id` is a bare 6-digit number becomes `japic:JAPICCTI-<digits>` — matching the
+`JapicCTI-142447`-shaped form WHO ICTRP records carry in free text, which the `japic` text
+pattern (below) already recognises on its own. A `REGISTRY` entry with a bare-digit id and
+an *unrelated* domain (French ID-RCB, NCI CTRP, a Philippine registry, …) stays unmatched —
+raw data in `ctg_secondary_ids` only. No other domain rules exist.
+
+### Output format
+
+`sorted({f"{type}:{value}" for type, value in ids})`, or `None` when nothing was found (the
+same empty-value convention `regions_normalized` uses). Sorted and de-duplicated so
+recomputation is deterministic and never causes a spurious `update_fields` write.
+
+### Parser coverage (`gregory/utils/trial_identifiers.py`)
+
+Twenty-four registries in total. `nct`, `eudract`, `ctis`, `isrctn`, `actrn`, `drks`,
+`ctri`, `pactr`, `rpcec`, `tctr`, `slctr`, `itmctr`, `umin`, `jrct`, `rbr`, `irct`,
+`chictr` predate this field; this field's own pass added `nl_omon` (Dutch Trial Register, `NL-OMON…`), `nl`
+(`NL####`), `ntr` (`NTR#`–`NTR#####`), `repec` (Peru, `PER-###-##`), `lbctr`
+(Lebanon, `LBCTR##########`), `utn` (the WHO Universal Trial Number, `U1111-####-####`),
+and `japic` (`JapicCTI-######`), and widened two existing ones: `jrct` now accepts an
+optional single sub-prefix letter (`jRCTs031180248`) and upper-cases the whole match rather
+than just the `JRCT` literal, and `ctri`'s middle segment now accepts 2 or 3 digits
+(`CTRI/2009/091/000088` as well as the older `CTRI/2020/01/012345`).
+
+**Known gaps, left unparsed on purpose:**
+
+- `org_study_id` sponsor codes (e.g. `HSC-MS-15-0278`) — correctly not registry ids;
+- EudraCT numbers truncated at the source registry (54 rows, e.g. `2019-004822-1` — one
+  digit short of the real 4-6-2 format) — the legacy exact-match filter branch (below)
+  still finds these by their exact stored value;
+- domain-only `ctg_secondary_ids` entries whose registry isn't JAPIC (ID-RCB, NCI CTRP, a
+  Philippine registry, …) — add a domain rule if one of these starts mattering.
+
+### API / MCP / export
+
+- **Filters** (`api/filters.py`, `TrialFilter._match_registry_ids`): `nct`, `eudract`,
+  `euct`, `ctis`, and the umbrella `identifiers` all OR two branches — the legacy exact
+  case-insensitive match on the raw `identifiers` key(s) (kept so a row `identifiers_
+  normalized` hasn't reached yet, or a value the parser can't read, still matches exactly
+  as before), and `identifiers_normalized__overlap` against every canonical id
+  `extract_identifiers` can read out of the query value. The **value's format decides what
+  it matches, not which param it arrived in** — `?eudract=2023-507431-37-00` finds a CTIS
+  number, `?ctis=2021-003034-37` finds an EudraCT number. `?identifiers=` is a true
+  umbrella: any registry `extract_identifiers` recognises works there, not only the four
+  typed params' five legacy keys. See
+  [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#registry-identifier-filters) for the
+  full parameter reference, including why a lookup can return more than one row.
+- **Index:** `GinIndex(fields=["identifiers_normalized"], name="trials_ids_norm_gin_idx")`
+  — named `_ids_norm_` rather than the more obvious `_identifiers_norm_` because the latter
+  is 31 characters, one over Postgres/Django's 30-character index-name limit
+  (`models.E034`).
+- **Output:** `TrialSerializer` exposes `identifiers_normalized` next to `identifiers`
+  (read-only — `editable=False`); the MCP `compact_trial` projection includes it too;
+  `export_trials_xlsx` gives it a column (right after `secondary_id`) and a Glossary entry.
+  `ctg_secondary_ids` is raw ClinicalTrials.gov data feeding this field, not a public-facing
+  one — it's excluded from the export (`EXCLUDED_SCALARS`) and never appears on the API or
+  MCP.
+- **Backfills:** `backfill_trial_normalized_fields --field identifiers` recomputes the
+  derived field from whatever's already stored (fast, no external calls — the generic
+  backfill command already covers it, since `_field_key` derives the selector name by
+  dropping the `_normalized` suffix). `backfill_trial_secondary_ids_from_ctgov` is a new,
+  separate command (cloned from `backfill_trial_sponsors_from_ctgov`'s skeleton) that fetches
+  `ctg_secondary_ids` from the ClinicalTrials.gov API for every trial with an NCT id and
+  `ctg_secondary_ids IS NULL`, writing `[]` for a study that lists none; each save recomputes
+  `identifiers_normalized` in the same write via the standard `NORMALIZED_TRIAL_FIELDS` hook.
+
 ## The save() guarantee
 
 `Trials.save()` (in `django/gregory/models.py`) recomputes every derived field registered

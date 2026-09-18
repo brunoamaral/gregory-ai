@@ -63,13 +63,19 @@ async def search_trials(
 	accept a comma-separated list matched with OR (e.g.
 	"recruiting,not_recruiting"). Dates are YYYY-MM-DD.
 
-	Registry IDs — each accepts a single value or a comma-separated list,
-	matched case-insensitively against any: `nct` (ClinicalTrials.gov),
-	`euct` (EU CT / EUCTR — matches either identifier key), `eudract`
-	(legacy EudraCT, pre-2025 EU trials), `ctis` (EU Clinical Trials
-	Information System number). A European trial commonly only has
-	euct/eudract/ctis, not an nct — use whichever registry the caller
-	already has an ID from.
+	Registry IDs — each accepts a single value or a comma-separated list, in
+	any common format (bare number, EUDRACT/EUCTR/CTIS-prefixed, with or
+	without dashes — the id's own shape decides what it matches, not just the
+	param name): `nct` (ClinicalTrials.gov), `euct` (EU CT / EUCTR — matches
+	either identifier key), `eudract` (legacy EudraCT, pre-2025 EU trials),
+	`ctis` (EU Clinical Trials Information System number). Each matches IDs
+	from the trial's registry record, its secondary IDs, and the sponsor's
+	study code — not only the exact stored key — so `eudract=` also finds a
+	trial whose EudraCT number sits only in a CTIS-shaped key or in free
+	text. A European trial commonly only has euct/eudract/ctis, not an nct —
+	use whichever registry the caller already has an ID from. A lookup can
+	return more than one row when a trial was imported from two registries
+	and hasn't been merged yet.
 
 	A zero-hit response adds a `guidance` key: which filters were applied,
 	ranked suggestions for what's most likely over-constraining the search,

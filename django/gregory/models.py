@@ -1237,6 +1237,30 @@ class Trials(models.Model):
 	# derivation via gregory.utils.trial_field_normalizers.map_sponsor_type.
 	lead_sponsor_class = models.CharField(max_length=20, null=True, blank=True)
 
+	# Verbatim protocolSection.identificationModule.secondaryIdInfos from the
+	# ClinicalTrials.gov API — [{"id", "type", "domain", "link"}, …]. Same
+	# source-fidelity rule as lead_sponsor_class. [] = the API was asked and
+	# listed none; NULL = never fetched yet (see backfill_trial_secondary_ids_from_ctgov).
+	# Feeds identifiers_normalized below — never exposed on the API/MCP directly.
+	ctg_secondary_ids = models.JSONField(
+		null=True,
+		blank=True,
+		help_text="Verbatim secondaryIdInfos from ClinicalTrials.gov (id, type, domain, link). [] = none listed; null = not fetched yet.",
+	)
+
+	# Canonical registry IDs derived from `identifiers`, `secondary_id` and
+	# `ctg_secondary_ids` by gregory.utils.trial_identifiers.normalize_trial_identifiers.
+	# Recomputed on every save() below via NORMALIZED_TRIAL_FIELDS — never set this
+	# directly. `identifiers` stays the raw per-registry record the importers match on;
+	# this is the field to filter/search on. See docs/trials-field-normalization.md.
+	identifiers_normalized = ArrayField(
+		models.CharField(max_length=64),
+		null=True,
+		blank=True,
+		editable=False,
+		help_text='Canonical registry IDs as "type:VALUE", e.g. ["eudract:2021-003034-37", "isrctn:ISRCTN14048364"]. Derived from identifiers, secondary_id and ctg_secondary_ids; recomputed on every save.',
+	)
+
 	# Canonical sponsor entity resolved from the raw `primary_sponsor` value via
 	# SponsorAlias — recomputed on every save() below, see _resolve_primary_sponsor().
 	# Never set this directly. PROTECT: sponsors are only deleted via
@@ -1490,6 +1514,15 @@ class Trials(models.Model):
 			),
 			models.Index(
 				Upper(KeyTextTransform("ctis", "identifiers")), name="trials_uctis_idx"
+			),
+			# GIN index backing the identifiers_normalized__overlap branch every
+			# registry-ID filter falls through to (api.filters.TrialFilter._match_registry_ids).
+			# Named "..._ids_norm..." rather than "..._identifiers_norm..." — the latter
+			# is 31 characters, one over Django's 30-character index-name limit
+			# (models.E034).
+			GinIndex(
+				fields=["identifiers_normalized"],
+				name="trials_ids_norm_gin_idx",
 			),
 		]
 

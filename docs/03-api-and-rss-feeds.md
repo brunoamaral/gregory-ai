@@ -512,6 +512,42 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
 | `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
 
+### Registry identifier filters
+
+`?nct=`, `?eudract=`, `?euct=`, `?ctis=`, and the umbrella `?identifiers=` on
+`GET /trials/` (and everywhere it composes, e.g. `/trials/search/`). Each
+accepts a single value or a comma-separated list and matches any of them,
+case-insensitively.
+
+**Any common format is accepted** — a bare number (`2020-004505-32`), a
+registry-prefixed one (`EUDRACT2020-…`, `EUCTR2020-…-DE`, `CTIS2023-…`). NCT numbers
+also match with a space or dash after `NCT`. The value's
+own *shape* decides what it matches, not which param it arrived in: an
+EudraCT-shaped number passed to `?ctis=` still matches as EudraCT, and a
+CTIS-shaped number passed to `?eudract=` still matches as CTIS. `?identifiers=`
+is the true umbrella — it isn't limited to the four typed params' registries;
+any format `identifiers_normalized` recognises works there too, e.g.
+`?identifiers=ISRCTN14048364` or `?identifiers=U1111-1299-8084` (the WHO
+Universal Trial Number), neither of which has its own dedicated param.
+
+**What they read.** Not only the trial's registry record (`identifiers`
+JSON) — also its secondary ids (`secondary_id`, and ClinicalTrials.gov's
+typed `ctg_secondary_ids`) and the sponsor's own study code
+(`identifiers.org_study_id`), wherever a matching id happens to sit. This is
+what `identifiers_normalized` is: the derived, canonical union of all three,
+recomputed on every save — see
+[trials-field-normalization.md](trials-field-normalization.md#field-identifiers--secondary_id--ctg_secondary_ids--identifiers_normalized-multi-input)
+for exactly which sources are trusted and which are dropped on a conflict.
+
+**A lookup can return more than one row for what is really one trial.**
+Gregory stores one row per source import; a trial registered in two
+registries (e.g. ClinicalTrials.gov and EU CTIS) is two rows until the
+separate dedup/merge project runs, and a registry-id lookup finds both. This
+is intentional, not a bug — see `docs/trials-identity-dedup.md`.
+
+`identifiers_normalized` is also on `TrialSerializer` (next to `identifiers`)
+so a caller can see which of a trial's ids satisfied its query.
+
 ### Trials ordering
 
 `GET /trials/?ordering=<field>` (prefix with `-` to reverse). Accepted values: `discovery_date` (default, newest first via `-discovery_date`), `published_date`, `title`, `trial_id`, `last_updated`, `recruiting_first`.

@@ -39,7 +39,12 @@ _NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering"})
 # `country` matches related TrialCountry rows (TrialFilter.filter_country),
 # not a field on Trial itself. Keyed by tool because `search`'s coverage
 # differs between the two — see TRIAL_SEARCH_FIELDS above.
-_TRIAL_IDENTIFIER_FIELDS = ("identifiers",)
+#
+# The registry-ID filters match `identifiers_normalized`, which Django
+# derives from three raw columns: `identifiers`, `secondary_id` and
+# `ctg_secondary_ids` (see normalize_trial_identifiers in
+# django/gregory/utils/trial_identifiers.py).
+_TRIAL_IDENTIFIER_FIELDS = ("identifiers", "secondary_id", "ctg_secondary_ids")
 _FIELDS_READ_BY_TOOL: dict[str, dict[str, tuple[str, ...]]] = {
 	"articles": {
 		"search": ARTICLE_SEARCH_FIELDS,
@@ -78,9 +83,10 @@ _TAXONOMY_RULE = (
 
 _REGISTRY_ID_RULE = (
 	("nct", "euct", "eudract", "ctis"),
-	"Registry-ID filters match the trial's stored identifiers exactly "
-	"(case-insensitive). IDs listed only among a trial's secondary IDs, or "
-	"stored with a registry prefix such as EUCTR…, aren't matched.",
+	"Registry-ID filters match IDs from the trial's registry record, its "
+	"secondary IDs and the sponsor's study code, in any common format. No "
+	"match usually means the corpus has no record linked to that ID — try "
+	"`search` with the trial's name or acronym.",
 )
 
 _ACRONYM_RULE = (

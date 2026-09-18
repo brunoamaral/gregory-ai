@@ -240,3 +240,185 @@ class TrialIdentifierFilterTests(TestCase):
 		response = self.client.get("/trials/?nct=")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data["count"], Trials.objects.count())
+
+
+class TrialRegistryIdFormatDecidesFilterTests(TestCase):
+	"""An id's own format now
+	decides what it matches — the identifiers_normalized__overlap branch OR'd
+	onto the legacy exact-key match every test above already covers (the
+	superset guarantee: every test in TrialIdentifierFilterTests above still
+	passes unchanged). These cover the NEW reach only.
+	"""
+
+	def setUp(self):
+		self.client = APIClient()
+
+		self.org = Organization.objects.create(
+			name="Format Decides Org", slug="format-decides-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.org).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Format Decides Team", slug="format-decides-team", organization=self.org
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Format Decides Subject",
+			subject_slug="format-decides-subject",
+			team=self.team,
+		)
+		publish_subjects(self.subject, organization=self.org)
+
+		# OCTOPUS-shaped: EudraCT sits only in secondary_id, free text —
+		# exactly the regression case this PR exists to fix (plan intro).
+		self.trial_secondary_id_eudract = self._make_trial(
+			"OCTOPUS-shaped trial",
+			identifiers={"isrctn": "ISRCTN14048364"},
+			secondary_id="2021-003034-37;CPMS: 54274, ND001",
+		)
+		# STHENOS-shaped duplicate pair: the same real-world EudraCT number,
+		# stored under two different raw keys/formats by two importers.
+		self.trial_eudract_key = self._make_trial(
+			"STHENOS eudract-keyed", identifiers={"eudract": "2020-004505-32"}
+		)
+		self.trial_euctr_key = self._make_trial(
+			"STHENOS euctr-keyed", identifiers={"euctr": "EUCTR2020-004505-32-DE"}
+		)
+		self.trial_ctis_prefixed = self._make_trial(
+			"CTIS-prefixed trial", identifiers={"ctis": "CTIS2023-507431-37-00"}
+		)
+		self.trial_drks = self._make_trial(
+			"DRKS trial", identifiers={"drks": "DRKS00041145"}
+		)
+		# WHO Universal Trial Number: never its own identifiers key in
+		# practice — it shows up in free-text secondary_id.
+		self.trial_utn = self._make_trial(
+			"UTN trial",
+			identifiers={"nct": "NCT00099999"},
+			secondary_id="U1111-1299-8084",
+		)
+		# Truncated at source (54 such rows on dev): one digit
+		# short of a parseable EudraCT number, so extract_identifiers finds
+		# nothing in it; only the legacy exact-match branch can still find it.
+		self.trial_truncated_eudract = self._make_trial(
+			"Truncated EudraCT trial", identifiers={"eudract": "2019-004822-1"}
+		)
+		# Simulates a pre-existing row from before identifiers_normalized
+		# existed / before the backfill reached it: .update() bypasses
+		# save(), forcing the derived column back to NULL without touching
+		# the raw identifiers key a lookup should still find it through.
+		self.trial_pending_backfill = self._make_trial(
+			"Pending backfill trial", identifiers={"nct": "NCT00012345"}
+		)
+		Trials.objects.filter(pk=self.trial_pending_backfill.pk).update(
+			identifiers_normalized=None
+		)
+
+	def _make_trial(self, title, identifiers=None, secondary_id=None):
+		trial = Trials.objects.create(
+			title=title,
+			link=f"https://example.com/{title.replace(' ', '-').lower()}",
+			published_date=timezone.now(),
+			identifiers=identifiers,
+			secondary_id=secondary_id,
+		)
+		trial.teams.add(self.team)
+		trial.subjects.add(self.subject)
+		return trial
+
+	def _ids(self, response):
+		return {r["trial_id"] for r in response.data["results"]}
+
+	def test_eudract_finds_id_sitting_only_in_secondary_id(self):
+		response = self.client.get("/trials/?eudract=2021-003034-37")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response), {self.trial_secondary_id_eudract.trial_id}
+		)
+
+	def test_eudract_finds_both_eudract_and_euctr_keyed_rows(self):
+		"""The STHENOS example: one bare number, two rows, two
+		different raw keys/formats."""
+		response = self.client.get("/trials/?eudract=2020-004505-32")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_eudract_key.trial_id, self.trial_euctr_key.trial_id},
+		)
+
+	def test_ctis_finds_ctis_prefixed_row(self):
+		response = self.client.get("/trials/?ctis=2023-507431-37-00")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_ctis_prefixed.trial_id})
+
+	def test_query_format_tolerance_eudract_prefixed(self):
+		"""EUDRACT-prefixed input normalizes to the same bare number as the
+		euctr-keyed row's own stored value, so — like the bare-number query in
+		test_eudract_finds_both_eudract_and_euctr_keyed_rows above — this finds
+		both rows, not only the one stored under the "eudract" key."""
+		response = self.client.get("/trials/?eudract=EUDRACT2020-004505-32")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_eudract_key.trial_id, self.trial_euctr_key.trial_id},
+		)
+
+	def test_query_format_tolerance_euctr_prefixed_with_suffix(self):
+		response = self.client.get("/trials/?eudract=EUCTR2020-004505-32-DE")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_eudract_key.trial_id, self.trial_euctr_key.trial_id},
+		)
+
+	def test_format_decides_eudract_param_finds_ctis_number(self):
+		"""Design decision: the format decides what matches,
+		whichever typed param the id arrived in."""
+		response = self.client.get("/trials/?eudract=2023-507431-37-00")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_ctis_prefixed.trial_id})
+
+	def test_format_decides_ctis_param_finds_eudract_number(self):
+		response = self.client.get("/trials/?ctis=2021-003034-37")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response), {self.trial_secondary_id_eudract.trial_id}
+		)
+
+	def test_identifiers_umbrella_matches_isrctn(self):
+		"""Nothing today matches this; identifiers_normalized makes the
+		umbrella param reach every registry extract_identifiers knows."""
+		response = self.client.get("/trials/?identifiers=ISRCTN14048364")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response), {self.trial_secondary_id_eudract.trial_id}
+		)
+
+	def test_identifiers_umbrella_matches_drks(self):
+		response = self.client.get("/trials/?identifiers=DRKS00041145")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_drks.trial_id})
+
+	def test_identifiers_umbrella_matches_who_utn(self):
+		response = self.client.get("/trials/?identifiers=U1111-1299-8084")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_utn.trial_id})
+
+	def test_unparseable_input_falls_back_to_legacy_exact_match(self):
+		"""A truncated EudraCT number extract_identifiers can't parse is still
+		found — the legacy exact-match branch never goes away."""
+		response = self.client.get("/trials/?eudract=2019-004822-1")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response), {self.trial_truncated_eudract.trial_id}
+		)
+
+	def test_null_identifiers_normalized_still_matches_via_legacy_branch(self):
+		"""A row identifiers_normalized hasn't been (re)computed for yet — e.g.
+		pre-migration, pre-backfill — must still be reachable by its raw key."""
+		self.assertIsNone(
+			Trials.objects.get(pk=self.trial_pending_backfill.pk).identifiers_normalized
+		)
+		response = self.client.get("/trials/?nct=NCT00012345")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_pending_backfill.trial_id})

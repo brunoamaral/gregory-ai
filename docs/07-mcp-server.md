@@ -49,7 +49,7 @@ crowds context and degrades model tool selection.
 | `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
 | `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
-| `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis`), `acronym`, `has_results`, `therapeutic_areas`. |
+| `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`. Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |
@@ -87,8 +87,12 @@ When `search_articles` or `search_trials` returns zero results, the response car
   (both tools), and for trials also `acronym` and the registry-ID filters (`nct`, `euct`,
   `eudract`, `ctis`) — the ones where a zero hit usually means the term sits in a field
   the filter doesn't read, e.g. `{"search": ["title", "summary", "scientific_title"]}`
-  for a `search_trials` call. Every other applied filter is left out of the map; that's
-  not a claim about which fields it reads.
+  for a `search_trials` call. A registry-ID filter reports
+  `["identifiers", "secondary_id", "ctg_secondary_ids"]`: all three feed the derived
+  `identifiers_normalized` field these filters match against (see
+  [trials-field-normalization.md](trials-field-normalization.md#field-identifiers--secondary_id--ctg_secondary_ids--identifiers_normalized-multi-input)).
+  Every other applied filter is left out of the map; that's not a claim about which
+  fields it reads.
 
 Like `applied_filters`, none of this ever echoes a filter's value back — only filter
 names and static advice text.

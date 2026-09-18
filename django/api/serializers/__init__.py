@@ -589,6 +589,7 @@ class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSeriali
 			"links",
 			"sources",
 			"identifiers",
+			"identifiers_normalized",
 			"team_categories",
 			"export_date",
 			"internal_number",

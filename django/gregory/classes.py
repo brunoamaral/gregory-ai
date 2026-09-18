@@ -590,6 +590,40 @@ class ClinicalTrialsGovAPI:
 			"secondary_sponsor": "; ".join(clean_collabs) if clean_collabs else None,
 		}
 
+	@staticmethod
+	def extract_secondary_ids(identification_module: dict) -> tuple:
+		"""Extract (secondary_id_text, ctg_secondary_ids) from a CTGov study's
+		``identificationModule.secondaryIdInfos``.
+
+		Shared between ``parse_study_to_clinical_trial`` and the
+		``backfill_trial_secondary_ids_from_ctgov`` management command — same
+		rationale as ``extract_sponsor_fields``/``extract_countries`` above, so the
+		two can never disagree on how a study's secondary ids are read out of the
+		raw API response.
+
+		Returns:
+			A ``(secondary_id_text, ctg_secondary_ids)`` tuple:
+
+			- ``secondary_id_text``: the ``", "``-joined ids — unchanged from the
+			  format ``Trials.secondary_id`` has always stored, so nothing
+			  downstream of it changes. ``None`` when the study lists no id.
+			- ``ctg_secondary_ids``: the verbatim ``secondaryIdInfos`` list
+			  (``[{"id", "type", "domain", "link"}, …]``), for
+			  ``Trials.ctg_secondary_ids``. ``[]`` when the study lists none —
+			  distinct from that field's own ``None``, which means "not fetched
+			  yet" (see the field's docstring in gregory/models.py).
+		"""
+		raw = identification_module.get("secondaryIdInfos")
+		if not isinstance(raw, list):
+			raw = []
+		ids = [
+			info["id"]
+			for info in raw
+			if isinstance(info, dict) and info.get("id")
+		]
+		secondary_id_text = ", ".join(ids) if ids else None
+		return secondary_id_text, raw
+
 	def search_all(self, max_results: int = None, **search_kwargs):
 		"""
 		Search and iterate through all pages of results.
@@ -690,11 +724,9 @@ class ClinicalTrialsGovAPI:
 			"org_study_id": identification.get("orgStudyIdInfo", {}).get("id"),
 		}
 
-		# Extract secondary IDs
-		secondary_ids = []
-		for sec_id_info in identification.get("secondaryIdInfos", []):
-			if sec_id_info.get("id"):
-				secondary_ids.append(sec_id_info["id"])
+		# Extract secondary IDs (shared with backfill_trial_secondary_ids_from_ctgov —
+		# see extract_secondary_ids)
+		secondary_id_text, ctg_secondary_ids = self.extract_secondary_ids(identification)
 
 		# Extract conditions
 		conditions = conditions_module.get("conditions", [])
@@ -833,7 +865,8 @@ class ClinicalTrialsGovAPI:
 			"inclusion_criteria": eligibility_criteria,
 			"exclusion_criteria": None,  # API combines inclusion/exclusion in eligibilityCriteria
 			"intervention": "\n".join(interventions) if interventions else None,
-			"secondary_id": ", ".join(secondary_ids) if secondary_ids else None,
+			"secondary_id": secondary_id_text,
+			"ctg_secondary_ids": ctg_secondary_ids,
 			"condition": ", ".join(conditions) if conditions else None,
 			"primary_outcome": "\n".join(primary_outcomes)
 			if primary_outcomes
