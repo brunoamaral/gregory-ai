@@ -241,8 +241,8 @@ class WHODateConventionsTest(TestCase):
 			date_registration=date_registration,
 		)
 
-	def test_create_reads_registration_date_as_day_first(self):
-		t = self._import()
+	def test_create_prefers_registration3_when_fields_disagree(self):
+		t = self._import(date_registration="06/08/2026")
 		self.assertEqual(t.date_registration, datetime.date(2026, 8, 5))
 		self.assertEqual(t.published_date.date(), datetime.date(2026, 8, 5))
 
