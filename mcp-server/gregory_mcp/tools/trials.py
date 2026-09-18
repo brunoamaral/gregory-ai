@@ -55,10 +55,13 @@ async def search_trials(
 	"""Search clinical trials. Returns a compact projection — use get_trial
 	for the full record (trial_sites, eligibility text, results detail).
 
-	`search` is boolean over title + summary (see search_articles for the
-	syntax). `recruitment_status_normalized` and `phase_normalized` accept a
-	comma-separated list matched with OR (e.g. "recruiting,not_recruiting").
-	Dates are YYYY-MM-DD.
+	`search` is boolean over title + summary + scientific title (see
+	search_articles for the syntax). Registries outside ClinicalTrials.gov
+	often put a trial's name only in the scientific title — the public
+	title there is the registry's lay summary title, and `acronym` is
+	usually empty. `recruitment_status_normalized` and `phase_normalized`
+	accept a comma-separated list matched with OR (e.g.
+	"recruiting,not_recruiting"). Dates are YYYY-MM-DD.
 
 	Registry IDs — each accepts a single value or a comma-separated list,
 	matched case-insensitively against any: `nct` (ClinicalTrials.gov),
@@ -68,9 +71,12 @@ async def search_trials(
 	euct/eudract/ctis, not an nct — use whichever registry the caller
 	already has an ID from.
 
-	A zero-hit response adds a `guidance` key: which filters were applied
-	and ranked suggestions for what's most likely over-constraining the
-	search — check that before trying a completely different query.
+	A zero-hit response adds a `guidance` key: which filters were applied,
+	ranked suggestions for what's most likely over-constraining the search,
+	and `fields_read` — which fields each of those filters actually
+	searched, for filters (like `search` or a registry ID) whose coverage
+	isn't obvious from the name — check that before trying a completely
+	different query.
 
 	Args:
 		intent: One short phrase describing the information need. Recorded
@@ -121,7 +127,7 @@ async def search_trials(
 		"trials": [compact_trial(t) for t in results],
 	}
 	if count == 0:
-		response["guidance"] = guidance_for(params)
+		response["guidance"] = guidance_for(params, "trials")
 	return response
 
 

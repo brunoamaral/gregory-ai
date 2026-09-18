@@ -54,9 +54,11 @@ async def search_articles(
 	discovery_date, published_date, title, article_id, ml_score (prefix `-`
 	for descending).
 
-	A zero-hit response adds a `guidance` key: which filters were applied
-	and ranked suggestions for what's most likely over-constraining the
-	search — check that before trying a completely different query.
+	A zero-hit response adds a `guidance` key: which filters were applied,
+	ranked suggestions for what's most likely over-constraining the search,
+	and `fields_read` — which fields each of those filters actually
+	searched, for filters (like `search`) whose coverage isn't obvious from
+	the name — check that before trying a completely different query.
 
 	Args:
 		intent: One short phrase describing the information need. Recorded
@@ -97,7 +99,7 @@ async def search_articles(
 		"articles": [compact_article(a) for a in results],
 	}
 	if count == 0:
-		response["guidance"] = guidance_for(params)
+		response["guidance"] = guidance_for(params, "articles")
 	return response
 
 
