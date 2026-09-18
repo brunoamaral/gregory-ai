@@ -11,7 +11,14 @@ from rest_framework.test import APIClient
 
 from api.filters import ArticleFilter, TrialFilter
 from api.tests.visibility_helpers import publish_subjects
-from api.utils.search import build_search_q, _tokenize
+from api.utils.search import (
+	ARTICLE_SEARCH_FIELDS,
+	ARTICLE_SEARCH_LOOKUPS,
+	TRIAL_SEARCH_FIELDS,
+	TRIAL_SEARCH_LOOKUPS,
+	build_search_q,
+	_tokenize,
+)
 from gregory.models import (
 	Articles,
 	Trials,
@@ -144,6 +151,100 @@ class BuildSearchQTests(TestCase):
 	def test_all_operators_junk(self):
 		q = build_search_q("OR OR NOT AND")
 		self.assertIsInstance(q, Q)
+
+	# -----------------------------------------------------------------
+	# Per-model lookups: build_search_q
+	# takes the lookups tuple to OR each term across, defaulting to the
+	# article pair for backward compatibility.
+	# -----------------------------------------------------------------
+
+	def test_default_lookups_are_the_two_article_columns(self):
+		# No explicit `lookups` argument -> ARTICLE_SEARCH_LOOKUPS, unchanged
+		# from before this tuple existed.
+		q = build_search_q("myelin")
+		self.assertEqual(q, self._q("myelin"))
+		self.assertEqual(ARTICLE_SEARCH_LOOKUPS, ("utitle__contains", "usummary__contains"))
+
+	def test_trial_search_lookups_give_three_branches_per_term(self):
+		q = build_search_q("OCTOPUS", TRIAL_SEARCH_LOOKUPS)
+		expected = (
+			Q(utitle__contains="OCTOPUS")
+			| Q(usummary__contains="OCTOPUS")
+			| Q(scientific_title__icontains="OCTOPUS")
+		)
+		self.assertEqual(q, expected)
+		self.assertEqual(q.connector, "OR")
+		self.assertEqual(len(q.children), 3)
+
+	def test_trial_search_lookups_and_or_still_combine_the_three_branch_terms(self):
+		q = build_search_q("myelin OR OCTOPUS", TRIAL_SEARCH_LOOKUPS)
+
+		def trial_q(term):
+			upper = term.upper()
+			return (
+				Q(utitle__contains=upper)
+				| Q(usummary__contains=upper)
+				| Q(scientific_title__icontains=upper)
+			)
+
+		self.assertEqual(q, trial_q("myelin") | trial_q("OCTOPUS"))
+
+	def test_fallback_path_uses_the_lookups_it_is_given(self):
+		# The except branch (triggered here by an all-discarded parse) falls
+		# back to a whole-string term match using the SAME lookups tuple the
+		# caller passed in, not the default.
+		raw = "OR OR NOT AND"
+		q = build_search_q(raw, TRIAL_SEARCH_LOOKUPS)
+		upper = raw.upper()
+		expected = (
+			Q(utitle__contains=upper)
+			| Q(usummary__contains=upper)
+			| Q(scientific_title__icontains=upper)
+		)
+		self.assertEqual(q, expected)
+
+
+class TrialSearchHelpTextDriftGuardTests(TestCase):
+	"""TrialFilter.search's help_text must keep naming every field
+	TRIAL_SEARCH_LOOKUPS actually reads, so the two can't silently drift
+	apart."""
+
+	@staticmethod
+	def _fields_searched(lookups):
+		# utitle/usummary are the uppercase mirrors of title/summary.
+		column_to_field = {"utitle": "title", "usummary": "summary"}
+		columns = (lookup.split("__")[0] for lookup in lookups)
+		return tuple(column_to_field.get(c, c) for c in columns)
+
+	def test_trial_search_fields_match_the_lookups(self):
+		# The lookups are what's actually searched; TRIAL_SEARCH_FIELDS feeds
+		# the help text and is mirrored by the MCP guidance. Changing one
+		# without the other fails here.
+		self.assertEqual(
+			self._fields_searched(TRIAL_SEARCH_LOOKUPS), TRIAL_SEARCH_FIELDS
+		)
+
+	def test_article_search_fields_match_the_lookups(self):
+		self.assertEqual(
+			self._fields_searched(ARTICLE_SEARCH_LOOKUPS), ARTICLE_SEARCH_FIELDS
+		)
+
+	def test_help_text_names_every_trial_search_field(self):
+		help_text = TrialFilter.base_filters["search"].extra["help_text"]
+		self.assertEqual(TRIAL_SEARCH_FIELDS, ("title", "summary", "scientific_title"))
+		for field in TRIAL_SEARCH_FIELDS:
+			words = field.replace("_", " ")
+			self.assertIn(
+				words,
+				help_text,
+				f"TrialFilter.search help_text no longer names {words!r}",
+			)
+
+	def test_article_help_text_names_every_article_search_field(self):
+		help_text = ArticleFilter.base_filters["search"].extra["help_text"]
+		self.assertEqual(ARTICLE_SEARCH_FIELDS, ("title", "summary"))
+		for field in ARTICLE_SEARCH_FIELDS:
+			self.assertIn(field, help_text)
 
 
 # ---------------------------------------------------------------------------

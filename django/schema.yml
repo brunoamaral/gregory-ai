@@ -3042,7 +3042,7 @@ paths:
         - **category_modality** - filter by the intervention modality of the trial's categories; one of the `CategoryModality` values
         - **source_id** - filter by source ID
         - **status/recruitment_status** - filter by recruitment status
-        - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
+        - **search** - search in title, summary and scientific title (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary field (case-insensitive substring)
         - **page** - page number for pagination
@@ -3555,8 +3555,10 @@ paths:
         name: search
         schema:
           type: string
-        description: Boolean search across title and summary. Bare terms are AND-ed;
-          uppercase OR/NOT and "quoted phrases" are supported.
+        description: Boolean search across title, summary and scientific title. Bare
+          terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported. Registries
+          outside ClinicalTrials.gov usually put a trial's name and acronym only in
+          the scientific title.
       - in: query
         name: site_id
         schema:
@@ -3703,7 +3705,7 @@ paths:
         - **category_modality** - filter by the intervention modality of the trial's categories; one of the `CategoryModality` values
         - **source_id** - filter by source ID
         - **status/recruitment_status** - filter by recruitment status
-        - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
+        - **search** - search in title, summary and scientific title (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary field (case-insensitive substring)
         - **page** - page number for pagination
@@ -4000,7 +4002,8 @@ paths:
     get:
       operationId: trials_search_list
       description: |-
-        Advanced search for clinical trials by title, summary, and recruitment status.
+        Advanced search for clinical trials by title, summary, scientific title, and
+        recruitment status.
 
         This endpoint accepts both GET and POST requests with team_id and subject_id
         parameters, along with optional search parameters. Every filter on
@@ -4018,7 +4021,7 @@ paths:
         Parameters (can be sent as query params for GET or in request body for POST):
         - title: Search only in title field
         - summary: Search only in summary/abstract field
-        - search: Search in both title and summary fields
+        - search: Search in title, summary, and scientific title fields
         - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
         - team_id: Required - Team ID to filter trials by (must be provided)
         - subject_id: Required - Subject ID to filter trials by (must be provided)
@@ -4361,8 +4364,10 @@ paths:
         name: search
         schema:
           type: string
-        description: Boolean search across title and summary. Bare terms are AND-ed;
-          uppercase OR/NOT and "quoted phrases" are supported.
+        description: Boolean search across title, summary and scientific title. Bare
+          terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported. Registries
+          outside ClinicalTrials.gov usually put a trial's name and acronym only in
+          the scientific title.
       - in: query
         name: site_id
         schema:
@@ -4492,7 +4497,8 @@ paths:
     post:
       operationId: trials_search_create
       description: |-
-        Advanced search for clinical trials by title, summary, and recruitment status.
+        Advanced search for clinical trials by title, summary, scientific title, and
+        recruitment status.
 
         This endpoint accepts both GET and POST requests with team_id and subject_id
         parameters, along with optional search parameters. Every filter on
@@ -4510,7 +4516,7 @@ paths:
         Parameters (can be sent as query params for GET or in request body for POST):
         - title: Search only in title field
         - summary: Search only in summary/abstract field
-        - search: Search in both title and summary fields
+        - search: Search in title, summary, and scientific title fields
         - status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
         - team_id: Required - Team ID to filter trials by (must be provided)
         - subject_id: Required - Subject ID to filter trials by (must be provided)
@@ -4561,8 +4567,10 @@ paths:
                     only.
                 search:
                   type: string
-                  description: Boolean search across title and summary. Bare terms
-                    are AND-ed; uppercase OR/NOT and "quoted phrases" are supported.
+                  description: Boolean search across title, summary and scientific
+                    title. Bare terms are AND-ed; uppercase OR/NOT and "quoted phrases"
+                    are supported. Registries outside ClinicalTrials.gov usually put
+                    a trial's name and acronym only in the scientific title.
                 recruitment_status:
                   type: string
                   description: Raw-text case-insensitive exact match against the registry's
@@ -5146,8 +5154,10 @@ paths:
         name: search
         schema:
           type: string
-        description: Boolean search across title and summary. Bare terms are AND-ed;
-          uppercase OR/NOT and "quoted phrases" are supported.
+        description: Boolean search across title, summary and scientific title. Bare
+          terms are AND-ed; uppercase OR/NOT and "quoted phrases" are supported. Registries
+          outside ClinicalTrials.gov usually put a trial's name and acronym only in
+          the scientific title.
       - in: query
         name: site_id
         schema:

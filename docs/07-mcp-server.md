@@ -49,7 +49,7 @@ crowds context and degrades model tool selection.
 | `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
 | `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
-| `search_trials` | `GET /trials/` | `search` plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis`), `acronym`, `has_results`, `therapeutic_areas`. |
+| `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis`), `acronym`, `has_results`, `therapeutic_areas`. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |
@@ -59,15 +59,39 @@ crowds context and degrades model tool selection.
 
 ### `search` syntax
 
-`search_articles`'s and `search_trials`'s `search` parameter is boolean over title +
-summary (same semantics as the REST API's `?search=` — see
-[03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)):
+`search_articles`'s and `search_trials`'s `search` parameter is boolean (same semantics
+as the REST API's `?search=` — see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)):
 
 - space-separated terms are AND-ed
 - uppercase `OR` for alternatives, `-term` / `NOT term` to exclude
 - `"quoted phrases"` match contiguously, `(parentheses)` group
 
-Use `title=` / `summary=` instead to match only one field.
+`search_articles`'s `search` reads title + summary. `search_trials`'s also reads the
+scientific title — registries other than ClinicalTrials.gov (WHO ICTRP-sourced records)
+commonly put a trial's real name and acronym there rather than in the public title or a
+summary, since WHO-only trials rarely have one. Use `title=` / `summary=` instead to
+match only one field.
+
+### Zero-hit guidance
+
+When `search_articles` or `search_trials` returns zero results, the response carries a
+`guidance` key instead of just an empty list:
+
+- `applied_filters` — the names (never the values) of every filter that was set on the
+  call, sorted.
+- `suggestions` — ranked, structural advice for what's most likely over-constraining the
+  search — e.g. drop `relevant`/`ml_threshold`, widen a date range, or double-check a
+  taxonomy/registry/sponsor ID. Checked in priority order per tool; the broadest ones
+  (like `search`) rank last since a narrower filter is a more likely culprit.
+- `fields_read` — which fields the *text-matching* filters actually searched: `search`
+  (both tools), and for trials also `acronym` and the registry-ID filters (`nct`, `euct`,
+  `eudract`, `ctis`) — the ones where a zero hit usually means the term sits in a field
+  the filter doesn't read, e.g. `{"search": ["title", "summary", "scientific_title"]}`
+  for a `search_trials` call. Every other applied filter is left out of the map; that's
+  not a claim about which fields it reads.
+
+Like `applied_filters`, none of this ever echoes a filter's value back — only filter
+names and static advice text.
 
 ### Payload shaping
 

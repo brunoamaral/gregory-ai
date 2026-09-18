@@ -2418,7 +2418,7 @@ class TrialViewSet(
 	- **category_modality** - filter by the intervention modality of the trial's categories; one of the `CategoryModality` values
 	- **source_id** - filter by source ID
 	- **status/recruitment_status** - filter by recruitment status
-	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
+	- **search** - search in title, summary and scientific title (supports boolean operators, e.g. `a OR b`)
 	- **title** - search only in the title field (case-insensitive substring)
 	- **summary** - search only in the summary field (case-insensitive substring)
 	- **page** - page number for pagination
@@ -4195,7 +4195,8 @@ class TrialSearchView(
 	BodyParamsAsQueryParamsMixin, CSVStreamingMixin, BulkExportThrottleMixin, generics.ListAPIView
 ):
 	"""
-	Advanced search for clinical trials by title, summary, and recruitment status.
+	Advanced search for clinical trials by title, summary, scientific title, and
+	recruitment status.
 
 	This endpoint accepts both GET and POST requests with team_id and subject_id
 	parameters, along with optional search parameters. Every filter on
@@ -4213,7 +4214,7 @@ class TrialSearchView(
 	Parameters (can be sent as query params for GET or in request body for POST):
 	- title: Search only in title field
 	- summary: Search only in summary/abstract field
-	- search: Search in both title and summary fields
+	- search: Search in title, summary, and scientific title fields
 	- status: Filter by recruitment status (e.g., 'Recruiting', 'Completed')
 	- team_id: Required - Team ID to filter trials by (must be provided)
 	- subject_id: Required - Subject ID to filter trials by (must be provided)

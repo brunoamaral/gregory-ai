@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<!--
+  Reconstructed for tests from trial 519 (ISRCTN14048364, "OCTOPUS") as stored
+  in the dev database on 2026-09-18, formatted in the shape of a real WHO
+  ICTRP XML export (trialsearch.who.int; reference sample exported
+  2026-09-18). This file is NOT a captured export, and it intentionally omits
+  every contact field (names, emails, phone numbers). There is no Acronym
+  element, matching the trial's empty acronym; in the reference sample,
+  records from registries other than ClinicalTrials.gov omit it too.
+-->
+<Trials_downloaded_from_ICTRP>
+  <Trial><Export_date>06/19/2026 00:00:00</Export_date>
+    <Internal_Number>15833153
+    </Internal_Number>
+    <TrialID>ISRCTN14048364
+    </TrialID>
+    <Last_Refreshed_on>8 June 2026
+    </Last_Refreshed_on>
+    <Public_title>Testing and comparing multiple drugs at once against the standard treatment for progressive multiple sclerosis treatment
+    </Public_title>
+    <Scientific_title>OCTOPUS - Optimal Clinical Trials Platform for Progressive Multiple Sclerosis
+    </Scientific_title>
+    <Primary_sponsor>University College London
+    </Primary_sponsor>
+    <Prospective_registration>Yes
+    </Prospective_registration>
+    <Date_registration3>20221025
+    </Date_registration3>
+    <Date_registration>25/10/2022
+    </Date_registration>
+    <Source_Register>ISRCTN
+    </Source_Register>
+    <web_address>https://www.isrctn.com/ISRCTN14048364
+    </web_address>
+    <Recruitment_Status>Recruiting
+    </Recruitment_Status>
+    <other_records>No
+    </other_records>
+    <Inclusion_agemin>25 Years
+    </Inclusion_agemin>
+    <Inclusion_agemax>70 Years
+    </Inclusion_agemax>
+    <Inclusion_gender>All
+    </Inclusion_gender>
+    <Date_enrollement>18/01/2023
+    </Date_enrollement>
+    <Target_size>1200
+    </Target_size>
+    <Study_type>Interventional
+    </Study_type>
+    <Phase>Phase III
+    </Phase>
+    <Countries>United Kingdom;England;Northern Ireland;Scotland;Wales;Australia
+    </Countries>
+    <Condition>Primary progressive multiple sclerosis and secondary progressive multiple sclerosis Nervous System Diseases
+    </Condition>
+    <Intervention>Participants will be randomised at each site via the OCTOPUS eDC System, a centrally managed system hosted by MRC CTU. OCTOPUS is a blinded trial therefore all participants have the same dosing and assessment schedule.
+    </Intervention>
+    <Secondary_ID>2021-003034-37;CPMS: 54274, ND001
+    </Secondary_ID>
+    <Secondary_Sponsor>Griffith University
+    </Secondary_Sponsor>
+
+  </Trial>
+</Trials_downloaded_from_ICTRP>

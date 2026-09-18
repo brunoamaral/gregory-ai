@@ -47,7 +47,13 @@ def _who_source():
 	team = Team.objects.create(
 		organization=org, name="WHO Test Team", slug="who-test-team"
 	)
-	subject = Subject.objects.create(subject_name="WHO MS", subject_slug="who-ms")
+	# team=team: without it, Subject.objects.get(id=subject_id, team=team)
+	# (api.views.TrialSearchView's team/subject validation) can't find this
+	# subject under its own team, which 404s any test that drives an import
+	# from this helper through TrialSearchView/TrialViewSet.
+	subject = Subject.objects.create(
+		subject_name="WHO MS", subject_slug="who-ms", team=team
+	)
 	return Sources.objects.create(
 		name="WHO ICTRP",
 		source_for="trials",

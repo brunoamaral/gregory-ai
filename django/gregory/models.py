@@ -1453,6 +1453,17 @@ class Trials(models.Model):
 				name="trials_usummary_gin_idx",
 				opclasses=["gin_trgm_ops"],
 			),
+			# Expression index, not a persisted column: TrialFilter.search's
+			# scientific_title__icontains compiles to
+			# UPPER(scientific_title) LIKE UPPER(...), which Postgres serves from
+			# this GIN trigram index as a third BitmapOr branch alongside utitle
+			# and usummary above. A GeneratedField column was rejected because
+			# simple-history mirrors generated columns onto
+			# gregory_historicaltrials (842 MB), which this avoids.
+			GinIndex(
+				OpClass(Upper("scientific_title"), name="gin_trgm_ops"),
+				name="trials_uscititle_gin_idx",
+			),
 			# Non-partial expression indexes on the registry-identifier keys used by
 			# the /trials/ identifier filters (api.filters.TrialFilter). A dedicated
 			# non-partial index is needed per key for one of two reasons:
