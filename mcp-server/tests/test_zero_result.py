@@ -127,6 +127,16 @@ def test_fields_read_empty_when_no_field_coverage_filters_applied():
 	assert guidance["fields_read"] == {}
 
 
+def test_non_text_filters_never_appear_in_fields_read():
+	# has_results, subject_id and country all read fields other than the one
+	# their name suggests (or several fields, or a related model) — being
+	# left out of fields_read isn't a claim they read a same-named field.
+	guidance = guidance_for(
+		{"has_results": True, "subject_id": 1, "country": "DE"}, "trials"
+	)
+	assert guidance["fields_read"] == {}
+
+
 def test_trials_search_fields_read_is_the_trial_search_fields_constant():
 	guidance = guidance_for({"search": "x"}, "trials")
 	assert guidance["fields_read"]["search"] == list(TRIAL_SEARCH_FIELDS)

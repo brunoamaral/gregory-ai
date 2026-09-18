@@ -28,10 +28,17 @@ TRIAL_SEARCH_FIELDS = ("title", "summary", "scientific_title")
 # only ever names things that narrow the result set.
 _NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering"})
 
-# Fields each filter reads, when that isn't obvious from the arg name
-# itself (an id/slug/date filter reads the field it's named after; `search`
-# and the registry-ID params don't). Keyed by tool because `search`'s
-# coverage differs between the two — see TRIAL_SEARCH_FIELDS above.
+# `fields_read` covers only the text-matching filters: `search` (both
+# tools), and for trials also `acronym` and the registry-ID filters (`nct`,
+# `euct`, `eudract`, `ctis`). Those are where a zero hit usually means the
+# term sits in a field the filter doesn't read. Every other filter is
+# deliberately left out — being absent from this map says nothing about
+# which fields it reads, and several don't read a same-named field at all:
+# trials' `has_results` reads results_posted/results_date_completed/
+# results_url_link/results_yes_no (TrialFilter.filter_has_results), and
+# `country` matches related TrialCountry rows (TrialFilter.filter_country),
+# not a field on Trial itself. Keyed by tool because `search`'s coverage
+# differs between the two — see TRIAL_SEARCH_FIELDS above.
 _TRIAL_IDENTIFIER_FIELDS = ("identifiers",)
 _FIELDS_READ_BY_TOOL: dict[str, dict[str, tuple[str, ...]]] = {
 	"articles": {

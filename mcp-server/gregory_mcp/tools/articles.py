@@ -56,9 +56,9 @@ async def search_articles(
 
 	A zero-hit response adds a `guidance` key: which filters were applied,
 	ranked suggestions for what's most likely over-constraining the search,
-	and `fields_read` — which fields each of those filters actually
-	searched, for filters (like `search`) whose coverage isn't obvious from
-	the name — check that before trying a completely different query.
+	and `fields_read` — which fields the text-matching `search` filter
+	actually searched — check that before trying a completely different
+	query.
 
 	Args:
 		intent: One short phrase describing the information need. Recorded

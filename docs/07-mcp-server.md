@@ -83,10 +83,12 @@ When `search_articles` or `search_trials` returns zero results, the response car
   search — e.g. drop `relevant`/`ml_threshold`, widen a date range, or double-check a
   taxonomy/registry/sponsor ID. Checked in priority order per tool; the broadest ones
   (like `search`) rank last since a narrower filter is a more likely culprit.
-- `fields_read` — for applied filters whose field coverage isn't obvious from the name
-  (`search`, `acronym`, the registry-ID filters), which underlying fields they actually
-  searched, e.g. `{"search": ["title", "summary", "scientific_title"]}` for a
-  `search_trials` call. Filters not in this map read the field their name says.
+- `fields_read` — which fields the *text-matching* filters actually searched: `search`
+  (both tools), and for trials also `acronym` and the registry-ID filters (`nct`, `euct`,
+  `eudract`, `ctis`) — the ones where a zero hit usually means the term sits in a field
+  the filter doesn't read, e.g. `{"search": ["title", "summary", "scientific_title"]}`
+  for a `search_trials` call. Every other applied filter is left out of the map; that's
+  not a claim about which fields it reads.
 
 Like `applied_filters`, none of this ever echoes a filter's value back — only filter
 names and static advice text.
