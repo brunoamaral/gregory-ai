@@ -180,6 +180,48 @@ specifically:
   values preserved side by side, and the normalized country/region layers reflect the
   union of both).
 
+## Implemented: WHO ICTRP dates read in each field's own convention
+
+`date_registration` flip-flopped too, but for a different reason: the importers
+disagreed on what the date *was*. ICTRP's XML export mixes date conventions within one
+file, and `importWHOXML.py` used to read every date month-first (dateutil's default), so
+any date whose day was 12 or lower came out with day and month swapped. For
+NCT04789551, ClinicalTrials.gov stored `2021-03-05`, the next WHO import stored
+`2021-05-03`, and so on after every run.
+
+What ICTRP exports, checked in September 2026 against a real export and against the
+ICTRP portal (which shows the same strings as the export):
+
+| XML field | Convention | Examples |
+|---|---|---|
+| `Export_date` | month-first | `09/18/2026 10:42:00` |
+| `Date_registration3` | `yyyymmdd` | `20260805` |
+| `Date_registration` | day-first; year-first for some registries (ChiCTR, IRCT, NL-OMON) | `05/08/2026`, `2022-12-23` |
+| `Date_enrollement` | day-first; year-first (ChiCTR, IRCT, NL-OMON, JPRN/UMIN); textual (ClinicalTrials.gov) | `08/07/2026`, `2020-04-10`, `2021/07/27`, `August 15, 2026` |
+| `Ethics_review_approval_date` | day-first | `31/10/2023` |
+| `results_date_completed` | day-first | `03/02/2025` |
+| `Last_Refreshed_on` | textual | `24 August 2026` |
+
+So the importer:
+
+- takes the registration date from `Date_registration3`, falling back to
+  `Date_registration` read day-first;
+- reads the other registry dates day-first, except a value that opens with a four-digit
+  year, which is year-month-day (dateutil applies day-first to those too, which would
+  turn `2020-04-10` into 4 October);
+- keeps `Export_date` month-first.
+
+ICTRP's `Date_registration` for a ClinicalTrials.gov record is the "first submitted"
+date that `feedreader_trials_ctgov.py` stores, so now that both importers read it
+correctly they agree and stop flipping. Rows the old parser got wrong are corrected by
+the next import that carries them: the ClinicalTrials.gov import for NCT trials, and the
+WHO import for the rest, whose update path overwrites any stored date that differs from
+the incoming one. A row merged from several registrations of the same study (say an NCT
+and a CTRI record) still gets genuinely different registration dates from each; that is
+trial dedup, not date parsing.
+
+Tests: `gregory/tests/test_who_importer.py` (`WHODateConventionsTest`).
+
 ## Derived normalized fields are immune to the flip-flop
 
 `phase` and `recruitment_status` are shared/contested fields above — their raw vocabulary
