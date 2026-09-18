@@ -11,8 +11,13 @@ from gregory.utils.registry_utils import (
 )
 from gregory.utils.text_utils import clean_field_html
 import datetime
+import re
 import xml.etree.ElementTree as ET
 import pytz
+
+# A date that opens with a four-digit year ("2023-01-25", "2021/07/27",
+# "20260805") is year-month-day, whichever convention its field uses.
+YEAR_FIRST_DATE = re.compile(r"\s*\d{4}")
 
 
 class Command(BaseCommand):
@@ -53,17 +58,54 @@ class Command(BaseCommand):
 		"""Truncate change reason to fit within 100 character database limit."""
 		return reason[:100] if len(reason) > 100 else reason
 
-	def robust_parse_date(self, date_str):
+	def robust_parse_date(self, date_str, dayfirst=False):
+		"""
+		Parse an ICTRP date to midnight UTC, or None if it can't be parsed.
+
+		dayfirst says how to read an ambiguous numeric date: True reads
+		"05/08/2026" as 5 August, False as 8 May. Textual dates ("August 15,
+		2026") and year-first ones ("2023-01-25") read the same either way.
+		"""
 		if not date_str:
 			return None
+		# dateutil applies dayfirst even after a leading year, reading
+		# "2023-01-05" as 1 May.
+		if YEAR_FIRST_DATE.match(date_str):
+			dayfirst = False
 		try:
-			naive_date = parse(date_str).date()
+			# A month-only date ("May 2015", which ICTRP gives for some
+			# ClinicalTrials.gov records) has no day, and dateutil would fill in
+			# today's, so the stored date changed with every import. Use the 1st,
+			# as the ClinicalTrials.gov importer does.
+			naive_date = parse(
+				date_str,
+				dayfirst=dayfirst,
+				default=datetime.datetime(datetime.date.today().year, 1, 1),
+			).date()
 			aware_datetime = timezone.make_aware(
 				datetime.datetime.combine(naive_date, datetime.time(0, 0)), pytz.UTC
 			)
 			return aware_datetime
 		except ValueError:
 			return None
+
+	def parse_registration_date(self, trial):
+		"""
+		Registration date as midnight UTC, or None.
+
+		Date_registration3 ("20260805") can't be misread, so it wins when present.
+		Date_registration, the fallback, holds the same date day-first
+		("05/08/2026"), or year-first for some registries ("2022-12-23").
+		"""
+		try:
+			registered = datetime.datetime.strptime(
+				self.get_text(trial, "Date_registration3") or "", "%Y%m%d"
+			)
+		except ValueError:
+			return self.robust_parse_date(
+				self.get_text(trial, "Date_registration"), dayfirst=True
+			)
+		return timezone.make_aware(registered, pytz.UTC)
 
 	def update_existing_trial(self, trial, trial_data, source, subject):
 		has_changes = False
@@ -351,18 +393,23 @@ class Command(BaseCommand):
 					None, "ictrp", trial_data["countries"]
 				)
 
-			for date_field in [
-				"Export_date",
-				"Date_enrollement",
-				"Ethics_review_approval_date",
-				"results_date_completed",
-				"Last_Refreshed_on",
+			# ICTRP's export mixes date conventions within one file. Export_date
+			# is month-first ("09/18/2026 10:42:00"); the registry dates are
+			# day-first ("08/07/2026" is 8 July), year-first ("2023-01-25", e.g.
+			# ChiCTR, IRCT, NL-OMON) or textual ("August 15, 2026").
+			for date_field, dayfirst in [
+				("Export_date", False),
+				("Date_enrollement", True),
+				("Ethics_review_approval_date", True),
+				("results_date_completed", True),
+				("Last_Refreshed_on", True),
 			]:
 				raw_date = self.get_text(trial, date_field)
-				trial_data[date_field.lower()] = self.robust_parse_date(raw_date)
+				trial_data[date_field.lower()] = self.robust_parse_date(
+					raw_date, dayfirst=dayfirst
+				)
 
-			date_registration_raw = self.get_text(trial, "Date_registration")
-			parsed_registration = self.robust_parse_date(date_registration_raw)
+			parsed_registration = self.parse_registration_date(trial)
 			# WHO ICTRP only provides a single "Date of registration"; mirror it into both
 			# published_date (used across the app) and date_registration (registry field).
 			trial_data["published_date"] = parsed_registration
