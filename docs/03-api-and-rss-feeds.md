@@ -310,7 +310,7 @@ implemented and the one precedence rule to know.
 |:----------|:----------|:---:|:----:|:------------|
 | `title` | articles, trials | ✅ | ✅ | Match in the title only (case-insensitive, partial). |
 | `summary` | articles, trials | ✅ | ✅ | Match in the summary/abstract only. |
-| `search` | articles, trials | ✅ | ✅ | Match in title **or** summary (supports boolean operators, e.g. `a OR b`). |
+| `search` | articles, trials | ✅ | ✅ | Boolean search (e.g. `a OR b`). Articles: title or summary. Trials: title, summary or scientific title. |
 | `status` | trials | ✅ | ✅ | Case-insensitive exact match on the raw `recruitment_status` string (e.g. `Recruiting`). For the canonical vocabulary use `recruitment_status_normalized` on `GET /trials/`. |
 | `full_name` | authors | ✅ | ✅ | Match on the author's full name (case-insensitive, partial). |
 | `page`, `page_size`, `all_results` | all | ✅ | ✅ | Pagination. `FlexiblePagination` checks the POST body for all three. |
@@ -318,6 +318,13 @@ implemented and the one precedence rule to know.
 | `published_date_after` / `published_date_before` | articles | ✅ | ✅ | Publication date range — same semantics as on `GET /articles/`. |
 | `date_registration_after` / `date_registration_before` | trials | ✅ | ✅ | Registration date range — same semantics as on `GET /trials/`. |
 | Any other list-endpoint filter | articles, trials, authors | ✅ | ✅ | `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`, `sponsor_id`, `orcid`, … — the search endpoints mount the same `ArticleFilter` / `TrialFilter` / `AuthorFilter` as the list endpoints, so every filter defined there applies. |
+
+Trials' `search` also reads `scientific_title` because WHO ICTRP-sourced trials
+(`Source_Register` other than ClinicalTrials.gov) rarely have a `summary`, and their
+`title` is the registry's lay public title — the trial's actual name is usually only in
+the scientific title. This is additive for bare and `OR`-ed terms (a trial can only gain
+matches), but `-term` / `NOT term` now also excludes a trial whose scientific title
+contains the excluded word, even if its title and summary don't.
 
 #### GET vs POST on search endpoints
 
