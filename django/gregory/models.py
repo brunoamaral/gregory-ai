@@ -1462,7 +1462,7 @@ class Trials(models.Model):
 			# gregory_historicaltrials (842 MB), which this avoids.
 			GinIndex(
 				OpClass(Upper("scientific_title"), name="gin_trgm_ops"),
-				name="trials_uscientific_title_gin_idx",
+				name="trials_uscititle_gin_idx",
 			),
 			# Non-partial expression indexes on the registry-identifier keys used by
 			# the /trials/ identifier filters (api.filters.TrialFilter). A dedicated

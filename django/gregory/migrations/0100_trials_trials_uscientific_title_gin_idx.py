@@ -14,6 +14,6 @@ class Migration(migrations.Migration):
     operations = [
         migrations.AddIndex(
             model_name='trials',
-            index=django.contrib.postgres.indexes.GinIndex(django.contrib.postgres.indexes.OpClass(django.db.models.functions.text.Upper('scientific_title'), name='gin_trgm_ops'), name='trials_uscientific_title_gin_idx'),
+            index=django.contrib.postgres.indexes.GinIndex(django.contrib.postgres.indexes.OpClass(django.db.models.functions.text.Upper('scientific_title'), name='gin_trgm_ops'), name='trials_uscititle_gin_idx'),
         ),
     ]

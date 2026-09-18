@@ -9,7 +9,7 @@ TRIAL_SEARCH_LOOKUPS = (
 	"utitle__contains",
 	"usummary__contains",
 	# icontains compiles to UPPER(col) LIKE UPPER(%s), which the
-	# trials_uscientific_title_gin_idx expression index answers.
+	# trials_uscititle_gin_idx expression index answers.
 	"scientific_title__icontains",
 )
 
