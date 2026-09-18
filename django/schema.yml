@@ -3354,11 +3354,11 @@ paths:
         description: Mixed list of registry identifiers, comma-separated, matched
           across every registry the id's own format identifies it as, case-insensitive
           — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g. ?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364.
-          Any common format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed,
-          with or without dashes/spacing). Matches ids from the trial's registry record,
-          its secondary ids, and the sponsor's study code — a lookup can return more
-          than one row when a trial was imported from two registries and hasn't been
-          merged yet. Acronyms are excluded (not unique) — use acronym for those.
+          Any common format is accepted (a bare number, or EUDRACT/EUCTR/CTIS-prefixed).
+          Matches ids from the trial's registry record, its secondary ids, and the
+          sponsor's study code — a lookup can return more than one row when a trial
+          was imported from two registries and hasn't been merged yet. Acronyms are
+          excluded (not unique) — use acronym for those.
         explode: false
         style: form
       - in: query
@@ -4215,11 +4215,11 @@ paths:
         description: Mixed list of registry identifiers, comma-separated, matched
           across every registry the id's own format identifies it as, case-insensitive
           — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g. ?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364.
-          Any common format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed,
-          with or without dashes/spacing). Matches ids from the trial's registry record,
-          its secondary ids, and the sponsor's study code — a lookup can return more
-          than one row when a trial was imported from two registries and hasn't been
-          merged yet. Acronyms are excluded (not unique) — use acronym for those.
+          Any common format is accepted (a bare number, or EUDRACT/EUCTR/CTIS-prefixed).
+          Matches ids from the trial's registry record, its secondary ids, and the
+          sponsor's study code — a lookup can return more than one row when a trial
+          was imported from two registries and hasn't been merged yet. Acronyms are
+          excluded (not unique) — use acronym for those.
         explode: false
         style: form
       - in: query
@@ -4663,12 +4663,12 @@ paths:
                     matched across every registry the id's own format identifies it
                     as, case-insensitive — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g.
                     ?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364. Any common
-                    format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed,
-                    with or without dashes/spacing). Matches ids from the trial's
-                    registry record, its secondary ids, and the sponsor's study code
-                    — a lookup can return more than one row when a trial was imported
-                    from two registries and hasn't been merged yet. Acronyms are excluded
-                    (not unique) — use acronym for those.
+                    format is accepted (a bare number, or EUDRACT/EUCTR/CTIS-prefixed).
+                    Matches ids from the trial's registry record, its secondary ids,
+                    and the sponsor's study code — a lookup can return more than one
+                    row when a trial was imported from two registries and hasn't been
+                    merged yet. Acronyms are excluded (not unique) — use acronym for
+                    those.
                 nct:
                   type: array
                   items:
@@ -5046,11 +5046,11 @@ paths:
         description: Mixed list of registry identifiers, comma-separated, matched
           across every registry the id's own format identifies it as, case-insensitive
           — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g. ?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364.
-          Any common format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed,
-          with or without dashes/spacing). Matches ids from the trial's registry record,
-          its secondary ids, and the sponsor's study code — a lookup can return more
-          than one row when a trial was imported from two registries and hasn't been
-          merged yet. Acronyms are excluded (not unique) — use acronym for those.
+          Any common format is accepted (a bare number, or EUDRACT/EUCTR/CTIS-prefixed).
+          Matches ids from the trial's registry record, its secondary ids, and the
+          sponsor's study code — a lookup can return more than one row when a trial
+          was imported from two registries and hasn't been merged yet. Acronyms are
+          excluded (not unique) — use acronym for those.
         explode: false
         style: form
       - in: query

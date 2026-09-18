@@ -1,6 +1,5 @@
 """
-Importer regression test for Trials.identifiers_normalized
-(TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §6.5).
+Importer regression test for Trials.identifiers_normalized.
 
 Imports django/gregory/tests/fixtures/ictrp/NCT07758270_NCT07768761_DRKS00040782.xml
 -- three real WHO ICTRP-sourced trials, trimmed from a live sample export --
@@ -8,7 +7,7 @@ through the real importWHOXML command, then asserts each trial's
 identifiers_normalized holds ONLY its own registry id. Two of the three carry
 a free-text Secondary_ID that is a genuine WHO ICTRP negative sample (not a
 registry id: "1583821/ 17043-H33", "23-232 BO") -- see the fixture's own
-header comment and plan §2.6 -- so this also guards against the normalizer
+header comment -- so this also guards against the normalizer
 over-matching free text that merely looks numeric/alphanumeric.
 
 Run:

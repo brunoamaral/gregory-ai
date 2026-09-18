@@ -71,8 +71,7 @@ def test_acronym_fires_its_own_rule_not_the_registry_id_one():
 	assert not any("registry-id" in s.lower() for s in guidance["suggestions"])
 	# And the reverse: a registry-ID filter fires its own rule, not the
 	# acronym-specific one. The registry-ID rule's own text legitimately
-	# points at trying `search` with the acronym as a next step
-	# (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.7) — checked here by the
+	# points at trying `search` with the acronym as a next step, so check the
 	# acronym rule's distinctive phrasing, not the bare word "acronym".
 	registry_guidance = guidance_for({"nct": "x"}, "trials")
 	assert not any(
@@ -162,8 +161,7 @@ def test_acronym_fields_read():
 
 def test_registry_id_fields_read_includes_secondary_id_sources():
 	"""A registry-ID filter matches identifiers_normalized, which is derived
-	from all three of these raw fields — see
-	TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.7."""
+	from all three of these raw fields."""
 	for key in ("nct", "euct", "eudract", "ctis"):
 		guidance = guidance_for({key: "x"}, "trials")
 		assert guidance["fields_read"][key] == [

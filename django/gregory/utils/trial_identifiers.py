@@ -44,10 +44,14 @@ PATTERNS: list[tuple[str, re.Pattern]] = [
 	("chictr", re.compile(r"(?<![A-Za-z0-9])ChiCTR[-A-Za-z0-9]{5,20}", _FLAGS)),
 	# Dutch Trial Register: NL-OMON must be tried before the bare "nl" pattern
 	# below so the more specific form is obvious, though the two can't actually
-	# collide — "NL" is never immediately followed by "-OMON" AND 4-5 digits at
+	# collide — "NL" is never immediately followed by "-OMON" AND 4 digits at
 	# once.
 	("nl_omon", re.compile(r"(?<![A-Za-z0-9])NL-OMON(\d+)(?![A-Za-z0-9])", _FLAGS)),
-	("nl", re.compile(r"(?<![A-Za-z0-9])NL(\d{4,5})(?![A-Za-z0-9])", _FLAGS)),
+	# Dutch trial register (LTR) ids are NL + 4 digits. CCMO ethics-committee
+	# dossier numbers share the prefix (NL67805.068.18: 5 digits, then
+	# ".<digits>") but aren't trial ids, so take exactly 4 digits and reject a
+	# following ".<digit>".
+	("nl", re.compile(r"(?<![A-Za-z0-9])NL(\d{4})(?![A-Za-z0-9]|\.\d)", _FLAGS)),
 	("ntr", re.compile(r"(?<![A-Za-z0-9])NTR(\d{1,5})(?![A-Za-z0-9])", _FLAGS)),
 	# Peru (REPEC — Registro Peruano de Ensayos Clínicos).
 	("repec", re.compile(r"(?<![A-Za-z0-9])PER-(\d{3}-\d{2})(?![A-Za-z0-9])", _FLAGS)),
@@ -130,8 +134,8 @@ def extract_identifiers_from_trial_identifiers(identifiers: dict | None) -> set[
 #
 # Feeds gregory.utils.trial_field_normalizers.NORMALIZED_TRIAL_FIELDS as the
 # (("identifiers", "secondary_id", "ctg_secondary_ids"), "identifiers_normalized", …)
-# entry. See TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.3 and
-# docs/trials-field-normalization.md for the full trust-tier rationale.
+# entry. See docs/trials-field-normalization.md for the full trust-tier
+# rationale.
 
 # ctg_secondary_ids[].type values that are sponsor-declared registrations of this
 # study — always counted, never dropped by the free-text clash rule.
@@ -141,7 +145,7 @@ _CTG_REGISTRY_TYPES = frozenset({"EUDRACT_NUMBER", "CTIS", "REGISTRY"})
 # identifiers — skipped outright, whatever their value looks like.
 _CTG_GRANT_TYPES = frozenset({"NIH", "OTHER_GRANT", "AHRQ", "FDA", "SAMHSA", "VA", "CDC"})
 
-# JAPIC domain rule (§3.4): a REGISTRY-typed ctg_secondary_ids entry whose domain
+# JAPIC domain rule: a REGISTRY-typed ctg_secondary_ids entry whose domain
 # names the Japan Pharmaceutical Information Center registry, and whose id is a
 # bare 6-digit number (no "JapicCTI-" prefix for extract_identifiers to match),
 # is still a JAPIC clinical trial id.
@@ -163,10 +167,10 @@ def _japic_from_registry_entry(entry: dict) -> set[tuple[str, str]]:
 	see _JAPIC_DOMAIN_RE above. Additive to _extract_from_value(entry["id"]): a
 	bare 6-digit id has no prefix for the "japic" text pattern to match, so this
 	is the only way such an entry is ever recognised."""
-	domain = entry.get("domain") or ""
+	domain = str(entry.get("domain") or "")
 	if not _JAPIC_DOMAIN_RE.search(domain):
 		return set()
-	digits = (entry.get("id") or "").strip()
+	digits = str(entry.get("id") or "").strip()
 	if not _SIX_DIGITS_RE.fullmatch(digits):
 		return set()
 	return {("japic", f"JAPICCTI-{digits}")}
@@ -180,7 +184,7 @@ def normalize_trial_identifiers(
 	"""Compute Trials.identifiers_normalized: the sorted, de-duplicated list of
 	every canonical registry id a trial carries, as "type:VALUE" strings.
 
-	Sources are trusted differently (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.3):
+	Sources are trusted differently:
 
 	- **Registry-sourced — always counts:** every ``identifiers`` value except
 	  ``org_study_id`` (a sponsor-assigned code, not a registry's own record),
@@ -223,7 +227,7 @@ def normalize_trial_identifiers(
 	for entry in ctg_secondary_ids or []:
 		if not isinstance(entry, dict):
 			continue
-		entry_type = (entry.get("type") or "").strip().upper()
+		entry_type = str(entry.get("type") or "").strip().upper()
 		if entry_type in _CTG_GRANT_TYPES:
 			continue
 		if entry_type in _CTG_REGISTRY_TYPES:

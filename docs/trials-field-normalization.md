@@ -519,9 +519,9 @@ used to compare a query value against one raw `identifiers` JSON key, exactly. T
 almost everything: keys and formats are inconsistent across importers (`nl` vs `nl-omon`,
 `irct` vs `irctn`, a literal `null` key on 15 rows), stored values keep their source's own
 prefix (`EUCTR2020-…-DE`, `CTIS2023-…`), and a registry id sitting only in `secondary_id`
-or the sponsor's `org_study_id` was never reachable at all — see
-TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md for the full audit (79 of 926 EudraCT numbers and 285
-of 346 CTIS numbers were reachable by their plain number before this field existed).
+or the sponsor's `org_study_id` was never reachable at all. Before this field existed, only 79
+of 926 EudraCT numbers and 285 of 346 CTIS numbers stored in `identifiers` could be found by
+their plain number (dev database audit, 2026-09-18).
 `identifiers_normalized` is the fix: one canonical, searchable list per trial, recomputed on
 every save like every other field on this page — but with three raw inputs and a
 trust-tiered merge, not a straight one-input mapping.
@@ -576,8 +576,7 @@ recomputation is deterministic and never causes a spurious `update_fields` write
 
 Twenty-four registries in total. `nct`, `eudract`, `ctis`, `isrctn`, `actrn`, `drks`,
 `ctri`, `pactr`, `rpcec`, `tctr`, `slctr`, `itmctr`, `umin`, `jrct`, `rbr`, `irct`,
-`chictr` predate this field (see the "What exists today" section of the plan for their
-history); this field's own pass added `nl_omon` (Dutch Trial Register, `NL-OMON…`), `nl`
+`chictr` predate this field; this field's own pass added `nl_omon` (Dutch Trial Register, `NL-OMON…`), `nl`
 (`NL####`/`NL#####`), `ntr` (`NTR#`–`NTR#####`), `repec` (Peru, `PER-###-##`), `lbctr`
 (Lebanon, `LBCTR##########`), `utn` (the WHO Universal Trial Number, `U1111-####-####`),
 and `japic` (`JapicCTI-######`), and widened two existing ones: `jrct` now accepts an

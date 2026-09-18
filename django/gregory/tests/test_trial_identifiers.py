@@ -122,7 +122,7 @@ class OtherRegistryExtractionTest(SimpleTestCase):
 
 
 class NewRegistryExtractionTest(SimpleTestCase):
-	"""Parser extensions added for TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.4."""
+	"""Registry patterns added alongside identifiers_normalized."""
 
 	def test_nl_omon(self):
 		self.assertEqual(
@@ -131,6 +131,20 @@ class NewRegistryExtractionTest(SimpleTestCase):
 
 	def test_nl(self):
 		self.assertEqual(extract_identifiers("NL7921"), {("nl", "NL7921")})
+
+	def test_nl_ccmo_dossier_number_is_not_a_trial_id(self):
+		# CCMO ethics-committee dossier numbers share the NL prefix but aren't
+		# registry ids: 5 digits, then ".<digits>".
+		self.assertEqual(extract_identifiers("NL67805.068.18"), set())
+		self.assertEqual(
+			extract_identifiers("NL7921;NL67805.068.18;NL"), {("nl", "NL7921")}
+		)
+
+	def test_nl_trial_id_before_a_full_stop(self):
+		self.assertEqual(
+			extract_identifiers("Netherlands Trial Register, NL8496. Registered 2020"),
+			{("nl", "NL8496")},
+		)
 
 	def test_nl_omon_does_not_also_register_as_bare_nl(self):
 		"""NL-OMON19915 must not also match the plain "nl" pattern — there is no
@@ -195,8 +209,8 @@ class NewRegistryExtractionTest(SimpleTestCase):
 
 class LabelledTokenExtractionTest(SimpleTestCase):
 	"""A registry id embedded in a labelled sentence, not a bare token — parsing
-	must search inside tokens, not require a whole-token match (plan §2.2:
-	55 secondary_id rows label the number, e.g. "EudraCT No.: …")."""
+	must search inside tokens, not require a whole-token match (55 dev
+	secondary_id rows label the number, e.g. "EudraCT No.: …")."""
 
 	def test_eudract_no_colon_label(self):
 		self.assertEqual(
@@ -213,8 +227,8 @@ class LabelledTokenExtractionTest(SimpleTestCase):
 
 class NegativeSampleExtractionTest(SimpleTestCase):
 	"""None of these should ever yield an identifier — the WHO ICTRP sample
-	Secondary_ID values from plan §2.6 (deliberately not registry ids), plus
-	the extra negatives from plan §6.1."""
+	Secondary_ID values (deliberately not registry ids), plus a few more
+	known non-IDs."""
 
 	def test_ictrp_sample_secondary_ids_yield_nothing(self):
 		samples = [
@@ -242,7 +256,7 @@ class NegativeSampleExtractionTest(SimpleTestCase):
 	def test_truncated_eudract_not_matched(self):
 		"""Truncated at source (53 chars short of the full 2-digit suffix) —
 		stays unparsed; the legacy exact-match filter branch is what still
-		finds these (plan §3.5)."""
+		finds these."""
 		self.assertEqual(extract_identifiers("2019-004822-1"), set())
 
 	def test_bare_six_digits_without_domain_context_not_matched(self):
@@ -286,8 +300,7 @@ class ExtractFromTrialIdentifiersTest(SimpleTestCase):
 
 
 class NormalizeTrialIdentifiersTest(SimpleTestCase):
-	"""gregory.utils.trial_identifiers.normalize_trial_identifiers —
-	TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.3/§6.2."""
+	"""gregory.utils.trial_identifiers.normalize_trial_identifiers."""
 
 	def test_all_empty_inputs_return_none(self):
 		self.assertIsNone(normalize_trial_identifiers(None, None, None))
@@ -398,6 +411,19 @@ class NormalizeTrialIdentifiersTest(SimpleTestCase):
 			["drks:DRKS00041145", "isrctn:ISRCTN14048364", "nct:NCT01234567"],
 		)
 
+	def test_non_string_json_values_do_not_crash(self):
+		# ctg_secondary_ids is a JSONField, so tolerate whatever shapes it holds.
+		result = normalize_trial_identifiers(
+			None,
+			None,
+			[
+				{"id": 153082, "type": "REGISTRY", "domain": "JAPIC-CTI"},
+				{"id": "NCT12345678", "type": None},
+				{"id": None, "type": 7, "domain": 3},
+			],
+		)
+		self.assertEqual(result, ["japic:JAPICCTI-153082", "nct:NCT12345678"])
+
 	def test_ctg_grant_types_skipped_even_when_value_would_parse(self):
 		result = normalize_trial_identifiers(
 			None,
@@ -416,7 +442,7 @@ class NormalizeTrialIdentifiersTest(SimpleTestCase):
 
 	def test_ctg_ctis_shaped_value_typed_eudract_number_lands_as_ctis(self):
 		"""Format decides the canonical type, never the source's own type
-		label (plan §3.3/§6.2)."""
+		label."""
 		result = normalize_trial_identifiers(
 			None,
 			None,
@@ -435,7 +461,7 @@ class NormalizeTrialIdentifiersTest(SimpleTestCase):
 	def test_ctg_registry_type_non_japic_domain_bare_digit_unmatched(self):
 		"""A REGISTRY-typed entry with an unrelated domain and a bare-digit id
 		(French ID-RCB, NCI CTRP, ...) stays unrecognised — it's raw data only
-		in ctg_secondary_ids, see plan §11."""
+		in ctg_secondary_ids."""
 		result = normalize_trial_identifiers(
 			None,
 			None,

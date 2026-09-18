@@ -9,8 +9,8 @@
   Two of the three carry a free-text Secondary_ID that is NOT a registry
   identifier ("1583821/ 17043-H33" for NCT07768761, "23-232 BO" for
   DRKS00040782), part of the negative test set for
-  gregory.utils.trial_identifiers.normalize_trial_identifiers (see
-  TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §2.6): after import, each of these
+  gregory.utils.trial_identifiers.normalize_trial_identifiers: after
+  import, each of these
   three trials' identifiers_normalized must hold only its own registry id,
   nothing picked up from Secondary_ID or Acronym.
 -->

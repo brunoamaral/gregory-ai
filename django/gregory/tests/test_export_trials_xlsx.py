@@ -435,7 +435,6 @@ class ExportTrialsXlsxTests(TestCase):
 
 	# ------------------------------------------------------------------
 	# identifiers_normalized / ctg_secondary_ids
-	# (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.6)
 	# ------------------------------------------------------------------
 
 	def test_identifiers_normalized_column_present_and_rendered(self):
@@ -474,7 +473,7 @@ class ExportTrialsXlsxTests(TestCase):
 
 	def test_ctg_secondary_ids_is_excluded_from_export(self):
 		"""ctg_secondary_ids is raw ClinicalTrials.gov data feeding
-		identifiers_normalized, not a public-facing column — plan §3.2."""
+		identifiers_normalized, not a public-facing column."""
 		path, wb = self._export(subjects=str(self.subject_ms.pk))
 		try:
 			ws = wb["Multiple Sclerosis"]

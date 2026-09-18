@@ -1,7 +1,6 @@
 """One-time backfill of Trials.ctg_secondary_ids from the ClinicalTrials.gov API, for
 trials that predate typed-secondary-id capture in the CTGov importer (and, for the
-~12.9k legacy pre-CTGov-importer rows, predate it entirely — see
-TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.8).
+~12.9k legacy pre-CTGov-importer rows, predate it entirely).
 
 Clone of backfill_trial_sponsors_from_ctgov's skeleton — same conventions, same
 idempotent selection-on-emptiness, same batched filter.ids fetch with retry/backoff,

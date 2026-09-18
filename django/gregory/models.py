@@ -1518,7 +1518,7 @@ class Trials(models.Model):
 			# GIN index backing the identifiers_normalized__overlap branch every
 			# registry-ID filter falls through to (api.filters.TrialFilter._match_registry_ids).
 			# Named "..._ids_norm..." rather than "..._identifiers_norm..." — the latter
-			# is 31 characters, one over Postgres/Django's 30-character index-name limit
+			# is 31 characters, one over Django's 30-character index-name limit
 			# (models.E034).
 			GinIndex(
 				fields=["identifiers_normalized"],

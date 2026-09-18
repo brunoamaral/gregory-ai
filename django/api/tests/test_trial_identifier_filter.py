@@ -243,7 +243,7 @@ class TrialIdentifierFilterTests(TestCase):
 
 
 class TrialRegistryIdFormatDecidesFilterTests(TestCase):
-	"""TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.5/§6.4: an id's own format now
+	"""An id's own format now
 	decides what it matches — the identifiers_normalized__overlap branch OR'd
 	onto the legacy exact-key match every test above already covers (the
 	superset guarantee: every test in TrialIdentifierFilterTests above still
@@ -291,13 +291,13 @@ class TrialRegistryIdFormatDecidesFilterTests(TestCase):
 			"DRKS trial", identifiers={"drks": "DRKS00041145"}
 		)
 		# WHO Universal Trial Number: never its own identifiers key in
-		# practice — it shows up in free-text secondary_id (plan §2.4).
+		# practice — it shows up in free-text secondary_id.
 		self.trial_utn = self._make_trial(
 			"UTN trial",
 			identifiers={"nct": "NCT00099999"},
 			secondary_id="U1111-1299-8084",
 		)
-		# Truncated at source (54 such rows on dev — plan §2.4): one digit
+		# Truncated at source (54 such rows on dev): one digit
 		# short of a parseable EudraCT number, so extract_identifiers finds
 		# nothing in it; only the legacy exact-match branch can still find it.
 		self.trial_truncated_eudract = self._make_trial(
@@ -337,7 +337,7 @@ class TrialRegistryIdFormatDecidesFilterTests(TestCase):
 		)
 
 	def test_eudract_finds_both_eudract_and_euctr_keyed_rows(self):
-		"""The plan's own STHENOS example: one bare number, two rows, two
+		"""The STHENOS example: one bare number, two rows, two
 		different raw keys/formats."""
 		response = self.client.get("/trials/?eudract=2020-004505-32")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -372,7 +372,7 @@ class TrialRegistryIdFormatDecidesFilterTests(TestCase):
 		)
 
 	def test_format_decides_eudract_param_finds_ctis_number(self):
-		"""Design decision (plan §3.5): the format decides what matches,
+		"""Design decision: the format decides what matches,
 		whichever typed param the id arrived in."""
 		response = self.client.get("/trials/?eudract=2023-507431-37-00")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)

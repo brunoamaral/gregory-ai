@@ -520,8 +520,8 @@ accepts a single value or a comma-separated list and matches any of them,
 case-insensitively.
 
 **Any common format is accepted** — a bare number (`2020-004505-32`), a
-registry-prefixed one (`EUDRACT2020-…`, `EUCTR2020-…-DE`, `CTIS2023-…`), with
-or without the internal dashes/spacing a source happened to use. The value's
+registry-prefixed one (`EUDRACT2020-…`, `EUCTR2020-…-DE`, `CTIS2023-…`). NCT numbers
+also match with a space or dash after `NCT`. The value's
 own *shape* decides what it matches, not which param it arrived in: an
 EudraCT-shaped number passed to `?ctis=` still matches as EudraCT, and a
 CTIS-shaped number passed to `?eudract=` still matches as CTIS. `?identifiers=`

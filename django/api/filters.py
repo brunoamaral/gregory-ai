@@ -773,7 +773,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	# ``identifiers`` is the umbrella param: a mixed list matched across every
 	# registry key at once. The typed params below scope to a single registry.
 	# The format decides what a value matches, not which param it arrived in —
-	# see _match_registry_ids / TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.5.
+	# see _match_registry_ids.
 	identifiers = filters.BaseInFilter(
 		method="filter_identifiers",
 		label="Mixed registry id(s), comma-separated; matches any registry (case-insensitive)",
@@ -782,8 +782,8 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"every registry the id's own format identifies it as, "
 			"case-insensitive — not just NCT/EudraCT/EUCT/EUCTR/CTIS, e.g. "
 			"?identifiers=NCT02521311,2020-001234-12,ISRCTN14048364. Any common "
-			"format is accepted (bare number, EUDRACT/EUCTR/CTIS-prefixed, "
-			"with or without dashes/spacing). Matches ids from the trial's "
+			"format is accepted (a bare number, or EUDRACT/EUCTR/CTIS-prefixed). "
+			"Matches ids from the trial's "
 			"registry record, its secondary ids, and the sponsor's study code — "
 			"a lookup can return more than one row when a trial was imported "
 			"from two registries and hasn't been merged yet. Acronyms are "
@@ -1217,7 +1217,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	def _match_registry_ids(self, queryset, value, legacy_keys):
 		"""Return trials matching any of ``value``'s registry ids, in any common
 		format — the id's own shape decides what it matches, whichever param it
-		arrived in (TRIALS-IDENTIFIERS-NORMALIZED-PLAN.md §3.5).
+		arrived in.
 
 		Two branches, OR'd together:
 
@@ -1232,7 +1232,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		pre-existing behaviour by construction: rows the identifiers_normalized
 		backfill hasn't reached yet (NULL), and truncated/malformed values
 		``extract_identifiers`` can't parse, still match exactly as they do
-		today — see the "Reachability"/"Superset" checks in the plan's §8.
+		today.
 		"""
 		tokens = {v.strip() for v in (value or []) if v and v.strip()}
 		if not tokens:
