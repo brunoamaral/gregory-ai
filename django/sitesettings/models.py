@@ -334,8 +334,9 @@ class CustomSetting(models.Model):
 		help_text=(
 			"Optional. How the research assistant describes this instance to "
 			"the model: its focus and framing. The model reads it, not "
-			"people. If left blank, a description is generated from the "
-			"site's name and subjects."
+			"people. Not read by the MCP server yet (a later release starts "
+			"using it); once it is, a blank value generates a description "
+			"from the site's name and subjects."
 		),
 	)
 
