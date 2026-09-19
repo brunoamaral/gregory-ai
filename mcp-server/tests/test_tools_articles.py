@@ -160,6 +160,37 @@ async def test_get_article_returns_full_record(mock_gregory):
 	assert mock_gregory.requests[0].url.path == "/articles/42/"
 
 
+async def test_get_article_strips_team_data(mock_gregory):
+	# Team plumbing sits at three depths in the raw record (per schema.yml):
+	# `teams`, each subject's team_id, and each relevance's nested subject's
+	# team_id. None of it may reach the model. team_categories is category
+	# data despite its name, and subject_id is not a team key.
+	category = {"id": 5, "category_name": "Stem cells", "category_slug": "stem-cells"}
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200,
+			json={
+				"article_id": 42,
+				"teams": [{"id": 1, "name": "Team A", "slug": "team-a", "organization": 1}],
+				"subjects": [{"id": 1, "subject_name": "Multiple Sclerosis", "description": None, "team_id": 1}],
+				"team_categories": [category],
+				"article_subject_relevances": [
+					{"subject": {"id": 1, "subject_name": "Multiple Sclerosis", "team_id": 1}, "subject_id": 1, "is_relevant": True}
+				],
+			},
+		)
+	)
+
+	result = await get_article(42)
+
+	assert "teams" not in result
+	assert result["subjects"] == [{"id": 1, "subject_name": "Multiple Sclerosis", "description": None}]
+	assert result["article_subject_relevances"] == [
+		{"subject": {"id": 1, "subject_name": "Multiple Sclerosis"}, "subject_id": 1, "is_relevant": True}
+	]
+	assert result["team_categories"] == [category]
+
+
 async def test_get_article_404_says_not_found_in_this_instance(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
 

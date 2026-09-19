@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .. import intent as intent_module
 from ..client import GregoryAPIError, get_client
-from ..compact import compact_article
+from ..compact import compact_article, strip_team_data
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
 from ..zero_result import guidance_for
@@ -111,7 +111,7 @@ async def get_article(article_id: int) -> dict:
 		ValueError: If no article with this ID is visible in this instance.
 	"""
 	try:
-		return await get_client().get(f"/articles/{article_id}/")
+		article = await get_client().get(f"/articles/{article_id}/")
 	except GregoryAPIError as exc:
 		# Django returns 404 both for an article that doesn't exist and one
 		# outside this site's scope — deliberately identical, so existence
@@ -121,3 +121,4 @@ async def get_article(article_id: int) -> dict:
 		if exc.status_code == 404:
 			raise ValueError(f"Article {article_id} was not found in this instance.") from exc
 		raise
+	return strip_team_data(article)
