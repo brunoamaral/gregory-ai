@@ -161,6 +161,11 @@ page (`CustomSetting.mcp_enabled`/`mcp_description`, and the `SiteMcpPrompt` /
 The server doesn't read them yet, so clients still get the three built-ins
 listed above; a later release publishes and serves the authored ones instead.
 
+The three built-ins above also exist as editable `SiteMcpPrompt` rows for
+brain-regeneration.com, seeded by a data migration. `seed_mcp_prompts --site
+<id>` gives a new tenant the same starting set — it never overwrites a row
+that already exists, so an edited prompt is never touched by a re-run.
+
 ---
 
 ## Instance targeting
