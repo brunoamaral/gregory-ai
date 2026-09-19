@@ -169,24 +169,45 @@ in this order:
 
 1. **`GREGORY_SITE_ID`** (env) — wins outright, without ever calling the API. Set this
    for a single-tenant deployment that should always report as one site regardless of
-   how it's reached.
+   how it's reached. It must name an `api_public` site (see below).
 2. **The inbound `Host` header** this server was reached on (nginx sets
    `proxy_set_header Host $host` — see [Deployment](#deployment)), resolved against the
    API's `GET /sites/` discovery endpoint (`{site_id, domain, name}` for every
-   `api_public` site) the same way `django/subscriptions/views.py`'s
-   `_find_site_by_domain()` resolves a domain: exact match, then one subdomain level
+   `api_public` site) the same way `django/gregory/site_resolution.py`'s
+   `find_site_by_domain()` resolves a domain: exact match, then one subdomain level
    stripped — so `gregory-ai.brain-regeneration.com` resolves via
    `brain-regeneration.com`. `GET /sites/` is cached in-process for the same 10 minutes
    as the subjects/categories catalogs (`CATALOG_CACHE_TTL_MS`), not fetched per call.
-3. **Neither resolves** — the parameter is omitted, exactly like today's behaviour.
-   Never guessed, never an error from this server.
+3. **Neither resolves** — the parameter is omitted. Never guessed, and this server raises
+   no error of its own: the call gets whatever the API answers an anonymous request that
+   names no site (below).
 
-This exists so the server keeps working, unchanged, once the site-scoped API visibility
-project's later phase makes the API fail closed for an anonymous caller that names no
-site. An unrecognised query parameter is ignored by django-filter today, so this is a
-no-op until that phase ships. Site resolution is transport-level (`GregoryClient.get()`
-and `CatalogCache`'s cache key, not a parameter on any tool) — no tool signature changes,
-and no LLM caller ever chooses a `site_id` itself.
+This is what scopes the server to one site's corpus. The server calls the API
+anonymously, and the API scopes an anonymous caller to a single `api_public` site's
+`scope_subjects`, resolved from `?site_id=` — see
+[Resolving a site for an anonymous caller](03-api-and-rss-feeds.md#resolving-a-site-for-an-anonymous-caller).
+On `/articles/` and `/trials/` the same parameter is also a subject-scope content filter.
+So each hostname gets its own site's content, and a tool cannot return anything outside
+that scope: the API never sends it.
+
+When no site resolves, the outcome depends on how many `api_public` sites the instance
+has:
+
+- **At most one:** the API serves the public union, which is then that one site's
+  scope. Results are the same as if `site_id` had been sent.
+- **Two or more:** the API returns `400` (`NoSiteResolvedError`, listing the sites a
+  caller could name), and every tool call fails with it. That is correct fail-closed
+  behaviour — the API refuses to blend several sites' content into one answer — but it
+  means that **before adding a second `api_public` site, every hostname this server is
+  reached on has to resolve to a site**, or `GREGORY_SITE_ID` has to be set.
+
+Anonymous resolution only ever considers `api_public` sites, so a private site's
+`site_id` never grants that site's scope, wherever it comes from. This server cannot
+serve a private site today.
+
+Site resolution is transport-level (`GregoryClient.get()` and `CatalogCache`'s cache key,
+not a parameter on any tool) — no tool signature changes, and no LLM caller ever chooses
+a `site_id` itself.
 
 ## Auth
 

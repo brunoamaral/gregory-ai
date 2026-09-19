@@ -1,32 +1,38 @@
 """Per-request site resolution: makes every upstream call carry `?site_id=`.
 
-Why this exists: the site-scoped API visibility project's next phase will
-make the Gregory API fail closed — an anonymous caller that names no site
-gets a `400` (see `SITE-API-VISIBILITY-SPEC.md`, "Resolving a site without
-being told one"). This server calls the API anonymously
-(`gregory_mcp/client.py` sends only `Accept` and `User-Agent`), so every tool
-call would break the moment that phase ships, unless it already sends
-`?site_id=` by then. An unrecognised query parameter is ignored by
-django-filter today, so sending it now — on every endpoint, not only the two
-that currently declare it (`/articles/`, `/trials/`) — is a no-op until that
-phase ships and a forward-compatible default once it does.
+Why this exists: this server calls the API anonymously
+(`gregory_mcp/client.py` sends only `Accept` and `User-Agent`), and the API
+scopes an anonymous caller to ONE `api_public` site's `scope_subjects`,
+resolved from `?site_id=` (`django/gregory/site_resolution.py`, #866). So
+`?site_id=` is what tells the API which site — which tenant — a call is for.
+Sent on every call except `GET /sites/` itself: visibility reads it on every
+content endpoint, and `/articles/` and `/trials/` also apply it as a
+subject-scope content filter.
+
+A call that names no site gets the public union only while that union is
+unambiguous: with at most one `api_public` site it simply is that site's
+scope, so nothing changes. From the second `api_public` site on, the API
+answers `400` (`NoSiteResolvedError`) instead — so on a multi-site
+deployment every tool call depends on this resolving. Resolution only ever
+considers `api_public` sites, so a private site's id never grants its scope.
 
 Resolution order for a request, cheapest/most-certain first:
 
 1. `GREGORY_SITE_ID` (env, loaded once at startup into
    `Settings.site_id_override`) — wins outright, without ever touching the
    network. A single-tenant deployment can pin this and depend on neither
-   the inbound Host header nor `GET /sites/` existing.
+   the inbound Host header nor `GET /sites/` existing. It must name an
+   `api_public` site, for the reason above.
 2. The inbound `Host` header the MCP server was reached on (nginx sets
    `proxy_set_header Host $host` — see docs/07-mcp-server.md), resolved to a
    site_id via the API's `GET /sites/` discovery endpoint (added alongside
    the visibility project, PR #859) — matched exactly the way
-   `django/subscriptions/views.py`'s `_find_site_by_domain()` matches a
+   `django/gregory/site_resolution.py`'s `find_site_by_domain()` matches a
    domain: exact match, then one subdomain level stripped. Mirrored rather
    than imported — this is a separate deployable with no Django import path.
-3. Neither resolves — omit the parameter. Exactly today's behaviour, so
-   nothing regresses; once the API fail-closes this surfaces as its own
-   `400`, which is the correct, visible failure. Never guess, never raise.
+3. Neither resolves — omit the parameter, with the consequences above: fine
+   with one `api_public` site, a `400` on every call from the second one on,
+   which is the correct, visible failure. Never guess, never raise.
 
 The resolved value is exposed to the rest of the request via
 `site_context.get_current_site_id()` — see that module's docstring for why
@@ -79,9 +85,10 @@ def reset_site_resolution() -> None:
 
 
 def _normalize_host(raw: str | None) -> str | None:
-	"""Same normalisation `_find_site_by_domain` applies: strip a port or
-	IPv6 brackets via urlparse, lowercase. Returns None for an empty/missing
-	header rather than an empty string, so callers can `if host is None`."""
+	"""Same normalisation Django's `find_site_by_domain()` applies: strip a
+	port or IPv6 brackets via urlparse, lowercase. Returns None for an
+	empty/missing header rather than an empty string, so callers can
+	`if host is None`."""
 	if not raw:
 		return None
 	host = urlparse(f"//{raw}").hostname
@@ -89,10 +96,11 @@ def _normalize_host(raw: str | None) -> str | None:
 
 
 def _match_domain(host: str, domain_map: dict[str, int]) -> int | None:
-	"""Exact match, then one subdomain level stripped — mirrors
-	`_find_site_by_domain` exactly: 'gregory-ai.brain-regeneration.com' has
+	"""Exact match, then one subdomain level stripped — the same rule as
+	Django's `find_site_by_domain()`: 'gregory-ai.brain-regeneration.com' has
 	no exact entry in the directory, so this falls back to
-	'brain-regeneration.com'."""
+	'brain-regeneration.com'. Unlike Django's, it only ever matches against
+	`api_public` sites, since that is all `GET /sites/` lists."""
 	if host in domain_map:
 		return domain_map[host]
 	parts = host.split(".")
@@ -109,8 +117,9 @@ async def _fetch_site_directory() -> dict[str, int]:
 	Never raises: this endpoint is new (PR #859), so an instance running
 	slightly older Gregory code, or any other upstream failure, must degrade
 	to "no domain map available" — which resolves to omitting site_id, the
-	same safe fallback as an unresolvable Host — rather than breaking every
-	tool call on this server.
+	same fallback as an unresolvable Host (see the module docstring for what
+	the API then answers) — rather than raising out of every tool call on
+	this server.
 
 	GregoryAPIError covers non-2xx statuses and transport failures, but a
 	2xx response isn't guaranteed to be JSON — an intermediate proxy can
