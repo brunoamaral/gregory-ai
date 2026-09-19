@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.contrib.sites.admin import SiteAdmin
 from django.contrib.sites.models import Site
 
-from .models import CustomSetting
+from .models import CustomSetting, SiteMcpDocument, SiteMcpPrompt
 from gregory.models import OrganizationSite
 from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 
@@ -126,7 +126,45 @@ class CustomSettingInline(admin.StackedInline):
 				],
 			},
 		),
+		(
+			"Research assistant (MCP)",
+			{
+				"fields": ["mcp_enabled", "mcp_description"],
+				"description": (
+					"The assistant's corpus is <b>scope_subjects</b> above — there is no "
+					"separate MCP subject list. Prompts and documents are edited in their "
+					"own sections on this page. Not read by the MCP server yet — it starts "
+					"using these settings in a later release."
+				),
+			},
+		),
 	]
+
+
+class SiteMcpPromptInline(admin.StackedInline):
+	model = SiteMcpPrompt
+	extra = 0
+	verbose_name = "MCP prompt"
+	verbose_name_plural = "MCP prompts"
+	fields = ["name", "title", "description", "template", "arguments", "is_active", "ordering"]
+
+	def formfield_for_dbfield(self, db_field, request, **kwargs):
+		formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+		if db_field.name == "arguments":
+			formfield.help_text = (
+				'JSON list, e.g. [{"name": "topic", "description": "The topic to '
+				'research.", "required": true}]. Every $name placeholder in the '
+				"template must have a matching entry here, and vice versa."
+			)
+		return formfield
+
+
+class SiteMcpDocumentInline(admin.StackedInline):
+	model = SiteMcpDocument
+	extra = 0
+	verbose_name = "MCP document"
+	verbose_name_plural = "MCP documents"
+	fields = ["slug", "title", "description", "mime_type", "body", "is_active", "ordering"]
 
 
 class OrganizationSiteInline(admin.TabularInline):
@@ -151,7 +189,12 @@ class OrganizationSiteInline(admin.TabularInline):
 
 
 class SiteWithSettingsAdmin(SiteAdmin):
-	inlines = [CustomSettingInline, OrganizationSiteInline]
+	inlines = [
+		CustomSettingInline,
+		SiteMcpPromptInline,
+		SiteMcpDocumentInline,
+		OrganizationSiteInline,
+	]
 
 
 admin.site.unregister(Site)
