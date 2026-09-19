@@ -1,8 +1,108 @@
+import re
+import string
+
 from django.contrib.postgres.fields import ArrayField
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxLengthValidator
 from django.db import models
 from django.contrib.sites.models import Site
 from gregory.models import EncryptedTextField
 from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
+
+MCP_DESCRIPTION_MAX_CHARS = 2_000
+MCP_PROMPT_TEMPLATE_MAX_CHARS = 8_000
+MCP_DOCUMENT_BODY_MAX_CHARS = 50_000
+RESERVED_MCP_DOCUMENT_SLUGS = frozenset({"subjects", "categories", "about"})
+
+_PROMPT_ARGUMENT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_PROMPT_ARGUMENT_ALLOWED_KEYS = frozenset({"name", "description", "required"})
+
+
+def validate_prompt_template(template: str, arguments) -> list[dict]:
+	"""Return `arguments` in canonical form, or raise ValidationError keyed by field.
+
+	Canonical form is a list of {"name", "description", "required"} dicts, in
+	the order given, with "description" defaulting to "" and "required"
+	defaulting to True. Errors are raised as
+	ValidationError({"template": [...], "arguments": [...]}) so the admin can
+	show each one next to its field.
+	"""
+	errors: dict[str, list[str]] = {}
+
+	if not isinstance(arguments, list):
+		raise ValidationError({"arguments": ["arguments must be a list."]})
+
+	canonical = []
+	seen_names: set[str] = set()
+	argument_errors: list[str] = []
+	for item in arguments:
+		if not isinstance(item, dict):
+			argument_errors.append(f"Each argument must be an object, got {item!r}.")
+			continue
+
+		unknown_keys = set(item.keys()) - _PROMPT_ARGUMENT_ALLOWED_KEYS
+		if unknown_keys:
+			argument_errors.append(
+				f"Unknown key(s) {sorted(unknown_keys)} in argument {item!r}. "
+				f"Allowed keys are name, description, required."
+			)
+			continue
+
+		name = item.get("name")
+		if not isinstance(name, str) or not _PROMPT_ARGUMENT_NAME_RE.match(name):
+			argument_errors.append(
+				f"Argument name {name!r} must match ^[A-Za-z_][A-Za-z0-9_]*$."
+			)
+			continue
+
+		if name in seen_names:
+			argument_errors.append(f"Argument name '{name}' is declared more than once.")
+			continue
+		seen_names.add(name)
+
+		description = item.get("description", "")
+		if not isinstance(description, str):
+			argument_errors.append(f"Argument '{name}' description must be a string.")
+			continue
+
+		required = item.get("required", True)
+		if not isinstance(required, bool):
+			argument_errors.append(f"Argument '{name}' required must be true or false.")
+			continue
+
+		canonical.append({"name": name, "description": description, "required": required})
+
+	if argument_errors:
+		errors["arguments"] = argument_errors
+
+	if not isinstance(template, str):
+		raise ValidationError({"template": ["template must be a string."]})
+
+	tpl = string.Template(template)
+	if not tpl.is_valid():
+		errors.setdefault("template", []).append(
+			"Invalid $ in the template. Write $$ for a literal dollar sign, "
+			"and $name or ${name} for an argument."
+		)
+	else:
+		placeholders = set(tpl.get_identifiers())
+		declared = seen_names
+		undeclared = placeholders - declared
+		unused = declared - placeholders
+		if undeclared:
+			errors.setdefault("template", []).append(
+				f"The template uses placeholder(s) {sorted(undeclared)} with no "
+				f"matching declared argument."
+			)
+		if unused:
+			errors.setdefault("arguments", []).append(
+				f"Argument(s) {sorted(unused)} are declared but never used in the template."
+			)
+
+	if errors:
+		raise ValidationError(errors)
+
+	return canonical
 
 
 class CustomSetting(models.Model):
@@ -217,3 +317,106 @@ class CustomSetting(models.Model):
 		default="",
 		help_text="How to cite an export from this site. Leave blank to generate '{title}. Clinical trials export, {date}. {website_url}'.",
 	)
+	mcp_enabled = models.BooleanField(
+		default=False,
+		help_text=(
+			"Offers this site's research assistant (MCP). Takes effect only "
+			"when scope_subjects above is non-empty. The public MCP server "
+			"only serves api_public sites, so on a private site this flag "
+			"does nothing until authenticated MCP servers exist. Off by "
+			"default: a site is not a tenant until someone decides it is."
+		),
+	)
+	mcp_description = models.TextField(
+		blank=True,
+		default="",
+		validators=[MaxLengthValidator(MCP_DESCRIPTION_MAX_CHARS)],
+		help_text=(
+			"Optional. How the research assistant describes this instance to "
+			"the model: its focus and framing. The model reads it, not "
+			"people. If left blank, a description is generated from the "
+			"site's name and subjects."
+		),
+	)
+
+
+class SiteMcpPrompt(models.Model):
+	site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="mcp_prompts")
+	name = models.SlugField(max_length=64, help_text="The MCP prompt name. Unique per site.")
+	title = models.CharField(max_length=200)
+	description = models.CharField(max_length=500, blank=True, default="")
+	template = models.TextField(
+		validators=[MaxLengthValidator(MCP_PROMPT_TEMPLATE_MAX_CHARS)],
+		help_text=(
+			"string.Template syntax: $topic or ${topic} for an argument, and "
+			"$$ for a literal dollar sign."
+		),
+	)
+	arguments = models.JSONField(
+		default=list,
+		blank=True,
+		help_text='[{"name": "topic", "description": "…", "required": true}]',
+	)
+	is_active = models.BooleanField(
+		default=True,
+		help_text="Inactive rows are kept but never published.",
+	)
+	ordering = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ["ordering", "name"]
+		constraints = [
+			models.UniqueConstraint(fields=["site", "name"], name="sitemcpprompt_site_name_uniq"),
+		]
+
+	def __str__(self):
+		return f"{self.site.domain}: {self.name}"
+
+	def clean(self):
+		super().clean()
+		self.arguments = validate_prompt_template(self.template, self.arguments)
+
+
+class SiteMcpDocument(models.Model):
+	MIME_TYPE_CHOICES = [
+		("text/markdown", "Markdown"),
+		("text/plain", "Plain text"),
+	]
+
+	site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="mcp_documents")
+	slug = models.SlugField(
+		max_length=64,
+		help_text="Served at gregory-ai://doc/{slug} from a later release. Unique per site.",
+	)
+	title = models.CharField(max_length=200)
+	description = models.CharField(max_length=500, blank=True, default="")
+	mime_type = models.CharField(
+		max_length=50, choices=MIME_TYPE_CHOICES, default="text/markdown"
+	)
+	body = models.TextField(validators=[MaxLengthValidator(MCP_DOCUMENT_BODY_MAX_CHARS)])
+	is_active = models.BooleanField(
+		default=True,
+		help_text="Inactive rows are kept but never published.",
+	)
+	ordering = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ["ordering", "slug"]
+		constraints = [
+			models.UniqueConstraint(fields=["site", "slug"], name="sitemcpdocument_site_slug_uniq"),
+		]
+
+	def __str__(self):
+		return f"{self.site.domain}: {self.slug}"
+
+	def clean(self):
+		super().clean()
+		if self.slug in RESERVED_MCP_DOCUMENT_SLUGS:
+			raise ValidationError(
+				{
+					"slug": (
+						"subjects, categories and about are reserved for "
+						"built-in resources."
+					)
+				}
+			)

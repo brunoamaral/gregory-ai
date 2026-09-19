@@ -154,6 +154,13 @@ instead.
 - `recent_trials_for_subject` — actively recruiting / recently registered trials for a subject
 - `author_profile` — build a profile of a researcher from their articles and affiliation
 
+Per-site prompts and reference documents can now be written on the Site admin
+page (`CustomSetting.mcp_enabled`/`mcp_description`, and the `SiteMcpPrompt` /
+`SiteMcpDocument` inlines next to it — see
+[docs/02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md)).
+The server doesn't read them yet, so clients still get the three built-ins
+listed above; a later release publishes and serves the authored ones instead.
+
 ---
 
 ## Instance targeting
