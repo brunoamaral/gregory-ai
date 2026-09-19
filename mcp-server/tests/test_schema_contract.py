@@ -91,8 +91,8 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"include_public",
 		# Not a *tool* parameter — no LLM caller ever chooses it. GregoryClient.get()
 		# adds it transport-side to every upstream call from its own per-request
-		# resolution (env override, else inbound Host via GET /sites/) — see
-		# gregory_mcp/site.py. Absent from every tool's signature by design.
+		# resolution (env override, else inbound Host via GET /tenants/) — see
+		# gregory_mcp/tenants.py. Absent from every tool's signature by design.
 		"site_id",
 		"source_id",  # niche — callers don't know source IDs
 		"subjects",

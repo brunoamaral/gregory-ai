@@ -1,87 +1,37 @@
-"""Per-request site resolution: makes every upstream call carry `?site_id=`.
+"""Host-matching helpers, and the middleware that resolves each request's
+tenant before anything else runs.
 
-Why this exists: this server calls the API anonymously
-(`gregory_mcp/client.py` sends only `Accept` and `User-Agent`), and the API
-scopes an anonymous caller to ONE `api_public` site's `scope_subjects`,
-resolved from `?site_id=` (`django/gregory/site_resolution.py`, #866). So
-`?site_id=` is what tells the API which site — which tenant — a call is for.
-Sent on every call except `GET /sites/` itself: visibility reads it on every
-content endpoint, and `/articles/` and `/trials/` also apply it as a
-subject-scope content filter.
+The actual directory fetch, caching, and resolution order now live in
+`tenants.py` (`resolve_tenant()`) — see that module's docstring for why:
+Phase 3 of MCP multi-tenancy replaced `GET /sites/`-based resolution with
+`GET /tenants/`, since a hostname that isn't a tenant is refused
+(`tenants.TenantGateMiddleware`, decision 1) before any API call, so there is
+no reason left to also resolve through the unscoped `/sites/` discovery
+endpoint.
 
-A call that names no site gets the public union only while that union is
-unambiguous: with at most one `api_public` site it simply is that site's
-scope, so nothing changes. From the second `api_public` site on, the API
-answers `400` (`NoSiteResolvedError`) instead — so on a multi-site
-deployment every tool call depends on this resolving. Resolution only ever
-considers `api_public` sites, so a private site's id never grants its scope.
+This module keeps only:
 
-Resolution order for a request, cheapest/most-certain first:
-
-1. `GREGORY_SITE_ID` (env, loaded once at startup into
-   `Settings.site_id_override`) — wins outright, without ever touching the
-   network. A single-tenant deployment can pin this and depend on neither
-   the inbound Host header nor `GET /sites/` existing. It must name an
-   `api_public` site, for the reason above.
-2. The inbound `Host` header the MCP server was reached on (nginx sets
-   `proxy_set_header Host $host` — see docs/07-mcp-server.md), resolved to a
-   site_id via the API's `GET /sites/` discovery endpoint (added alongside
-   the visibility project, PR #859) — matched exactly the way
-   `django/gregory/site_resolution.py`'s `find_site_by_domain()` matches a
-   domain: exact match, then one subdomain level stripped. Mirrored rather
-   than imported — this is a separate deployable with no Django import path.
-3. Neither resolves — omit the parameter, with the consequences above: fine
-   with one `api_public` site, a `400` on every call from the second one on,
-   which is the correct, visible failure. Never guess, never raise.
-
-The resolved value is exposed to the rest of the request via
-`site_context.get_current_site_id()` — see that module's docstring for why
-it isn't defined here.
+- `_normalize_host()` / `_match_domain()` — the Host-matching rules,
+  mirrored from `django/gregory/site_resolution.py`'s `find_site_by_domain()`
+  rather than imported, since this is a separate deployable with no Django
+  import path. `tenants.py` imports them from here.
+- `_extract_host_header()` — reading the inbound Host off a request context.
+- `SiteMiddleware` — sets `site_context`'s per-request `site_id` and
+  `Tenant` for the rest of the request, via `client.py`'s `?site_id=`
+  injection and `cache.py`'s cache key. Calls `tenants.resolve_tenant()`
+  through a lazy (in-function) import: this module is what `tenants.py`
+  imports the Host helpers *from*, so importing `tenants.py` back at module
+  scope here would be a load-time cycle.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 from typing import Any
 from urllib.parse import urlparse
 
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 
-from .cache import CATALOG_CACHE_TTL_MS, CatalogCache
-from .client import GregoryAPIError, get_client
-from .config import Settings
-from .site_context import _current_site_id
-
-logger = logging.getLogger("gregory_mcp.site")
-
-# GET /sites/ is unscoped, public, and slow-changing (it lists api_public
-# sites) — cached the same way subjects/categories are, with the same TTL,
-# rather than fetched per request. Its own CatalogCache instance, not the
-# shared one from cache.py: that one is deliberately narrow to
-# /subjects/+/categories/ (see its module docstring), and /sites/ isn't a
-# catalog a tool exposes to a caller.
-_site_directory_cache = CatalogCache(ttl_ms=CATALOG_CACHE_TTL_MS)
-
-# Set once at startup by init_site_resolution(); None means "no override,
-# resolve from Host". Not part of Settings' own consumers (client.py,
-# logging_config.py) needing this — only this module does.
-_site_id_override: int | None = None
-
-
-def init_site_resolution(settings: Settings) -> None:
-	"""Call once at startup, alongside client.init_client() — see __main__.py."""
-	global _site_id_override
-	_site_id_override = settings.site_id_override
-
-
-def reset_site_resolution() -> None:
-	"""Test-only: undo init_site_resolution() and drop the cached directory,
-	so one test's GREGORY_SITE_ID/`GET /sites/` state can't leak into
-	another's (mirrors cache.reset_catalog_cache())."""
-	global _site_id_override
-	_site_id_override = None
-	_site_directory_cache.clear()
+from .site_context import _current_site_id, _current_tenant
 
 
 def _normalize_host(raw: str | None) -> str | None:
@@ -100,7 +50,7 @@ def _match_domain(host: str, domain_map: dict[str, int]) -> int | None:
 	Django's `find_site_by_domain()`: 'gregory-ai.brain-regeneration.com' has
 	no exact entry in the directory, so this falls back to
 	'brain-regeneration.com'. Unlike Django's, it only ever matches against
-	`api_public` sites, since that is all `GET /sites/` lists."""
+	tenant domains, since that is all `GET /tenants/` lists."""
 	if host in domain_map:
 		return domain_map[host]
 	parts = host.split(".")
@@ -109,62 +59,6 @@ def _match_domain(host: str, domain_map: dict[str, int]) -> int | None:
 		if parent in domain_map:
 			return domain_map[parent]
 	return None
-
-
-async def _fetch_site_directory() -> dict[str, int]:
-	"""GET /sites/ -> {domain: site_id}.
-
-	Never raises: this endpoint is new (PR #859), so an instance running
-	slightly older Gregory code, or any other upstream failure, must degrade
-	to "no domain map available" — which resolves to omitting site_id, the
-	same fallback as an unresolvable Host (see the module docstring for what
-	the API then answers) — rather than raising out of every tool call on
-	this server.
-
-	GregoryAPIError covers non-2xx statuses and transport failures, but a
-	2xx response isn't guaranteed to be JSON — an intermediate proxy can
-	return an HTML error page with a 200/204 (e.g. a misconfigured gateway
-	swallowing the real status). GregoryClient.get() calls response.json()
-	unguarded, so that shows up here as json.JSONDecodeError, not
-	GregoryAPIError — caught alongside it for the same degrade-not-raise
-	reason.
-	"""
-	try:
-		data = await get_client().get("/sites/")
-	except (GregoryAPIError, json.JSONDecodeError):
-		logger.warning("gregory_sites_directory_unavailable", exc_info=True)
-		return {}
-	if not isinstance(data, list):
-		# GET /sites/ returns a plain JSON array (see schema.yml), not the
-		# {count, next, results} shape client.get_all_pages() expects —
-		# an unexpected shape here means a contract change worth knowing
-		# about, not a crash.
-		logger.warning("gregory_sites_directory_unexpected_shape", extra={"type": type(data).__name__})
-		return {}
-	domain_map: dict[str, int] = {}
-	for row in data:
-		if not isinstance(row, dict):
-			continue
-		domain, site_id = row.get("domain"), row.get("site_id")
-		if isinstance(domain, str) and isinstance(site_id, int):
-			domain_map[domain.lower()] = site_id
-	return domain_map
-
-
-async def _get_site_directory() -> dict[str, int]:
-	return await _site_directory_cache.get_or_fetch("/sites/", None, _fetch_site_directory)
-
-
-async def resolve_site_id(host_header: str | None) -> int | None:
-	"""The site_id for a request that carried `host_header` as its Host,
-	or None if nothing resolves. See the module docstring for the order."""
-	if _site_id_override is not None:
-		return _site_id_override
-	host = _normalize_host(host_header)
-	if host is None:
-		return None
-	domain_map = await _get_site_directory()
-	return _match_domain(host, domain_map)
 
 
 def _extract_host_header(ctx: ServerRequestContext[Any, Any]) -> str | None:
@@ -184,25 +78,30 @@ def _extract_host_header(ctx: ServerRequestContext[Any, Any]) -> str | None:
 
 
 class SiteMiddleware(ServerMiddleware[Any]):
-	"""Resolves this request's site_id once, and makes it available for the
-	rest of the request via `site_context.get_current_site_id()` — read by
-	`GregoryClient.get()` (added to every upstream call) and
-	`CatalogCache._key()` (mixed into the cache key, so the shared
-	subjects/categories cache can never serve one site's catalog to
-	another's caller).
+	"""Resolves this request's tenant once, and makes its `site_id` and
+	`Tenant` available for the rest of the request via `site_context` — read
+	by `GregoryClient.get()` (site_id added to every upstream call),
+	`CatalogCache._key()` (site_id mixed into the cache key), and
+	`tenants.TenantGateMiddleware`/`TenantIdentityMiddleware` (the `Tenant`
+	itself).
 
-	Registered outermost relative to TelemetryMiddleware (see server.py) so
-	a cold-cache `GET /sites/` fetch's latency is never smeared into some
-	unrelated tool call's own `upstream_ms`/`upstream_calls` telemetry.
+	Registered outermost relative to TelemetryMiddleware and
+	TenantGateMiddleware (see server.py) so a cold-cache `GET /tenants/`
+	fetch's latency is never smeared into some unrelated tool call's own
+	`upstream_ms`/`upstream_calls` telemetry.
 	"""
 
 	async def __call__(self, ctx: ServerRequestContext[Any, Any], call_next: CallNext) -> HandlerResult:
 		if ctx.request_id is None:
 			return await call_next(ctx)  # notifications never call the upstream API
 
-		site_id = await resolve_site_id(_extract_host_header(ctx))
-		token = _current_site_id.set(site_id)
+		from .tenants import resolve_tenant  # lazy: see module docstring
+
+		tenant = await resolve_tenant(_extract_host_header(ctx))
+		site_token = _current_site_id.set(tenant.site_id if tenant is not None else None)
+		tenant_token = _current_tenant.set(tenant)
 		try:
 			return await call_next(ctx)
 		finally:
-			_current_site_id.reset(token)
+			_current_site_id.reset(site_token)
+			_current_tenant.reset(tenant_token)

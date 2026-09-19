@@ -13,7 +13,7 @@ from .client import init_client
 from .config import load_settings
 from .logging_config import configure_logging
 from .server import build_server
-from .site import init_site_resolution
+from .tenants import init_tenant_resolution
 
 logger = logging.getLogger("gregory_mcp")
 
@@ -22,7 +22,7 @@ def main() -> None:
 	settings = load_settings()
 	configure_logging(settings.log_level, settings.log_dir)
 	init_client(settings)
-	init_site_resolution(settings)
+	init_tenant_resolution(settings)
 
 	logger.info("gregory_mcp_starting", extra={"path": settings.api_base})
 	server = build_server()
