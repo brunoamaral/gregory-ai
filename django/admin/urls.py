@@ -45,6 +45,7 @@ from api.views import (
 	CategoriesByTeamAndSubject,
 	StatsView,
 	PublicSitesView,
+	McpTenantsView,
 )
 from rss.views import (
 	SiteArticlesByAuthorFeed,
@@ -229,6 +230,11 @@ urlpatterns = (
 		# because a caller needs a site_id and nothing else would tell it which
 		# exist. See SITE-API-VISIBILITY-SPEC.md (local planning doc).
 		path("sites/", PublicSitesView.as_view(), name="public_sites"),
+		# Separate from sites/ on purpose (see PublicSiteSerializer's
+		# docstring): this one carries MCP configuration and, for a
+		# site-bound key, that caller's own private tenant -- sites/ must
+		# stay unscoped public discovery only.
+		path("tenants/", McpTenantsView.as_view(), name="mcp_tenants"),
 		# Gregory app routes
 		path("", include("gregory.urls")),
 		# Include router routes

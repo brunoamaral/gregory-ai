@@ -927,12 +927,75 @@ class PublicSiteSerializer(serializers.Serializer):
 	Deliberately minimal: just enough for a caller to learn which site IDs
 	exist so it can pass ?site_id=. Everything here is already public.
 
-	The MCP multi-tenancy spec proposes a richer per-site config endpoint
-	carrying subjects, prompts and documents. That project is unstarted; when
-	it lands, the two should converge on one endpoint rather than duplicate --
-	this payload is a strict subset of that one.
+	Separate BY DESIGN from GET /tenants/ (McpTenantSerializer below), and
+	the two must not converge: /sites/ is unscoped public discovery, and
+	stays exactly as it is. /tenants/ carries MCP configuration -- prompts,
+	documents, a description written for the model -- and, for a caller
+	holding a site-bound key, can include that caller's own PRIVATE site.
+	Folding the two together would leak a private site's existence and
+	authored content to anyone who could call the unscoped endpoint.
 	"""
 
 	site_id = serializers.IntegerField(source="site.id", read_only=True)
 	domain = serializers.CharField(source="site.domain", read_only=True)
 	name = serializers.CharField(source="site.name", read_only=True)
+
+
+class McpTenantSubjectSerializer(serializers.Serializer):
+	"""A subject as listed on GET /tenants/ -- deliberately just {id,
+	subject_name}, no team_id. Not SubjectsSerializer: that one includes
+	team_id, which this endpoint must never expose (parent plan decision E)."""
+
+	id = serializers.IntegerField(read_only=True)
+	subject_name = serializers.CharField(read_only=True)
+
+
+class McpTenantPromptArgumentSerializer(serializers.Serializer):
+	"""One canonical-form argument of a SiteMcpPrompt.template -- see
+	sitesettings.models.validate_prompt_template()."""
+
+	name = serializers.CharField(read_only=True)
+	description = serializers.CharField(read_only=True, allow_blank=True)
+	required = serializers.BooleanField(read_only=True)
+
+
+class McpTenantPromptSerializer(serializers.Serializer):
+	"""An active SiteMcpPrompt, for GET /tenants/. The template is raw --
+	the MCP server substitutes arguments at prompts/get time, not here."""
+
+	name = serializers.CharField(read_only=True)
+	title = serializers.CharField(read_only=True)
+	description = serializers.CharField(read_only=True, allow_blank=True)
+	template = serializers.CharField(read_only=True)
+	arguments = McpTenantPromptArgumentSerializer(many=True, read_only=True)
+
+
+class McpTenantDocumentSerializer(serializers.Serializer):
+	"""An active SiteMcpDocument, for GET /tenants/."""
+
+	slug = serializers.CharField(read_only=True)
+	title = serializers.CharField(read_only=True)
+	description = serializers.CharField(read_only=True, allow_blank=True)
+	mime_type = serializers.CharField(read_only=True)
+	body = serializers.CharField(read_only=True)
+
+
+class McpTenantSerializer(serializers.Serializer):
+	"""One tenant on GET /tenants/ -- a site offering a research assistant
+	(MCP). See api.views.McpTenantsView for who sees what and why this is a
+	separate endpoint from GET /sites/.
+
+	No team_id anywhere (parent plan decision E) -- subjects use
+	McpTenantSubjectSerializer, not the nested serializers articles/trials
+	use, which carry team_id.
+	"""
+
+	site_id = serializers.IntegerField(read_only=True)
+	domain = serializers.CharField(read_only=True)
+	name = serializers.CharField(read_only=True)
+	title = serializers.CharField(read_only=True)
+	api_public = serializers.BooleanField(read_only=True)
+	mcp_description = serializers.CharField(read_only=True, allow_blank=True)
+	subjects = McpTenantSubjectSerializer(many=True, read_only=True)
+	prompts = McpTenantPromptSerializer(many=True, read_only=True)
+	documents = McpTenantDocumentSerializer(many=True, read_only=True)

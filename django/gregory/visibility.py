@@ -115,6 +115,62 @@ def _public_subject_ids() -> set[int]:
 	)
 
 
+def site_id_for_api_scheme(api_scheme) -> int | None:
+	"""Return api_scheme's own site_id, or None if it has none or that site
+	does not belong to its organisation.
+
+	Lifted out of visible_subject_ids' key branch so the tenant config
+	endpoint (gregory/api McpTenantsView) can ask the same question without
+	re-implementing the OrganizationSite check that stops one organisation's
+	key from reading another organisation's site. A None here means "empty
+	scope" to every caller of this function -- never "fall through to
+	anonymous".
+	"""
+	if api_scheme is None or api_scheme.site_id is None:
+		return None
+
+	# The key's site must belong to the key's organisation. Both fields
+	# exist and are independently editable during Phase 1 -- `organization`
+	# is not retired until Phase 4 -- so a mismatched pair would otherwise
+	# hand one organisation's credential another organisation's subject
+	# scope. Fail closed on a mismatch rather than trusting site_id alone.
+	from gregory.models import OrganizationSite
+
+	if not OrganizationSite.objects.filter(
+		organization_id=api_scheme.organization_id, site_id=api_scheme.site_id
+	).exists():
+		return None
+	return api_scheme.site_id
+
+
+def api_key_site_id(request) -> int | None:
+	"""Resolve request's API key, if any, to its own site_id via
+	site_id_for_api_scheme(). None when there is no key, an invalid/expired
+	one, or one with no usable site."""
+	return site_id_for_api_scheme(_resolve_api_scheme(request))
+
+
+def site_scope_subject_ids(site_id, *, public_only: bool) -> set[int]:
+	"""Return the union of scope_subjects across site_id's CustomSetting
+	row(s).
+
+	public_only=False covers every settings row for the site, whether or not
+	it is api_public -- what a site-bound API key sees of its own site.
+	public_only=True restricts to rows with api_public=True -- what an
+	anonymous caller may see of that site.
+	"""
+	from sitesettings.models import CustomSetting
+
+	qs = CustomSetting.objects.filter(site_id=site_id)
+	if public_only:
+		qs = qs.filter(api_public=True)
+	return set(
+		qs.exclude(scope_subjects__isnull=True).values_list(
+			"scope_subjects__id", flat=True
+		)
+	)
+
+
 def visible_subject_ids(request) -> set[int]:
 	"""
 	Return the set of Subject IDs the caller is permitted to see.
@@ -200,26 +256,10 @@ def visible_subject_ids(request) -> set[int]:
 
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
-		if api_scheme.site_id is None:
+		site_id = site_id_for_api_scheme(api_scheme)
+		if site_id is None:
 			return _resolve(set())
-		# The key's site must belong to the key's organisation. Both fields
-		# exist and are independently editable during Phase 1 -- `organization`
-		# is not retired until Phase 4 -- so a mismatched pair would otherwise
-		# hand one organisation's credential another organisation's subject
-		# scope. Fail closed on a mismatch rather than trusting site_id alone.
-		from gregory.models import OrganizationSite
-
-		if not OrganizationSite.objects.filter(
-			organization_id=api_scheme.organization_id, site_id=api_scheme.site_id
-		).exists():
-			return _resolve(set())
-		return _resolve(
-			set(
-				CustomSetting.objects.filter(site_id=api_scheme.site_id)
-				.exclude(scope_subjects__isnull=True)
-				.values_list("scope_subjects__id", flat=True)
-			)
-		)
+		return _resolve(site_scope_subject_ids(site_id, public_only=False))
 
 	if getattr(request, "user", None) is not None and request.user.is_authenticated:
 		from gregory.models import OrganizationSite
@@ -265,17 +305,13 @@ def visible_subject_ids(request) -> set[int]:
 		# came out empty (see the API-key/user branches above): zero
 		# subjects, no error.
 		return set()
-	return set(
-		# api_public=True, not just site_id=site_id: CustomSetting.site is a
-		# plain FK, not OneToOne, so a site can carry a second, PRIVATE
-		# settings row alongside the public one that made it eligible above.
-		# Filtering on site_id alone would union that private row's own
-		# scope_subjects into this anonymous response -- matching
-		# _public_subject_ids()'s own filter for the same reason.
-		CustomSetting.objects.filter(site_id=site_id, api_public=True)
-		.exclude(scope_subjects__isnull=True)
-		.values_list("scope_subjects__id", flat=True)
-	)
+	# public_only=True, not just site_id=site_id: CustomSetting.site is a
+	# plain FK, not OneToOne, so a site can carry a second, PRIVATE settings
+	# row alongside the public one that made it eligible above. Filtering on
+	# site_id alone would union that private row's own scope_subjects into
+	# this anonymous response -- matching _public_subject_ids()'s own filter
+	# for the same reason.
+	return site_scope_subject_ids(site_id, public_only=True)
 
 
 def visible_org_ids(request) -> set[int]:

@@ -135,6 +135,50 @@ Responses that consulted `Origin` or `Referer` to reach their result carry `Vary
 
 `GET /sites/` lists every *API public* site as `{site_id, domain, name}`. It is the discovery entry point a new caller needs before it can pass `?site_id=`, so it is **never gated by the resolution above** — it answers with no site indicator at all, even amid the exact ambiguity that would 400 every other endpoint. It is also the same code path the `400` body's `public_sites` list is drawn from, so the two can never disagree.
 
+### Discovering MCP tenants
+
+`GET /tenants/` is a **separate, richer** endpoint for sites offering a research assistant (MCP) — it is not a replacement for `GET /sites/`, and the two are kept apart on purpose (see `PublicSiteSerializer`'s docstring): `/sites/` is unscoped public discovery and stays exactly as it is; `/tenants/` carries MCP configuration — a description written for the model, authored prompts, and reference documents — and can include a caller's own **private** site.
+
+A site is a **public tenant** when it has a settings row with `api_public=True`, `mcp_enabled=True`, and a non-empty `scope_subjects`. Who sees what:
+
+| Caller | Gets |
+|:-------|:-----|
+| Anonymous, a signed-in user, or an invalid/expired key | Every public tenant |
+| A valid key whose site belongs to its organisation | Every public tenant, plus its own site if that site is a tenant (`mcp_enabled` and a non-empty scope), whether or not it is `api_public` |
+| A key with no site, or a site outside its organisation | The same as anonymous |
+
+The response is a plain JSON array, ordered by `site_id`, with no pagination:
+
+```json
+[
+  {
+    "site_id": 3,
+    "domain": "brain-regeneration.com",
+    "name": "Brain Regeneration",
+    "title": "Brain Regeneration",
+    "api_public": true,
+    "mcp_description": "",
+    "subjects": [{"id": 1, "subject_name": "Multiple Sclerosis"}],
+    "prompts": [
+      {
+        "name": "research_topic",
+        "title": "Research a topic",
+        "description": "Survey recent articles and clinical trials on a topic.",
+        "template": "Research the topic \"$topic\". …",
+        "arguments": [{"name": "topic", "description": "The topic to research.", "required": true}]
+      }
+    ],
+    "documents": []
+  }
+]
+```
+
+`subjects` carries `id` and `subject_name` only — no `team_id`, anywhere. `prompts` and `documents` list only `is_active` rows, in their model `ordering`; a prompt's `template` is raw text (`$name`-style placeholders), substituted by the MCP server at render time, not here.
+
+Like `GET /sites/`, this endpoint is **never gated by the resolution above** — it answers the same way no matter how many `api_public` sites exist, even where `/articles/` would 400 on an anonymous caller who names none. Every response carries `Vary: Authorization`, since the answer depends on the caller's key.
+
+Nothing reads this endpoint yet except the endpoint itself: see [07-mcp-server.md](07-mcp-server.md#prompts) for what a later release changes once the MCP server starts consuming it.
+
 ---
 
 ## Accessing private organisation data
@@ -279,6 +323,7 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 | RSS feeds (old, no `site_id`) | `GET /feed/author/{orcid}/`, `GET /feed/trials/subject/{subject_slug}/` | `orcid` / `subject_slug` (path) | **301** to the `/feed/sites/3/...` equivalent — see [Old feed URLs](#old-feed-urls--permanent-redirect) |
 | Stats | `GET /stats/` | `team`, `site`, `subject`, `include_public`, `organization` (alias `org`, deprecated) | See [Stats endpoint](#stats-endpoint) below |
 | Sites | `GET /sites/` | None | Publicly readable sites as `{site_id, domain, name}`. **Unscoped by design** — it is the discovery entry point for callers that need a `site_id`, so it cannot require one. Everything returned is already public |
+| Tenants | `GET /tenants/` | None | MCP tenants — see [Discovering MCP tenants](#discovering-mcp-tenants) above. Never gated by site resolution; carries `Vary: Authorization` |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
 
 ### Search endpoints
