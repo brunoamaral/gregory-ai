@@ -9,7 +9,7 @@ from gregory_mcp.cache import reset_catalog_cache
 from gregory_mcp.client import GregoryClient
 from gregory_mcp.config import Settings
 from gregory_mcp.server import build_server
-from gregory_mcp.site import reset_site_resolution
+from gregory_mcp.tenants import reset_tenant_directory
 
 TEST_SETTINGS = Settings(
 	api_url="https://gregory.test",
@@ -52,8 +52,15 @@ def mock_gregory(monkeypatch):
 	and after each test — it's a module-level singleton, so without this a
 	list_subjects()/list_categories() call in one test could be served a
 	cached result left behind by a completely different test. Also resets
-	gregory_mcp.site's module-level state (the GREGORY_SITE_ID override and
-	the cached /sites/ directory) for the same reason.
+	gregory_mcp.tenants' module-level state (the GREGORY_SITE_ID override,
+	the cached `/tenants/` directory, and the kept-stale-copy) for the same
+	reason.
+
+	The default handler returns `{}` for every path, which is not a tenant
+	directory shape — a test that needs a tenant to resolve (most
+	server-level ones do, since TenantGateMiddleware refuses everything
+	else) must call `set_handler` with something built on `tenants_payload()`
+	below, routing `/tenants/` to it.
 	"""
 	import gregory_mcp.client as client_module
 
@@ -63,7 +70,7 @@ def mock_gregory(monkeypatch):
 
 	monkeypatch.setattr(client_module, "_client", client)
 	reset_catalog_cache()
-	reset_site_resolution()
+	reset_tenant_directory()
 
 	class Handle:
 		def set_handler(self, fn):
@@ -75,9 +82,46 @@ def mock_gregory(monkeypatch):
 
 	yield Handle()
 	reset_catalog_cache()
-	reset_site_resolution()
+	reset_tenant_directory()
 
 
 @pytest.fixture
 def server():
 	return build_server()
+
+
+def tenants_payload(*tenants: dict) -> list[dict]:
+	"""Build a `GET /tenants/` response body from partial tenant dicts.
+
+	Fills in every field `tenants.py`'s parser requires, so a test only has
+	to override what it cares about, e.g. `tenants_payload({"site_id": 3,
+	"domain": "brain-regeneration.com"})`.
+	"""
+	defaults = {
+		"site_id": 1,
+		"domain": "example.test",
+		"name": "Example",
+		"title": "Example",
+		"api_public": True,
+		"mcp_description": "",
+		"subjects": [],
+		"prompts": [],
+		"documents": [],
+	}
+	return [{**defaults, **t} for t in tenants]
+
+
+def route_by_path(routes: dict[str, Callable[[httpx2.Request], httpx2.Response]]):
+	"""A `mock_gregory` handler that dispatches on `request.url.path`, falling
+	back to an empty-list 200 for anything not listed — the shape
+	`get_all_pages`-backed tools/resources expect from an endpoint they
+	don't care about in a given test.
+	"""
+
+	def handler(request: httpx2.Request) -> httpx2.Response:
+		route = routes.get(request.url.path)
+		if route is not None:
+			return route(request)
+		return httpx2.Response(200, json={"count": 0, "next": None, "results": []})
+
+	return handler

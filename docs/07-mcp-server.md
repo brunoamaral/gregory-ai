@@ -181,56 +181,63 @@ The server proxies whatever instance `GREGORY_API_URL` names — one codebase se
 brain-regeneration.com, encefalites.pt, clinicaltrialupdates.com, or a local dev instance,
 with no code change. See `mcp-server/gregory_mcp/config.py`.
 
-### Site scoping (`?site_id=`)
+### Tenant resolution (`?site_id=`)
 
-Every upstream call carries a `site_id` query parameter — except `GET /sites/` itself,
-the unscoped discovery call this resolution depends on (see step 2 below); it can't require
-the thing it exists to provide, and `test_sites_call_itself_carries_no_site_id` enforces
-that it never gets one, even transitively through the same client every other call goes
-through. Otherwise, `site_id` is resolved once per request (`mcp-server/gregory_mcp/site.py`)
-in this order:
+Every upstream call carries a `site_id` query parameter — except `GET /tenants/` itself,
+the unscoped call this resolution depends on; it can't require the thing it exists to
+provide, and `test_tenants_call_itself_carries_no_site_id` enforces that it never gets
+one, even transitively through the same client every other call goes through. Otherwise,
+`site_id` is resolved once per request, from the resolved tenant
+(`mcp-server/gregory_mcp/tenants.py`), in this order:
 
-1. **`GREGORY_SITE_ID`** (env) — wins outright, without ever calling the API. Set this
-   for a single-tenant deployment that should always report as one site regardless of
-   how it's reached. It must name an `api_public` site (see below).
+1. **`GREGORY_SITE_ID`** (env) — picks the `GET /tenants/` entry with that `site_id`. Set
+   this for a single-tenant deployment that should always report as one tenant
+   regardless of how it's reached. Unlike before Phase 3, this does not skip the network:
+   the server still fetches `/tenants/` to get that tenant's full record (name, title,
+   description, subjects, prompts, documents), not just permission to omit `site_id`.
 2. **The inbound `Host` header** this server was reached on (nginx sets
-   `proxy_set_header Host $host` — see [Deployment](#deployment)), resolved against the
-   API's `GET /sites/` discovery endpoint (`{site_id, domain, name}` for every
-   `api_public` site) the same way `django/gregory/site_resolution.py`'s
+   `proxy_set_header Host $host` — see [Deployment](#deployment)), matched against
+   `GET /tenants/`'s domains the same way `django/gregory/site_resolution.py`'s
    `find_site_by_domain()` resolves a domain: exact match, then one subdomain level
    stripped — so `gregory-ai.brain-regeneration.com` resolves via
-   `brain-regeneration.com`. `GET /sites/` is cached in-process for the same 10 minutes
-   as the subjects/categories catalogs (`CATALOG_CACHE_TTL_MS`), not fetched per call.
-3. **Neither resolves** — the parameter is omitted. Never guessed, and this server raises
-   no error of its own: the call gets whatever the API answers an anonymous request that
-   names no site (below).
+   `brain-regeneration.com`. `GET /tenants/` is cached in-process for 10 minutes
+   (`CATALOG_CACHE_TTL_MS`), not fetched per call. A fetch failure serves the last
+   successfully fetched directory rather than caching the outage; with nothing yet
+   fetched, the directory counts as unavailable.
+3. **Neither resolves, or the directory is unavailable** — the request is refused (below).
 
-This is what scopes the server to one site's corpus. The server calls the API
+**A hostname that isn't a tenant is refused before any API call.** This is the one
+behaviour change Phase 3 makes on purpose (decision 1,
+`MCP-MULTI-TENANCY-PHASE-3-PLAN.md`): every request except `ping` gets the error "This
+research assistant is not available at this address." when no tenant resolves — a
+hostname pointed at the container that resolves to nothing, or a site that has never
+ticked `mcp_enabled`, serves nothing rather than a generic, unscoped identity. This
+includes the connection handshake itself (`initialize`/`server/discover`), so a client
+pointed at a non-tenant hostname cannot connect at all, not just call tools. The refusal
+is still logged as an `mcp_request` with `site_id: null` and `error_kind:
+"protocol_error"`.
+
+**Local development needs `GREGORY_SITE_ID` set to a tenant's id** (`3` in dev, for
+brain-regeneration.com) — an in-memory or local client carries no usable Host header, so
+without the override every request is refused.
+
+A tenant's `site_id` is what scopes the server to its corpus. The server calls the API
 anonymously, and the API scopes an anonymous caller to a single `api_public` site's
 `scope_subjects`, resolved from `?site_id=` — see
 [Resolving a site for an anonymous caller](03-api-and-rss-feeds.md#resolving-a-site-for-an-anonymous-caller).
 On `/articles/` and `/trials/` the same parameter is also a subject-scope content filter.
-So each hostname gets its own site's content, and a tool cannot return anything outside
-that scope: the API never sends it.
-
-When no site resolves, the outcome depends on how many `api_public` sites the instance
-has:
-
-- **At most one:** the API serves the public union, which is then that one site's
-  scope. Results are the same as if `site_id` had been sent.
-- **Two or more:** the API returns `400` (`NoSiteResolvedError`, listing the sites a
-  caller could name), and every tool call fails with it. That is correct fail-closed
-  behaviour — the API refuses to blend several sites' content into one answer — but it
-  means that **before adding a second `api_public` site, every hostname this server is
-  reached on has to resolve to a site**, or `GREGORY_SITE_ID` has to be set.
+So each tenant gets its own content, and a tool cannot return anything outside that
+scope: the API never sends it. Because a non-tenant hostname is refused before any API
+call now, the old "two or more `api_public` sites and nothing resolved" `400` from the
+API no longer applies to this server — it refuses first.
 
 Anonymous resolution only ever considers `api_public` sites, so a private site's
 `site_id` never grants that site's scope, wherever it comes from. This server cannot
 serve a private site today.
 
-Site resolution is transport-level (`GregoryClient.get()` and `CatalogCache`'s cache key,
-not a parameter on any tool) — no tool signature changes, and no LLM caller ever chooses
-a `site_id` itself.
+Tenant resolution is transport-level (`GregoryClient.get()` and `CatalogCache`'s cache
+key, not a parameter on any tool) — no tool signature changes, and no LLM caller ever
+chooses a `site_id` itself.
 
 ## Auth
 
