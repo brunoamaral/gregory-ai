@@ -48,7 +48,7 @@ def test_date_filters_trigger_date_range_suggestion():
 
 def test_taxonomy_id_filters_trigger_taxonomy_suggestion():
 	for tool in ("articles", "trials"):
-		for key in ("subject_id", "category_id", "category_slug", "category_modality", "team_id"):
+		for key in ("subject_id", "category_id", "category_slug", "category_modality"):
 			guidance = guidance_for({key: "x"}, tool)
 			assert any("list_subjects" in s or "list_categories" in s for s in guidance["suggestions"])
 

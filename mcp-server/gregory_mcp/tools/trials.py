@@ -141,7 +141,7 @@ async def get_trial(trial_id: int) -> dict:
 	trial_sites (detail-only), eligibility criteria, and results detail.
 
 	Raises:
-		ValueError: If no trial with this ID is visible in this instance.
+		ValueError: If the trial can't be found.
 	"""
 	try:
 		trial = await get_client().get(f"/trials/{trial_id}/")
@@ -149,6 +149,6 @@ async def get_trial(trial_id: int) -> dict:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".
 		if exc.status_code == 404:
-			raise ValueError(f"Trial {trial_id} was not found in this instance.") from exc
+			raise ValueError(f"Trial {trial_id} was not found.") from exc
 		raise
 	return strip_team_data(trial)

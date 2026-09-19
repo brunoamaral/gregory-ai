@@ -76,7 +76,7 @@ _DATE_RULE = (
 )
 
 _TAXONOMY_RULE = (
-	("subject_id", "category_id", "category_slug", "category_modality", "team_id"),
+	("subject_id", "category_id", "category_slug", "category_modality"),
 	"Call list_subjects/list_categories first to confirm the ID or slug is "
 	"correct — a typo'd or stale one silently returns zero rows rather than an error.",
 )

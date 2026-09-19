@@ -50,7 +50,7 @@ _QUERY_ARGS_BY_TOOL = {
 # `full_name`, `given_name`, `family_name`, `orcid`, `doi`, `condition`,
 # `intervention`, or any other free-text/identifying field here — see
 # MCP-TELEMETRY-PLAN.md's "not logged at any phase".
-_LOGGED_ARG_NAMES = ("page", "page_size", "subject_id", "team_id", "category_slug", "category_modality")
+_LOGGED_ARG_NAMES = ("page", "page_size", "subject_id", "category_slug", "category_modality")
 
 
 def _sanitized_logged_value(key: str, value: Any) -> Any | None:
@@ -65,7 +65,7 @@ def _sanitized_logged_value(key: str, value: Any) -> Any | None:
 	check here, not trust in the client's claimed type, is what keeps
 	`_LOGGED_ARG_NAMES` honestly limited to "public, low-cardinality" data.
 	"""
-	if key in ("page", "page_size", "subject_id", "team_id"):
+	if key in ("page", "page_size", "subject_id"):
 		return value if isinstance(value, int) and not isinstance(value, bool) else None
 	if key == "category_slug":
 		if isinstance(value, str) and len(value) <= _MAX_SLUG_LENGTH and _SLUG_RE.fullmatch(value):

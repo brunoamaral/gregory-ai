@@ -35,7 +35,6 @@ _EXTRA_FIELDS = (
 	"page",
 	"page_size",
 	"subject_id",
-	"team_id",
 	"category_slug",
 	"category_modality",
 	"client_name",

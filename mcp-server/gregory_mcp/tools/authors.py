@@ -68,7 +68,7 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 			(a second request) — off by default since it is rarely needed.
 
 	Raises:
-		ValueError: If no author with this ID is visible in this instance.
+		ValueError: If the author can't be found.
 	"""
 	try:
 		author = await get_client().get(f"/authors/{author_id}/")
@@ -76,7 +76,7 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".
 		if exc.status_code == 404:
-			raise ValueError(f"Author {author_id} was not found in this instance.") from exc
+			raise ValueError(f"Author {author_id} was not found.") from exc
 		raise
 	if include_coauthors:
 		coauthors = await get_client().get(f"/authors/{author_id}/coauthors/")

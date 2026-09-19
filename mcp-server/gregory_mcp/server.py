@@ -1,4 +1,4 @@
-"""Builds the GregoryAI MCPServer: registers tools, resources, and prompts.
+"""Builds the MCPServer: registers tools, resources, and prompts.
 
 Everything here is read-only. Every tool is annotated
 `read_only_hint=True, idempotent_hint=True, open_world_hint=False` since none
@@ -13,6 +13,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
 from .cache import CATALOG_CACHE_TTL_MS
+from .identity import SERVER_VERSION, TenantIdentityMiddleware
 from .prompts import register_prompts
 from .resources import register_resources
 from .site import SiteMiddleware
@@ -22,31 +23,18 @@ from .tools import articles, authors, catalog, stats, trials
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
 
-# Reference-data resources change slowly; let clients cache them for as long as
-# the server itself does (CATALOG_CACHE_TTL_MS, see cache.py — one constant,
-# so the client-facing hint and the server's actual cache can't drift apart).
+# All five cache hints are "private" (decision 3, MCP-MULTI-TENANCY-PHASE-3-PLAN.md):
+# every response now carries the resolved tenant's own serverInfo stamp
+# (TenantIdentityMiddleware, identity.py), and most carry per-tenant content or
+# instructions too, so no result is identical for every caller any more.
+# "public" bought a shared cache/proxy the ability to serve one response to
+# every caller regardless of which tenant's hostname they reached — that stops
+# being true the moment identity itself is per-tenant. It costs nothing here:
+# this server is always reached on one tenant's own hostname, never shared
+# anonymously across tenants the way a single pre-Phase-3 deployment was.
 #
-# resources/list only enumerates the two URIs below (gregory://subjects,
-# gregory://categories) — that list is identical for every caller regardless
-# of site, so it's safe to share across callers ("public", the only other
-# value CacheHint accepts per the 2026-07-28 SEP-2549 caching revision —
-# there's no "scoped to one site" option to ask for here).
-CATALOG_LIST_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="public")
-
-# resources/read is different: SiteMiddleware (site.py) makes the actual
-# subjects/categories content this returns depend on the resolved site_id
-# for whichever request read it — CatalogCache._key() (cache.py) already
-# mixes site_id into the server-side cache key so this process never serves
-# one site's catalog to a caller resolved to another. But CacheHint is one
-# static value per method, chosen once here at server construction, not per
-# call — it can't switch between "public" and "private" depending on
-# whether *this particular* call resolved a site_id. Advertising it as
-# "public" would tell a client/proxy every response is shareable, undoing
-# that isolation the moment one exists (site A's catalog handed to site B's
-# caller from a shared cache). "private" is the safe choice in both cases a
-# single call can land in — it costs a no-site-resolved caller a caching
-# optimization it could technically have shared, but a resolved-site caller
-# can never leak into another's cache.
+# TTLs are unchanged from before Phase 3 — only the scope moved.
+CATALOG_LIST_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="private")
 CATALOG_READ_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="private")
 
 # Tool/prompt schemas and server capabilities are static *between deploys* — unlike
@@ -63,7 +51,7 @@ CATALOG_READ_CACHE = CacheHint(ttl_ms=CATALOG_CACHE_TTL_MS, scope="private")
 # merely degraded, and one sending a REMOVED parameter is rejected against the
 # current schema. Neither is the silent-wrong-results failure mode that unknown
 # *API* query params cause, since django-filter ignores those instead of erroring.
-STATIC_CACHE = CacheHint(ttl_ms=30 * 60 * 1000, scope="public")
+STATIC_CACHE = CacheHint(ttl_ms=30 * 60 * 1000, scope="private")
 
 # Module-level so tests can assert on it: MCPServer keeps no public accessor for
 # the hints it was constructed with, and a missing entry degrades silently to
@@ -79,13 +67,15 @@ CACHE_HINTS = {
 
 def build_server() -> MCPServer:
 	server = MCPServer(
-		name="gregory",
-		title="GregoryAI",
-		description=(
-			"Read-only access to the GregoryAI research database: articles, clinical "
-			"trials, authors, subjects, categories, and sponsors."
-		),
-		version="0.1.0",
+		# Neutral defaults, naming no platform (decision F) — a client only
+		# ever sees these if no tenant resolved, and TenantGateMiddleware
+		# already refuses every such request except ping/notifications.
+		# Every real response's identity comes from TenantIdentityMiddleware
+		# instead (identity.py).
+		name="gregory-ai",
+		title="Research assistant",
+		description="Read-only access to a research database of articles, clinical trials, authors, and sponsors.",
+		version=SERVER_VERSION,
 		cache_hints=CACHE_HINTS,
 		# SiteMiddleware first (outermost): it resolves this request's tenant
 		# — env override, else inbound Host via GET /tenants/ — before
@@ -95,7 +85,11 @@ def build_server() -> MCPServer:
 		# TenantGateMiddleware comes after Telemetry so a refusal is still
 		# logged as an mcp_request (site_id: null, error_kind:
 		# "protocol_error") rather than disappearing before telemetry sees it.
-		middleware=[SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware()],
+		# TenantIdentityMiddleware is innermost: the SDK serializes each
+		# result, including its default identity stamp, *inside* the
+		# middleware chain, so only the middleware closest to the handler
+		# sees that stamp on the dict call_next returns (see identity.py).
+		middleware=[SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware(), TenantIdentityMiddleware()],
 	)
 
 	server.add_tool(catalog.list_subjects, annotations=READ_ONLY)

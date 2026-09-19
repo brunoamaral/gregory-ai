@@ -73,36 +73,20 @@ def test_every_cacheable_method_carries_a_hint():
 		assert hints[method].ttl_ms > 0, f"{method} hint is ttl_ms=0, same as no hint at all"
 
 
-def test_hints_for_site_invariant_methods_are_shareable():
-	"""Every cacheable method except resources/read returns content that
-	never depends on which site (Host/GREGORY_SITE_ID — see site.py) made
-	the request: tool/prompt schemas are the same for every caller, and so
-	is the *list* of available resource URIs (resources/list). A shared
-	cache should be allowed to serve those."""
+def test_every_cache_hint_is_private():
+	"""Decision 3 (MCP-MULTI-TENANCY-PHASE-3-PLAN.md): all five hints are
+	"private", not just resources/read as before Phase 3. Every response now
+	carries the resolved tenant's own serverInfo stamp
+	(TenantIdentityMiddleware, identity.py), and most carry per-tenant
+	content or instructions too, so no result is identical for every caller
+	any more — a shared cache/proxy could otherwise hand one tenant's
+	identity or content to another's caller. This server is always reached
+	on one tenant's own hostname, never shared anonymously across tenants,
+	so nothing is lost by never advertising "public"."""
 	from gregory_mcp.server import CACHE_HINTS as hints
 
-	for method in ("tools/list", "prompts/list", "resources/list", "server/discover"):
-		assert hints[method].scope == "public", (
-			f"{method} is identical for every caller regardless of site, "
-			"so a shared cache should be allowed to serve it"
-		)
-
-
-def test_resources_read_hint_is_private_so_a_proxy_cant_leak_across_sites():
-	"""resources/read is the exception: SiteMiddleware makes the actual
-	subjects/categories content it returns depend on the resolved site_id
-	for that call (see CatalogCache._key() in cache.py, which mixes site_id
-	into the server-side cache key for exactly this reason). CacheHint has
-	no per-call scope — it's one static value for the whole method, chosen
-	once here — so it must be "private" (the only other value the SDK's
-	CacheHint accepts, per the 2026-07-28 SEP-2549 caching revision):
-	advertising "public" would tell a client/proxy that any two callers'
-	resources/read responses are interchangeable, letting a shared cache
-	hand site A's catalog to site B's caller and undo the server-side
-	per-site isolation entirely."""
-	from gregory_mcp.server import CACHE_HINTS as hints
-
-	assert hints["resources/read"].scope == "private"
+	for method in ("tools/list", "prompts/list", "resources/list", "resources/read", "server/discover"):
+		assert hints[method].scope == "private", f"{method} must be private now that identity is per-tenant"
 
 
 def test_client_exposes_no_write_methods():
