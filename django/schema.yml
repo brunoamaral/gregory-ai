@@ -3023,6 +3023,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCategoryList'
           description: ''
+  /tenants/:
+    get:
+      operationId: tenants_list
+      description: 'Sites offering a research assistant (MCP): api_public sites with
+        CustomSetting.mcp_enabled=True and a non-empty scope_subjects, plus, for a
+        caller holding a site-bound API key, that caller''s own site if it is a tenant
+        -- whether or not that site is api_public. Unlike GET /sites/, this can therefore
+        include a private site, but only to the key that owns it. Anonymous callers,
+        signed-in users, and a key with no usable site all get the same list: every
+        public tenant. Never gated by site resolution -- it answers the same way regardless
+        of how many public sites exist, unlike content endpoints, which fail closed
+        when that is ambiguous. Ordered by site_id, with no pagination. Carries Vary:
+        Authorization, since the answer depends on the caller''s key.'
+      summary: List MCP tenants
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - tenants
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTenant'
+            text/csv:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTenant'
+          description: ''
   /trials/:
     get:
       operationId: trials_list
@@ -5980,6 +6023,149 @@ components:
       - created_date
       - id
       - subject
+    McpTenant:
+      type: object
+      description: |-
+        One tenant on GET /tenants/ -- a site offering a research assistant
+        (MCP). See api.views.McpTenantsView for who sees what and why this is a
+        separate endpoint from GET /sites/.
+
+        No team_id anywhere (parent plan decision E) -- subjects use
+        McpTenantSubjectSerializer, not the nested serializers articles/trials
+        use, which carry team_id.
+      properties:
+        site_id:
+          type: integer
+          readOnly: true
+        domain:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        api_public:
+          type: boolean
+          readOnly: true
+        mcp_description:
+          type: string
+          readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTenantSubject'
+          readOnly: true
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTenantPrompt'
+          readOnly: true
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTenantDocument'
+          readOnly: true
+      required:
+      - api_public
+      - documents
+      - domain
+      - mcp_description
+      - name
+      - prompts
+      - site_id
+      - subjects
+      - title
+    McpTenantDocument:
+      type: object
+      description: An active SiteMcpDocument, for GET /tenants/.
+      properties:
+        slug:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        mime_type:
+          type: string
+          readOnly: true
+        body:
+          type: string
+          readOnly: true
+      required:
+      - body
+      - description
+      - mime_type
+      - slug
+      - title
+    McpTenantPrompt:
+      type: object
+      description: |-
+        An active SiteMcpPrompt, for GET /tenants/. The template is raw --
+        the MCP server substitutes arguments at prompts/get time, not here.
+      properties:
+        name:
+          type: string
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        template:
+          type: string
+          readOnly: true
+        arguments:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpTenantPromptArgument'
+          readOnly: true
+      required:
+      - arguments
+      - description
+      - name
+      - template
+      - title
+    McpTenantPromptArgument:
+      type: object
+      description: |-
+        One canonical-form argument of a SiteMcpPrompt.template -- see
+        sitesettings.models.validate_prompt_template().
+      properties:
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        required:
+          type: boolean
+          readOnly: true
+      required:
+      - description
+      - name
+      - required
+    McpTenantSubject:
+      type: object
+      description: |-
+        A subject as listed on GET /tenants/ -- deliberately just {id,
+        subject_name}, no team_id. Not SubjectsSerializer: that one includes
+        team_id, which this endpoint must never expose (parent plan decision E).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        subject_name:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - subject_name
     ModalityEnum:
       enum:
       - small_molecule
@@ -6218,10 +6404,13 @@ components:
         Deliberately minimal: just enough for a caller to learn which site IDs
         exist so it can pass ?site_id=. Everything here is already public.
 
-        The MCP multi-tenancy spec proposes a richer per-site config endpoint
-        carrying subjects, prompts and documents. That project is unstarted; when
-        it lands, the two should converge on one endpoint rather than duplicate --
-        this payload is a strict subset of that one.
+        Separate BY DESIGN from GET /tenants/ (McpTenantSerializer below), and
+        the two must not converge: /sites/ is unscoped public discovery, and
+        stays exactly as it is. /tenants/ carries MCP configuration -- prompts,
+        documents, a description written for the model -- and, for a caller
+        holding a site-bound key, can include that caller's own PRIVATE site.
+        Folding the two together would leak a private site's existence and
+        authored content to anyone who could call the unscoped endpoint.
       properties:
         site_id:
           type: integer

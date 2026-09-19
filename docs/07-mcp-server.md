@@ -166,6 +166,13 @@ brain-regeneration.com, seeded by a data migration. `seed_mcp_prompts --site
 <id>` gives a new tenant the same starting set — it never overwrites a row
 that already exists, so an edited prompt is never touched by a re-run.
 
+Authored prompts and documents are published at
+[`GET /tenants/`](03-api-and-rss-feeds.md#discovering-mcp-tenants) — the MCP
+server does not read that endpoint yet, so this only changes what an admin
+can write, not what a client gets back. A later release makes the server
+fetch `/tenants/` (the way it already fetches `/sites/`) and serve each
+tenant's own prompts and documents instead of the three built-ins.
+
 ---
 
 ## Instance targeting

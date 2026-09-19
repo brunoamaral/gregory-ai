@@ -41,6 +41,7 @@ from api.serializers import (
 	OrganizationSerializer,
 	SponsorSerializer,
 	PublicSiteSerializer,
+	McpTenantSerializer,
 )
 from api.pagination import (
 	CappedPageNumberPagination,
@@ -4660,6 +4661,157 @@ class PublicSitesView(APIView):
 		# @extend_schema): public_sites() already returns plain
 		# {site_id, domain, name} dicts in that exact shape.
 		return Response(public_sites())
+
+
+@extend_schema(
+	summary="List MCP tenants",
+	description=(
+		"Sites offering a research assistant (MCP): api_public sites with "
+		"CustomSetting.mcp_enabled=True and a non-empty scope_subjects, plus, "
+		"for a caller holding a site-bound API key, that caller's own site if "
+		"it is a tenant -- whether or not that site is api_public. Unlike "
+		"GET /sites/, this can therefore include a private site, but only to "
+		"the key that owns it. Anonymous callers, signed-in users, and a key "
+		"with no usable site all get the same list: every public tenant. "
+		"Never gated by site resolution -- it answers the same way "
+		"regardless of how many public sites exist, unlike content "
+		"endpoints, which fail closed when that is ambiguous. Ordered by "
+		"site_id, with no pagination. Carries Vary: Authorization, since the "
+		"answer depends on the caller's key."
+	),
+	responses=McpTenantSerializer(many=True),
+)
+class McpTenantsView(APIView):
+	"""Sites offering a research assistant (MCP), for the MCP server (and a
+	private tenant's own key holder) to read.
+
+	A separate endpoint from GET /sites/ (PublicSitesView) on purpose --
+	see PublicSiteSerializer's docstring. /sites/ is unscoped public
+	discovery and stays exactly as it is; this one carries MCP
+	configuration (prompts, documents, a description written for the
+	model) and, for a site-bound key, that caller's own private tenant.
+	Folding the two together would leak a private site's existence and
+	authored content to anyone who could call the unscoped one.
+
+	Who sees what:
+	  - Anonymous, a signed-in user, or an invalid/expired key -> every
+	    public tenant.
+	  - A valid key whose site belongs to its organisation -> every public
+	    tenant, plus its own site if that site is a tenant (mcp_enabled and
+	    a non-empty scope), whether or not it is api_public.
+	  - A key with no site, or a site outside its organisation -> the same
+	    as anonymous.
+
+	Deliberately does NOT read request.visible_subject_ids: for an
+	anonymous caller with two or more api_public sites, reading it raises
+	gregory.site_resolution.NoSiteResolvedError (a 400) -- the fail-closed
+	behaviour every content endpoint needs, but not this one. Like
+	GET /sites/, this endpoint answers with no site indicator at all.
+	"""
+
+	permission_classes = [permissions.AllowAny]
+
+	def get(self, request):
+		from django.contrib.sites.models import Site
+		from django.utils.cache import patch_vary_headers
+
+		from gregory.visibility import api_key_site_id, site_scope_subject_ids
+		from sitesettings.models import CustomSetting, SiteMcpDocument, SiteMcpPrompt
+
+		# --- Public tenants: one settings row per site (lowest setting_id
+		# wins, matching public_sites()'s tie-break), api_public AND
+		# mcp_enabled, and a non-empty PUBLIC scope. ---
+		public_settings_qs = (
+			CustomSetting.objects.filter(api_public=True, mcp_enabled=True)
+			.select_related("site")
+			.order_by("site__domain", "setting_id")
+		)
+		tenants: dict[int, tuple] = {}
+		seen_site_ids = set()
+		for setting in public_settings_qs:
+			if setting.site_id in seen_site_ids:
+				continue
+			seen_site_ids.add(setting.site_id)
+			subject_ids = site_scope_subject_ids(setting.site_id, public_only=True)
+			if subject_ids:
+				tenants[setting.site_id] = (setting, subject_ids)
+
+		# --- The caller's own site, if a site-bound key names one. Computed
+		# AFTER the public loop above, so if the site is ALSO a public
+		# tenant it is overwritten here rather than listed twice -- using
+		# the full (public_only=False) scope, which is what the API returns
+		# to the same key. ---
+		own_site_id = api_key_site_id(request)
+		if own_site_id is not None:
+			own_setting = (
+				CustomSetting.objects.filter(site_id=own_site_id, mcp_enabled=True)
+				.order_by("setting_id")
+				.first()
+			)
+			if own_setting is not None:
+				subject_ids = site_scope_subject_ids(own_site_id, public_only=False)
+				if subject_ids:
+					tenants[own_site_id] = (own_setting, subject_ids)
+
+		site_ids_sorted = sorted(tenants.keys())
+		sites_by_id = {
+			site.id: site
+			for site in Site.objects.filter(id__in=site_ids_sorted).prefetch_related(
+				Prefetch(
+					"mcp_prompts",
+					queryset=SiteMcpPrompt.objects.filter(is_active=True),
+				),
+				Prefetch(
+					"mcp_documents",
+					queryset=SiteMcpDocument.objects.filter(is_active=True),
+				),
+			)
+		}
+
+		payload = []
+		for site_id in site_ids_sorted:
+			setting, subject_ids = tenants[site_id]
+			site = sites_by_id[site_id]
+			payload.append(
+				{
+					"site_id": site_id,
+					"domain": site.domain,
+					"name": site.name,
+					"title": setting.title,
+					"api_public": setting.api_public,
+					"mcp_description": setting.mcp_description,
+					"subjects": list(
+						Subject.objects.filter(id__in=subject_ids)
+						.order_by("id")
+						.values("id", "subject_name")
+					),
+					"prompts": [
+						{
+							"name": prompt.name,
+							"title": prompt.title,
+							"description": prompt.description,
+							"template": prompt.template,
+							"arguments": prompt.arguments,
+						}
+						for prompt in site.mcp_prompts.all()
+					],
+					"documents": [
+						{
+							"slug": document.slug,
+							"title": document.title,
+							"description": document.description,
+							"mime_type": document.mime_type,
+							"body": document.body,
+						}
+						for document in site.mcp_documents.all()
+					],
+				}
+			)
+
+		serializer = McpTenantSerializer(payload, many=True)
+		response = Response(serializer.data)
+		patch_vary_headers(response, ["Authorization"])
+		return response
 
 
 def stats_payload_cache_key(team_id_list, visible_subject_ids, subject_ids):
