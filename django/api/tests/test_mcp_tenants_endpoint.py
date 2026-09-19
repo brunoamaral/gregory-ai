@@ -292,7 +292,10 @@ class McpTenantsKeyTests(TestCase):
 		self.client.defaults["HTTP_AUTHORIZATION"] = key.api_key
 
 		with_key_resp = self.client.get(reverse("mcp_tenants"))
-		anon_resp = self.client.get(reverse("mcp_tenants"))
+		# A genuinely separate, credential-free client -- self.client still
+		# carries the header set above, so reusing it here would compare the
+		# keyed response with itself rather than with a real anonymous one.
+		anon_resp = APIClient().get(reverse("mcp_tenants"))
 		self.assertEqual(with_key_resp.data, anon_resp.data)
 		site_ids = {row["site_id"] for row in with_key_resp.data}
 		self.assertNotIn(self.private_site.pk, site_ids)
