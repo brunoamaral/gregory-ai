@@ -103,7 +103,11 @@ names and static advice text.
 title, date, a few key fields, and a summary truncated to ~400 characters — not the full
 record. A ten-result search with full abstracts and nested author lists is a very large
 response, and most searches are followed by a `get_*` read of one or two records anyway.
-`get_article` / `get_trial` / `get_author` return the untouched record.
+`get_article` / `get_trial` / `get_author` return the full record, minus team data:
+`get_article` and `get_trial` drop every `teams` and `team_id` key, at any depth
+(`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
+team plumbing is noise to the model. `team_categories` stays — despite the name, it holds
+the record's category tags.
 
 No tool exposes `all_results=true`. Bulk export is deliberately out of scope for this
 server — see [Risks](#risks).

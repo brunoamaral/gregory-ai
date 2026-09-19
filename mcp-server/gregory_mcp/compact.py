@@ -3,7 +3,8 @@
 Search tools return a small, flat projection of each record — full abstracts
 and nested author/site lists blow up context fast, and most searches are
 followed by a `get_*` read of one or two records anyway. Detail tools
-(`get_article`, `get_trial`) return the record untouched.
+(`get_article`, `get_trial`) return the full record, minus team data
+(`strip_team_data`).
 """
 
 from __future__ import annotations
@@ -11,6 +12,28 @@ from __future__ import annotations
 from typing import Any
 
 SUMMARY_TRUNCATE_CHARS = 400
+
+# Team plumbing in API records: an article's `teams`, and the `team_id` on
+# every nested subject — including the one inside each of an article's
+# `article_subject_relevances`. #871 took `team_id` off every tool parameter
+# and catalog row (a tenant sees its site's scope, and no tool accepts a
+# team), so records returned whole must not carry it either.
+_TEAM_KEYS = frozenset({"teams", "team_id"})
+
+
+def strip_team_data(value: Any) -> Any:
+	"""A copy of `value` with every `teams` / `team_id` key removed, at any
+	depth — so a more deeply nested record, or a serializer field added
+	later, can't bring team data back.
+
+	`team_categories` is kept: despite the name it holds the record's
+	category tags, which the tools expose as categories.
+	"""
+	if isinstance(value, dict):
+		return {key: strip_team_data(item) for key, item in value.items() if key not in _TEAM_KEYS}
+	if isinstance(value, list):
+		return [strip_team_data(item) for item in value]
+	return value
 
 
 def _truncate(text: str | None, limit: int = SUMMARY_TRUNCATE_CHARS) -> str | None:

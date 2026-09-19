@@ -6,7 +6,7 @@ from typing import Literal
 
 from .. import intent as intent_module
 from ..client import GregoryAPIError, get_client
-from ..compact import compact_trial
+from ..compact import compact_trial, strip_team_data
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
 from ..zero_result import guidance_for
@@ -144,10 +144,11 @@ async def get_trial(trial_id: int) -> dict:
 		ValueError: If no trial with this ID is visible in this instance.
 	"""
 	try:
-		return await get_client().get(f"/trials/{trial_id}/")
+		trial = await get_client().get(f"/trials/{trial_id}/")
 	except GregoryAPIError as exc:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".
 		if exc.status_code == 404:
 			raise ValueError(f"Trial {trial_id} was not found in this instance.") from exc
 		raise
+	return strip_team_data(trial)
