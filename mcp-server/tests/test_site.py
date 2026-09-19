@@ -38,7 +38,7 @@ def test_normalize_host_none_or_empty_is_none():
 	assert _normalize_host("") is None
 
 
-# --- domain matching (mirrors django/subscriptions/views.py:_find_site_by_domain) --
+# --- domain matching (mirrors django/gregory/site_resolution.py:find_site_by_domain) --
 
 
 def test_match_domain_exact():
@@ -53,7 +53,7 @@ def test_match_domain_falls_back_one_subdomain_level():
 
 
 def test_match_domain_two_levels_stripped_is_not_attempted():
-	# _find_site_by_domain only ever strips ONE subdomain level.
+	# find_site_by_domain only ever strips ONE subdomain level.
 	domain_map = {"brain-regeneration.com": 3}
 	assert _match_domain("a.b.brain-regeneration.com", domain_map) is None
 
