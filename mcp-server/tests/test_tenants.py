@@ -129,6 +129,53 @@ async def test_a_failure_with_nothing_cached_returns_unavailable(mock_gregory):
 	assert await _get_tenants_directory() is None
 
 
+@pytest.mark.parametrize(
+	"malformed_response",
+	[
+		httpx2.Response(200, text="<html>Bad Gateway</html>"),  # 2xx but not JSON at all
+		httpx2.Response(200, json={"count": 0, "results": []}),  # JSON, but not the plain-list shape
+	],
+	ids=["non-json-2xx-body", "unexpected-shape-2xx-body"],
+)
+async def test_malformed_2xx_response_is_never_cached(mock_gregory, malformed_response):
+	"""A 2xx that isn't a JSON list (an intermediate proxy's HTML error page,
+	or a contract change) must be treated exactly like a transport/HTTP
+	failure -- never cached as a valid empty directory -- not silently
+	parsed into zero tenants."""
+	mock_gregory.set_handler(lambda request: malformed_response)
+
+	assert await _get_tenants_directory() is None
+	# A second call retries rather than serving a cached failure.
+	await _get_tenants_directory()
+	tenants_requests = [r for r in mock_gregory.requests if r.url.path == "/tenants/"]
+	assert len(tenants_requests) == 2
+
+
+@pytest.mark.parametrize(
+	"malformed_response",
+	[
+		httpx2.Response(200, text="<html>Bad Gateway</html>"),
+		httpx2.Response(200, json={"count": 0, "results": []}),
+	],
+	ids=["non-json-2xx-body", "unexpected-shape-2xx-body"],
+)
+async def test_malformed_2xx_response_falls_back_to_the_stale_copy(mock_gregory, monkeypatch, malformed_response):
+	responses = iter(
+		[httpx2.Response(200, json=tenants_payload({"site_id": 3, "domain": "br.test"})), malformed_response]
+	)
+	mock_gregory.set_handler(lambda request: next(responses))
+
+	first = await _get_tenants_directory()
+	assert first is not None and [t.site_id for t in first] == [3]
+
+	import gregory_mcp.tenants as tenants_module
+
+	monkeypatch.setattr(tenants_module._tenants_cache, "_clock", lambda: float("inf"))
+
+	second = await _get_tenants_directory()
+	assert second is not None and [t.site_id for t in second] == [3]  # the stale copy
+
+
 async def test_tenants_call_itself_carries_no_site_id(mock_gregory):
 	"""GET /tenants/ must be fetched before this request's own site_id is
 	set — the same requirement /sites/ had, and for the same reason: it
@@ -188,6 +235,21 @@ async def test_one_stripped_subdomain_level_resolves(mock_gregory):
 	)
 
 	tenant = await resolve_tenant("gregory-ai.brain-regeneration.com")
+
+	assert tenant is not None and tenant.site_id == 3
+
+
+async def test_matches_regardless_of_the_directorys_domain_casing(mock_gregory):
+	"""_normalize_host() lowercases the inbound Host, so the directory's own
+	domain casing must not matter -- DNS hostnames are case-insensitive, and
+	nothing guarantees the API always returns a lowercase domain."""
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200, json=tenants_payload({"site_id": 3, "domain": "Brain-Regeneration.COM"})
+		)
+	)
+
+	tenant = await resolve_tenant("brain-regeneration.com")
 
 	assert tenant is not None and tenant.site_id == 3
 

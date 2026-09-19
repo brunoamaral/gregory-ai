@@ -314,7 +314,11 @@ async def resolve_tenant(host_header: str | None) -> Tenant | None:
 	host = _normalize_host(host_header)
 	if host is None:
 		return None
-	domain_map = {t.domain: t.site_id for t in tenants}
+	# _normalize_host() lowercases the inbound Host, so the map's keys must
+	# be lowercased too -- DNS hostnames are case-insensitive, and nothing
+	# guarantees CustomSetting.domain is stored lowercase (the old
+	# _fetch_site_directory() lowercased for the same reason).
+	domain_map = {t.domain.lower(): t.site_id for t in tenants}
 	site_id = _match_domain(host, domain_map)
 	if site_id is None:
 		return None
