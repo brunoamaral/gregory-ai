@@ -220,7 +220,13 @@ def _parse_tenants(data: list) -> list[Tenant]:
 	for row in data:
 		tenant = _parse_tenant(row)
 		if tenant is None:
-			logger.warning("gregory_tenant_row_malformed", extra={"row": row if isinstance(row, dict) else None})
+			# The domain, not the row: an API row is free-form and would be
+			# dropped by JsonFormatter's allowlist anyway (logging_config.py).
+			domain = row.get("domain") if isinstance(row, dict) else None
+			logger.warning(
+				"gregory_tenant_row_malformed",
+				extra={"domain": domain if isinstance(domain, str) else None},
+			)
 			continue
 		tenants.append(tenant)
 	return tenants

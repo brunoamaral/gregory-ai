@@ -30,8 +30,9 @@ SERVER_VERSION = "0.1.0"
 
 
 def instructions_for(tenant: Tenant) -> str:
-	"""Generated `instructions` for `tenant`, three paragraphs: an
-	introduction, the subjects covered, and how the tools behave.
+	"""Generated `instructions` for `tenant`: an introduction, the subjects
+	covered, and how the tools behave. The middle paragraph is dropped when
+	a tenant has no subjects (see below), so two paragraphs in that case.
 
 	Decision 6 (MCP-MULTI-TENANCY-PHASE-3-PLAN.md, task B2) is this exact
 	wording — edit here, not at a call site, if it needs to change.

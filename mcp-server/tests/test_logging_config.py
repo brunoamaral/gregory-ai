@@ -81,6 +81,45 @@ def test_json_formatter_omits_site_id_when_the_event_never_set_it():
 	assert "site_id" not in payload
 
 
+def test_json_formatter_writes_the_phase_3_diagnostic_fields():
+	"""A warning's structured fields are worth nothing if the formatter
+	drops them: the tenant gate and the malformed-row warnings exist to say
+	*which* hostname was refused and *which* tenant had a bad row."""
+	record = logging.getLogger("gregory_mcp.tenants").makeRecord(
+		"gregory_mcp.tenants", logging.WARNING, __file__, 0, "gregory_tenant_gate_refused", (), None,
+		extra={
+			"host": "unknown.test",
+			"domain": "brain-regeneration.com",
+			"kind": "prompt",
+			"reason": "no tenant matched",
+			"prompt": "research_topic",
+		},
+	)
+
+	payload = json.loads(JsonFormatter().format(record))
+
+	assert payload["host"] == "unknown.test"
+	assert payload["domain"] == "brain-regeneration.com"
+	assert payload["kind"] == "prompt"
+	assert payload["reason"] == "no tenant matched"
+	assert payload["prompt"] == "research_topic"
+
+
+def test_json_formatter_still_drops_a_field_outside_the_allowlist():
+	"""The allowlist is a boundary, not a convenience: adding the fields
+	above must not turn the formatter into "log every extra"."""
+	record = logging.getLogger("gregory_mcp.tenants").makeRecord(
+		"gregory_mcp.tenants", logging.WARNING, __file__, 0, "gregory_tenant_row_malformed", (), None,
+		extra={"row": {"secret": "SENSITIVE-marker"}, "search": "SENSITIVE-marker"},
+	)
+
+	payload = json.loads(JsonFormatter().format(record))
+
+	assert "row" not in payload
+	assert "search" not in payload
+	assert "SENSITIVE-marker" not in json.dumps(payload)
+
+
 def test_intent_json_formatter_never_writes_site_id():
 	"""The file writer is the last line of the intent/telemetry separation.
 
