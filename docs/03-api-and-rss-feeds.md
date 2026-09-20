@@ -177,7 +177,7 @@ The response is a plain JSON array, ordered by `site_id`, with no pagination:
 
 Like `GET /sites/`, this endpoint is **never gated by the resolution above** — it answers the same way no matter how many `api_public` sites exist, even where `/articles/` would 400 on an anonymous caller who names none. Every response carries `Vary: Authorization`, since the answer depends on the caller's key.
 
-Nothing reads this endpoint yet except the endpoint itself: see [07-mcp-server.md](07-mcp-server.md#prompts) for what a later release changes once the MCP server starts consuming it.
+The MCP server fetches this endpoint the way it already fetches `GET /sites/` — cached for 10 minutes, with a stale-copy fallback on fetch failure rather than treating an outage as "no tenants exist" — and refuses any request whose Host doesn't resolve to one of these rows, before making any other API call. See [07-mcp-server.md](07-mcp-server.md#tenant-resolution-site_id) and its §"Prompts"/§"Resources".
 
 ---
 

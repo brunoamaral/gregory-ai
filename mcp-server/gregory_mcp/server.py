@@ -8,14 +8,14 @@ named by `GREGORY_API_URL`.
 
 from __future__ import annotations
 
+import mcp_types as types
 from mcp.server.caching import CacheHint
 from mcp.server.mcpserver import MCPServer
 from mcp_types import ToolAnnotations
 
+from . import prompts, resources
 from .cache import CATALOG_CACHE_TTL_MS
 from .identity import SERVER_VERSION, TenantIdentityMiddleware
-from .prompts import register_prompts
-from .resources import register_resources
 from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tenants import TenantGateMiddleware
@@ -65,6 +65,31 @@ CACHE_HINTS = {
 }
 
 
+def _replace_handler(server: MCPServer, method: str, params_type: type, handler) -> None:
+	"""Registers `handler` for `method`, replacing whatever the SDK's own
+	high-level decorators would have registered.
+
+	`server._lowlevel_server.add_request_handler` is private SDK API (`mcp`
+	pinned to `==2.0.0` in pyproject.toml) — the one seam this server uses to
+	serve prompts/resources per resolved tenant, since the
+	`@server.prompt()`/`@server.resource()` decorators fix their
+	registration at construction time, once for the whole process, while
+	this server's active prompt/document set now varies per request. An SDK
+	upgrade needs re-checking this attribute still exists;
+	test_server.py::test_replace_handler_seam_still_exists fails loudly if
+	it doesn't.
+	"""
+	lowlevel = getattr(server, "_lowlevel_server", None)
+	if lowlevel is None or not callable(getattr(lowlevel, "add_request_handler", None)):
+		raise RuntimeError(
+			"MCPServer._lowlevel_server.add_request_handler is gone -- the mcp "
+			"SDK's internals changed. _replace_handler (server.py) depends on "
+			"this private attribute to serve per-tenant prompts/resources; "
+			"re-check it against the new SDK version before upgrading further."
+		)
+	lowlevel.add_request_handler(method, params_type, handler)
+
+
 def build_server() -> MCPServer:
 	server = MCPServer(
 		# Neutral defaults, naming no platform (decision F) — a client only
@@ -103,7 +128,12 @@ def build_server() -> MCPServer:
 	server.add_tool(catalog.list_sponsors, annotations=READ_ONLY)
 	server.add_tool(stats.get_stats, annotations=READ_ONLY)
 
-	register_resources(server)
-	register_prompts(server)
+	_replace_handler(server, "prompts/list", types.PaginatedRequestParams, prompts.list_prompts)
+	_replace_handler(server, "prompts/get", types.GetPromptRequestParams, prompts.get_prompt)
+	_replace_handler(server, "resources/list", types.PaginatedRequestParams, resources.list_resources)
+	_replace_handler(
+		server, "resources/templates/list", types.PaginatedRequestParams, resources.list_resource_templates
+	)
+	_replace_handler(server, "resources/read", types.ReadResourceRequestParams, resources.read_resource)
 
 	return server

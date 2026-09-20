@@ -2,12 +2,17 @@
 
 date_registration was never a valid `ordering` value on /trials/ (see
 TrialViewSet.ordering_fields in django/api/views.py) — DRF's OrderingFilter
-silently ignores an unrecognised value rather than rejecting it, so the prompt
-promised registration-recency order and quietly delivered the default order
-instead. This scans prompts.py and the tool modules for any ordering="..."
-literal and checks the field name against every endpoint's real
-ordering_fields, so the next typo fails a test instead of failing silently at
-runtime.
+silently ignores an unrecognised value rather than rejecting it, so a prompt
+that named it would promise registration-recency order and quietly deliver
+the default order instead. This scans the tool modules for any
+ordering="..." literal and checks the field name against every endpoint's
+real ordering_fields, so the next typo fails a test instead of failing
+silently at runtime.
+
+Prompts themselves are Django-authored, free-form text since Phase 3
+(sitesettings/mcp_defaults.py, served via gregory_mcp/prompts.py's
+per-tenant handlers) — there is no longer a fixed prompts.py source to scan
+for ordering literals.
 
 This is a hardcoded allowlist rather than a read from django/schema.yml
 because, as of this test, the schema does not yet declare a real enum for
@@ -21,7 +26,6 @@ from __future__ import annotations
 import inspect
 import re
 
-from gregory_mcp import prompts
 from gregory_mcp.tools import articles, catalog, trials
 
 # Mirrors each ViewSet's ordering_fields in django/api/views.py.
@@ -68,10 +72,6 @@ def _assert_all_valid(values: set[str], where: str) -> None:
 			f"{where} references ordering={value!r}, but {field!r} is not a valid "
 			"ordering field on any endpoint (see VALID_ORDERING_FIELDS)."
 		)
-
-
-def test_prompts_only_reference_valid_ordering_fields():
-	_assert_all_valid(_ordering_values_in(prompts), "prompts.py")
 
 
 def test_tool_source_only_references_valid_ordering_fields():
