@@ -11,6 +11,7 @@ from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
 import logging
+import re
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
@@ -2388,6 +2389,7 @@ class ArticleCountFilter(admin.SimpleListFilter):
 class AuthorsAdmin(admin.ModelAdmin):
 	search_fields = ["family_name", "given_name", "ORCID"]
 	list_display = [
+		"author_id",
 		"given_name",
 		"family_name",
 		"display_orcid",
@@ -2398,6 +2400,29 @@ class AuthorsAdmin(admin.ModelAdmin):
 	inlines = [AuthorArticlesInline]
 	readonly_fields = ["biography", "recheck_orcid_button"]
 	actions = ["merge_selected_authors"]
+
+	def get_search_results(self, request, queryset, search_term):
+		id_list = self._parse_id_list(search_term)
+		if id_list is not None:
+			return queryset.filter(author_id__in=id_list), False
+		return super().get_search_results(request, queryset, search_term)
+
+	@staticmethod
+	def _parse_id_list(search_term):
+		"""If every token in search_term is a plain integer, return the list of ints.
+
+		Tokens may be separated by commas, whitespace, or newlines, so pasting a CSV
+		column of author_ids (one per line or comma-joined) works. Returns None if the
+		search term is empty or contains anything that isn't a bare integer, so normal
+		name/ORCID searches are unaffected.
+		"""
+		tokens = [t for t in re.split(r"[,\s]+", search_term.strip()) if t]
+		if not tokens:
+			return None
+		try:
+			return [int(t) for t in tokens]
+		except ValueError:
+			return None
 
 	def display_orcid(self, obj):
 		if obj.ORCID:
