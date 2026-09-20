@@ -160,14 +160,31 @@ def test_replace_handler_seam_still_exists():
 	assert server._lowlevel_server._request_handlers["ping"] is not None
 
 
-def test_replace_handler_raises_loudly_if_the_seam_disappears():
+def test_replace_handler_raises_loudly_if_lowlevel_server_disappears():
 	from gregory_mcp.server import _replace_handler
 
 	class NoLowlevelServer:
 		pass
 
-	with pytest.raises(RuntimeError, match="_lowlevel_server"):
+	with pytest.raises(RuntimeError, match="add_request_handler"):
 		_replace_handler(NoLowlevelServer(), "ping", type(None), lambda ctx, params: None)
+
+
+def test_replace_handler_raises_loudly_if_add_request_handler_disappears():
+	"""_lowlevel_server surviving an SDK upgrade doesn't guarantee
+	add_request_handler does too -- this must fail with the same actionable
+	RuntimeError, not a bare AttributeError, if just that method is renamed
+	or removed."""
+	from gregory_mcp.server import _replace_handler
+
+	class LowlevelServerWithoutTheMethod:
+		pass
+
+	class ServerMissingOnlyTheMethod:
+		_lowlevel_server = LowlevelServerWithoutTheMethod()
+
+	with pytest.raises(RuntimeError, match="add_request_handler"):
+		_replace_handler(ServerMissingOnlyTheMethod(), "ping", type(None), lambda ctx, params: None)
 
 
 def test_client_exposes_no_write_methods():

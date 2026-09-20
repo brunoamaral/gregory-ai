@@ -80,12 +80,12 @@ def _replace_handler(server: MCPServer, method: str, params_type: type, handler)
 	it doesn't.
 	"""
 	lowlevel = getattr(server, "_lowlevel_server", None)
-	if lowlevel is None:
+	if lowlevel is None or not callable(getattr(lowlevel, "add_request_handler", None)):
 		raise RuntimeError(
-			"MCPServer._lowlevel_server is gone -- the mcp SDK's internals "
-			"changed. _replace_handler (server.py) depends on this private "
-			"attribute to serve per-tenant prompts/resources; re-check it "
-			"against the new SDK version before upgrading further."
+			"MCPServer._lowlevel_server.add_request_handler is gone -- the mcp "
+			"SDK's internals changed. _replace_handler (server.py) depends on "
+			"this private attribute to serve per-tenant prompts/resources; "
+			"re-check it against the new SDK version before upgrading further."
 		)
 	lowlevel.add_request_handler(method, params_type, handler)
 
