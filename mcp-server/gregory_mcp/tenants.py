@@ -145,12 +145,40 @@ def _parse_subject(row: Any) -> tuple[int, str] | None:
 	return (subject_id, subject_name)
 
 
+def _parse_child_rows(parse, rows: list, kind: str, domain: str) -> tuple:
+	"""Parse a tenant's subjects/prompts/documents, dropping any row the
+	parser rejects rather than the whole tenant with it.
+
+	A tenant is only dropped over the fields its server cannot work without
+	— site_id, domain, identity (see `_parse_tenant`). One malformed prompt
+	must not take a live tenant's whole endpoint dark, which is what
+	returning None here used to do: `TenantGateMiddleware` refuses every
+	request for a hostname with no tenant, so a single bad row would have
+	been an outage rather than a missing prompt. Each dropped row is logged,
+	so it is visible rather than silently absent.
+	"""
+	parsed = []
+	for row in rows:
+		item = parse(row)
+		if item is None:
+			logger.warning("gregory_tenant_child_row_malformed", extra={"kind": kind, "domain": domain})
+			continue
+		parsed.append(item)
+	return tuple(parsed)
+
+
 def _parse_tenant(row: Any) -> Tenant | None:
 	"""One row of `GET /tenants/`, or None if malformed.
 
 	Never raises — a single bad row must not take down every other tenant's
 	server, so this is defensive on every field rather than trusting the
 	API's own schema.
+
+	Only the fields a tenant's server cannot work without are fatal here:
+	`site_id`, `domain`, its identity, and the three collections being lists
+	at all. A malformed row *inside* one of those collections costs that row
+	only (`_parse_child_rows`), because dropping the tenant would refuse
+	every request for its hostname — an outage in place of a missing prompt.
 	"""
 	if not isinstance(row, dict):
 		return None
@@ -170,11 +198,9 @@ def _parse_tenant(row: Any) -> Tenant | None:
 	if not isinstance(raw_subjects, list) or not isinstance(raw_prompts, list) or not isinstance(raw_documents, list):
 		return None
 
-	subjects = tuple(_parse_subject(s) for s in raw_subjects)
-	prompts = tuple(_parse_prompt(p) for p in raw_prompts)
-	documents = tuple(_parse_document(d) for d in raw_documents)
-	if any(s is None for s in subjects) or any(p is None for p in prompts) or any(d is None for d in documents):
-		return None
+	subjects = _parse_child_rows(_parse_subject, raw_subjects, "subject", domain)
+	prompts = _parse_child_rows(_parse_prompt, raw_prompts, "prompt", domain)
+	documents = _parse_child_rows(_parse_document, raw_documents, "document", domain)
 
 	return Tenant(
 		site_id=site_id,
@@ -194,7 +220,13 @@ def _parse_tenants(data: list) -> list[Tenant]:
 	for row in data:
 		tenant = _parse_tenant(row)
 		if tenant is None:
-			logger.warning("gregory_tenant_row_malformed", extra={"row": row if isinstance(row, dict) else None})
+			# The domain, not the row: an API row is free-form and would be
+			# dropped by JsonFormatter's allowlist anyway (logging_config.py).
+			domain = row.get("domain") if isinstance(row, dict) else None
+			logger.warning(
+				"gregory_tenant_row_malformed",
+				extra={"domain": domain if isinstance(domain, str) else None},
+			)
 			continue
 		tenants.append(tenant)
 	return tenants

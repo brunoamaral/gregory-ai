@@ -1,5 +1,12 @@
-"""Decision F, scanned across every method the server answers: no
-client-visible response may contain "GregoryAI", "instance" or "tenant".
+"""Decision F, scanned across every method that carries server-authored
+text: no such response may contain "GregoryAI", "instance" or "tenant".
+
+`tools/call` is deliberately outside the sweep. Its results are upstream
+data — article titles, trial summaries, author affiliations — which may
+legitimately contain any of those words, so scanning them would fail on
+the corpus rather than on this server's own wording. What this server
+writes into a tool result is its error text, and the tool tests
+(test_tools_*.py) pin that instead.
 See MCP-MULTI-TENANCY-PLAN.md decision F and
 MCP-MULTI-TENANCY-PHASE-3-PLAN.md task C5.
 

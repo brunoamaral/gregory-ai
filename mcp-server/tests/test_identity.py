@@ -72,6 +72,16 @@ def test_behaviour_paragraph_is_present():
 	assert "not found" in text.lower()
 
 
+def test_instructions_omit_the_subjects_paragraph_when_there_are_none():
+	"""Only reachable when every subject row failed to parse — the API
+	lists no tenant with an empty scope. Better a missing paragraph than
+	"Subjects covered: ." in a model's system prompt."""
+	text = instructions_for(_make_tenant(subjects=()))
+
+	assert "Subjects covered" not in text
+	assert text.count("\n\n") == 1  # intro, then the read-only paragraph
+
+
 def test_instructions_contain_no_banned_words():
 	tenant = _make_tenant(
 		title="Brain Regeneration",

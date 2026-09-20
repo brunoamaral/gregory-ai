@@ -30,8 +30,9 @@ SERVER_VERSION = "0.1.0"
 
 
 def instructions_for(tenant: Tenant) -> str:
-	"""Generated `instructions` for `tenant`, three paragraphs: an
-	introduction, the subjects covered, and how the tools behave.
+	"""Generated `instructions` for `tenant`: an introduction, the subjects
+	covered, and how the tools behave. The middle paragraph is dropped when
+	a tenant has no subjects (see below), so two paragraphs in that case.
 
 	Decision 6 (MCP-MULTI-TENANCY-PHASE-3-PLAN.md, task B2) is this exact
 	wording — edit here, not at a call site, if it needs to change.
@@ -45,13 +46,17 @@ def instructions_for(tenant: Tenant) -> str:
 			f"This is {tenant.title}'s research database: articles, clinical "
 			"trials and researchers, curated to the subjects below."
 		)
-	subject_names = ", ".join(name for _, name in tenant.subjects)
-	subjects_paragraph = f"Subjects covered: {subject_names}."
 	behavior_paragraph = (
 		"All tools are read-only. Searches and lists only return these "
 		"subjects; a record outside them is reported as not found."
 	)
-	return "\n\n".join([intro, subjects_paragraph, behavior_paragraph])
+	if not tenant.subjects:
+		# Only reachable if every subject row failed to parse: the API lists
+		# no tenant whose scope is empty. Drop the paragraph rather than
+		# render "Subjects covered: ." at a model.
+		return "\n\n".join([intro, behavior_paragraph])
+	subject_names = ", ".join(name for _, name in tenant.subjects)
+	return "\n\n".join([intro, f"Subjects covered: {subject_names}.", behavior_paragraph])
 
 
 def _server_info(tenant: Tenant) -> dict[str, Any]:

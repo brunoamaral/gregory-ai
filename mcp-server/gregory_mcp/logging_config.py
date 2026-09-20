@@ -47,6 +47,20 @@ _EXTRA_FIELDS = (
 	"length_bucket",
 	"matched_category_slugs",
 	"unmatched_term_count",
+	# Phase 3 diagnostics, on warnings rather than on the telemetry stream.
+	# Each is low-cardinality and carries no caller text: `host` is the
+	# inbound Host header and `domain` a tenant's own public domain (the
+	# same attribution `site_id` already carries), `kind` is one of
+	# subject/prompt/document, `reason` one of two fixed strings, and
+	# `prompt` an authored prompt's slug. A whole API row, or anything else
+	# free-form, still has no way through — that is what this allowlist is
+	# for (see tenants.py's malformed-row warning, which logs the domain
+	# rather than the row it rejected).
+	"host",
+	"domain",
+	"kind",
+	"reason",
+	"prompt",
 )
 
 

@@ -101,11 +101,12 @@ class GregoryClient:
 		Query params with a `None` value are dropped so tools can pass every
 		optional filter unconditionally without hand-pruning the dict.
 
-		Adds `site_id` (site.py's per-request resolution — env override,
-		else the inbound Host resolved against `GET /sites/`, else omitted)
-		to every call unless the caller already set one explicitly. See
-		site.py's module docstring for why this is a transport-level
-		concern rather than a parameter on each tool.
+		Adds `site_id` (the resolved tenant's, from tenants.py's per-request
+		resolution — env override, else the inbound Host matched against
+		`GET /tenants/`, else omitted) to every call unless the caller
+		already set one explicitly. See site.py's module docstring for why
+		this is a transport-level concern rather than a parameter on each
+		tool.
 		"""
 		clean_params = {k: v for k, v in (params or {}).items() if v is not None}
 		site_id = get_current_site_id()

@@ -137,7 +137,7 @@ async def get_all_pages_cached(path: str, params: dict[str, Any] | None = None) 
 
 	Cache the concatenated, parsed `results` rows — not a tool- or
 	resource-specific projection of them — so list_subjects/list_categories
-	and the matching gregory://subjects / gregory://categories resources
+	and the matching gregory-ai://subjects / gregory-ai://categories resources
 	share one cache entry per (path, params) instead of each fetching their
 	own copy of the same data.
 	"""
