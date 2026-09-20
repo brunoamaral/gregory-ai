@@ -72,3 +72,22 @@ class AuthorsIdListSearchTests(TestCase):
 		# Falls back to the default icontains search on "author_id, Yong" as a whole,
 		# which won't match family_name/given_name/ORCID for any author.
 		self.assertEqual(results, [])
+
+	def test_signed_integer_is_not_treated_as_id_list(self):
+		# Python's int() accepts a leading sign; a bare author_id never has one.
+		results, _ = self._search(f"+{self.a.author_id}")
+
+		self.assertEqual(results, [])
+
+	def test_underscore_grouped_number_is_not_treated_as_id_list(self):
+		# Python's int() accepts "_" as a digit-group separator; reject it too.
+		results, _ = self._search("1_000")
+
+		self.assertEqual(results, [])
+
+	def test_id_beyond_autofield_range_falls_back_without_db_error(self):
+		# Larger than Postgres's 32-bit integer max (2147483647): must not reach
+		# the __in filter, where it would raise instead of matching nothing.
+		results, _ = self._search("99999999999")
+
+		self.assertEqual(results, [])
