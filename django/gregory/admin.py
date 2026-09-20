@@ -2410,6 +2410,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 	# author_id is a plain (32-bit) AutoField; anything larger can't exist as an ID
 	# and would make PostgreSQL raise on the __in lookup instead of matching nothing.
 	_AUTOFIELD_MAX = 2147483647
+	_AUTOFIELD_MAX_DIGITS = len(str(_AUTOFIELD_MAX))
 
 	@classmethod
 	def _parse_id_list(cls, search_term):
@@ -2417,15 +2418,21 @@ class AuthorsAdmin(admin.ModelAdmin):
 
 		Tokens may be separated by commas, whitespace, or newlines, so pasting a CSV
 		column of author_ids (one per line or comma-joined) works. A token must be
-		plain ASCII digits only (no sign, no "_" grouping, unlike Python's int())
-		and fit in a 32-bit AutoField. Returns None if the search term is empty or
-		any token fails that check, so normal name/ORCID searches (and anything
-		that merely looks numeric-ish) are unaffected.
+		plain ASCII digits only (no sign, no "_" grouping, unlike Python's int()) and
+		fit in a 32-bit AutoField. Digit length is checked, and overlong tokens
+		rejected, *before* calling int() on them: CPython caps how many digits it
+		will convert (4300 by default, since it's a known DoS vector), so int() on
+		an arbitrarily long numeric paste can raise ValueError. Returns None if the
+		search term is empty or any token fails these checks, so normal name/ORCID
+		searches (and anything that merely looks numeric-ish) are unaffected.
 		"""
 		tokens = [t for t in re.split(r"[,\s]+", search_term.strip()) if t]
 		if not tokens or not all(re.fullmatch(r"[0-9]+", t) for t in tokens):
 			return None
-		ids = [int(t) for t in tokens]
+		normalized = [t.lstrip("0") or "0" for t in tokens]
+		if any(len(t) > cls._AUTOFIELD_MAX_DIGITS for t in normalized):
+			return None
+		ids = [int(t) for t in normalized]
 		if any(i > cls._AUTOFIELD_MAX for i in ids):
 			return None
 		return ids

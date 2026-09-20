@@ -91,3 +91,16 @@ class AuthorsIdListSearchTests(TestCase):
 		results, _ = self._search("99999999999")
 
 		self.assertEqual(results, [])
+
+	def test_leading_zeros_are_normalized(self):
+		term = f"{str(self.a.author_id).zfill(10)},{self.c.author_id}"
+		results, _ = self._search(term)
+
+		self.assertCountEqual(results, [self.a, self.c])
+
+	def test_overlong_numeric_token_does_not_raise(self):
+		# CPython caps int()'s digit conversion (4300 by default); a token this long
+		# must be rejected by length before ever reaching int(), not raise ValueError.
+		results, _ = self._search("9" * 5000)
+
+		self.assertEqual(results, [])
