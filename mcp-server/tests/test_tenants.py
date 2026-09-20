@@ -50,24 +50,80 @@ def test_empty_list_parses_to_empty():
 	assert _parse_tenants([]) == []
 
 
-def test_malformed_prompt_argument_drops_the_whole_prompt_row_not_the_tenant():
+def _prompt(name: str, arguments: list | None = None) -> dict:
+	return {
+		"name": name,
+		"title": name.title(),
+		"description": "",
+		"template": "hi",
+		"arguments": [] if arguments is None else arguments,
+	}
+
+
+def test_a_malformed_prompt_costs_that_prompt_only_not_the_tenant(caplog):
+	"""A bad row inside a tenant must not take its whole endpoint dark.
+
+	TenantGateMiddleware refuses every request for a hostname with no
+	tenant, so dropping the tenant over one unusable prompt would be an
+	outage in place of a missing prompt.
+	"""
 	rows = tenants_payload(
 		{
 			"site_id": 3,
 			"domain": "brain-regeneration.com",
 			"prompts": [
-				{
-					"name": "p",
-					"title": "P",
-					"description": "",
-					"template": "hi",
-					"arguments": [{"name": "x", "description": "", "required": "not-a-bool"}],
-				}
+				_prompt("good"),
+				_prompt("bad", [{"name": "x", "description": "", "required": "not-a-bool"}]),
 			],
 		}
 	)
+
 	tenants = _parse_tenants(rows)
-	assert len(tenants) == 0  # the whole tenant row is malformed, not silently missing one prompt
+
+	assert len(tenants) == 1
+	assert [p.name for p in tenants[0].prompts] == ["good"]
+	assert "gregory_tenant_child_row_malformed" in caplog.text
+
+
+def test_a_malformed_subject_costs_that_subject_only():
+	rows = tenants_payload(
+		{
+			"site_id": 3,
+			"domain": "brain-regeneration.com",
+			"subjects": [{"id": 1, "subject_name": "MS"}, {"id": "nope", "subject_name": "Broken"}],
+		}
+	)
+
+	tenants = _parse_tenants(rows)
+
+	assert len(tenants) == 1
+	assert tenants[0].subjects == ((1, "MS"),)
+
+
+def test_a_malformed_document_costs_that_document_only():
+	rows = tenants_payload(
+		{
+			"site_id": 3,
+			"domain": "brain-regeneration.com",
+			"documents": [
+				{"slug": "ok", "title": "Ok", "description": "", "mime_type": "text/markdown", "body": "b"},
+				{"slug": "broken", "title": "Broken", "description": "", "mime_type": "text/markdown"},
+			],
+		}
+	)
+
+	tenants = _parse_tenants(rows)
+
+	assert len(tenants) == 1
+	assert [d.slug for d in tenants[0].documents] == ["ok"]
+
+
+def test_a_collection_that_is_not_a_list_still_drops_the_tenant():
+	"""The tenant's own shape is still fatal — only rows *inside* a
+	well-formed collection are dropped individually."""
+	rows = tenants_payload({"site_id": 3, "domain": "brain-regeneration.com", "prompts": "not-a-list"})
+
+	assert _parse_tenants(rows) == []
 
 
 # --- the directory: caching, failure, and stale-copy behaviour ----------
