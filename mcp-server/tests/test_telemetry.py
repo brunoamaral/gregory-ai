@@ -302,9 +302,9 @@ async def test_raising_tool_call_still_emits_an_event(caplog):
 
 async def test_tool_error_result_is_recorded_as_error_outcome(caplog):
 	"""The SDK's own tool-call handler catches exceptions raised by the tool
-	function (e.g. get_article's `ValueError: Article 123 was not found in
-	this instance.`) and converts them into a CallToolResult(is_error=True)
-	before our middleware ever sees them — so no exception reaches or leaves
+	function (e.g. get_article's `ValueError: Article 123 was not found.`)
+	and converts them into a CallToolResult(is_error=True) before our
+	middleware ever sees them — so no exception reaches or leaves
 	TelemetryMiddleware here; only the is_error result does.
 	"""
 

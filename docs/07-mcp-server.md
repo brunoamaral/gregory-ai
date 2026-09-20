@@ -115,31 +115,35 @@ server — see [Risks](#risks).
 ### Not-found errors
 
 `get_article`, `get_trial`, and `get_author` turn a `404` from their endpoint into a clear
-`ValueError` naming the record — e.g. `Article 123 was not found in this instance.` — rather
-than the generic upstream error text. Django returns `404` both for a record that doesn't
-exist and one outside this site's scope (see [Site scoping](#site-scoping-site_id)),
+`ValueError` naming the record — e.g. `Article 123 was not found.` — rather than the
+generic upstream error text. Django returns `404` both for a record that doesn't exist and
+one outside this site's scope (see [Tenant resolution](#tenant-resolution-site_id)),
 deliberately identical so existence isn't leaked; this server preserves that and never
-implies the record might exist elsewhere. Any other error status still propagates unchanged.
+implies the record might exist elsewhere. Any other error status still propagates
+unchanged. The message says nothing about "instances" or tenants either (decision F,
+`MCP-MULTI-TENANCY-PLAN.md`) — it used to say "was not found in this instance"; that
+implied other instances exist, which is exactly what a single-tenant surface must not say.
 
 ---
 
 ## Resources
 
 Slow-changing reference data, served with a 10-minute `ttlMs` cache hint so repeated
-conversations stop refetching it. The list of resource URIs (`resources/list`) is `public`
-scope — it never varies by site, so clients can share one cached copy. The content each one
-reads (`resources/read`) is `private` scope instead: it varies by the resolved site (see
-[Site scoping](#site-scoping-site_id) below), and a hint can't switch per call, so it has to
-assume the conservative value in both cases rather than let a shared cache hand one site's
-catalog to another's caller. The server also caches these two server-side, for the same 10
-minutes (`gregory_mcp/cache.py`, `CATALOG_CACHE_TTL_MS` — the one constant both the hint and
-the actual cache derive from), already keyed by site there —
-`/categories/` costs about a second per request and takes 12 requests to read in full, so
-this is the difference between a call that answers instantly and one that visibly stalls.
-Per-replica, in-process, with single-flight (concurrent cold-cache callers await one fetch
-rather than each starting their own). `list_subjects`/`list_categories` share the same cache
-entries as these resources when called with equivalent filters — search tools are never
-cached.
+conversations stop refetching it. Both `resources/list` (the list of resource URIs) and
+`resources/read` (the content each one holds) are `private` scope — see
+[Identity](#identity) above for why every cacheable method is `private` now that each one
+carries the resolved tenant's own identity stamp; `resources/read` was already `private`
+before that, since its content varies by the resolved tenant (see
+[Tenant resolution](#tenant-resolution-site_id) above) and a hint can't switch per call,
+so it always had to assume the conservative value. The server also caches these two
+server-side, for the same 10 minutes (`gregory_mcp/cache.py`, `CATALOG_CACHE_TTL_MS` — the
+one constant both the hint and the actual cache derive from), already keyed by site there
+— `/categories/` costs about a second per request and takes 12 requests to read in full,
+so this is the difference between a call that answers instantly and one that visibly
+stalls. Per-replica, in-process, with single-flight (concurrent cold-cache callers await
+one fetch rather than each starting their own). `list_subjects`/`list_categories` share
+the same cache entries as these resources when called with equivalent filters — search
+tools are never cached.
 
 - `gregory://subjects` — every subject
 - `gregory://categories` — every category
@@ -238,6 +242,41 @@ serve a private site today.
 Tenant resolution is transport-level (`GregoryClient.get()` and `CatalogCache`'s cache
 key, not a parameter on any tool) — no tool signature changes, and no LLM caller ever
 chooses a `site_id` itself.
+
+### Identity
+
+Someone adding a tenant's server to Claude Desktop, and the model they talk to, see that
+tenant and nothing else (decision F, `MCP-MULTI-TENANCY-PLAN.md`) — no platform name, no
+sign of other tenants. `TenantIdentityMiddleware` (`gregory_mcp/identity.py`) rewrites
+every response's identity to the resolved tenant's own, replacing the neutral defaults
+`build_server()` constructs the server with (`name="gregory-ai"`, `title="Research
+assistant"` — a client only ever sees these if no tenant resolved, which
+`TenantGateMiddleware` already refuses except for `ping`):
+
+- **`name`** is the tenant's domain, e.g. `brain-regeneration.com`.
+- **`title`** is `CustomSetting.title`, e.g. "Brain Regeneration".
+- **`description`** is generated: "Read-only access to {title}'s research database:
+  articles, clinical trials, authors, subjects, categories and sponsors."
+- **`instructions`** are generated by `instructions_for()`, three paragraphs: an
+  introduction (the tenant's own `mcp_description` if set, otherwise a generated one
+  naming the title), the subjects covered (in `id` order), and a note that every tool is
+  read-only and scoped to those subjects. None of this text ever contains "GregoryAI",
+  "instance" or "tenant" — `tests/test_identity.py` checks every tenant's rendered text
+  for that.
+
+Both the legacy handshake (`initialize`, protocol ≤ 2025-11-25) and the modern one
+(`server/discover`) carry this identity, and every other 2026-era response carries the
+same stamp in its `_meta["io.modelcontextprotocol/serverInfo"]` field — a client sees the
+same name and title everywhere, however it connects.
+
+**All five cache hints are `private`** as of this identity change (`tools/list`,
+`prompts/list`, `resources/list`, `resources/read`, `server/discover` — TTLs unchanged).
+Before per-tenant identity, four of the five were `public`: their content was the same
+for every caller regardless of site. Once every response carries the resolved tenant's
+own identity stamp, that stops being true — a shared cache or proxy serving one tenant's
+`server/discover` response to another tenant's caller would hand over the wrong name and
+`instructions`. This server is always reached on one tenant's own hostname, never shared
+anonymously across tenants, so nothing is lost by advertising `private` everywhere.
 
 ## Auth
 

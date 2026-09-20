@@ -108,7 +108,7 @@ async def get_article(article_id: int) -> dict:
 	ML predictions, linked clinical trials, and the untruncated summary.
 
 	Raises:
-		ValueError: If no article with this ID is visible in this instance.
+		ValueError: If the article can't be found.
 	"""
 	try:
 		article = await get_client().get(f"/articles/{article_id}/")
@@ -116,9 +116,10 @@ async def get_article(article_id: int) -> dict:
 		# Django returns 404 both for an article that doesn't exist and one
 		# outside this site's scope — deliberately identical, so existence
 		# isn't leaked (see site-scoped API visibility, #858-#868). Match
-		# that: name the record and say it wasn't found here, never implying
-		# it might exist somewhere else.
+		# that: name the record and say it wasn't found, never implying it
+		# might exist somewhere else (decision F drops "in this instance" —
+		# no client-visible text names the platform or its multi-tenancy).
 		if exc.status_code == 404:
-			raise ValueError(f"Article {article_id} was not found in this instance.") from exc
+			raise ValueError(f"Article {article_id} was not found.") from exc
 		raise
 	return strip_team_data(article)

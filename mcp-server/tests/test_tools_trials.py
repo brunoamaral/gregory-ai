@@ -165,14 +165,14 @@ async def test_get_trial_strips_team_data(mock_gregory):
 	assert result["team_categories"] == [category]
 
 
-async def test_get_trial_404_says_not_found_in_this_instance(mock_gregory):
+async def test_get_trial_404_says_not_found(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
 
 	with pytest.raises(ValueError) as exc_info:
 		await get_trial(555)
 
 	message = str(exc_info.value)
-	assert message == "Trial 555 was not found in this instance."
+	assert message == "Trial 555 was not found."
 	# Django returns 404 both for a missing trial and one outside this site's
 	# scope, deliberately identical so existence isn't leaked -- the message
 	# must never suggest the record exists somewhere else.
@@ -180,6 +180,7 @@ async def test_get_trial_404_says_not_found_in_this_instance(mock_gregory):
 	assert "scope" not in message.lower()
 	assert "site" not in message.lower()
 	assert "belongs" not in message.lower()
+	assert "instance" not in message.lower()  # decision F: no platform vocabulary
 
 
 async def test_get_trial_non_404_error_propagates(mock_gregory):
