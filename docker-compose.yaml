@@ -80,6 +80,12 @@ services:
       # the sibling `gregory` container for local dev; point it at a public
       # instance (e.g. https://api.brain-regeneration.com) in production.
       - GREGORY_API_URL=${GREGORY_MCP_API_URL:-http://gregory:8000}
+      # Pins this server to one tenant by Site ID. Set it for local dev
+      # (GREGORY_MCP_SITE_ID=3 in .env): a request to 127.0.0.1:8001 carries
+      # no Host this server can resolve, and an unresolved host is refused —
+      # see docs/07-mcp-server.md, "Tenant resolution". Empty in production,
+      # where the inbound Host resolves the tenant on its own.
+      - GREGORY_SITE_ID=${GREGORY_MCP_SITE_ID:-}
       - MCP_LOG_DIR=/var/log/gregory-mcp
     networks:
       - gregory_network

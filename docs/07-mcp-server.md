@@ -509,7 +509,9 @@ query load against Django. Per-tool `limit_req` in nginx is the mitigation, not 
 ```bash
 cd mcp-server
 pip install -e ".[dev]"
-GREGORY_API_URL=http://localhost:8000 python -m gregory_mcp   # run locally
+# GREGORY_SITE_ID is required locally: a local client's Host (127.0.0.1) resolves to no
+# tenant, and an unresolved host is refused — see Tenant resolution above.
+GREGORY_API_URL=http://localhost:8000 GREGORY_SITE_ID=3 python -m gregory_mcp   # run locally
 pytest                                                         # unit + schema-contract tests
 ```
 
