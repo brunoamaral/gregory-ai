@@ -133,8 +133,9 @@ class CustomSettingInline(admin.StackedInline):
 				"description": (
 					"The assistant's corpus is <b>scope_subjects</b> above — there is no "
 					"separate MCP subject list. Prompts and documents are edited in their "
-					"own sections on this page. Not read by the MCP server yet — it starts "
-					"using these settings in a later release."
+					"own sections on this page, and reach the assistant within about 10 "
+					"minutes of saving (its tenant directory cache), plus however long a "
+					"connected client itself caches a response."
 				),
 			},
 		),

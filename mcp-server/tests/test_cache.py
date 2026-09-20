@@ -187,22 +187,14 @@ async def test_list_subjects_and_subjects_resource_share_the_cache(mock_gregory)
 
 	mock_gregory.set_handler(handler)
 
-	from gregory_mcp.resources import register_resources
+	import mcp_types as types
 
-	captured = {}
-
-	class FakeServer:
-		def resource(self, *args, **kwargs):
-			def decorator(fn):
-				captured[kwargs.get("name")] = fn
-				return fn
-
-			return decorator
-
-	register_resources(FakeServer())
+	from gregory_mcp.resources import SUBJECTS_URI, read_resource
 
 	await list_subjects()
-	await captured["subjects_catalog"]()
+	# read_resource() never reads its ctx argument, so a real
+	# ServerRequestContext isn't needed for this unit-level check.
+	await read_resource(None, types.ReadResourceRequestParams(uri=SUBJECTS_URI))
 
 	assert len(calls) == 1  # second call hit the cache, not the network
 

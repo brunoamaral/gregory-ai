@@ -334,9 +334,9 @@ class CustomSetting(models.Model):
 		help_text=(
 			"Optional. How the research assistant describes this instance to "
 			"the model: its focus and framing. The model reads it, not "
-			"people. Not read by the MCP server yet (a later release starts "
-			"using it); once it is, a blank value generates a description "
-			"from the site's name and subjects."
+			"people — it becomes the first paragraph of the assistant's "
+			"generated instructions. A blank value generates that "
+			"introduction from the site's name and subjects instead."
 		),
 	)
 
@@ -387,7 +387,7 @@ class SiteMcpDocument(models.Model):
 	site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="mcp_documents")
 	slug = models.SlugField(
 		max_length=64,
-		help_text="Served at gregory-ai://doc/{slug} from a later release. Unique per site.",
+		help_text="Served at gregory-ai://doc/{slug}. Unique per site.",
 	)
 	title = models.CharField(max_length=200)
 	description = models.CharField(max_length=500, blank=True, default="")

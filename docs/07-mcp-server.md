@@ -145,8 +145,18 @@ one fetch rather than each starting their own). `list_subjects`/`list_categories
 the same cache entries as these resources when called with equivalent filters — search
 tools are never cached.
 
-- `gregory://subjects` — every subject
-- `gregory://categories` — every category
+- `gregory-ai://subjects` — every subject this tenant covers
+- `gregory-ai://categories` — every category this tenant covers
+- `gregory-ai://about` — generated Markdown: the tenant's title, its `instructions`
+  (see [Identity](#identity)), and an index of its documents, each linking to its own
+  `gregory-ai://doc/{slug}` address
+- `gregory-ai://doc/{slug}` (a resource *template*, `resources/templates/list`) — one of
+  the tenant's own authored reference documents, `text/markdown` or `text/plain`
+
+Renamed outright from the old `gregory://` scheme (decision 5,
+`MCP-MULTI-TENANCY-PLAN.md`) — only Bruno's own tooling used it, so there was no reason to
+accept both during a transition. An old `gregory://` address, or any URI this tenant
+doesn't recognise, is rejected with `Resource not found: {uri}`.
 
 No sponsors resource: at 8,000+ rows / ~700 KB it isn't catalog-shaped the way
 subjects and categories are — use the `list_sponsors` tool (search + pagination)
@@ -154,28 +164,30 @@ instead.
 
 ## Prompts
 
+Written per site on the Django Site admin page (`CustomSetting.mcp_enabled`/
+`mcp_description`, and the `SiteMcpPrompt`/`SiteMcpDocument` inlines next to it — see
+[docs/02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md)), and served
+live: `prompts/list` and `prompts/get` read the resolved tenant's own rows from
+[`GET /tenants/`](03-api-and-rss-feeds.md#discovering-mcp-tenants), the same directory that
+resolves which tenant a request is for (see [Tenant resolution](#tenant-resolution-site_id)).
+An edit reaches connected clients within about 10 minutes (the server's own `/tenants/`
+cache), plus however long a client caches its own `prompts/list` response.
+
+`prompts/get` renders a prompt's `template` with `string.Template(template).substitute(...)`:
+an omitted optional argument renders as `""`; a missing required one, or an unknown prompt
+name, is rejected with `INVALID_PARAMS`; a template broken past what Django's own save-time
+validation should ever allow through returns `INTERNAL_ERROR` ("This prompt could not be
+rendered.") and logs a warning rather than crashing the call.
+
+Every tenant starts with the same three built-ins, seeded as editable rows by a data
+migration — brain-regeneration.com has them in production today:
+
 - `research_topic` — survey recent articles and trials on a topic
 - `recent_trials_for_subject` — actively recruiting / recently registered trials for a subject
 - `author_profile` — build a profile of a researcher from their articles and affiliation
 
-Per-site prompts and reference documents can now be written on the Site admin
-page (`CustomSetting.mcp_enabled`/`mcp_description`, and the `SiteMcpPrompt` /
-`SiteMcpDocument` inlines next to it — see
-[docs/02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md)).
-The server doesn't read them yet, so clients still get the three built-ins
-listed above; a later release publishes and serves the authored ones instead.
-
-The three built-ins above also exist as editable `SiteMcpPrompt` rows for
-brain-regeneration.com, seeded by a data migration. `seed_mcp_prompts --site
-<id>` gives a new tenant the same starting set — it never overwrites a row
-that already exists, so an edited prompt is never touched by a re-run.
-
-Authored prompts and documents are published at
-[`GET /tenants/`](03-api-and-rss-feeds.md#discovering-mcp-tenants) — the MCP
-server does not read that endpoint yet, so this only changes what an admin
-can write, not what a client gets back. A later release makes the server
-fetch `/tenants/` (the way it already fetches `/sites/`) and serve each
-tenant's own prompts and documents instead of the three built-ins.
+`seed_mcp_prompts --site <id>` gives a new tenant the same starting set by hand — it never
+overwrites a row that already exists, so an edited prompt is never touched by a re-run.
 
 ---
 

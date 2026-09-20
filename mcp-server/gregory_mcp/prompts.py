@@ -1,66 +1,80 @@
-"""Starter prompts. Three to start; let real usage dictate the rest."""
+"""Serves each tenant's own authored prompts (Phase 2: django/sitesettings
+`SiteMcpPrompt`, published at `GET /tenants/`) — replacing the three
+hard-coded prompts this module used to register.
+
+Registered as raw request handlers (`server.py`'s `_replace_handler`), not
+the `@server.prompt()` decorator: the decorator's registration is fixed at
+construction time, once for the whole process, but this server's active
+prompt set now varies per request — the resolved tenant's own rows.
+"""
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+import logging
+import string
+from typing import Any
+
+import mcp_types as types
+from mcp.server.context import ServerRequestContext
+from mcp.shared.exceptions import MCPError
+
+from .site_context import get_current_tenant
+
+logger = logging.getLogger("gregory_mcp.prompts")
 
 
-def register_prompts(server) -> None:
-	@server.prompt(
-		name="research_topic",
-		title="Research a topic",
-		description="Survey recent articles and clinical trials on a topic.",
+async def list_prompts(
+	ctx: ServerRequestContext[Any, Any], params: types.PaginatedRequestParams
+) -> types.ListPromptsResult:
+	tenant = get_current_tenant()
+	prompts = tenant.prompts if tenant is not None else ()
+	return types.ListPromptsResult(
+		prompts=[
+			types.Prompt(
+				name=prompt.name,
+				title=prompt.title,
+				description=prompt.description,
+				arguments=[
+					types.PromptArgument(name=arg.name, description=arg.description, required=arg.required)
+					for arg in prompt.arguments
+				],
+			)
+			for prompt in prompts
+		]
 	)
-	def research_topic(topic: str, subject_id: str | None = None) -> str:
-		scope = f" within subject_id={subject_id}" if subject_id else ""
-		return (
-			f"Research the topic \"{topic}\"{scope} using the GregoryAI tools.\n\n"
-			f"1. Call search_articles with search=\"{topic}\" (add relevant=true if you "
-			"want AI-flagged-relevant results only) and skim the top results.\n"
-			f"2. Call search_trials with search=\"{topic}\" to find related clinical trials.\n"
-			"3. For the most promising 2-3 articles or trials, call get_article / get_trial "
-			"for the full record before summarizing.\n"
-			"4. Summarize: what's being studied, how far along it is (trial phase/recruitment "
-			"status where relevant), and any notable authors or sponsors."
-		)
 
-	@server.prompt(
-		name="recent_trials_for_subject",
-		title="Recent trials for a subject",
-		description="List actively recruiting or recently registered trials for a research subject.",
-	)
-	def recent_trials_for_subject(subject_id: str) -> str:
-		# date_registration is not a valid `ordering` value on /trials/ (see
-		# TrialViewSet.ordering_fields) — DRF's OrderingFilter silently ignores
-		# an unrecognised value rather than rejecting it, so ordering by it
-		# quietly fell back to the default order instead of erroring. Bound
-		# recency with the date_registration_after filter instead; the default
-		# ordering (-discovery_date) already puts newest-discovered first.
-		cutoff = (date.today() - timedelta(days=180)).isoformat()
-		return (
-			f"Find recent clinical trials for subject_id={subject_id} using the GregoryAI tools.\n\n"
-			f"1. Call search_trials with subject_id={subject_id}, "
-			f'recruitment_status_normalized="recruiting", date_registration_after="{cutoff}" '
-			"(roughly the last 6 months) to bound it to recently-registered trials — "
-			"results already come back newest-discovered-first by default.\n"
-			"2. For each result, note phase, sponsor, and countries from the compact result — "
-			"call get_trial only for ones worth a closer look.\n"
-			"3. Summarize what's actively recruiting and where."
-		)
 
-	@server.prompt(
-		name="author_profile",
-		title="Author profile",
-		description="Build a profile of a researcher: affiliation, publication history, relevance.",
+async def get_prompt(
+	ctx: ServerRequestContext[Any, Any], params: types.GetPromptRequestParams
+) -> types.GetPromptResult:
+	tenant = get_current_tenant()
+	prompts = tenant.prompts if tenant is not None else ()
+	prompt = next((p for p in prompts if p.name == params.name), None)
+	if prompt is None:
+		raise MCPError(types.INVALID_PARAMS, f"Unknown prompt: {params.name}")
+
+	supplied = params.arguments or {}
+	missing = [arg.name for arg in prompt.arguments if arg.required and supplied.get(arg.name) is None]
+	if missing:
+		raise MCPError(types.INVALID_PARAMS, f"Missing required argument(s): {', '.join(missing)}")
+
+	values = {
+		arg.name: supplied.get(arg.name) if isinstance(supplied.get(arg.name), str) else ""
+		for arg in prompt.arguments
+	}
+	try:
+		rendered = string.Template(prompt.template).substitute(values)
+	except (KeyError, ValueError):
+		# Django validates every template against its declared arguments at
+		# save time (validate_prompt_template, sitesettings/models.py), so
+		# this should be unreachable in practice -- but a row written
+		# directly (a fixture, a migration, a bypassed clean()) could still
+		# be broken, and a rendering failure must never look like a normal
+		# tool-call crash to the caller.
+		logger.warning("gregory_prompt_render_failed", extra={"prompt": prompt.name})
+		raise MCPError(types.INTERNAL_ERROR, "This prompt could not be rendered.") from None
+
+	return types.GetPromptResult(
+		description=prompt.description,
+		messages=[types.PromptMessage(role="user", content=types.TextContent(type="text", text=rendered))],
 	)
-	def author_profile(name_or_orcid: str) -> str:
-		return (
-			f'Build a profile of the researcher "{name_or_orcid}" using the GregoryAI tools.\n\n'
-			"1. Call search_authors with search set to the given name or orcid to find the "
-			"author_id (if it looks like an ORCID iD, pass it as orcid instead).\n"
-			"2. Call get_author with that author_id (include_coauthors=true if collaboration "
-			"network is relevant) for the full record.\n"
-			"3. Optionally call search_articles with author_id=<id> to see their recent work.\n"
-			"4. Summarize affiliation, publication volume, and how much of their work is "
-			"AI-flagged relevant (relevant_articles_count vs articles_count)."
-		)
