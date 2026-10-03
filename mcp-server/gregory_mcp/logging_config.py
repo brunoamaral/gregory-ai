@@ -61,6 +61,15 @@ _EXTRA_FIELDS = (
 	"kind",
 	"reason",
 	"prompt",
+	# Editor access (MCP-AUTH-PLAN.md). `tier` is anon, public or editor;
+	# `user_id` a Django user id (editors only); on an `mcp_edit` line,
+	# `article_id` and `fields` (the NAMES of the fields a write changed,
+	# never their values -- those live in Django's history, which has its own
+	# access control). An Authorization header or token has no way through.
+	"tier",
+	"user_id",
+	"article_id",
+	"fields",
 )
 
 

@@ -188,9 +188,53 @@ def test_replace_handler_raises_loudly_if_add_request_handler_disappears():
 
 
 def test_client_exposes_no_write_methods():
-	"""The server issues GET only — assert the client has no write verbs at all."""
+	"""The anonymous server still issues GET only. Writes exist on the client for
+	the editor address, but they are not retried and refuse to run without a
+	signed-in session holding the edit scope (the second lock after
+	ToolAccessMiddleware). The original intent stands: nothing on `/mcp` writes."""
 	for verb in ("post", "put", "patch", "delete"):
-		assert not hasattr(GregoryClient, verb), f"GregoryClient must not expose .{verb}()"
+		assert hasattr(GregoryClient, verb)
+
+	anonymous_tools = {t.name for t in build_server()._tool_manager.list_tools()}
+	assert not anonymous_tools & {
+		"update_article_editorial",
+		"set_article_relevance",
+		"link_trial_to_article",
+		"unlink_trial_from_article",
+	}
+
+
+@pytest.mark.parametrize("verb", ["post", "put", "patch", "delete"])
+async def test_client_writes_refuse_without_an_edit_session(mock_editor_gregory, verb):
+	from gregory_mcp.client import GregoryAPIError, get_client
+	from gregory_mcp.site_context import _editor_context, EditorSession
+
+	method = getattr(get_client(), verb)
+	for session in (None, EditorSession(7, 3, "editor", frozenset({"articles:read"})), EditorSession(7, 3, "public", frozenset({"articles:edit"}))):
+		token = _editor_context.set(session)
+		try:
+			with pytest.raises(GregoryAPIError) as caught:
+				await (method("/editor/articles/1/editorial/") if verb == "delete" else method("/editor/articles/1/editorial/", json={}))
+		finally:
+			_editor_context.reset(token)
+		assert caught.value.status_code == 403
+
+	assert mock_editor_gregory.requests == []
+
+
+async def test_client_writes_are_not_retried(mock_editor_gregory):
+	from gregory_mcp.client import GregoryAPIError, get_client
+	from gregory_mcp.site_context import _editor_context, EditorSession
+
+	mock_editor_gregory.set_handler(lambda request: httpx2.Response(503, text="down"))
+	token = _editor_context.set(EditorSession(7, 3, "editor", frozenset({"articles:edit"})))
+	try:
+		with pytest.raises(GregoryAPIError):
+			await get_client().patch("/editor/articles/1/editorial/", json={"takeaways": "x"})
+	finally:
+		_editor_context.reset(token)
+
+	assert len(mock_editor_gregory.requests) == 1
 
 
 def _tenant_routes(extra):

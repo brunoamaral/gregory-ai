@@ -3,6 +3,9 @@
 Runs the streamable-HTTP transport per the 2026-07-28 spec revision — the
 stateless core here holds no session state, so `stateless_http=True` is safe
 and lets nginx round-robin across replicas with no sticky sessions.
+
+With `GREGORY_MCP_SERVICE_KEY` and `GREGORY_OAUTH_ISSUER` set, the same process
+also serves the authenticated `/mcp/editor` (app.py).
 """
 
 from __future__ import annotations
@@ -25,12 +28,29 @@ def main() -> None:
 	init_tenant_resolution(settings)
 
 	logger.info("gregory_mcp_starting", extra={"path": settings.api_base})
-	server = build_server()
-	server.run(
-		"streamable-http",
+	if not settings.editor_enabled:
+		# Anonymous /mcp only, run by the SDK exactly as before editor access.
+		server = build_server()
+		server.run(
+			"streamable-http",
+			host=settings.host,
+			port=settings.port,
+			stateless_http=True,
+		)
+		return
+
+	# /mcp and /mcp/editor in one app (app.py). Needs GREGORY_MCP_SERVICE_KEY and
+	# GREGORY_OAUTH_ISSUER; without both the editor address does not exist.
+	import uvicorn
+
+	from .app import build_app
+
+	logger.info("gregory_mcp_editor_enabled")
+	uvicorn.run(
+		build_app(settings),
 		host=settings.host,
 		port=settings.port,
-		stateless_http=True,
+		log_level=settings.log_level.lower(),
 	)
 
 
