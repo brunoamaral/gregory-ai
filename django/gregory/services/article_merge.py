@@ -31,7 +31,12 @@ import logging
 
 from django.db import IntegrityError, transaction
 
-from gregory.models import Articles, ArticleOrgContent, ArticleSubjectRelevance
+from gregory.models import (
+	Articles,
+	ArticleOrgContent,
+	ArticleSiteContent,
+	ArticleSubjectRelevance,
+)
 from gregory.relevance import recompute_article_relevance
 
 logger = logging.getLogger(__name__)
@@ -103,21 +108,28 @@ def _merge_subject_relevances(keep, rem, stdout=None):
 			rem_rel.delete()
 
 
-def _merge_org_contents(keep, rem, stdout=None):
-	"""Union ArticleOrgContent rows, preserving editorial text.
+def _merge_editorial_contents(keep, rem, accessor, owner_field, stdout=None):
+	"""Union an article's editorial rows (per organisation or per site),
+	preserving the text.
 
-	Org content (takeaways, plain-english summary) is hand-written curation, so —
-	as with relevance decisions — a filled row on the removed article fills an
-	empty slot on the survivor rather than being dropped by the generic
-	repoint-on-collision. The survivor's own content otherwise wins.
+	Editorial content (takeaways, plain-english summary) is hand-written
+	curation, so -- as with relevance decisions -- a filled row on the removed
+	article fills an empty slot on the survivor rather than being dropped by
+	the generic repoint-on-collision. The survivor's own content otherwise
+	wins. ``accessor`` is the reverse relation on Articles and ``owner_field``
+	the FK on the row naming who it belongs to.
 	"""
-	keep_by_org = {c.organization_id: c for c in keep.org_contents.all()}
-	for rem_content in rem.org_contents.all():
-		existing = keep_by_org.get(rem_content.organization_id)
+	owner_id_attr = f"{owner_field}_id"
+	keep_by_owner = {
+		getattr(c, owner_id_attr): c for c in getattr(keep, accessor).all()
+	}
+	for rem_content in getattr(rem, accessor).all():
+		owner_id = getattr(rem_content, owner_id_attr)
+		existing = keep_by_owner.get(owner_id)
 		if existing is None:
 			rem_content.article = keep
 			rem_content.save(update_fields=["article"])
-			keep_by_org[rem_content.organization_id] = rem_content
+			keep_by_owner[owner_id] = rem_content
 			continue
 		survivor_empty = not (
 			existing.takeaways or existing.summary_plain_english
@@ -133,8 +145,8 @@ def _merge_org_contents(keep, rem, stdout=None):
 			)
 			_log(
 				stdout,
-				f"   adopted editorial content for org "
-				f"{rem_content.organization_id} from article {rem.article_id}",
+				f"   adopted editorial content for {owner_field} "
+				f"{owner_id} from article {rem.article_id}",
 			)
 		rem_content.delete()
 
@@ -164,7 +176,7 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 	]
 	# Reverse FKs, minus the relations we merge explicitly above with
 	# curation-preserving logic.
-	explicit = (ArticleSubjectRelevance, ArticleOrgContent)
+	explicit = (ArticleSubjectRelevance, ArticleOrgContent, ArticleSiteContent)
 	reverse_fks = [
 		f
 		for f in Articles._meta.get_fields()
@@ -180,9 +192,14 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 			if related:
 				getattr(keep, fname).add(*related)
 
-		# 2. Curation-preserving unions (manual relevance, editorial org content).
+		# 2. Curation-preserving unions (manual relevance, editorial content).
 		_merge_subject_relevances(keep, rem, stdout=stdout)
-		_merge_org_contents(keep, rem, stdout=stdout)
+		_merge_editorial_contents(
+			keep, rem, "org_contents", "organization", stdout=stdout
+		)
+		_merge_editorial_contents(
+			keep, rem, "site_contents", "site", stdout=stdout
+		)
 
 		# 3. Every other reverse-FK child → repoint to the survivor; drop only on
 		#    a unique collision. A per-child savepoint lets us recover from the

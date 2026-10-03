@@ -11,7 +11,8 @@ from gregory.models import (
 	Team,
 	Subject,
 	ArticleSubjectRelevance,
-	ArticleOrgContent,
+	ArticleSiteContent,
+	OrganizationSite,
 )
 from gregory.utils.registry_utils import merge_links
 
@@ -29,7 +30,11 @@ class Command(BaseCommand):
 			"--target-org",
 			type=str,
 			required=True,
-			help="Organization slug or ID that owns the imported takeaways/summaries.",
+			help=(
+				"Organization slug or ID whose sites receive the imported "
+				"takeaways/summaries (editorial content is per site; every "
+				"site the organization owns gets a copy)."
+			),
 		)
 
 	def handle(self, *args, **options):
@@ -43,6 +48,17 @@ class Command(BaseCommand):
 				target_org = Organization.objects.get(slug=target_org_arg)
 		except Organization.DoesNotExist:
 			raise CommandError("Organization not found: %s" % target_org_arg)
+
+		target_site_ids = list(
+			OrganizationSite.objects.filter(organization=target_org).values_list(
+				"site_id", flat=True
+			)
+		)
+		if not target_site_ids:
+			raise CommandError(
+				"Organization %s owns no site to hold the imported takeaways/summaries."
+				% target_org_arg
+			)
 
 		imported_count = 0
 		self.stdout.write("Starting import from %s" % api_url)
@@ -111,20 +127,21 @@ class Command(BaseCommand):
 						article.links = merged_links
 						article.save(update_fields=["links"])
 
-				# Upsert per-org editorial content for fields the upstream explicitly provided.
+				# Upsert per-site editorial content for fields the upstream explicitly provided.
 				# Absent keys and None are skipped; empty strings are normalized to None so
 				# they clear stale values rather than being silently ignored.
-				org_defaults = {}
+				site_defaults = {}
 				if takeaways_raw is not _missing and takeaways_raw is not None:
-					org_defaults["takeaways"] = takeaways_raw or None
+					site_defaults["takeaways"] = takeaways_raw or None
 				if spe_raw is not _missing and spe_raw is not None:
-					org_defaults["summary_plain_english"] = spe_raw or None
-				if org_defaults:
-					ArticleOrgContent.objects.update_or_create(
-						article=article,
-						organization=target_org,
-						defaults=org_defaults,
-					)
+					site_defaults["summary_plain_english"] = spe_raw or None
+				if site_defaults:
+					for site_id in target_site_ids:
+						ArticleSiteContent.objects.update_or_create(
+							article=article,
+							site_id=site_id,
+							defaults=site_defaults,
+						)
 
 				# Process ManyToMany relationships
 

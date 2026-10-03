@@ -1,18 +1,18 @@
 """
 get_takeaways
 =============
-Generate ML takeaways for science papers and store them in ``ArticleOrgContent``
-(one row per article × organisation).
+Generate ML takeaways for science papers and store them in ``ArticleSiteContent``
+(one row per article × site).
 
 A single summariser call is made per article (since the abstract is identical
-regardless of organisation), and the resulting text is fanned out to every
-organisation the article belongs to via teams that does not already have a
-non-empty ``takeaways`` row.
+regardless of site), and the resulting text is fanned out to every site owned
+by an organisation the article belongs to via teams that does not already have
+a non-empty ``takeaways`` row.
 
 Articles are processed oldest-first (``order_by("article_id")``) so a backlog
 is worked down from the front instead of always favouring recent ingestion.
 The candidate queryset is filtered up front to articles that still need work
-(at least one linked organisation missing a non-empty ``takeaways`` row), so
+(at least one linked site missing a non-empty ``takeaways`` row), so
 already-filled articles are never fetched and never consume ``--limit``.
 
 Usage
@@ -21,7 +21,7 @@ Default (pipeline cron)::
 
     python manage.py get_takeaways
 
-Scoped to one organisation::
+Scoped to the sites of one organisation::
 
     python manage.py get_takeaways --org-id 3
 
@@ -36,10 +36,11 @@ import html
 import time
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Exists, OuterRef, Q
+from django.contrib.sites.models import Site
+from django.db.models import Exists, OuterRef
 from django.db.models.functions import Length
 
-from gregory.models import Articles, ArticleOrgContent
+from gregory.models import Articles, ArticleSiteContent
 from transformers import pipeline
 
 import logging
@@ -47,8 +48,8 @@ import logging
 
 class Command(BaseCommand):
 	help = (
-		"Summarise article abstracts and store the result in ArticleOrgContent "
-		"for every organisation the article belongs to (via teams)."
+		"Summarise article abstracts and store the result in ArticleSiteContent "
+		"for every site of the organisations the article belongs to (via teams)."
 	)
 
 	def add_arguments(self, parser):
@@ -56,7 +57,7 @@ class Command(BaseCommand):
 			"--org-id",
 			type=int,
 			dest="org_id",
-			help="Restrict generation to a single organisation.",
+			help="Restrict generation to the sites of a single organisation.",
 		)
 		parser.add_argument(
 			"--limit",
@@ -103,54 +104,58 @@ class Command(BaseCommand):
 		return ""
 
 	@staticmethod
-	def _orgs_for_article(article, org_id=None):
-		"""Return organisations linked to *article* via its teams, optionally scoped."""
-		from django.apps import apps
-
-		Organization = apps.get_model("organizations", "Organization")
-		qs = Organization.objects.filter(teams__articles=article).distinct()
+	def _sites_for_article(article, org_id=None):
+		"""Return sites owned by organisations linked to *article* via its teams,
+		optionally scoped to one organisation."""
+		qs = Site.objects.filter(
+			organization_sites__organization__teams__articles=article
+		).distinct()
 		if org_id is not None:
-			qs = qs.filter(pk=org_id)
+			qs = qs.filter(organization_sites__organization_id=org_id)
 		return list(qs)
 
 	@staticmethod
-	def _orgs_missing_takeaways(article, orgs):
-		"""Of *orgs*, return the ones whose ArticleOrgContent row is missing or has empty takeaways."""
+	def _sites_missing_takeaways(article, sites):
+		"""Of *sites*, return the ones whose ArticleSiteContent row is missing or has empty takeaways."""
 		existing = (
-			ArticleOrgContent.objects.filter(article=article, organization__in=orgs)
+			ArticleSiteContent.objects.filter(article=article, site__in=sites)
 			.exclude(takeaways__isnull=True)
 			.exclude(takeaways="")
-			.values_list("organization_id", flat=True)
+			.values_list("site_id", flat=True)
 		)
 		filled = set(existing)
-		return [org for org in orgs if org.pk not in filled]
+		return [site for site in sites if site.pk not in filled]
 
 	@staticmethod
 	def _needs_work_qs(qs, org_id=None):
 		"""Restrict *qs* to articles that still need at least one takeaway.
 
-		An article needs work when at least one organisation linked to it via
-		teams (optionally scoped to *org_id*) has no ``ArticleOrgContent`` row,
-		or has one with a NULL/empty ``takeaways``. Implemented as a single
-		``Exists`` subquery so it composes cleanly with ``.iterator()``.
+		An article needs work when at least one site owned by an organisation
+		linked to it via teams (optionally scoped to *org_id*) has no
+		``ArticleSiteContent`` row, or has one with a NULL/empty ``takeaways``.
+		Implemented as a single ``Exists`` subquery so it composes cleanly with
+		``.iterator()``.
 		"""
-		from django.apps import apps
-
-		Organization = apps.get_model("organizations", "Organization")
-
-		outer_article = OuterRef("pk")
-		orgs_for_article = Organization.objects.filter(teams__articles=outer_article)
-		if org_id is not None:
-			orgs_for_article = orgs_for_article.filter(pk=org_id)
-
-		already_filled = (
-			Q(article_contents__article=outer_article)
-			& Q(article_contents__takeaways__isnull=False)
-			& ~Q(article_contents__takeaways="")
+		sites_for_article = Site.objects.filter(
+			organization_sites__organization__teams__articles=OuterRef("pk")
 		)
-		orgs_missing = orgs_for_article.exclude(already_filled)
+		if org_id is not None:
+			sites_for_article = sites_for_article.filter(
+				organization_sites__organization_id=org_id
+			)
 
-		return qs.filter(Exists(orgs_missing))
+		# OuterRef(OuterRef(...)): the article one level up from the Site query.
+		already_filled = (
+			ArticleSiteContent.objects.filter(
+				article=OuterRef(OuterRef("pk")),
+				site=OuterRef("pk"),
+				takeaways__isnull=False,
+			)
+			.exclude(takeaways="")
+		)
+		sites_missing = sites_for_article.exclude(Exists(already_filled))
+
+		return qs.filter(Exists(sites_missing))
 
 	# ------------------------------------------------------------------
 	# Entry point
@@ -195,8 +200,8 @@ class Command(BaseCommand):
 				break
 			scanned += 1
 
-			orgs = self._orgs_for_article(article, org_id=org_id)
-			if not orgs:
+			sites = self._sites_for_article(article, org_id=org_id)
+			if not sites:
 				# Should be rare now that the queryset filters for pending work:
 				# it can only happen if the article's teams/orgs changed between
 				# the query running and this row being processed.
@@ -204,16 +209,16 @@ class Command(BaseCommand):
 					orphans += 1
 					self.stderr.write(
 						self.style.WARNING(
-							f"Skipping orphan article {article.article_id}: no organisations via teams."
+							f"Skipping orphan article {article.article_id}: no sites via teams."
 						)
 					)
 				continue
 
 			# Cheap per-article re-check: the queryset annotation and this write
-			# are not atomic, so re-derive the exact set of orgs still missing a
+			# are not atomic, so re-derive the exact set of sites still missing a
 			# takeaway rather than trusting the upfront filter blindly.
-			missing_orgs = self._orgs_missing_takeaways(article, orgs)
-			if not missing_orgs:
+			missing_sites = self._sites_missing_takeaways(article, sites)
+			if not missing_sites:
 				continue
 
 			try:
@@ -233,7 +238,7 @@ class Command(BaseCommand):
 			if dry_run:
 				self.stdout.write(
 					f"[DRY RUN] Would summarise article {article.article_id} and fill "
-					f"{len(missing_orgs)} org row(s): {[o.pk for o in missing_orgs]}"
+					f"{len(missing_sites)} site row(s): {[o.pk for o in missing_sites]}"
 				)
 				processed += 1
 				continue
@@ -261,17 +266,17 @@ class Command(BaseCommand):
 			if not takeaways:
 				continue
 
-			for org in missing_orgs:
-				aoc, created = ArticleOrgContent.objects.get_or_create(
+			for site in missing_sites:
+				asc, created = ArticleSiteContent.objects.get_or_create(
 					article=article,
-					organization=org,
+					site=site,
 					defaults={"takeaways": takeaways},
 				)
 				if created:
 					created_rows += 1
 				else:
-					aoc.takeaways = takeaways
-					aoc.save(update_fields=["takeaways", "updated_at"])
+					asc.takeaways = takeaways
+					asc.save(update_fields=["takeaways", "updated_at"])
 					updated_rows += 1
 
 			processed += 1
@@ -281,7 +286,7 @@ class Command(BaseCommand):
 			summary_style(
 				f"{'[DRY RUN] ' if dry_run else ''}"
 				f"Processed {processed} article(s) (examined {scanned} candidate(s), orphans skipped {orphans}). "
-				f"Created {created_rows} new ArticleOrgContent row(s), "
+				f"Created {created_rows} new ArticleSiteContent row(s), "
 				f"updated {updated_rows} existing row(s)."
 			)
 		)

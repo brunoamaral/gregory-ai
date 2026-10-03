@@ -1,6 +1,6 @@
 """
 Regression guard: org_content_map must be populated (non-empty) for team-owned
-emails when matching ArticleOrgContent rows exist.
+emails when matching ArticleSiteContent rows exist.
 
 Catches future re-introduction of the silent empty-map fallback in
 templates/emails/components/content_organizer.py.
@@ -17,7 +17,13 @@ django.setup()
 from django.contrib.sites.models import Site
 from django.test import TestCase
 
-from gregory.models import Articles, ArticleOrgContent, Subject, Team
+from gregory.models import (
+	Articles,
+	ArticleSiteContent,
+	OrganizationSite,
+	Subject,
+	Team,
+)
 from organizations.models import Organization
 from templates.emails.components.content_organizer import EmailRenderingPipeline
 
@@ -36,14 +42,17 @@ class OrgContentMapTest(TestCase):
 			subject_slug="map-subject",
 		)
 		self.site = Site.objects.create(domain="maporg.example.com", name="Map Org")
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.site, is_default=True
+		)
 		self.article = Articles.objects.create(
 			title="Test article",
 			link="https://example.com/article/1",
 		)
 		self.article.teams.add(self.team)
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=self.article,
-			organization=self.org,
+			site=self.site,
 			takeaways="Key finding",
 		)
 
@@ -58,6 +67,24 @@ class OrgContentMapTest(TestCase):
 		self.assertIn(self.article.article_id, context["org_content_map"])
 		oc = context["org_content_map"][self.article.article_id]
 		self.assertEqual(oc.takeaways, "Key finding")
+
+	def test_org_content_map_uses_the_default_site_of_the_organisation(self):
+		"""Editorial content is per site; an email carries the organisation's
+		default site text, not another site's."""
+		other = Site.objects.create(domain="maporg-two.example.com", name="Map Two")
+		OrganizationSite.objects.create(organization=self.org, site=other)
+		ArticleSiteContent.objects.create(
+			article=self.article, site=other, takeaways="Other site text"
+		)
+		context = EmailRenderingPipeline().prepare_optimized_context(
+			email_type="weekly_summary",
+			articles=Articles.objects.filter(pk=self.article.pk),
+			organization=self.org,
+			site=self.site,
+		)
+		self.assertEqual(
+			context["org_content_map"][self.article.article_id].takeaways, "Key finding"
+		)
 
 	def test_org_content_map_empty_and_warns_for_team_type_without_organization(self):
 		"""
