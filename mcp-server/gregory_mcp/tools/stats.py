@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from ..client import get_client
 
 Scope = Literal["global", "articles", "trials"]
@@ -43,4 +45,4 @@ async def get_stats(
 	if scope == "trials":
 		params = {"subject_id": subject_id, "search": search}
 		return await get_client().get("/trials/stats/", params)
-	raise ValueError(f"unknown scope {scope!r} — expected 'global', 'articles', or 'trials'")
+	raise ToolError(f"unknown scope {scope!r} — expected 'global', 'articles', or 'trials'")
