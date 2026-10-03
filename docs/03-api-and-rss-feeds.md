@@ -109,7 +109,7 @@ Named editors sign in to the MCP server's editor address with their Django usern
 | `POST /o/register/` | RFC 7591 dynamic client registration. Open, rate limited per address (`OAUTH_DCR_MAX_PER_HOUR`), `authorization_code` clients only, https or loopback redirect URIs |
 | `GET /o/login/` | The sign-in page for the flow (CSRF protected, not frameable, rate limited on failures) |
 
-Clients may instead use an `https` URL as their `client_id` (Client ID Metadata Documents); the server fetches the document with an SSRF-hardened fetcher and applies the same redirect and grant rules as for dynamic registration.
+Clients may instead use an `https` URL as their `client_id` (Client ID Metadata Documents); the server fetches the document with an SSRF-hardened fetcher and applies the same redirect rules as for dynamic registration. Grants differ: a metadata document is published once for every authorization server, so it may list grants this server doesn't support (claude.ai's lists the JWT bearer grant). If the document asks for `authorization_code`, its list is narrowed to `authorization_code` and `refresh_token`; a document without `authorization_code` is refused. A dynamic registration is addressed to this server alone and is refused if it asks for any other grant. Either way, the token endpoint issues only the authorization code and refresh grants.
 
 Every token is bound to one site by its `resource`, and carries a tier: `editor` for a person with an active `SiteEditor` grant, `public` for a signed-in person without one on a site that has `api_public` data. A public-tier token never carries `articles:edit`. The `resource` is the only way to name a site; the MCP server rejects a token sent to any other host.
 

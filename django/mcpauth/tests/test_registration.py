@@ -12,7 +12,7 @@ from django.test import Client, TestCase, override_settings
 from oauth2_provider.models import get_application_model
 
 from mcpauth.models import AccessToken
-from mcpauth.registration import PolicyMetadataFetcher
+from mcpauth.registration import PolicyMetadataFetcher, narrow_document_grants
 from mcpauth.tests.helpers import (
 	REDIRECT_URI,
 	SERVICE_KEY,
@@ -231,6 +231,57 @@ class ClientIdMetadataDocumentTest(TestCase):
 			finally:
 				FakeFetcher.document = dict(FakeFetcher.document, grant_types=["authorization_code"])
 
+	def test_document_listing_grants_we_do_not_support_is_narrowed(self):
+		# claude.ai's published document: one document for every server, so it
+		# names a grant this server never issues.
+		with self._settings():
+			FakeFetcher.document = dict(
+				FakeFetcher.document,
+				grant_types=["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"],
+			)
+			try:
+				web = Client()
+				web.force_login(self.user)
+
+				response = web.get("/o/authorize/", authorize_params(CIMD_URL, resource_for(self.site)))
+
+				self.assertEqual(response.status_code, 200, response.content)
+				self.assertContains(response, "Approve")
+				app = Application.objects.get(client_id=CIMD_URL)
+				self.assertEqual(app.authorization_grant_type, "authorization-code")
+			finally:
+				FakeFetcher.document = dict(FakeFetcher.document, grant_types=["authorization_code"])
+
+	def test_document_without_the_code_grant_is_still_refused(self):
+		with self._settings():
+			FakeFetcher.document = dict(
+				FakeFetcher.document, grant_types=["urn:ietf:params:oauth:grant-type:jwt-bearer", "refresh_token"]
+			)
+			try:
+				web = Client()
+				web.force_login(self.user)
+
+				response = web.get("/o/authorize/", authorize_params(CIMD_URL, resource_for(self.site)))
+
+				self.assertEqual(response.status_code, 400)
+				self.assertEqual(Application.objects.count(), 0)
+			finally:
+				FakeFetcher.document = dict(FakeFetcher.document, grant_types=["authorization_code"])
+
+	def test_a_refused_request_says_so_instead_of_no_access(self):
+		web = Client()
+		web.force_login(self.user)
+
+		response = web.get(
+			"/o/authorize/",
+			authorize_params("https://does-not-resolve.invalid/client.json", resource_for(self.site)),
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertContains(response, "This connection can't be completed", status_code=400)
+		self.assertContains(response, "invalid_request", status_code=400)
+		self.assertNotContains(response, "No access", status_code=400)
+
 	def test_cimd_client_cannot_skip_consent_or_name_a_foreign_redirect(self):
 		with self._settings():
 			web = Client()
@@ -258,6 +309,20 @@ class ClientIdMetadataDocumentTest(TestCase):
 	def test_metadata_advertises_cimd(self):
 		data = Client().get("/.well-known/oauth-authorization-server").json()
 		self.assertTrue(data["client_id_metadata_document_supported"])
+
+
+class NarrowDocumentGrantsTest(TestCase):
+	def test_unsupported_grants_are_dropped_next_to_authorization_code(self):
+		narrowed = narrow_document_grants({"grant_types": ["authorization_code", "implicit", "refresh_token"]})
+		self.assertEqual(narrowed["grant_types"], ["authorization_code", "refresh_token"])
+
+	def test_a_document_without_authorization_code_is_left_for_the_policy(self):
+		document = {"grant_types": ["implicit"]}
+		self.assertIs(narrow_document_grants(document), document)
+
+	def test_a_document_without_grant_types_is_left_alone(self):
+		document = {"redirect_uris": [REDIRECT_URI]}
+		self.assertIs(narrow_document_grants(document), document)
 
 
 class ServerMetadataTest(TestCase):

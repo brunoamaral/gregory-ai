@@ -1,7 +1,13 @@
 {% extends "mcpauth/base.html" %}
-{% block title %}Connect to {{ site.name }}{% endblock %}
+{% block title %}{% if error %}Connection refused{% else %}Connect to {{ site.name }}{% endif %}{% endblock %}
 {% block content %}
-{% if access is None %}
+{% if error %}
+	{# DOT's error_response renders this template with only the OAuth error: no site, no access. #}
+	<h1>This connection can't be completed</h1>
+	<p>The application's sign-in request was refused{% if error.description %}: {{ error.description }}{% else %}.{% endif %}</p>
+	<p class="muted">Error code: <code>{{ error.error }}</code>. Try connecting again from the application; if this keeps happening, tell the site's administrator.</p>
+	<p class="muted">You can close this window.</p>
+{% elif access is None %}
 	<h1>No access to {{ site.name }}</h1>
 	<p>You are signed in as <strong>{{ signed_in_as }}</strong>, and this account has no access to {{ site.name }}.</p>
 	<p class="muted">{% if contact_email %}Contact <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> to be given editor access.{% else %}Ask the site's administrator to give you editor access.{% endif %}</p>
