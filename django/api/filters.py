@@ -16,10 +16,10 @@ from gregory.models import (
 	Subject,
 	Sponsor,
 	TrialCountry,
-	ArticleOrgContent,
+	ArticleSiteContent,
 	TrialOrgContent,
 )
-from api.editorial import editorial_org_ids
+from api.editorial import editorial_org_ids, editorial_site_ids
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
@@ -174,7 +174,14 @@ class SubjectFilterMixin:
 		)
 
 
-_HAS_TAKEAWAYS_HELP = (
+_HAS_TAKEAWAYS_HELP_ARTICLES = (
+	"true: records with non-empty takeaways written for the caller's own "
+	"site (API key's site, the sites of the organisations of a logged-in "
+	"user, or the resolved public site). false: everything else. Does not "
+	"require include=editorial."
+)
+
+_HAS_TAKEAWAYS_HELP_TRIALS = (
 	"true: records with non-empty takeaways written by the caller's own "
 	"organisation (API key's organisation, the organisations of a logged-in "
 	"user, or the organisation owning the resolved public site). false: "
@@ -182,15 +189,17 @@ _HAS_TAKEAWAYS_HELP = (
 )
 
 
-def _filter_has_takeaways(request, queryset, content_model, fk_name, value):
+def _filter_has_takeaways(
+	queryset, content_model, fk_name, owner_lookup, owner_ids, value
+):
 	"""Shared by ArticleFilter/TrialFilter. Exists() so it adds no DISTINCT and
-	cannot duplicate rows. With no editorial orgs, true matches nothing."""
+	cannot duplicate rows. With no editorial owners (sites for articles,
+	organisations for trials), true matches nothing."""
 	if value is None:
 		return queryset
 	has = Exists(
 		content_model.objects.filter(
-			**{fk_name: OuterRef("pk")},
-			organization_id__in=editorial_org_ids(request),
+			**{fk_name: OuterRef("pk"), owner_lookup: owner_ids},
 			takeaways__isnull=False,
 		).exclude(takeaways="")
 	)
@@ -361,7 +370,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	has_takeaways = filters.BooleanFilter(
 		method="filter_has_takeaways",
 		label="Has takeaways",
-		help_text=_HAS_TAKEAWAYS_HELP,
+		help_text=_HAS_TAKEAWAYS_HELP_ARTICLES,
 	)
 	published_date_after = filters.DateFilter(
 		method="filter_published_date_after",
@@ -686,7 +695,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_has_takeaways(self, queryset, name, value):
 		return _filter_has_takeaways(
-			self.request, queryset, ArticleOrgContent, "article", value
+			queryset,
+			ArticleSiteContent,
+			"article",
+			"site_id__in",
+			editorial_site_ids(self.request),
+			value,
 		)
 
 	def filter_published_date_after(self, queryset, name, value):
@@ -926,7 +940,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	has_takeaways = filters.BooleanFilter(
 		method="filter_has_takeaways",
 		label="Has takeaways",
-		help_text=_HAS_TAKEAWAYS_HELP,
+		help_text=_HAS_TAKEAWAYS_HELP_TRIALS,
 	)
 	internal_number = filters.CharFilter(
 		field_name="internal_number",
@@ -1189,7 +1203,12 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_has_takeaways(self, queryset, name, value):
 		return _filter_has_takeaways(
-			self.request, queryset, TrialOrgContent, "trial", value
+			queryset,
+			TrialOrgContent,
+			"trial",
+			"organization_id__in",
+			editorial_org_ids(self.request),
+			value,
 		)
 
 	def filter_title(self, queryset, name, value):

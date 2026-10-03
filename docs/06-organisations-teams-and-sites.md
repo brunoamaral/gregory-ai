@@ -210,13 +210,15 @@ EMAIL_POSTMARK_API_URL=https://api.postmarkapp.com/email
 
 ## Editorial content (`?include=editorial`)
 
-Editorial content is the per-organisation `takeaways` and `summary_plain_english` stored in `ArticleOrgContent` / `TrialOrgContent`. Article and trial responses include it only when the caller sends `?include=editorial`, nested under `editorial`. Which organisation's content comes back is decided by who the caller is, never by `?team_id=` or any other parameter:
+Editorial content is the `takeaways` and `summary_plain_english` of a record. Article content is stored per site in `ArticleSiteContent`, so two sites of one organisation can carry different text for the same article. (It used to be per organisation in `ArticleOrgContent`, which is now read-only and is dropped in a later release; a data migration copied every row to each site its organisation owns.) Trial content is still per organisation in `TrialOrgContent`. Article and trial responses include it only when the caller sends `?include=editorial`, nested under `editorial`. Whose content comes back is decided by who the caller is, never by `?team_id=` or any other parameter:
 
-| Caller | Organisation(s) whose content is returned |
-|:-------|:------------------------------------------|
-| Valid API key | The key's organisation |
-| Logged-in user | Every organisation the user belongs to |
-| Anonymous | The organisation that owns the `api_public` site resolved from `?site_id=`, `Origin`, `Referer`, or the single public site |
-| Anonymous, no `api_public` site | None (`editorial: []`) |
+| Caller | Articles: site(s) whose content is returned | Trials: organisation(s) |
+|:-------|:--------------------------------------------|:------------------------|
+| Valid API key | The key's site (none if it has no site, or one owned by another organisation) | The key's organisation |
+| Logged-in user | Every site owned by an organisation the user belongs to | Every organisation the user belongs to |
+| Anonymous | The `api_public` site resolved from `?site_id=`, `Origin`, `Referer`, or the single public site | The organisation that owns that site |
+| Anonymous, no `api_public` site | None (`editorial: []`) | None |
+
+The same rule decides where `POST /articles/edit/` writes (the key's site) and which text a newsletter carries (the site its List is sent for, or the organisation's default site when that site isn't one the organisation owns). `get_takeaways` and `import_articles_from_api` write a copy to every site of the organisation.
 
 Because the anonymous case goes through `OrganizationSite`, a site must belong to exactly one organisation (database constraint `unique_site_organization`). See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#editorial-content) for the response shape and the `has_takeaways` filter.

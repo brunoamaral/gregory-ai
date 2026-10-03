@@ -13,7 +13,6 @@ from gregory.models import (
 	ArticleSubjectRelevance,
 	TeamCategory,
 	ArticleTrialReference,
-	ArticleOrgContent,
 	TrialOrgContent,
 	TrialCountry,
 	TrialSite,
@@ -26,7 +25,13 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.editorial import editorial_org_ids, editorial_org_names, editorial_requested
+from api.editorial import (
+	editorial_org_ids,
+	editorial_org_names,
+	editorial_requested,
+	editorial_site_ids,
+	editorial_sites,
+)
 from api.serializers.mixins import ScopedSerializerMixin
 
 
@@ -424,20 +429,74 @@ class EditorialEntrySerializer(serializers.Serializer):
 	summary_plain_english = serializers.CharField(allow_null=True)
 
 
-class EditorialFieldMixin:
-	"""``?include=editorial`` support for the article and trial serializers.
+class EditorialSiteSerializer(serializers.Serializer):
+	id = serializers.IntegerField()
+	domain = serializers.CharField()
+	name = serializers.CharField()
 
-	``editorial`` is declared as a field so it appears in the schema, but is
-	popped from the output unless the caller opted in; ``get_editorial()``
-	returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-	EDITORIAL-API-SPEC.md.
-	"""
+
+class EditorialSiteEntrySerializer(serializers.Serializer):
+	"""One site's editorial content for an article (``?include=editorial``)."""
+
+	site = EditorialSiteSerializer()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+
+
+class _EditorialIncludeMixin:
+	"""Pops ``editorial`` from the output unless the caller opted in with
+	``?include=editorial``. ``editorial`` is declared as a field so it appears
+	in the schema; the ``get_editorial()`` of each subclass returns
+	immediately when it was not requested, so default responses cost nothing.
+	See api/editorial.py and EDITORIAL-API-SPEC.md."""
 
 	def to_representation(self, instance):
 		ret = super().to_representation(instance)
 		if not editorial_requested(self.context.get("request")):
 			ret.pop("editorial", None)
 		return ret
+
+
+class SiteEditorialFieldMixin(_EditorialIncludeMixin):
+	"""``?include=editorial`` for articles: one entry per site, since article
+	editorial content is per site (``ArticleSiteContent``)."""
+
+	@extend_schema_field(EditorialSiteEntrySerializer(many=True))
+	def get_editorial(self, obj) -> list:
+		"""One entry per editorial site (sorted by id); null fields when that
+		site has no content row. Uses ``_prefetched_site_contents`` when the
+		view attached it, else one query per object (single-object
+		serialisation)."""
+		request = self.context.get("request")
+		if not editorial_requested(request):
+			return []  # popped in to_representation
+		site_ids = editorial_site_ids(request)
+		if not site_ids:
+			return []
+		sites = editorial_sites(request)
+		prefetched = getattr(obj, "_prefetched_site_contents", None)
+		rows = prefetched if prefetched is not None else obj.site_contents.filter(
+			site_id__in=site_ids
+		)
+		by_site = {row.site_id: row for row in rows}
+		entries = []
+		for site_id in site_ids:
+			row = by_site.get(site_id)
+			entries.append(
+				{
+					"site": sites.get(
+						site_id, {"id": site_id, "domain": "", "name": ""}
+					),
+					"takeaways": row.takeaways if row else None,
+					"summary_plain_english": row.summary_plain_english if row else None,
+				}
+			)
+		return entries
+
+
+class EditorialFieldMixin(_EditorialIncludeMixin):
+	"""``?include=editorial`` for trials: one entry per organisation, since
+	trial editorial content is still per organisation (``TrialOrgContent``)."""
 
 	@extend_schema_field(EditorialEntrySerializer(many=True))
 	def get_editorial(self, obj) -> list:
@@ -470,7 +529,7 @@ class EditorialFieldMixin:
 
 
 class ArticleSerializer(
-	EditorialFieldMixin,
+	SiteEditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
 ):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")

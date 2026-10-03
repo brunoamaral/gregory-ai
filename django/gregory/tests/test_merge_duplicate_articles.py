@@ -17,6 +17,7 @@ Run:
 from contextlib import contextmanager
 from io import StringIO
 
+from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
@@ -26,6 +27,7 @@ from organizations.models import Organization
 from gregory.models import (
 	ArticleCategoryAssignment,
 	ArticleOrgContent,
+	ArticleSiteContent,
 	Articles,
 	ArticleSubjectRelevance,
 	CategoryAssignmentSource,
@@ -207,6 +209,73 @@ class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 		self.assertEqual(content.takeaways, "Key finding")
 		self.assertEqual(content.summary_plain_english, "Plain summary")
 		self.assertEqual(ArticleOrgContent.objects.count(), 1)
+
+	def test_site_content_adopted_into_empty_survivor_slot(self):
+		keep, loser = self.make_dup_pair(
+			"10.1/site", links=("https://ex.org/keep-s", "https://ex.org/loser-s")
+		)
+		site = Site.objects.create(domain="merge-site.example.com", name="Merge site")
+		other_site = Site.objects.create(domain="merge-other.example.com", name="Other")
+		# Survivor has an empty editorial row for one site; loser's is filled.
+		ArticleSiteContent.objects.create(
+			article=keep, site=site, takeaways="", summary_plain_english=""
+		)
+		ArticleSiteContent.objects.create(
+			article=loser, site=site,
+			takeaways="Key finding", summary_plain_english="Plain summary",
+		)
+		# A site only the loser has content for moves across untouched.
+		ArticleSiteContent.objects.create(
+			article=loser, site=other_site, takeaways="Only on loser"
+		)
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		content = ArticleSiteContent.objects.get(article=keep, site=site)
+		self.assertEqual(content.takeaways, "Key finding")
+		self.assertEqual(content.summary_plain_english, "Plain summary")
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=keep, site=other_site).takeaways,
+			"Only on loser",
+		)
+		self.assertEqual(ArticleSiteContent.objects.count(), 2)
+
+	def test_site_content_survivor_text_wins_over_loser(self):
+		keep, loser = self.make_dup_pair(
+			"10.1/site-win", links=("https://ex.org/keep-w", "https://ex.org/loser-w")
+		)
+		site = Site.objects.create(domain="merge-win.example.com", name="Win")
+		ArticleSiteContent.objects.create(article=keep, site=site, takeaways="Survivor")
+		ArticleSiteContent.objects.create(article=loser, site=site, takeaways="Loser")
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=keep, site=site).takeaways, "Survivor"
+		)
+		self.assertEqual(ArticleSiteContent.objects.count(), 1)
+
+	def test_site_content_merges_complementary_fields(self):
+		"""A survivor with only takeaways adopts the loser's plain-English
+		summary instead of losing it, and keeps its own takeaways."""
+		keep, loser = self.make_dup_pair(
+			"10.1/site-fields", links=("https://ex.org/keep-f", "https://ex.org/loser-f")
+		)
+		site = Site.objects.create(domain="merge-fields.example.com", name="Fields")
+		ArticleSiteContent.objects.create(article=keep, site=site, takeaways="Survivor")
+		ArticleSiteContent.objects.create(
+			article=loser, site=site, takeaways="Loser", summary_plain_english="Loser summary"
+		)
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		content = ArticleSiteContent.objects.get(article=keep, site=site)
+		self.assertEqual(content.takeaways, "Survivor")
+		self.assertEqual(content.summary_plain_english, "Loser summary")
+		self.assertEqual(ArticleSiteContent.objects.count(), 1)
 
 	def test_three_way_merge(self):
 		with self.without_doi_constraint():

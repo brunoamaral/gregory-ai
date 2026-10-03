@@ -209,16 +209,19 @@ class PreviewOrganizationTest(TestCase):
 		self.lst.subjects.add(self.subject)
 
 	def test_preview_context_carries_organization_scoped_content_map(self):
-		from gregory.models import ArticleOrgContent
+		from gregory.models import ArticleSiteContent, OrganizationSite
 
+		OrganizationSite.objects.get_or_create(
+			organization=self.org, site=self.site, defaults={"is_default": True}
+		)
 		article = Articles.objects.create(
 			title="Org Preview Article",
 			link="https://example.com/org-preview",
 			doi="10.6543/org-preview",
 		)
 		article.subjects.add(self.subject)
-		ArticleOrgContent.objects.create(
-			article=article, organization=self.org, takeaways="Org takeaways"
+		ArticleSiteContent.objects.create(
+			article=article, site=self.site, takeaways="Org takeaways"
 		)
 
 		rf = RequestFactory()

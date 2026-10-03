@@ -6,6 +6,7 @@ from django.core.management import call_command
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, PermissionDenied
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+from django.contrib.sites.models import Site
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import path, reverse
@@ -39,6 +40,7 @@ from .models import (
 	OrganizationSite,
 	OrganizationApiSettings,
 	ArticleOrgContent,
+	ArticleSiteContent,
 	TrialOrgContent,
 	TrialCountry,
 	TrialSite,
@@ -656,10 +658,91 @@ class _BaseOrgContentInline(admin.StackedInline):
 		return ScopedOrgContentFormSet
 
 
-class ArticleOrgContentInline(_BaseOrgContentInline):
-	model = ArticleOrgContent
-	verbose_name = "Editorial content (per organisation)"
-	verbose_name_plural = "Editorial content (per organisation)"
+class ArticleSiteContentInline(admin.StackedInline):
+	"""Per-site editorial content on the article page.
+
+	Same rules as the per-organisation inline: staff only see and edit rows
+	for sites their organisation(s) own, the site of an existing row is
+	locked, and empty extra rows are skipped at save time.
+	"""
+
+	model = ArticleSiteContent
+	extra = 0
+	fields = ("site", "takeaways", "summary_plain_english", "updated_at")
+	readonly_fields = ("updated_at",)
+	verbose_name = "Editorial content (per site)"
+	verbose_name_plural = "Editorial content (per site)"
+
+	@staticmethod
+	def _user_sites(request):
+		"""Sites the user may write to; every site for a superuser."""
+		if request.user.is_superuser:
+			return Site.objects.all().order_by("domain")
+		user_orgs = get_user_organizations(request.user)
+		return Site.objects.filter(
+			organization_sites__organization_id__in=user_orgs
+		).order_by("domain")
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related("site")
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(site__in=self._user_sites(request))
+
+	def has_add_permission(self, request, obj=None):
+		# The model permission first: the site restriction only narrows it.
+		if not super().has_add_permission(request, obj):
+			return False
+		if request.user.is_superuser:
+			return True
+		return self._user_sites(request).exists()
+
+	def _missing_site_ids(self, request, obj):
+		"""Return user-sites that don't yet have a content row for this article."""
+		if obj is None or not obj.pk:
+			return []
+		existing = set(obj.site_contents.values_list("site_id", flat=True))
+		return [
+			site_id
+			for site_id in self._user_sites(request).values_list("pk", flat=True)
+			if site_id not in existing
+		]
+
+	def get_extra(self, request, obj=None, **kwargs):
+		if obj is None or not obj.pk:
+			return 0
+		if request.user.is_superuser:
+			return 1
+		return len(self._missing_site_ids(request, obj))
+
+	def get_max_num(self, request, obj=None, **kwargs):
+		if request.user.is_superuser:
+			return None
+		# Cap at the user's site count so they can't create rows for other sites.
+		return self._user_sites(request).count()
+
+	def get_formset(self, request, obj=None, **kwargs):
+		formset_class = super().get_formset(request, obj, **kwargs)
+		is_superuser = request.user.is_superuser
+		allowed_sites = self._user_sites(request)
+		extra_site_ids = [] if is_superuser else self._missing_site_ids(request, obj)
+
+		class ScopedSiteContentFormSet(formset_class):
+			def _construct_form(self, i, **form_kwargs):
+				form = super()._construct_form(i, **form_kwargs)
+				form.fields["site"].queryset = allowed_sites
+				if form.instance.pk:
+					# Existing row: lock the site so content can't be reassigned.
+					form.fields["site"].disabled = True
+				elif not is_superuser:
+					# Extra row for staff: pre-fill and lock to their next missing site.
+					extra_index = i - self.initial_form_count()
+					if 0 <= extra_index < len(extra_site_ids):
+						form.fields["site"].initial = extra_site_ids[extra_index]
+						form.fields["site"].disabled = True
+				return form
+
+		return ScopedSiteContentFormSet
 
 
 class TrialOrgContentInline(_BaseOrgContentInline):
@@ -880,7 +963,7 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 	source_for_values = ["science paper", "news article"]
 	actions = ["add_source_action", "remove_source_action"]
 	inlines = [
-		ArticleOrgContentInline,
+		ArticleSiteContentInline,
 		ArticleSubjectRelevanceInline,
 		ArticleTrialReferenceInline,
 		ArticleCategoryAssignmentInline,
@@ -3797,6 +3880,10 @@ class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 
 @admin.register(ArticleOrgContent)
 class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
+	"""Read-only: editorial content is per site now (ArticleSiteContent). Kept
+	so the legacy rows and their history stay browsable until the table is
+	dropped."""
+
 	list_display = ("article", "organization", "updated_at")
 	raw_id_fields = ("article",)
 	search_fields = _BaseOrgContentAdmin.search_fields + (
@@ -3806,6 +3893,54 @@ class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
 
 	def has_module_perms(self, request):
 		return False
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(ArticleSiteContent)
+class ArticleSiteContentAdmin(SimpleHistoryAdmin):
+	"""Standalone page for browsing audit history; routine editing happens in
+	the Article page's inline."""
+
+	list_display = ("article", "site", "updated_at")
+	list_filter = ("site",)
+	raw_id_fields = ("article",)
+	readonly_fields = ("created_at", "updated_at")
+	search_fields = ("takeaways", "summary_plain_english", "article__title", "article__doi")
+
+	def has_module_perms(self, request):
+		return False
+
+	# Read-only for staff: these forms would offer every site and any article,
+	# so a direct add or change URL could write another organisation's content.
+	# Staff edit through the Article page's inline, which scopes and locks both.
+	def has_add_permission(self, request):
+		return request.user.is_superuser
+
+	def has_change_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def has_delete_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def get_queryset(self, request):
+		# OrganizationFilterMixin has no path for this model (no organization,
+		# team or sources), so scope to the user's organisations' sites here.
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			site__organization_sites__organization_id__in=get_user_organizations(
+				request.user
+			)
+		)
 
 
 @admin.register(TrialOrgContent)
