@@ -152,15 +152,21 @@ class CachedCountMixin:
 			if key not in self._count_key_ignored_params
 			for value in request.query_params.getlist(key)
 		)
-		digest = hashlib.sha256(
-			json.dumps(
-				{
-					"path": request.path,
-					"subjects": subjects,
-					"params": params,
-				}
-			).encode()
-		).hexdigest()
+		key_parts = {
+			"path": request.path,
+			"subjects": subjects,
+			"params": params,
+		}
+		if "has_takeaways" in request.query_params:
+			# has_takeaways counts rows with text written for the caller's own
+			# site (articles) or organisation (trials), which two callers with
+			# the same subject scope can differ on -- same reason as the stats
+			# cache key (api.views.CachedStatsActionMixin).
+			from api.editorial import editorial_org_ids, editorial_site_ids
+
+			key_parts["editorial_sites"] = editorial_site_ids(request)
+			key_parts["editorial_orgs"] = editorial_org_ids(request)
+		digest = hashlib.sha256(json.dumps(key_parts).encode()).hexdigest()
 		return f"paginator_count:{digest}"
 
 	def paginate_queryset(self, queryset, request, view=None):

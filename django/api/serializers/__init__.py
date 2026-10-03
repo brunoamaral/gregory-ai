@@ -26,11 +26,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
 from api.editorial import (
+	article_site_contents,
 	editorial_org_ids,
 	editorial_org_names,
 	editorial_requested,
 	editorial_site_ids,
 	editorial_sites,
+	is_editor_request,
 )
 from api.serializers.mixins import ScopedSerializerMixin
 
@@ -436,11 +438,17 @@ class EditorialSiteSerializer(serializers.Serializer):
 
 
 class EditorialSiteEntrySerializer(serializers.Serializer):
-	"""One site's editorial content for an article (``?include=editorial``)."""
+	"""One site's editorial content for an article (``?include=editorial``).
+
+	``updated_at`` and ``updated_by`` appear only for an MCP editor
+	(``/editor/`` routes): when the entry last changed and who changed it.
+	"""
 
 	site = EditorialSiteSerializer()
 	takeaways = serializers.CharField(allow_null=True)
 	summary_plain_english = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True, required=False)
+	updated_by = serializers.CharField(allow_null=True, required=False)
 
 
 class _EditorialIncludeMixin:
@@ -475,22 +483,23 @@ class SiteEditorialFieldMixin(_EditorialIncludeMixin):
 			return []
 		sites = editorial_sites(request)
 		prefetched = getattr(obj, "_prefetched_site_contents", None)
-		rows = prefetched if prefetched is not None else obj.site_contents.filter(
-			site_id__in=site_ids
+		rows = prefetched if prefetched is not None else article_site_contents(request).filter(
+			article=obj
 		)
 		by_site = {row.site_id: row for row in rows}
+		with_audit = is_editor_request(request)
 		entries = []
 		for site_id in site_ids:
 			row = by_site.get(site_id)
-			entries.append(
-				{
-					"site": sites.get(
-						site_id, {"id": site_id, "domain": "", "name": ""}
-					),
-					"takeaways": row.takeaways if row else None,
-					"summary_plain_english": row.summary_plain_english if row else None,
-				}
-			)
+			entry = {
+				"site": sites.get(site_id, {"id": site_id, "domain": "", "name": ""}),
+				"takeaways": row.takeaways if row else None,
+				"summary_plain_english": row.summary_plain_english if row else None,
+			}
+			if with_audit:
+				entry["updated_at"] = row.updated_at if row else None
+				entry["updated_by"] = getattr(row, "last_editor", None) if row else None
+			entries.append(entry)
 		return entries
 
 

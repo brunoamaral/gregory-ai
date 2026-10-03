@@ -240,6 +240,10 @@ Which tier a sign-in gets is decided when the token is issued:
 
 The consent screen for a person without a grant says they have read access to public data only and names the site's `admin_email` as the contact for editor access. Revoking a grant turns that person's next sign-in on the site into the public tier. A refresh keeps the tier the token was issued with, so a newly granted editor signs in again to get the edit tools.
 
+### What an editor can do
+
+Once connected to a site's editor address, an editor reads that site's published scope (`scope_subjects`, on a private site too) and can change, for that site only, the editorial text of an article, the relevance of an article for a subject in the site's scope, and the links between an article and a trial. Each edit is attributed to the person in the history that Django keeps. The routes behind it are in [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#editor-routes-editor). Relevance is shared: it describes the article and the subject, not the site, so an edit on one site is visible on every other site that lists the subject.
+
 ### Maintenance
 
 Clients register themselves, so two commands keep the tables small. Run them from cron, daily or weekly:
@@ -262,6 +266,7 @@ Clients register themselves, so two commands keep the tables small. Run them fro
 | `MCP_EDITOR_HOST_PREFIX` | `gregory-ai` | The host prefix of editor addresses |
 | `OAUTH_LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per 15 minutes, per client address and per username, before the login page refuses |
 | `OAUTH_DCR_MAX_PER_HOUR` | `30` | Dynamic registrations per client address per hour |
+| `MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY` | `60`, `500` | Edits allowed per editor and site per window. Tune from production logs |
 
 ## Editorial content (`?include=editorial`)
 
