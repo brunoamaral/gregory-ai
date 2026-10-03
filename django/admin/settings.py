@@ -115,6 +115,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	'mcpauth.middleware.EditorHeaderGuardMiddleware',
 	'corsheaders.middleware.CorsMiddleware',
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	'django.middleware.common.CommonMiddleware',
@@ -319,6 +320,16 @@ SPECTACULAR_SETTINGS = {
 	# by hand here and referenced via `security=` on the views that use it.
 	'APPEND_COMPONENTS': {
 		'securitySchemes': {
+			'editorServiceAuth': {
+				'type': 'http',
+				'scheme': 'bearer',
+				'description': (
+					'The MCP server\'s service credential (GREGORY_MCP_SERVICE_KEY), '
+					'sent with X-Gregory-Editor-User and X-Gregory-Editor-Site naming the '
+					'verified editor and the one site. Only the MCP server holds it; '
+					'/editor/ is not reachable from the public internet.'
+				),
+			},
 			'apiKeyAuth': {
 				'type': 'apiKey',
 				'in': 'header',
@@ -360,6 +371,13 @@ GREGORY_MCP_SERVICE_KEY = os.environ.get('GREGORY_MCP_SERVICE_KEY', '')
 
 # The editor address of a site is https://<prefix>.<site domain>/mcp/editor.
 MCP_EDITOR_HOST_PREFIX = os.environ.get('MCP_EDITOR_HOST_PREFIX', 'gregory-ai')
+
+# MCP editor writes allowed per (user, site) per window (D21). Start here and
+# tune from production logs.
+MCP_EDITOR_RATE_LIMITS = {
+	'hour': int(os.environ.get('MCP_EDITOR_WRITES_PER_HOUR', '60')),
+	'day': int(os.environ.get('MCP_EDITOR_WRITES_PER_DAY', '500')),
+}
 
 # Failed sign-ins allowed per window on the OAuth login page, per client
 # address and per username.

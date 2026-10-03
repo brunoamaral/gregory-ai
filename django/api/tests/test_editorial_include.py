@@ -515,3 +515,25 @@ class TrialEditorialStaysPerOrganisationTests(EditorialFixtureMixin, TestCase):
 			{"id": self.org_a.id, "name": "Editorial Org A"},
 		)
 		self.assertNotIn("site", row["editorial"][0])
+
+
+class CountCacheTests(EditorialFixtureMixin, TestCase):
+	"""The paginator's cached count must not serve one site's has_takeaways
+	count to another caller who shares the subject scope."""
+
+	def test_has_takeaways_count_is_not_shared_across_sites_with_the_same_scope(self):
+		from django.core.cache import cache
+
+		cache.clear()
+		second_site = publish_subjects(
+			self.subject_a, self.subject_b, organization=self.org_a, domain="count-two.test.example.com"
+		)
+		second_key = _key(self.org_a, second_site, "editorial-count-two")
+		for article in (self.without_content, self.empty_takeaways):
+			ArticleSiteContent.objects.create(article=article, site=second_site, takeaways="text")
+
+		first = self.keyed(self.key_a, "/articles/?has_takeaways=true")
+		second = self.keyed(second_key, "/articles/?has_takeaways=true")
+
+		self.assertEqual(first.data["count"], 1)
+		self.assertEqual(second.data["count"], 2)

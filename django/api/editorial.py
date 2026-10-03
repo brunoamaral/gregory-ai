@@ -15,6 +15,9 @@ Articles (sites):
 
   - Valid API key         -> the key's site (none if the key's site does not
                              belong to the key's organisation).
+  - MCP editor            -> the one site their token is bound to (and, on
+                             top of the usual fields, who last changed each
+                             entry and when).
   - Logged-in user        -> every site owned by an organisation the user
                              belongs to, each labelled by site.
   - Anonymous             -> the ``api_public`` site ``resolve_anonymous_site()``
@@ -25,6 +28,7 @@ Articles (sites):
 Trials (organisations):
 
   - Valid API key         -> the key's organisation.
+  - MCP editor            -> the organisation that owns their site.
   - Logged-in user        -> every organisation the user belongs to.
   - Anonymous             -> the organisation that owns the ``api_public``
                              site the anonymous resolution above picks.
@@ -95,11 +99,19 @@ def editorial_org_ids(request) -> list:
 	from gregory.models import OrganizationSite
 	from gregory.site_resolution import resolve_anonymous_site
 	from gregory.visibility import _resolve_api_scheme
+	from mcpauth.editor_auth import editor_auth_of
 
 	org_ids = set()
 	scheme = _resolve_api_scheme(request)
+	editor = editor_auth_of(request)
 	if scheme is not None:
 		org_ids.add(scheme.organization_id)
+	elif editor is not None:
+		org_ids.update(
+			OrganizationSite.objects.filter(site_id=editor.site_id).values_list(
+				"organization_id", flat=True
+			)
+		)
 	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
 		org_ids.update(
 			request.user.organizations_organizationuser.values_list(
@@ -148,13 +160,17 @@ def editorial_site_ids(request) -> list:
 	from gregory.models import OrganizationSite
 	from gregory.site_resolution import resolve_anonymous_site
 	from gregory.visibility import _resolve_api_scheme, site_id_for_api_scheme
+	from mcpauth.editor_auth import editor_auth_of
 
 	site_ids = set()
 	scheme = _resolve_api_scheme(request)
+	editor = editor_auth_of(request)
 	if scheme is not None:
 		site_id = site_id_for_api_scheme(scheme)
 		if site_id is not None:
 			site_ids.add(site_id)
+	elif editor is not None:
+		site_ids.add(editor.site_id)
 	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
 		org_ids = request.user.organizations_organizationuser.values_list(
 			"organization_id", flat=True
@@ -190,3 +206,35 @@ def editorial_sites(request) -> dict:
 	}
 	setattr(request, _SITES_ATTR, sites)
 	return sites
+
+
+def is_editor_request(request) -> bool:
+	"""True for an MCP editor's request, which sees who last changed each
+	editorial entry (``updated_by``) and when (``updated_at``)."""
+	from mcpauth.editor_auth import editor_auth_of
+
+	return request is not None and editor_auth_of(request) is not None
+
+
+def article_site_contents(request):
+	"""The ``ArticleSiteContent`` rows ``?include=editorial`` may show this caller.
+
+	For an editor each row also carries ``last_editor``: the name recorded on
+	its newest history row (or the API key's label when a key made the change),
+	as one correlated subquery, so a page of articles stays one extra query.
+	"""
+	from django.db.models import OuterRef, Subquery, Value
+	from django.db.models.functions import Coalesce, NullIf
+
+	from gregory.models import ArticleSiteContent
+
+	queryset = ArticleSiteContent.objects.filter(site_id__in=editorial_site_ids(request))
+	if is_editor_request(request):
+		newest = ArticleSiteContent.history.filter(id=OuterRef("id")).order_by("-history_date")
+		queryset = queryset.annotate(
+			last_editor=Coalesce(
+				NullIf(Subquery(newest.values("editor_label")[:1]), Value("")),
+				NullIf(Subquery(newest.values("api_access_scheme_label")[:1]), Value("")),
+			)
+		)
+	return queryset

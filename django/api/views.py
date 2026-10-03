@@ -139,6 +139,7 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import now as tz_now
 
 from api.editorial import (
+	article_site_contents,
 	editorial_org_ids,
 	editorial_requested,
 	editorial_site_ids,
@@ -1725,9 +1726,7 @@ class ArticleViewSet(
 			qs = qs.prefetch_related(
 				Prefetch(
 					"site_contents",
-					queryset=ArticleSiteContent.objects.filter(
-						site_id__in=editorial_site_ids(self.request)
-					),
+					queryset=article_site_contents(self.request),
 					to_attr="_prefetched_site_contents",
 				)
 			)
@@ -4148,9 +4147,7 @@ class ArticleSearchView(
 				queryset = queryset.prefetch_related(
 					Prefetch(
 						"site_contents",
-						queryset=ArticleSiteContent.objects.filter(
-							site_id__in=editorial_site_ids(self.request)
-						),
+						queryset=article_site_contents(self.request),
 						to_attr="_prefetched_site_contents",
 					)
 				)
@@ -4778,6 +4775,9 @@ class McpTenantsView(APIView):
 
 	permission_classes = [permissions.AllowAny]
 
+	#: EditorTenantsView sets this: list every mcp_enabled site, public or not.
+	include_all_mcp_sites = False
+
 	def get(self, request):
 		from django.contrib.sites.models import Site
 		from django.utils.cache import patch_vary_headers
@@ -4802,6 +4802,26 @@ class McpTenantsView(APIView):
 			subject_ids = site_scope_subject_ids(setting.site_id, public_only=True)
 			if subject_ids:
 				tenants[setting.site_id] = (setting, subject_ids)
+
+		# --- Every MCP site, private included, for the MCP server's editor
+		# mount (EditorTenantsView). Replaces the public-only list above, and
+		# lists each site with its full published scope, since an editor reads
+		# all of it. A public settings row represents its site when it has one,
+		# so `api_public` says whether the site has public data at all. ---
+		if self.include_all_mcp_sites:
+			tenants = {}
+			seen_site_ids = set()
+			for setting in (
+				CustomSetting.objects.filter(mcp_enabled=True)
+				.select_related("site")
+				.order_by("site__domain", "-api_public", "setting_id")
+			):
+				if setting.site_id in seen_site_ids:
+					continue
+				seen_site_ids.add(setting.site_id)
+				subject_ids = site_scope_subject_ids(setting.site_id, public_only=False)
+				if subject_ids:
+					tenants[setting.site_id] = (setting, subject_ids)
 
 		# --- The caller's own site, if a site-bound key names one. Computed
 		# AFTER the public loop above, so if the site is ALSO a public

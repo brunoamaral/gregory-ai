@@ -115,6 +115,49 @@ Every token is bound to one site by its `resource`, and carries a tier: `editor`
 
 ---
 
+## Editor routes (`/editor/`)
+
+The MCP server calls these on behalf of a signed-in editor. They are not for browsers or API keys, and nginx keeps them off the public internet (see [MCP editor access](06-organisations-teams-and-sites.md#mcp-editor-access)); Django does not rely on that and checks every request itself.
+
+Every request carries:
+
+| Header | Value |
+|:-------|:------|
+| `Authorization` | `Bearer <GREGORY_MCP_SERVICE_KEY>` |
+| `X-Gregory-Editor-User` | The Django user id of the editor, verified by the MCP server through `/o/introspect/` |
+| `X-Gregory-Editor-Site` | The one site the editor's token is bound to |
+
+Rules:
+
+- Django re-checks the editor's active `SiteEditor` grant on every request, so a revocation takes effect on the next call whatever the MCP server has cached. A bad or missing credential, or an unknown or inactive user, is `401` with `WWW-Authenticate: Bearer`. A valid credential for an editor without an active grant on that site, or for a site with `mcp_enabled` off, is `403`. A grant with `can_edit` off reads but gets `403` on every write.
+- A request carrying either editor header without the credential is `401` on every route, and the headers are refused on any route outside `/editor/`.
+- The site is the token's, never a parameter. An article, trial or subject outside that site's `scope_subjects` is `404`, the same answer as one that doesn't exist.
+- Writes take effect immediately, run as the editor (history rows record the editor and `via = "mcp"`), and are throttled per (editor, site): 60 per hour and 500 per day by default (`MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY`). A throttled write is `429` with `Retry-After`. Reads are never throttled.
+
+### Reads
+
+The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
+
+Differences from the public endpoints:
+
+- `?include=editorial` returns only the editor's site, and each article entry also carries `updated_at` and `updated_by` (the name and email of whoever last changed it, or the API key's name when a key did).
+- `GET /editor/tenants/` lists every site with `mcp_enabled` and a non-empty scope, private ones included, each with its full scope and an `api_public` flag. It takes the service credential alone, with no editor headers. The MCP server's editor mount uses it to tell which site a host is.
+
+### Writes and history
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `GET /editor/articles/resolve/?doi=` | DOI to `article_id` among in-scope articles. `404` for none, or for one outside the scope. `409` with `article_ids` when several in-scope articles share the DOI |
+| `PATCH /editor/articles/{article_id}/editorial/` | Upsert this site's `takeaways` and/or `summary_plain_english`. Omitted fields are left alone; an empty string clears. Returns the stored values with `updated_by` and `updated_at` |
+| `PUT /editor/articles/{article_id}/relevance/{subject_id}/` | Body `{"is_relevant": true \| false \| null}`. The subject must be in the site's scope (`404` otherwise). Relevance is per subject, so the change applies to every site listing the subject |
+| `POST /editor/articles/{article_id}/trials/` | Body `{"trial_id": n}`. Adds a manual link, `201`; an already linked pair returns the existing link, `200`. The trial must be in scope |
+| `DELETE /editor/articles/{article_id}/trials/{trial_id}/` | Removes a manual link, or hides an auto-detected one (`suppressed`) so detection doesn't recreate it. `404` when the pair isn't linked |
+| `GET /editor/articles/{article_id}/history/?limit=` | Who changed this site's editorial content, the article's relevance for subjects in scope, and its links to trials in scope; newest first, `limit` up to 200 (default 50) |
+
+Trials are read-only over MCP: an editor can link a trial to an article but cannot change the trial. `access`, `retracted` and `kind` stay on `POST /articles/edit/` (API key) and the admin.
+
+---
+
 ## Resolving a site for an anonymous caller
 
 An anonymous request is scoped to exactly one site's `scope_subjects`, resolved in this order:

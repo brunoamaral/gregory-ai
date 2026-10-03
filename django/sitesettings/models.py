@@ -321,10 +321,11 @@ class CustomSetting(models.Model):
 		default=False,
 		help_text=(
 			"Offers this site's research assistant (MCP). Takes effect only "
-			"when scope_subjects above is non-empty. The public MCP server "
-			"only serves api_public sites, so on a private site this flag "
-			"does nothing until authenticated MCP servers exist. Off by "
-			"default: a site is not a tenant until someone decides it is."
+			"when scope_subjects above is non-empty. The anonymous MCP "
+			"address only serves api_public sites; a private site with this "
+			"flag is served at its editor address, to the people granted "
+			"editor access below. Off by default: a site is not a tenant "
+			"until someone decides it is."
 		),
 	)
 	mcp_description = models.TextField(
