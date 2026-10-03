@@ -208,6 +208,61 @@ EMAIL_POSTMARK_API_KEY=your-postmark-server-token
 EMAIL_POSTMARK_API_URL=https://api.postmarkapp.com/email
 ```
 
+## MCP editor access
+
+Named editors, from our own team and from client organisations, can read more than an anonymous visitor and edit article content through the MCP server's editor address. See [07-mcp-server.md](07-mcp-server.md) for the connector side; this section covers who may do what, and where it is managed.
+
+### One address per site
+
+Each site with `mcp_enabled` has its own editor address, `https://gregory-ai.<site domain>/mcp/editor` (the prefix is `MCP_EDITOR_HOST_PREFIX`). It is shown on the Site admin page, so it can be sent to a new editor. An editor adds one connector per site; each connector signs in on its own and gets permissions for that site only. There is no site switcher and no address that covers several sites. A token for one site is refused on another site's address.
+
+### Granting access
+
+On the Site admin page, the **MCP editors** inline lists the site's grants. Only superusers see or change it.
+
+| Field | Meaning |
+|:------|:--------|
+| User | The person. Editors sign in with their Django username and password; a client editor without an account needs one created first |
+| Can edit | Ticked: the edit tools. Unticked: the editor read scope without the edit tools. Saving it unticked ends the person's existing sessions on this site |
+| Granted by, Created | Filled in on save |
+| Revoke | Tick and save to end the grant. The person's tokens for this site are deleted in the same transaction, so access ends at once, not when the token expires |
+
+A client editor can only be granted a site owned by an organisation they belong to. A superuser (our own team) can be granted any site. Superuser status alone never gives edit access: every editor appears in the list. Grants are revoked, not deleted, so the list stays the record of who had access.
+
+### Tiers
+
+Which tier a sign-in gets is decided when the token is issued:
+
+| Signed-in person | Site has `api_public` data | Site has no public data |
+|:-----------------|:---------------------------|:------------------------|
+| Active grant | Editor tier | Editor tier |
+| No grant | Public tier: the same read access as the anonymous `/mcp` address, no edit tools | Refused on the consent screen; no token is issued |
+
+The consent screen for a person without a grant says they have read access to public data only and names the site's `admin_email` as the contact for editor access. Revoking a grant turns that person's next sign-in on the site into the public tier. A refresh keeps the tier the token was issued with, so a newly granted editor signs in again to get the edit tools.
+
+### Maintenance
+
+Clients register themselves, so two commands keep the tables small. Run them from cron, daily or weekly:
+
+```cron
+# Delete expired and revoked OAuth tokens
+15 3 * * * docker exec gregory python manage.py cleartokens
+# Delete self-registered OAuth clients unused for 90 days
+25 3 * * 0 docker exec gregory python manage.py prune_oauth_clients
+```
+
+`prune_oauth_clients` never touches clients created by hand in the admin; `--dry-run` reports what it would delete and `--days` changes the 90.
+
+### Settings
+
+| Variable | Default | Meaning |
+|:---------|:--------|:--------|
+| `GREGORY_MCP_SERVICE_KEY` | empty | Shared secret between this API and the MCP server. Unset means introspection refuses every request. Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
+| `OAUTH_ISSUER` | `https://api.<DOMAIN_NAME>` | The authorization server's issuer URL, with scheme and no path. Django sits behind a TLS-terminating proxy, so this is not derived from the request |
+| `MCP_EDITOR_HOST_PREFIX` | `gregory-ai` | The host prefix of editor addresses |
+| `OAUTH_LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per 15 minutes, per client address and per username, before the login page refuses |
+| `OAUTH_DCR_MAX_PER_HOUR` | `30` | Dynamic registrations per client address per hour |
+
 ## Editorial content (`?include=editorial`)
 
 Editorial content is the `takeaways` and `summary_plain_english` of a record. Article content is stored per site in `ArticleSiteContent`, so two sites of one organisation can carry different text for the same article. (It used to be per organisation in `ArticleOrgContent`, which is now read-only and is dropped in a later release; a data migration copied every row to each site its organisation owns.) Trial content is still per organisation in `TrialOrgContent`. Article and trial responses include it only when the caller sends `?include=editorial`, nested under `editorial`. Whose content comes back is decided by who the caller is, never by `?team_id=` or any other parameter:
