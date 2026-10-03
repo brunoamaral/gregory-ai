@@ -12,18 +12,12 @@ import time
 
 from django.core.cache import cache
 
+from api.utils.utils import getIPAddress
+
 
 def client_address(request) -> str:
-	"""The address to count against, as nginx saw it.
-
-	Not ``getIPAddress()``: that takes the first ``X-Forwarded-For`` entry, and
-	nginx's ``$proxy_add_x_forwarded_for`` appends to whatever the client sent,
-	so the first entry is the client's to choose and a fresh value per request
-	would never hit a limit. nginx sets ``X-Real-IP`` to ``$remote_addr`` on
-	every proxied location, replacing any client-sent value; without it (a
-	request that didn't come through nginx) the socket address is all there is.
-	"""
-	return request.META.get("HTTP_X_REAL_IP", "").strip() or request.META.get("REMOTE_ADDR") or "unknown"
+	"""The address to count against, as nginx saw it (see ``getIPAddress()``)."""
+	return getIPAddress(request) or "unknown"
 
 
 def _key(scope: str, subject: str) -> str:

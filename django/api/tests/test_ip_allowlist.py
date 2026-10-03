@@ -13,13 +13,14 @@ Run with:
 import json
 from datetime import timedelta
 
+from django.contrib.sites.models import Site
 from django.test import Client, RequestFactory, TestCase
 from django.utils.timezone import now
 from organizations.models import Organization
 
 from api.models import APIAccessScheme, APIAccessSchemeLog
 from api.utils.utils import getIPAddress
-from gregory.models import Articles, OrganizationApiSettings, Team
+from gregory.models import Articles, OrganizationApiSettings, OrganizationSite, Team
 from gregory.visibility import _resolve_api_scheme
 
 ALLOWED_IP = "203.0.113.5"
@@ -70,10 +71,14 @@ class IPAllowlistEditArticleTest(TestCase):
 			doi="10.1111/allowlist",
 		)
 		article.teams.add(team)
+		# Editorial content is per site, so the key needs one to edit.
+		site = Site.objects.create(domain="allowlist.example.com", name="allowlist")
+		OrganizationSite.objects.create(organization=org, site=site, is_default=True)
 		self.scheme = APIAccessScheme.objects.create(
 			client_name="allowlist-key",
 			client_contacts="allowlist@example.com",
 			organization=org,
+			site=site,
 			ip_addresses=ALLOWED_IP,
 			begin_date=now() - timedelta(days=1),
 			end_date=now() + timedelta(days=30),

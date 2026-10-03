@@ -278,7 +278,7 @@ class IpAddrTruncationTest(TestCase):
 		self.assertEqual(log.ip_addr, ipv6)
 
 	def test_oversized_forwarded_for_still_writes_row(self):
-		"""A 200-char junk X-Forwarded-For value (spoofed/malformed header)
+		"""A 200-char junk X-Real-IP value (malformed header, or a request that skipped nginx)
 		must still produce a log row, with ip_addr truncated to fit the
 		column rather than dropping the row entirely."""
 		junk_ip = "1" * 200
