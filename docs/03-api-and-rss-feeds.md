@@ -95,6 +95,24 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 | `POST /api/token/` | Obtain JWT token |
 | `GET /protected_endpoint/` | Test protected endpoint (requires auth header) |
 
+### OAuth 2.1 authorization server (MCP editor access)
+
+Named editors sign in to the MCP server's editor address with their Django username and password, through an OAuth 2.1 authorization server built on `django-oauth-toolkit`. These routes are served by Django on the API domain, not by the REST API: they are not part of `/api/schema/`. The flow, and what an editor sees, is described in [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#mcp-editor-access).
+
+| Endpoint | Purpose |
+|:---------|:--------|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 server metadata. `issuer` is `OAUTH_ISSUER`, or `https://api.<DOMAIN_NAME>`. Advertises the `authorization_code` and `refresh_token` grants, PKCE `S256`, the `articles:read` and `articles:edit` scopes, `registration_endpoint` and `client_id_metadata_document_supported` |
+| `GET /o/authorize/` | Authorization endpoint. Needs `response_type=code`, PKCE (`code_challenge`, `S256`) and exactly one `resource`: a site's editor address, `https://<host>/mcp/editor`. Sends an anonymous browser to `/o/login/`, then shows a consent screen naming the site and the client |
+| `POST /o/token/` | Token endpoint: authorization code (with `code_verifier`) and refresh. Access tokens last 1 hour; refresh tokens 30 days and are rotated on each use. Other grants are refused |
+| `POST /o/revoke/` | RFC 7009 revocation |
+| `POST /o/introspect/` | RFC 7662 introspection, for the MCP server only: `Authorization: Bearer <GREGORY_MCP_SERVICE_KEY>`. Returns `active`, `scope`, `exp`, `aud`, `user_id`, `site_id` and `tier`. Registration-management tokens are never active |
+| `POST /o/register/` | RFC 7591 dynamic client registration. Open, rate limited per address (`OAUTH_DCR_MAX_PER_HOUR`), `authorization_code` clients only, https or loopback redirect URIs |
+| `GET /o/login/` | The sign-in page for the flow (CSRF protected, not frameable, rate limited on failures) |
+
+Clients may instead use an `https` URL as their `client_id` (Client ID Metadata Documents); the server fetches the document with an SSRF-hardened fetcher and applies the same redirect and grant rules as for dynamic registration.
+
+Every token is bound to one site by its `resource`, and carries a tier: `editor` for a person with an active `SiteEditor` grant, `public` for a signed-in person without one on a site that has `api_public` data. A public-tier token never carries `articles:edit`. The `resource` is the only way to name a site; the MCP server rejects a token sent to any other host.
+
 ---
 
 ## Resolving a site for an anonymous caller

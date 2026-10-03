@@ -235,6 +235,10 @@ urlpatterns = (
 		# site-bound key, that caller's own private tenant -- sites/ must
 		# stay unscoped public discovery only.
 		path("tenants/", McpTenantsView.as_view(), name="mcp_tenants"),
+		# OAuth 2.1 authorization server for MCP editor access (MCP-AUTH-PLAN.md):
+		# /o/authorize/, /o/token/, /o/revoke/, /o/introspect/, /o/register/ and
+		# the RFC 8414 metadata at /.well-known/oauth-authorization-server.
+		path("", include("mcpauth.urls")),
 		# Gregory app routes
 		path("", include("gregory.urls")),
 		# Include router routes
