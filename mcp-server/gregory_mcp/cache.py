@@ -27,7 +27,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .client import get_client
-from .site_context import get_current_site_id
+from .site_context import get_cache_tier, get_current_site_id
 from .telemetry import record_cache_status
 
 # The single source of truth for how long the catalog is considered fresh.
@@ -71,7 +71,12 @@ class CatalogCache:
 		# truth or two different sites would collide on one cache entry. This
 		# is the highest-risk failure mode here: one site's subjects/categories
 		# served to another's caller because the key didn't vary by site.
-		return f"{get_current_site_id()}:{path}?{items!r}"
+		#
+		# And the tier (anon or editor): an editor's reads can return more than
+		# an anonymous caller's for the same site, so the two must never share an
+		# entry. The data is the same for every editor of a site, so the person
+		# is not part of the key.
+		return f"{get_current_site_id()}:{get_cache_tier()}:{path}?{items!r}"
 
 	def _lock_for(self, key: str) -> asyncio.Lock:
 		lock = self._locks.get(key)

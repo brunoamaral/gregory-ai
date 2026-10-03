@@ -17,10 +17,20 @@ class Settings:
 	log_level: str
 	log_dir: str | None
 	site_id_override: int | None
+	# Editor access (MCP-AUTH-PLAN.md). All three have to be set for the
+	# authenticated /mcp/editor address to exist; without them the server runs
+	# exactly as before, anonymous /mcp only.
+	service_key: str = ""
+	oauth_issuer: str = ""
+	editor_scheme: str = "https"
 
 	@property
 	def api_base(self) -> str:
 		return self.api_url.rstrip("/")
+
+	@property
+	def editor_enabled(self) -> bool:
+		return bool(self.service_key and self.oauth_issuer)
 
 
 def load_settings() -> Settings:
@@ -43,7 +53,21 @@ def load_settings() -> Settings:
 		log_level=os.environ.get("MCP_LOG_LEVEL", "INFO").upper(),
 		log_dir=os.environ.get("MCP_LOG_DIR", "").strip() or None,
 		site_id_override=_load_site_id_override(),
+		service_key=os.environ.get("GREGORY_MCP_SERVICE_KEY", "").strip(),
+		oauth_issuer=os.environ.get("GREGORY_OAUTH_ISSUER", "").strip().rstrip("/"),
+		editor_scheme=_load_editor_scheme(),
 	)
+
+
+def _load_editor_scheme() -> str:
+	"""`MCP_EDITOR_SCHEME`: the scheme of editor addresses, `https` unless a
+	local setup without TLS says `http`. Anything else fails at startup: the
+	scheme is part of the audience a token is checked against, so a typo here
+	would lock every editor out."""
+	scheme = os.environ.get("MCP_EDITOR_SCHEME", "https").strip().lower() or "https"
+	if scheme not in ("http", "https"):
+		raise RuntimeError(f"MCP_EDITOR_SCHEME must be http or https, got {scheme!r}")
+	return scheme
 
 
 def _load_site_id_override() -> int | None:

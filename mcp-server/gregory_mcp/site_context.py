@@ -23,6 +23,7 @@ here to depend on it safely.
 from __future__ import annotations
 
 import contextvars
+from dataclasses import dataclass
 from typing import Any
 
 _current_site_id: contextvars.ContextVar[int | None] = contextvars.ContextVar(
@@ -57,3 +58,62 @@ def get_current_tenant() -> Any:
 	gate (SiteMiddleware itself, tests) must still check.
 	"""
 	return _current_tenant.get()
+
+
+# The editor tiers (MCP-AUTH-PLAN.md). "editor": a person with an active grant on
+# the site, whose calls go to Django's /editor/ routes. "public": a signed-in
+# person without one, who gets exactly the anonymous /mcp data and tools.
+TIER_EDITOR = "editor"
+TIER_PUBLIC = "public"
+SCOPE_READ = "articles:read"
+SCOPE_EDIT = "articles:edit"
+
+
+@dataclass(frozen=True)
+class EditorSession:
+	"""The verified identity behind one request to the editor address.
+
+	Built by `auth.py` from Django's token introspection, never from anything
+	the client sent. `site_id` is the one site the token is bound to.
+	"""
+
+	user_id: int
+	site_id: int
+	tier: str
+	scopes: frozenset[str]
+
+	@property
+	def is_editor(self) -> bool:
+		return self.tier == TIER_EDITOR
+
+	@property
+	def can_edit(self) -> bool:
+		return self.is_editor and SCOPE_EDIT in self.scopes
+
+
+_editor_context: contextvars.ContextVar[EditorSession | None] = contextvars.ContextVar(
+	"gregory_mcp_editor_context", default=None
+)
+
+
+def get_editor_context() -> EditorSession | None:
+	"""The in-flight request's `EditorSession`, or `None` on the anonymous
+	address (and outside a tracked request). `None` means anonymous, never
+	"editor with unknown rights"."""
+	return _editor_context.get()
+
+
+def get_current_tier() -> str:
+	"""`anon`, `public` or `editor`, for telemetry."""
+	session = get_editor_context()
+	return "anon" if session is None else session.tier
+
+
+def get_cache_tier() -> str:
+	"""`editor` or `anon`, for the catalog cache key.
+
+	The public tier reads exactly what an anonymous caller reads, so it shares
+	the anonymous entries; only the editor tier can see more.
+	"""
+	session = get_editor_context()
+	return "editor" if session is not None and session.is_editor else "anon"

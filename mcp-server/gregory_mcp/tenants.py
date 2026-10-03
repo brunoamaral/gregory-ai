@@ -30,6 +30,13 @@ Resolution order for a request, cheapest/most-certain first:
 3. Neither resolves — `None`. `TenantGateMiddleware` turns that into a
    refusal for every request except `ping`.
 
+The editor address (`/mcp/editor`, MCP-AUTH-PLAN.md) resolves the same way but
+from `GET /editor/tenants/`, which also lists private sites (D18): a private
+site has an editor address and no anonymous one. A signed-in person with no
+editor grant on a public site is served the anonymous directory instead (D15),
+so the public tier sees exactly what `/mcp` shows. The two directories are
+cached separately.
+
 The resolved `Tenant` is exposed via `site_context.get_current_tenant()`,
 set by `site.SiteMiddleware` (which calls `resolve_tenant()` below via a
 lazy import, to avoid a module-load cycle: this module imports the Host
@@ -52,7 +59,7 @@ from .cache import CATALOG_CACHE_TTL_MS, CatalogCache
 from .client import GregoryAPIError, get_client
 from .config import Settings
 from .site import _extract_host_header, _match_domain, _normalize_host
-from .site_context import get_current_tenant
+from .site_context import get_current_tenant, get_editor_context
 
 logger = logging.getLogger("gregory_mcp.tenants")
 
@@ -239,12 +246,14 @@ class TenantsDirectoryError(Exception):
 
 
 _tenants_cache = CatalogCache(ttl_ms=CATALOG_CACHE_TTL_MS)
+_editor_tenants_cache = CatalogCache(ttl_ms=CATALOG_CACHE_TTL_MS)
 
 # The last successfully parsed directory, kept across TTL expiries and
 # fetch failures so a brief API outage degrades to "stale but working"
 # rather than "every request refused". None means "never fetched
 # successfully" -- see _get_tenants_directory()'s docstring.
 _last_good_tenants: list[Tenant] | None = None
+_last_good_editor_tenants: list[Tenant] | None = None
 
 # Set once at startup by init_tenant_resolution() -- None means "no
 # override, resolve from Host". Mirrors the old site.py override, but now
@@ -272,10 +281,12 @@ def reset_tenant_directory() -> None:
 	"""Test-only: undo init_tenant_resolution() and drop every cached/kept
 	directory state, so one test's GREGORY_SITE_ID/`GET /tenants/` state
 	can't leak into another's (mirrors cache.reset_catalog_cache())."""
-	global _site_id_override, _last_good_tenants
+	global _site_id_override, _last_good_tenants, _last_good_editor_tenants
 	_site_id_override = None
 	_last_good_tenants = None
+	_last_good_editor_tenants = None
 	_tenants_cache.clear()
+	_editor_tenants_cache.clear()
 	_directory_unavailable.set(False)
 
 
@@ -283,8 +294,9 @@ def directory_was_unavailable() -> bool:
 	return _directory_unavailable.get()
 
 
-async def _fetch_tenants_raw() -> list[Tenant]:
-	"""GET /tenants/ -> parsed Tenant list.
+async def _fetch_tenants_raw(editor: bool = False) -> list[Tenant]:
+	"""GET /tenants/ (or, for the editor address, GET /editor/tenants/) ->
+	parsed Tenant list.
 
 	Raises on any failure (GregoryAPIError, a non-JSON 2xx body, or a body
 	that isn't a JSON list) rather than degrading to an empty list — unlike
@@ -293,16 +305,20 @@ async def _fetch_tenants_raw() -> list[Tenant]:
 	plan's "Things that will go wrong"). `_get_tenants_directory()` is what
 	turns a raised exception into a stale-copy-or-unavailable outcome.
 	"""
+	path = "/editor/tenants/" if editor else "/tenants/"
 	try:
-		data = await get_client().get("/tenants/")
+		if editor:
+			data = await get_client().get_as_service(path)
+		else:
+			data = await get_client().get(path, editor_routing=False)
 	except json.JSONDecodeError as exc:
-		raise TenantsDirectoryError("non-JSON body from /tenants/") from exc
+		raise TenantsDirectoryError(f"non-JSON body from {path}") from exc
 	if not isinstance(data, list):
-		raise TenantsDirectoryError(f"unexpected /tenants/ shape: {type(data).__name__}")
+		raise TenantsDirectoryError(f"unexpected {path} shape: {type(data).__name__}")
 	return _parse_tenants(data)
 
 
-async def _get_tenants_directory() -> list[Tenant] | None:
+async def _get_tenants_directory(editor: bool = False) -> list[Tenant] | None:
 	"""The current tenant directory, or None if unavailable.
 
 	A cache hit or a fresh successful fetch both update `_last_good_tenants`
@@ -312,20 +328,27 @@ async def _get_tenants_directory() -> list[Tenant] | None:
 	if this process has never fetched successfully
 	(`gregory_tenants_directory_unavailable`).
 	"""
-	global _last_good_tenants
+	global _last_good_tenants, _last_good_editor_tenants
+	cache = _editor_tenants_cache if editor else _tenants_cache
+	last_good = _last_good_editor_tenants if editor else _last_good_tenants
 	try:
-		tenants = await _tenants_cache.get_or_fetch("/tenants/", None, _fetch_tenants_raw)
+		tenants = await cache.get_or_fetch(
+			"/editor/tenants/" if editor else "/tenants/", None, lambda: _fetch_tenants_raw(editor)
+		)
 	except (GregoryAPIError, TenantsDirectoryError):
-		if _last_good_tenants is not None:
+		if last_good is not None:
 			logger.warning("gregory_tenants_directory_stale", exc_info=True)
-			return _last_good_tenants
+			return last_good
 		logger.warning("gregory_tenants_directory_unavailable", exc_info=True)
 		return None
-	_last_good_tenants = tenants
+	if editor:
+		_last_good_editor_tenants = tenants
+	else:
+		_last_good_tenants = tenants
 	return tenants
 
 
-async def resolve_tenant(host_header: str | None) -> Tenant | None:
+async def resolve_tenant(host_header: str | None, *, editor: bool = False) -> Tenant | None:
 	"""The Tenant for a request that carried `host_header` as its Host, or
 	None if nothing resolves or the directory is unavailable. See the
 	module docstring for the resolution order.
@@ -334,7 +357,7 @@ async def resolve_tenant(host_header: str | None) -> Tenant | None:
 	effect, for TenantGateMiddleware's log message only — it never changes
 	whether this function returns a tenant.
 	"""
-	tenants = await _get_tenants_directory()
+	tenants = await _get_tenants_directory(editor)
 	if tenants is None:
 		_directory_unavailable.set(True)
 		return None
@@ -368,16 +391,35 @@ class TenantGateMiddleware(ServerMiddleware[Any]):
 	still logged as an `mcp_request` with `site_id: null` and
 	`error_kind: "protocol_error"` — TelemetryMiddleware's own MCPError
 	handler is what turns raising here into that log line.
+
+	Each mount has its own rule (D18). The anonymous address serves only
+	`api_public` sites, so a private site that has an editor address is
+	refused here with the same "not available at this address" error as any
+	unknown host. The editor address has no such rule, but it refuses a request
+	whose token belongs to a different site than the host resolved to, so a
+	mismatch fails even if the audience check upstream of this has a bug (D4).
 	"""
+
+	def __init__(self, editor: bool = False):
+		self._editor = editor
 
 	async def __call__(self, ctx: ServerRequestContext[Any, Any], call_next: CallNext) -> HandlerResult:
 		if ctx.request_id is None or ctx.method == "ping":
 			return await call_next(ctx)
 
-		if get_current_tenant() is not None:
+		tenant = get_current_tenant()
+		if tenant is not None and self._editor:
+			session = get_editor_context()
+			if session is not None and session.site_id == tenant.site_id:
+				return await call_next(ctx)
+			reason = "token site mismatch"
+		elif tenant is not None and tenant.api_public:
 			return await call_next(ctx)
+		elif tenant is not None:
+			reason = "private site on the anonymous address"
+		else:
+			reason = "directory unavailable" if directory_was_unavailable() else "no tenant matched"
 
-		reason = "directory unavailable" if directory_was_unavailable() else "no tenant matched"
 		host = _extract_host_header(ctx)
 		logger.warning("gregory_tenant_gate_refused", extra={"host": host, "reason": reason, "method": ctx.method})
 		raise MCPError(TENANT_NOT_FOUND_CODE, TENANT_NOT_FOUND_MESSAGE)
