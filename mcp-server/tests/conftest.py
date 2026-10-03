@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Callable
 
 import httpx2
@@ -65,6 +66,46 @@ def mock_gregory(monkeypatch):
 	import gregory_mcp.client as client_module
 
 	client = GregoryClient(TEST_SETTINGS)
+	recorder = RecordingTransport(lambda request: httpx2.Response(200, json={}))
+	client._client._transport = recorder.transport
+
+	monkeypatch.setattr(client_module, "_client", client)
+	reset_catalog_cache()
+	reset_tenant_directory()
+
+	class Handle:
+		def set_handler(self, fn):
+			recorder._handler = fn
+
+		@property
+		def requests(self):
+			return recorder.requests
+
+	yield Handle()
+	reset_catalog_cache()
+	reset_tenant_directory()
+
+
+# Editor access is configured: the service credential (sent to Django as a
+# bearer, never a user's token) and the public issuer URL clients are told to
+# sign in at.
+EDITOR_SETTINGS = dataclasses.replace(
+	TEST_SETTINGS,
+	# Bound like production (0.0.0.0): the SDK's localhost-only Host allowlist
+	# would otherwise answer 421 for the per-site hostnames these tests use.
+	host="0.0.0.0",
+	service_key="svc-key-for-tests",
+	oauth_issuer="https://api.test",
+)
+
+
+@pytest.fixture
+def mock_editor_gregory(monkeypatch):
+	"""`mock_gregory`, but with a client that holds the service credential, as the
+	editor address needs. Same handle: `set_handler(fn)`, `.requests`."""
+	import gregory_mcp.client as client_module
+
+	client = GregoryClient(EDITOR_SETTINGS)
 	recorder = RecordingTransport(lambda request: httpx2.Response(200, json={}))
 	client._client._transport = recorder.transport
 

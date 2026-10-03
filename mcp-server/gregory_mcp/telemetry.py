@@ -27,7 +27,7 @@ from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, Server
 from mcp.shared.exceptions import MCPError
 
 from .enums import CategoryModality
-from .site_context import get_current_site_id
+from .site_context import get_current_site_id, get_current_tier, get_editor_context
 
 logger = logging.getLogger("gregory_mcp.telemetry")
 
@@ -261,7 +261,16 @@ class TelemetryMiddleware(ServerMiddleware[Any]):
 			# consumer tell "resolved to no site" apart from "this server
 			# predates site_id" (an absent key can't distinguish the two).
 			"site_id": get_current_site_id(),
+			# anon (the open /mcp address), public (signed in to the editor
+			# address without an editor grant) or editor. Lets us count people
+			# who sign in without access. user_id is the Django user id, for
+			# editors only, and never joins to `mcp_intent`, which carries neither
+			# (intent.py).
+			"tier": get_current_tier(),
 		}
+		session = get_editor_context()
+		if session is not None and session.is_editor:
+			event["user_id"] = session.user_id
 
 		params = ctx.params or {}
 		tool_name = params.get("name") if ctx.method == "tools/call" else None

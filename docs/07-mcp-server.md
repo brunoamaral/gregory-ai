@@ -2,11 +2,13 @@
 
 > Audience: developers connecting an LLM client to GregoryAI, or maintaining `mcp-server/`.
 
-`mcp-server/` is a read-only [MCP](https://modelcontextprotocol.io/) server that lets LLM
+`mcp-server/` is an [MCP](https://modelcontextprotocol.io/) server that lets LLM
 clients (Claude Code, Claude Desktop, etc.) query the GregoryAI REST API — articles,
 clinical trials, authors, subjects, categories, and sponsors — without hand-writing HTTP
-calls. It is a thin, stateless proxy: no database access, no ORM, no write path. Every
-request it can issue is a `GET`.
+calls. It is a thin, stateless proxy: no database access, no ORM. The anonymous endpoint
+(`/mcp`) is read-only: every request it can issue is a `GET`. Signed-in editors get a
+second endpoint, `/mcp/editor`, that can also edit a site's article content — see
+[Editor access](#editor-access-mcpeditor).
 
 It runs as its own container (`gregory-mcp` in `docker-compose.yaml`), independent of the
 Django app, and talks to a GregoryAI instance over plain HTTP exactly like any other API
@@ -36,6 +38,30 @@ claude mcp add --transport http gregory https://gregory-ai.<your-domain>/mcp
 ### Claude Desktop
 
 Add a remote MCP connector pointing at the same URL from Settings → Connectors.
+
+### Editing (signed-in editors)
+
+Editors connect to the other address, `https://gregory-ai.<site domain>/mcp/editor`, and sign
+in when the client asks. **Add one connector per site.** A sign-in is bound to the one site
+whose host it was issued for and is refused on any other (the token's audience is that
+site's editor address), so an editor of two sites adds two connectors and signs in twice.
+Keep the anonymous `/mcp` connector as well if you want it; the two do not interfere.
+
+The editor needs a grant on the site (see
+[06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#mcp-editor-access)).
+Without one, a site with public data still signs the person in but gives the same read-only
+tools as `/mcp`, and a site without public data refuses the sign-in.
+
+| Client | How to connect |
+|:---|:---|
+| Claude Code | `claude mcp add --transport http gregory-edit https://gregory-ai.<site domain>/mcp/editor`, then run `/mcp` in a session and choose Authenticate. |
+| Claude Desktop and claude.ai | Settings → Connectors → Add custom connector, URL `https://gregory-ai.<site domain>/mcp/editor`, then Connect. Leave any OAuth client ID and secret fields empty: the client registers itself. |
+| Other MCP clients | Any client that supports the MCP authorization flow (OAuth 2.1 with PKCE, protected resource metadata discovery and dynamic client registration or client ID metadata documents) works with the URL alone. |
+
+The browser opens a Gregory sign-in page on the API host, where the editor logs in and
+approves the connector for that site. A superuser revokes access from the **MCP editors**
+inline on the Site admin page; it ends at once for that site's tokens (the MCP server
+re-checks within a minute).
 
 ---
 
@@ -298,7 +324,10 @@ anonymously across tenants, so nothing is lost by advertising `private` everywhe
 
 ## Auth
 
-None. The server exposes exactly what an anonymous API caller already sees — the same
+`/mcp` has none, and `/mcp/editor` is signed in; the second is described under
+[Editor access](#editor-access-mcpeditor). The rest of this section is about `/mcp`.
+
+The anonymous endpoint exposes exactly what an anonymous API caller already sees — the same
 public organisations any unauthenticated `GET` against the REST API returns. Nothing new
 is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer,
 per (client address, tool name) — the tool name coming from the client-controlled
@@ -452,6 +481,43 @@ Two things that are easy to get wrong:
 nginx -t && systemctl reload nginx
 ```
 
+### Enabling editor access
+
+Nothing above changes until you opt in, and deploying this code alone does not open
+`/mcp/editor`. To turn it on:
+
+1. Generate a service key and put the same value in `.env` for both containers (compose
+   passes it to `gregory` and `gregory-mcp`; see `example.env`):
+
+   ```bash
+   python -c "import secrets; print(secrets.token_urlsafe(48))"
+   # GREGORY_MCP_SERVICE_KEY=<that value>
+   ```
+
+   Set `OAUTH_ISSUER` only if the API is not at `https://api.<DOMAIN_NAME>`;
+   `MCP_EDITOR_HOST_PREFIX` only if the sites' MCP hosts are not `gregory-ai.<site domain>`.
+   Keep `GREGORY_MCP_API_URL` on the internal URL (the default, `http://gregory:8000`):
+   the container needs `/editor/` and `/o/introspect/`, which nginx hides from the public
+   host.
+2. In the nginx example config, add the three pieces that are new:
+   - in `conf.d/mcp.conf`: the `mcp_editor_per_client` `limit_req_zone`;
+   - in the API host's server block: `location ^~ /editor/` and
+     `location = /o/introspect/` returning 404, and the two cleared
+     `X-Gregory-Editor-*` request headers in `location /`;
+   - in **every** site's `gregory-ai.<site domain>` server block: `location /mcp/editor`
+     (own rate-limit zone, SSE settings like `/mcp`) and
+     `location = /.well-known/oauth-protected-resource/mcp/editor`. Without the second, a
+     client that gets a 401 cannot find where to sign in.
+
+   No new DNS records or certificates are needed: the editor address is on the host each
+   site already uses for `/mcp`.
+3. `docker compose up -d gregory gregory-mcp`, then `nginx -t && systemctl reload nginx`.
+4. Give people access on the Site admin page (the **MCP editors** inline) and have them
+   connect as described under [Editing](#editing-signed-in-editors).
+
+To turn it off again, unset `GREGORY_MCP_SERVICE_KEY` and recreate both containers: the
+process then serves `/mcp` only, and Django refuses introspection and `/editor/`.
+
 ### Verifying
 
 ```bash
@@ -494,16 +560,125 @@ dozen should return `200` and the rest `429`.
 
 Client config URL, **without the trailing slash**: `https://<host>/mcp`
 
+With editor access enabled, check the editor address the same way. An unauthenticated
+request must be refused with a pointer to the sign-in, never answered with data:
+
+```bash
+curl -s -i --max-time 5 -X POST https://<host>/mcp/editor \
+  -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{}'
+# expect: HTTP 401 and
+#   WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource/mcp/editor"
+
+curl -s https://<host>/.well-known/oauth-protected-resource/mcp/editor
+# expect JSON with "resource": "https://<host>/mcp/editor" and "authorization_servers"
+
+curl -s -o /dev/null -w '%{http_code}\n' https://api.<your-domain>/editor/tenants/            # expect 404
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://api.<your-domain>/o/introspect/      # expect 404
+curl -s https://api.<your-domain>/.well-known/oauth-authorization-server                       # expect JSON
+```
+
+A `404` on the first means the `location /mcp/editor` block (or the process's editor
+configuration) is missing on that host. A `502` on one of the first two means the
+`gregory-mcp` container is not reachable on `127.0.0.1:8001`; a `502` on one of the three
+`api.<your-domain>` checks means the `gregory` container is not reachable on
+`127.0.0.1:8000`. A `503` on a signed-in call means Django could not be asked to check the
+token (the service key differs between the two containers, or `gregory` is down).
+
 ### After that
 
 Every push to `main` that passes `Tests` rebuilds and redeploys both containers with no
 manual step. The one exception is another change to a *service definition* in
 `docker-compose.yaml` — those still need the checkout on the server updating first.
 
+## Editor access (`/mcp/editor`)
+
+Each site has a second address next to the anonymous one:
+
+```
+https://gregory-ai.<your-domain>/mcp/editor
+```
+
+It is served by the same process and port as `/mcp`. It is off until both
+`GREGORY_MCP_SERVICE_KEY` and `GREGORY_OAUTH_ISSUER` are set; without them the process serves
+`/mcp` only and nothing about the anonymous endpoint changes. Sign-in is OAuth 2.1 with the
+authorization server in Django (see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)). The
+token is bound to one site by its audience (the `resource` of that site's editor address), so a
+token for site A is a `401` on site B's host.
+
+### Authentication
+
+The MCP server does not hold users or issue tokens. `auth.py` is a small ASGI layer in front of
+the editor endpoint, picking the site from the request's `Host` (the SDK's own auth middleware
+assumes one fixed resource URL, so it cannot serve one process for many hosts; it reuses the
+SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
+
+- No token, or a token that is inactive, expired, for another site, or for another address:
+  `401` with `WWW-Authenticate: Bearer resource_metadata="https://<host>/.well-known/oauth-protected-resource/mcp/editor"`.
+  Never anonymous data on the editor address.
+- `GET /.well-known/oauth-protected-resource/mcp/editor` (RFC 9728) is public, per host, and
+  names the site's editor address as `resource`, Django's issuer as the authorization server,
+  and the scopes `articles:read` and `articles:edit`.
+- Tokens are checked by introspection (RFC 7662) against Django, using the service key. Results
+  are cached for 60 seconds, never past the token's own expiry, keyed by a hash of the token.
+  If Django cannot be reached the answer is `503` with `Retry-After`, not a sign-in loop.
+- The user's token is never forwarded to Django on any other request. Reads and writes carry
+  `Authorization: Bearer <service key>` plus `X-Gregory-Editor-User` and `X-Gregory-Editor-Site`
+  taken from the verified token, and Django re-checks the grant on every request.
+- Private sites (`api_public` off) get an editor address too; only the anonymous `/mcp` is
+  refused for them.
+
+### What each sign-in can do
+
+| Sign-in | Tools |
+|:---|:---|
+| Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
+| Editor, read-only grant | the ten read tools plus `get_article_history` |
+| Editor with the edit scope | all of those plus four write tools |
+
+`tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
+does not exist. `GregoryClient` refuses a write without an edit session as a second lock, and
+writes are never retried (a timeout may or may not have been applied, and the tool says so).
+Reads on this address go to Django's `/editor/` routes as the signed-in person, so editors see
+their site's whole published scope, and the response cache is keyed by tier so an editor's
+answer is never served to `/mcp`.
+
+| Tool | Backing route | Notes |
+|:---|:---|:---|
+| `update_article_editorial` | `PATCH /editor/articles/{id}/editorial/` | `takeaways` and/or `summary_plain_english` for this site. Empty string clears. |
+| `set_article_relevance` | `PUT /editor/articles/{id}/relevance/{subject_id}/` | `true`, `false` or `null` (not reviewed). Applies on every site covering the subject. |
+| `link_trial_to_article` | `POST /editor/articles/{id}/trials/` | Idempotent. |
+| `unlink_trial_from_article` | `DELETE /editor/articles/{id}/trials/{trial_id}/` | Deletes an editor link, hides an automatic one. |
+| `get_article_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. |
+
+Each takes `article_id` or `doi` (exactly one; both or neither is `INVALID_PARAMS`). A DOI shared
+by two articles is a readable error listing the ids. No tool takes a site. Write tools carry
+`destructive_hint` (except link, which only adds) and `idempotent_hint`, and ask the model to
+show the proposed text and get confirmation first; the rate limit (60 per hour, 500 per day per
+editor and site) and Django's history are the safeguards that do not depend on the client.
+Failures raise `ToolError` with a message the model can act on; since mcp 2.1 any other
+exception reaches it only as "Error executing tool <name>".
+
+`tools/list` and `server/discover` on this address are cached for 5 minutes (private) instead
+of 30, so a newly granted editor sees the edit tools soon after reconnecting.
+
+### Logs
+
+`mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
+`mcp_edit` line with the tool, article id, field names and outcome, never values (those live in
+Django's history). Tokens, authorization headers and the service key are never logged.
+
+---
+
 ## Risks
 
 **Unauthenticated endpoint.** No data-leak risk, but anyone who learns the URL can drive
 query load against Django. Per-tool `limit_req` in nginx is the mitigation, not optional.
+
+**The service key.** `GREGORY_MCP_SERVICE_KEY` lets the holder call `/editor/` as any editor
+by naming one in a header, so treat it like a database password: only in `.env`, never in the
+repo or a log, and rotate it by changing both containers together. Django also checks the
+named person's grant on every request, so the key alone cannot reach a site the named person
+has no grant on, and nginx hides `/editor/` and `/o/introspect/` from the public internet.
 
 **Bulk export stays out.** `all_results=true` on `/articles/` is a known failure mode
 (~98s, very large responses — see [csv-export.md](csv-export.md)). No tool here exposes it.

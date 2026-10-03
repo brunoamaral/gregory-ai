@@ -9,6 +9,7 @@ from ..client import GregoryAPIError, get_client
 from ..compact import compact_article, strip_team_data
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
+from ..site_context import get_editor_context
 from ..zero_result import guidance_for
 
 DEFAULT_PAGE_SIZE = 10
@@ -105,6 +106,15 @@ async def search_articles(
 	return response
 
 
+def _detail_params() -> dict | None:
+	"""An editor's detail read includes the site's editorial content (the
+	takeaways and summary they may be about to edit), which Django leaves out
+	without ``?include=editorial``. Anonymous and public-tier reads are
+	unchanged."""
+	session = get_editor_context()
+	return {"include": "editorial"} if session is not None and session.is_editor else None
+
+
 async def get_article(article_id: int) -> dict:
 	"""Fetch the full record for one article by ID, including authors,
 	ML predictions, linked clinical trials, and the untruncated summary.
@@ -113,7 +123,7 @@ async def get_article(article_id: int) -> dict:
 		ToolError: If the article can't be found.
 	"""
 	try:
-		article = await get_client().get(f"/articles/{article_id}/")
+		article = await get_client().get(f"/articles/{article_id}/", _detail_params())
 	except GregoryAPIError as exc:
 		# Django returns 404 both for an article that doesn't exist and one
 		# outside this site's scope — deliberately identical, so existence
