@@ -1,6 +1,6 @@
 # MCP authentication and editor access
 
-Status: draft, not started. Written 2026-10-03.
+Status: approved for implementation, not started. Written 2026-10-03.
 
 Adds a second, authenticated access level to the MCP server (`mcp-server/`). Anonymous
 callers keep what they have today: read access to one site's public data. Named editors,
@@ -28,6 +28,13 @@ These come from the requirements discussion on 2026-10-03.
 | D13 | Each site has its own editor address. The editor adds that address to their MCP client, signs in through it, and gets permissions for that site only. An organisation with more sites means one more connector per site, each with its own sign-in. There is no site switcher and no address that covers several sites. |
 | D14 | Deployment option A: one process serves every site, with our own per-`Host` auth middleware on the editor mount. |
 | D15 | Signing in on a site's editor address without editor access for that site still gives read access to that site's public data, if it has any. |
+| D16 | Relevance stays per subject. An editor can set relevance only for subjects in their site's `scope_subjects`, and the change applies wherever that subject is used. No schema change, and ML training labels are unchanged. |
+| D17 | Editors read their site's published scope only: `scope_subjects`, including on private sites, plus edit history. The curation queue (unpublished articles) is not exposed over MCP. |
+| D18 | A private site (`api_public=False`) with `mcp_enabled` serves its editor address to granted editors and refuses its anonymous `/mcp` address. |
+| D19 | Editors sign in with their Django username and password. Client editors without an account get one. No single sign-on in this project. |
+| D20 | Client registration supports both dynamic client registration (RFC 7591) and Client ID Metadata Documents. |
+| D21 | Rate limits start at 60 edits per hour and 500 per day per (user, site), configurable in settings, and get tuned from production logs. |
+| D22 | No email digest of MCP edits in this project. Edit history is available through `get_article_history` and the admin. |
 | D5 | Editors read more than anonymous callers. |
 | D6 | Editable: `takeaways`, `summary_plain_english`, subject relevance (`ArticleSubjectRelevance.is_relevant`), and links between an article and a trial. |
 | D7 | Global article fields (`access`, `retracted`, `kind`) are not editable over MCP. They stay on `POST /articles/edit/` (API key) and the admin. |
@@ -72,7 +79,7 @@ Two existing behaviours conflict with this feature:
 
 ### MCP SDK
 
-The server is pinned to `mcp==2.3.0` (upgraded from 2.0.0 on branch `claude/mcp-sdk-2.3`). The SDK includes resource-server support: `MCPServer(auth=AuthSettings(...), token_verifier=...)`, protected resource metadata, and `WWW-Authenticate` on 401. Since 2.2.0, `AuthSettings.validate_token_resource=True` rejects a token whose RFC 8707 resource isn't `resource_server_url`. It defaults to off and warns when unset, and 3.0 will turn it on by default.
+The server is pinned to `mcp==2.3.0` (upgraded from 2.0.0 in #889). The SDK includes resource-server support: `MCPServer(auth=AuthSettings(...), token_verifier=...)`, protected resource metadata, and `WWW-Authenticate` on 401. Since 2.2.0, `AuthSettings.validate_token_resource=True` rejects a token whose RFC 8707 resource isn't `resource_server_url`. It defaults to off and warns when unset, and 3.0 will turn it on by default.
 
 Two limits shape this design:
 
@@ -172,7 +179,7 @@ Django becomes the OAuth 2.1 authorization server with `django-oauth-toolkit` (D
 |:--|:--|
 | Endpoints | `/o/authorize/`, `/o/token/`, `/o/revoke/`, `/o/introspect/`, on the API domain |
 | Metadata | `/.well-known/oauth-authorization-server` (RFC 8414) |
-| Client registration | Dynamic client registration (RFC 7591) and Client ID Metadata Documents, so clients register without manual setup. DOT supports neither out of the box, so this is custom work (see [Open questions](#open-questions)). |
+| Client registration | Dynamic client registration (RFC 7591) and Client ID Metadata Documents, so clients register without manual setup. DOT supports neither out of the box, so this is custom work (D20). |
 | Grant | Authorization code with PKCE (S256) only. No implicit grant, no password grant. |
 | Login and consent | A minimal, branded login page plus a consent screen naming the site, the client application, and the actions it can take. Not the Django admin login. |
 | Token lifetime | Access token 1 hour. Refresh token 30 days, rotated on each use. |
@@ -222,17 +229,16 @@ The MCP authorization spec forbids passing the client's token to a downstream AP
 
 ### Editor read scope
 
-D5 says editors read more. The proposed scope, all limited to the token's site:
+D5 says editors read more. D17 limits that to published content. The scope, all limited to the token's site:
 
 | Data | Anonymous | Editor |
 |:--|:--|:--|
 | Articles and trials in `scope_subjects` | Yes, `api_public` sites only | Yes, private sites too |
-| Articles from the site organisation's sources with no subject in any scope (the curation queue) | No | Yes |
 | Relevance not yet reviewed (`is_relevant` null) | Hidden by `relevant=true` filters | Filterable explicitly |
 | Editorial content | Site content (after D3) | Same, plus `updated_by` and `updated_at` |
 | Edit history of a record | No | Yes, through `get_article_history` |
 
-Private sites: `/tenants/` and `TenantGateMiddleware` currently serve only sites with `mcp_enabled`. An `mcp_enabled` site with `api_public=False` would then serve its editor endpoint and refuse its anonymous one. That is a new tenant state, covered under [Open questions](#open-questions).
+Private sites (D18): `/tenants/` and `TenantGateMiddleware` currently serve only sites with `mcp_enabled`. An `mcp_enabled` site with `api_public=False` serves its editor address and refuses its anonymous `/mcp` address with the existing "not available at this address" error. `GET /tenants/` already returns `api_public` per tenant (`Tenant.api_public`), so `TenantGateMiddleware` gets a per-mount rule: the anonymous mount requires `api_public=True`, the editor mount doesn't. On a private site, a signed-in user without a grant is refused at consent (D15), since there is no public data to fall back to.
 
 Cache isolation: `CatalogCache` keys by `site_id` only. Editor reads can return more than anonymous reads, so the key becomes `(site_id, tier)`, where `tier` is `anon` or `editor`. The cached data is the same for every editor of a site, so the user isn't part of the key.
 
@@ -310,7 +316,7 @@ class ArticleSiteContent(models.Model):
 
 #### Relevance is shared across sites
 
-`ArticleSubjectRelevance` is keyed by subject, not by site. If two sites list the same subject in `scope_subjects`, an editor on one site changes relevance for both. D3 makes editorial content per site but doesn't cover relevance. See [Open questions](#open-questions).
+`ArticleSubjectRelevance` is keyed by subject, not by site. If two sites list the same subject in `scope_subjects`, an editor on one site changes relevance for both. D16 accepts this: relevance describes the article and the subject, not the site. `set_article_relevance` rejects a `subject_id` outside the token site's `scope_subjects`, and the tool description tells the model the change applies to every site covering that subject.
 
 ### Rate limits (D12)
 
@@ -359,13 +365,7 @@ Each phase is one PR and leaves production working.
 
 ## Open questions
 
-1. Relevance per site. Keep relevance per subject and accept that sites sharing a subject share relevance? Or add a `site` field to `ArticleSubjectRelevance`? The second option also changes the ML training labels and every `relevant=` filter. Answering needs a production count of subjects that appear in more than one site's `scope_subjects`.
-2. Client registration. claude.ai and Claude Desktop need a client to register itself. Build dynamic client registration on DOT, support Client ID Metadata Documents only, or both? Check which one each target client uses at implementation time.
-3. Private sites. Should an `mcp_enabled` site with `api_public=False` serve an editor endpoint only? `TenantGateMiddleware` and `/tenants/` would need a per-endpoint rule.
-4. Editor read scope. Confirm the table in [Editor read scope](#editor-read-scope), especially the curation queue, which exposes content not yet published anywhere.
-5. Rate limit numbers. 60 per hour and 500 per day are placeholders. Set them from expected editor workload.
-6. Login identity. Django username and password only, or single sign-on (for example Google) for client editors who don't have a Django password?
-7. Notification. Should the site's admin email receive a digest of MCP edits, alongside `send_admin_summary`?
+None. Questions raised during drafting were resolved on 2026-10-03 and recorded as D13 to D22.
 
 ## Non-goals
 
