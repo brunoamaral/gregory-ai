@@ -12,11 +12,12 @@ from django.conf import settings
 from organizations.models import Organization
 from gregory.models import Team
 from sitesettings.models import CustomSetting
-from subscriptions.models import Lists, Subscribers
+from subscriptions.models import ListSubscription, Lists, Subscribers
 from subscriptions.views import (
 	subscribe_view,
 	_origin_matches_allowed,
 	_check_origin_allowed,
+	_get_client_ip,
 	_resolve_site_from_request,
 	_site_allowed_domains,
 )
@@ -185,6 +186,92 @@ class SubscribeViewTest(TestCase):
 # gregory/site_resolution.py as part of Phase 3 of site-scoped API
 # visibility -- visibility must not import from the subscriptions app. Its
 # tests moved with it: see gregory/tests/test_site_resolution.py.
+
+
+class ConsentIPTest(TestCase):
+	"""consent_ip is the GDPR consent record, so it must be the address nginx
+	saw, not one the client chose.
+
+	nginx's ``X-Forwarded-For $proxy_add_x_forwarded_for`` appends to whatever
+	the client sent, so the first entry is client-chosen, and nginx passes a
+	client-sent ``CF-Connecting-IP`` through untouched on hostnames that don't
+	go through Cloudflare. ``X-Real-IP $remote_addr`` replaces any client value.
+	"""
+
+	REAL_IP = "203.0.113.10"
+	SPOOFED_IP = "198.51.100.66"
+	NGINX_IP = "172.18.0.1"
+
+	def setUp(self):
+		self.factory = RequestFactory()
+		self.org = Organization.objects.create(name="Test Org")
+		self.team = Team.objects.create(
+			organization=self.org, name="Alpha", slug="alpha"
+		)
+		Site.objects.update_or_create(
+			id=settings.SITE_ID, defaults={"domain": "example.com", "name": "example"}
+		)
+		self.lst = Lists.objects.create(list_name="Daily", team=self.team)
+
+	def _subscribe(self, **headers):
+		data = {
+			"first_name": "Alice",
+			"last_name": "Smith",
+			"email": "alice@example.com",
+			"list": [str(self.lst.pk)],
+		}
+		request = self.factory.post("/subscribe/", data, **headers)
+		response = subscribe_view(request)
+		self.assertEqual(response.status_code, 302)
+		self.assertIn("/thank-you/", response["Location"])
+		return ListSubscription.objects.get(
+			subscriber__email="alice@example.com", list=self.lst
+		)
+
+	def test_spoofed_x_forwarded_for_not_recorded(self):
+		ls = self._subscribe(
+			HTTP_X_FORWARDED_FOR=f"{self.SPOOFED_IP}, {self.REAL_IP}",
+			HTTP_X_REAL_IP=self.REAL_IP,
+			REMOTE_ADDR=self.NGINX_IP,
+		)
+		self.assertEqual(ls.consent_ip, self.REAL_IP)
+
+	def test_spoofed_cf_connecting_ip_not_recorded(self):
+		ls = self._subscribe(
+			HTTP_CF_CONNECTING_IP=self.SPOOFED_IP,
+			HTTP_X_REAL_IP=self.REAL_IP,
+			REMOTE_ADDR=self.NGINX_IP,
+		)
+		self.assertEqual(ls.consent_ip, self.REAL_IP)
+
+	def test_spoofed_headers_without_x_real_ip_record_socket_address(self):
+		ls = self._subscribe(
+			HTTP_CF_CONNECTING_IP=self.SPOOFED_IP,
+			HTTP_X_FORWARDED_FOR=self.SPOOFED_IP,
+			REMOTE_ADDR=self.REAL_IP,
+		)
+		self.assertEqual(ls.consent_ip, self.REAL_IP)
+
+	def test_resubscribe_refreshes_consent_ip_from_x_real_ip(self):
+		ls = self._subscribe(HTTP_X_REAL_IP=self.NGINX_IP)
+		ls.is_active = False
+		ls.save(update_fields=["is_active"])
+		ls = self._subscribe(
+			HTTP_CF_CONNECTING_IP=self.SPOOFED_IP,
+			HTTP_X_FORWARDED_FOR=self.SPOOFED_IP,
+			HTTP_X_REAL_IP=self.REAL_IP,
+		)
+		self.assertTrue(ls.is_active)
+		self.assertEqual(ls.consent_ip, self.REAL_IP)
+
+	def test_get_client_ip_ignores_cf_connecting_ip_and_x_forwarded_for(self):
+		request = self.factory.get(
+			"/",
+			HTTP_CF_CONNECTING_IP=self.SPOOFED_IP,
+			HTTP_X_FORWARDED_FOR=self.SPOOFED_IP,
+			REMOTE_ADDR=self.REAL_IP,
+		)
+		self.assertEqual(_get_client_ip(request), self.REAL_IP)
 
 
 class OriginMatchesAllowedTest(TestCase):
