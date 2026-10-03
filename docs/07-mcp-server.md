@@ -115,7 +115,7 @@ server — see [Risks](#risks).
 ### Not-found errors
 
 `get_article`, `get_trial`, and `get_author` turn a `404` from their endpoint into a clear
-`ValueError` naming the record — e.g. `Article 123 was not found.` — rather than the
+`ToolError` naming the record — e.g. `Article 123 was not found.` — rather than the
 generic upstream error text. Django returns `404` both for a record that doesn't exist and
 one outside this site's scope (see [Tenant resolution](#tenant-resolution-site_id)),
 deliberately identical so existence isn't leaked; this server preserves that and never
@@ -123,6 +123,12 @@ implies the record might exist elsewhere. Any other error status still propagate
 unchanged. The message says nothing about "instances" or tenants either (decision F,
 `MCP-MULTI-TENANCY-PLAN.md`) — it used to say "was not found in this instance"; that
 implied other instances exist, which is exactly what a single-tenant surface must not say.
+
+Both kinds of error have to be a `ToolError` (`GregoryAPIError` subclasses it). Since
+mcp 2.1 the SDK treats any other exception escaping a tool as a crash: the model sees only
+`Error executing tool <name>`, and the SDK logs a traceback at ERROR. A `ToolError` keeps
+its message for the model and is logged at INFO. `tests/test_server.py` drives a
+`tools/call` through the SDK to check both cases.
 
 ---
 

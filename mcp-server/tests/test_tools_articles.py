@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx2
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 import gregory_mcp.tools.articles as articles_module
 from gregory_mcp.client import GregoryAPIError
@@ -194,7 +195,7 @@ async def test_get_article_strips_team_data(mock_gregory):
 async def test_get_article_404_says_not_found(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
 
-	with pytest.raises(ValueError) as exc_info:
+	with pytest.raises(ToolError) as exc_info:
 		await get_article(999)
 
 	message = str(exc_info.value)
