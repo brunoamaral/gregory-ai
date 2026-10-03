@@ -16,7 +16,7 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 | **CustomSetting** | Per-site settings: site title, email footer, admin email, sender email prefix, whether the site publishes author profile pages, `scope_subjects` (what the site owns for anonymous API/RSS visibility) and `api_public` (whether that scope is visible to anonymous API callers), `rss_enabled` (whether the site serves [RSS feeds](03-api-and-rss-feeds.md#rss-feeds) at `/feed/sites/{site_id}/...`, scoped to `scope_subjects` regardless of `api_public`), the [sitemap](03-api-and-rss-feeds.md#sitemaps) switches (master switch, curated subjects, articles-relevant-only, include trials, trial recruitment statuses), the export/about metadata (description, contact email, data licence, citation) shown on the "About this file" sheet of `export_trials_xlsx` workbooks, and `mcp_enabled`/`mcp_description` (whether this site offers a research assistant and how it's described to the model — see [docs/02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#customsetting-sitesettings-app)). The Site admin page also carries `SiteMcpPrompt` and `SiteMcpDocument` inlines for that site's authored prompts and reference documents. |
 | **TeamCredentials** | Postmark API token and URL scoped to a specific team. |
 | **OrganisationCredentials** | Postmark API token and URL scoped to an organisation. Used as fallback when a team has no credentials. |
-| **OrganisationSite** | Links an Organisation to one or more Sites. One can be marked as `is_default`. |
+| **OrganisationSite** | Links an Organisation to one or more Sites. A Site belongs to exactly one Organisation (database constraint `unique_site_organization`). One of an Organisation's Sites can be marked as `is_default`. |
 
 ---
 
@@ -121,7 +121,7 @@ An Organisation can have one or more Sites. To configure this:
 3. In the **Sites** inline section, add one or more Sites.
 4. Tick **Is default** on the Site that should be used as the fallback for teams without an explicit site.
 
-Only one Site per Organisation can be marked as default (enforced by a database constraint).
+Only one Site per Organisation can be marked as default (enforced by a database constraint). A Site can belong to only one Organisation: adding a Site that another Organisation already owns is rejected with a validation error.
 
 ---
 

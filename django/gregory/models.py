@@ -1829,7 +1829,10 @@ class OrganizationSite(models.Model):
 		"sites.Site",
 		on_delete=models.CASCADE,
 		related_name="organization_sites",
-		help_text="The Django site associated with this organization.",
+		help_text=(
+			"The Django site associated with this organization. A site "
+			"belongs to exactly one organization."
+		),
 	)
 	is_default = models.BooleanField(
 		default=False,
@@ -1850,7 +1853,11 @@ class OrganizationSite(models.Model):
 				fields=["organization"],
 				condition=models.Q(is_default=True),
 				name="unique_default_site_per_organization",
-			)
+			),
+			models.UniqueConstraint(
+				fields=["site"],
+				name="unique_site_organization",
+			),
 		]
 
 	def __str__(self):
