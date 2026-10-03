@@ -442,7 +442,8 @@ def visible_trial_references_queryset(visible_subject_ids):
 	``None`` means "no middleware / no scoping" -- same fallback contract as
 	``SubjectVisibilityMixin``.
 	"""
-	qs = ArticleTrialReference.objects.select_related("trial")
+	# suppressed: an editor unlinked an auto-detected link. Hidden everywhere.
+	qs = ArticleTrialReference.objects.select_related("trial").filter(suppressed=False)
 	if visible_subject_ids is not None:
 		qs = qs.filter(
 			Exists(
@@ -458,7 +459,9 @@ def visible_article_references_queryset(visible_subject_ids):
 	"""The reverse of ``visible_trial_references_queryset``: prefetches
 	``Trials.article_references`` filtered to referenced ARTICLES that carry
 	a visible subject, for ``TrialSerializer.get_articles()``."""
-	qs = ArticleTrialReference.objects.select_related("article")
+	qs = ArticleTrialReference.objects.select_related("article").filter(
+		suppressed=False
+	)
 	if visible_subject_ids is not None:
 		qs = qs.filter(
 			Exists(
@@ -1200,14 +1203,18 @@ def edit_article(request):
 				site_fields[field] = None if val == "" else val
 
 		if site_fields:
-			site_content, _ = ArticleSiteContent.objects.get_or_create(
+			# One history row per edit: values go into the create when the row
+			# is new, instead of a create followed by a save.
+			site_content, created = ArticleSiteContent.objects.get_or_create(
 				article=article,
 				site_id=site_id,
+				defaults=site_fields,
 			)
-			for field, val in site_fields.items():
-				setattr(site_content, field, val)
-				updated_fields.append(field)
-			site_content.save()
+			if not created:
+				for field, val in site_fields.items():
+					setattr(site_content, field, val)
+				site_content.save()
+			updated_fields.extend(site_fields)
 
 		generateAccessSchemeLog(
 			call_type,

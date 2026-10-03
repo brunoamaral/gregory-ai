@@ -577,7 +577,9 @@ class ArticleSerializer(
 	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
 		references = obj.trial_references.all()
-		trials = [ref.trial for ref in references]
+		# The view's prefetch already drops suppressed links; this keeps an
+		# unprefetched caller from listing one.
+		trials = [ref.trial for ref in references if not ref.suppressed]
 		return TrialReferenceSerializer(trials, many=True).data
 
 
@@ -728,7 +730,7 @@ class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.Hy
 		to avoid one query per trial on list responses.
 		"""
 		references = obj.article_references.all()
-		articles = [ref.article for ref in references]
+		articles = [ref.article for ref in references if not ref.suppressed]
 		return ArticleReferenceSerializer(articles, many=True).data
 
 	def get_countries_normalized(self, obj) -> Optional[list]:

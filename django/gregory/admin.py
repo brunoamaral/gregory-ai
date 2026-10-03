@@ -312,6 +312,8 @@ class ArticleTrialReferenceInline(admin.TabularInline):
 		"trial",
 		"identifier_type",
 		"identifier_value",
+		"source",
+		"suppressed",
 		"discovered_date",
 	]
 	can_delete = False
@@ -330,6 +332,8 @@ class TrialArticleReferenceInline(admin.TabularInline):
 		"article",
 		"identifier_type",
 		"identifier_value",
+		"source",
+		"suppressed",
 		"discovered_date",
 	]
 	can_delete = False
