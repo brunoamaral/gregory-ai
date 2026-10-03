@@ -219,6 +219,6 @@ Editorial content is the `takeaways` and `summary_plain_english` of a record. Ar
 | Anonymous | The `api_public` site resolved from `?site_id=`, `Origin`, `Referer`, or the single public site | The organisation that owns that site |
 | Anonymous, no `api_public` site | None (`editorial: []`) | None |
 
-The same rule decides where `POST /articles/edit/` writes (the key's site) and which text an organisation's newsletter carries (the organisation's default site). `get_takeaways` and `import_articles_from_api` write a copy to every site of the organisation.
+The same rule decides where `POST /articles/edit/` writes (the key's site) and which text a newsletter carries (the site its List is sent for, or the organisation's default site when that site isn't one the organisation owns). `get_takeaways` and `import_articles_from_api` write a copy to every site of the organisation.
 
 Because the anonymous case goes through `OrganizationSite`, a site must belong to exactly one organisation (database constraint `unique_site_organization`). See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#editorial-content) for the response shape and the `has_takeaways` filter.

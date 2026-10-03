@@ -690,6 +690,9 @@ class ArticleSiteContentInline(admin.StackedInline):
 		return qs.filter(site__in=self._user_sites(request))
 
 	def has_add_permission(self, request, obj=None):
+		# The model permission first: the site restriction only narrows it.
+		if not super().has_add_permission(request, obj):
+			return False
 		if request.user.is_superuser:
 			return True
 		return self._user_sites(request).exists()
@@ -3914,6 +3917,18 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 
 	def has_module_perms(self, request):
 		return False
+
+	# Read-only for staff: these forms would offer every site and any article,
+	# so a direct add or change URL could write another organisation's content.
+	# Staff edit through the Article page's inline, which scopes and locks both.
+	def has_add_permission(self, request):
+		return request.user.is_superuser
+
+	def has_change_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def has_delete_permission(self, request, obj=None):
+		return request.user.is_superuser
 
 	def get_queryset(self, request):
 		# OrganizationFilterMixin has no path for this model (no organization,

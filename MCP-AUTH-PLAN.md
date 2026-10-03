@@ -1,6 +1,6 @@
 # MCP authentication and editor access
 
-Status: approved for implementation, not started. Written 2026-10-03.
+Status: in progress. Phase 1 is in #890; phases 2 to 6 follow in #891 to #895. Written 2026-10-03.
 
 Adds a second, authenticated access level to the MCP server (`mcp-server/`). Anonymous
 callers keep what they have today: read access to one site's public data. Named editors,

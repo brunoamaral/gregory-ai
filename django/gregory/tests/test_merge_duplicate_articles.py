@@ -257,6 +257,26 @@ class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 		)
 		self.assertEqual(ArticleSiteContent.objects.count(), 1)
 
+	def test_site_content_merges_complementary_fields(self):
+		"""A survivor with only takeaways adopts the loser's plain-English
+		summary instead of losing it, and keeps its own takeaways."""
+		keep, loser = self.make_dup_pair(
+			"10.1/site-fields", links=("https://ex.org/keep-f", "https://ex.org/loser-f")
+		)
+		site = Site.objects.create(domain="merge-fields.example.com", name="Fields")
+		ArticleSiteContent.objects.create(article=keep, site=site, takeaways="Survivor")
+		ArticleSiteContent.objects.create(
+			article=loser, site=site, takeaways="Loser", summary_plain_english="Loser summary"
+		)
+
+		with transaction.atomic():
+			merge_articles(keep, [loser])
+
+		content = ArticleSiteContent.objects.get(article=keep, site=site)
+		self.assertEqual(content.takeaways, "Survivor")
+		self.assertEqual(content.summary_plain_english, "Loser summary")
+		self.assertEqual(ArticleSiteContent.objects.count(), 1)
+
 	def test_three_way_merge(self):
 		with self.without_doi_constraint():
 			a = self.make_article(doi="10.1/three", link="https://ex.org/a")

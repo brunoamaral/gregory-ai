@@ -12,7 +12,7 @@ from django.test import TestCase
 from django.urls import reverse
 from organizations.models import Organization
 
-from gregory.admin import ArticleOrgContentAdmin, ArticleSiteContentInline
+from gregory.admin import ArticleOrgContentAdmin, ArticleSiteContentAdmin, ArticleSiteContentInline
 from gregory.models import (
 	ArticleOrgContent,
 	Articles,
@@ -88,6 +88,40 @@ class ArticleSiteContentInlineTest(TestCase):
 			inline._missing_site_ids(request, self.article), [self.second_site.pk]
 		)
 		self.assertEqual(inline.get_max_num(request, self.article), 2)
+
+
+	def test_inline_add_needs_the_model_add_permission(self):
+		"""Owning a site only narrows the model permission; it never replaces it."""
+		self.staff.user_permissions.remove(
+			Permission.objects.get(codename="add_articlesitecontent")
+		)
+		staff = User.objects.get(pk=self.staff.pk)  # drop the cached permissions
+		inline = ArticleSiteContentInline(Articles, admin.site)
+		request = type("R", (), {"user": staff})()
+		self.assertFalse(inline.has_add_permission(request, self.article))
+
+	def test_standalone_admin_is_read_only_for_staff(self):
+		"""The standalone page's forms offer every site and any article, so staff
+		can browse it but never add, change or delete through it."""
+		model_admin = ArticleSiteContentAdmin(ArticleSiteContent, admin.site)
+		staff_request = type("R", (), {"user": self.staff})()
+		root_request = type("R", (), {"user": self.superuser})()
+		self.assertFalse(model_admin.has_add_permission(staff_request))
+		self.assertFalse(model_admin.has_change_permission(staff_request))
+		self.assertFalse(model_admin.has_delete_permission(staff_request))
+		self.assertTrue(model_admin.has_add_permission(root_request))
+
+		self.client.force_login(self.staff)
+		add_url = reverse("admin:gregory_articlesitecontent_add")
+		self.assertEqual(self.client.get(add_url).status_code, 403)
+		row = ArticleSiteContent.objects.get(article=self.article, site=self.site)
+		resp = self.client.post(
+			reverse("admin:gregory_articlesitecontent_change", args=[row.pk]),
+			{"article": self.article.pk, "site": self.foreign_site.pk, "takeaways": "Moved"},
+		)
+		row.refresh_from_db()
+		self.assertNotEqual(resp.status_code, 302)
+		self.assertEqual(row.site, self.site)
 
 
 class LegacyOrgContentAdminTest(TestCase):
