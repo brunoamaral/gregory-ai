@@ -25,6 +25,7 @@ These come from the requirements discussion on 2026-10-03.
 | D2 | Every MCP client must work: Claude Code, Claude Desktop, claude.ai connectors, and any client that follows the MCP authorization spec. This requires OAuth 2.1. A static API key is not enough. |
 | D3 | Editorial content becomes per site, not per organisation. Two sites of the same organisation can carry different takeaways for the same article. This needs a schema change. |
 | D4 | One credential grants exactly one site. An editor working on two sites holds two grants and signs in twice. |
+| D13 | Each site has its own editor address. The editor adds that address to their MCP client, signs in through it, and gets permissions for that site only. An organisation with more sites means one more connector per site, each with its own sign-in. There is no site switcher and no address that covers several sites. |
 | D5 | Editors read more than anonymous callers. |
 | D6 | Editable: `takeaways`, `summary_plain_english`, subject relevance (`ArticleSubjectRelevance.is_relevant`), and links between an article and a trial. |
 | D7 | Global article fields (`access`, `retracted`, `kind`) are not editable over MCP. They stay on `POST /articles/edit/` (API key) and the admin. |
@@ -74,7 +75,7 @@ The server is pinned to `mcp==2.3.0` (upgraded from 2.0.0 on branch `claude/mcp-
 Two limits shape this design:
 
 - `streamable_http_app()` wraps the whole endpoint in `RequireAuthMiddleware`, so with auth enabled every caller must authenticate. MCP clients start the OAuth flow only when they receive an HTTP 401, so a single URL can't serve anonymous callers and still prompt editors to sign in.
-- `AuthSettings` takes one fixed `resource_server_url` per server. That one URL drives the token audience check, the protected resource metadata route, and the `WWW-Authenticate` header. This process serves every tenant hostname, and each tenant needs its own resource URL. The SDK's `auth=` wiring can't express that.
+- `AuthSettings` takes one fixed `resource_server_url` per server process. That one URL drives the token audience check, the protected resource metadata route, and the `WWW-Authenticate` header. One address per site (D13) is fine for editors, but today a single process serves every site's hostname, so the process needs a different resource URL per request. The SDK's `auth=` wiring can't express that. See [Deployment options](#deployment-options).
 
 ## Design
 
@@ -99,6 +100,37 @@ The editor mount doesn't use the SDK's `auth=` wiring, because that takes a sing
 The middleware reuses the SDK's types (`TokenVerifier`, `AccessToken`, the protected resource metadata model) so the protocol details stay the SDK's. If a later SDK release accepts a resource URL per request, the editor mount switches to the built-in wiring with `validate_token_resource=True`.
 
 Editors add the editor URL as a separate connector. The anonymous connector stays as it is.
+
+### Editor experience: one address per site
+
+D13 in practice. Example: Ana edits for an organisation that owns `brain-regeneration.com` and `encefalites.pt`, and has a `SiteEditor` grant on both.
+
+| Step | What Ana does | What happens |
+|:--|:--|:--|
+| 1 | Adds `https://gregory-ai.brain-regeneration.com/mcp/editor` as a connector in her MCP client | The client calls the endpoint, gets a 401, and reads that site's protected resource metadata |
+| 2 | Signs in when the client opens the browser | Django's login page, then a consent screen naming Brain Regeneration, the client application, and the actions it can take |
+| 3 | Approves | Django issues a token bound to the brain-regeneration.com editor address. The connector shows that site's name and title (`TenantIdentityMiddleware`). |
+| 4 | Adds `https://gregory-ai.encefalites.pt/mcp/editor` as a second connector | Same flow. The consent screen names Encefalites. If her Django session is still active, she skips the password and only approves. |
+| 5 | Uses both connectors | Each connector's tools act only on its own site. Brain Regeneration's token sent to the Encefalites address is rejected. |
+
+Rules this implies:
+
+- One connector, one site, one token. Permissions are checked against the site the address belongs to, never against a site the user or the model names.
+- A user with no active grant for the address's site reaches the consent step and is refused with a page saying they have no editor access to that site. No token is issued, and the page names who can grant access: the site's admin email from `CustomSetting`.
+- Revoking a grant for one site ends that connector only. The user's other connectors keep working.
+- Signing out of one connector (token revocation) doesn't affect the others.
+- The editor address for each site is shown on the Site admin page, next to the `SiteEditor` inline, so it can be sent to new editors. The connection guide in `docs/07-mcp-server.md` says to add one connector per site.
+
+### Deployment options
+
+One address per site works with either deployment. The choice only changes where the per-site auth code lives.
+
+| Option | How | Trade-off |
+|:--|:--|:--|
+| A. One process for all sites (recommended) | Today's `gregory-mcp` container serves every hostname. The editor mount uses the per-`Host` auth middleware described above. | One container to deploy and monitor, as today. About 150 lines of our own auth code, reusing the SDK's types. |
+| B. One process per site | One `gregory-mcp` container per site, each with `GREGORY_SITE_ID` set and the SDK's built-in `auth=AuthSettings(resource_server_url=<site's editor address>, validate_token_resource=True)` | No custom auth middleware. A container, a compose service and an nginx upstream per site, and every new site needs a deploy change rather than only the `mcp_enabled` tick. |
+
+Option A keeps the current operating model, where turning on a site's assistant is a Site admin change. If the SDK later accepts a resource URL per request, option A switches to the built-in wiring without changing anything editors see.
 
 ### Why the token is per site
 
@@ -292,18 +324,20 @@ Each phase is one PR and leaves production working.
 ## Testing
 
 - Django: grant checks (no grant, revoked grant, wrong organisation), token bound to the wrong site, service credential missing or wrong, editor headers without credential, every write endpoint inside and outside scope, DOI resolution with zero, one, or several matches, throttle, history attribution, migration from organisation content to site content on an organisation with two sites, detection reset keeping manual links and respecting suppressed ones.
+- Multi-site editor: one user with grants on two sites of the same organisation signs in on each address and gets two tokens; each token works only on its own address; revoking one grant leaves the other connector working; a user with no grant on the second site is refused at consent with no token issued.
 - MCP: `/mcp` behaves exactly as before (all existing tests pass without changes); `/mcp/editor` returns 401 with `WWW-Authenticate` and a resource metadata URL; protected resource metadata content; token for site A refused on site B's host; write tools absent from `/mcp`'s `tools/list`; no retries on writes; annotations on each tool; editor identity text; cache tier separation; no token in logs.
 - End to end on a staging tenant, once with each of Claude Code, Claude Desktop, and a claude.ai connector, before production.
 
 ## Open questions
 
-1. Relevance per site. Keep relevance per subject and accept that sites sharing a subject share relevance? Or add a `site` field to `ArticleSubjectRelevance`? The second option also changes the ML training labels and every `relevant=` filter. Answering needs a production count of subjects that appear in more than one site's `scope_subjects`.
-2. Client registration. claude.ai and Claude Desktop need a client to register itself. Build dynamic client registration on DOT, support Client ID Metadata Documents only, or both? Check which one each target client uses at implementation time.
-3. Private sites. Should an `mcp_enabled` site with `api_public=False` serve an editor endpoint only? `TenantGateMiddleware` and `/tenants/` would need a per-endpoint rule.
-4. Editor read scope. Confirm the table in [Editor read scope](#editor-read-scope), especially the curation queue, which exposes content not yet published anywhere.
-5. Rate limit numbers. 60 per hour and 500 per day are placeholders. Set them from expected editor workload.
-6. Login identity. Django username and password only, or single sign-on (for example Google) for client editors who don't have a Django password?
-7. Notification. Should the site's admin email receive a digest of MCP edits, alongside `send_admin_summary`?
+1. Deployment. Confirm option A (one process, per-host auth middleware) over option B (one container per site); see [Deployment options](#deployment-options).
+2. Relevance per site. Keep relevance per subject and accept that sites sharing a subject share relevance? Or add a `site` field to `ArticleSubjectRelevance`? The second option also changes the ML training labels and every `relevant=` filter. Answering needs a production count of subjects that appear in more than one site's `scope_subjects`.
+3. Client registration. claude.ai and Claude Desktop need a client to register itself. Build dynamic client registration on DOT, support Client ID Metadata Documents only, or both? Check which one each target client uses at implementation time.
+4. Private sites. Should an `mcp_enabled` site with `api_public=False` serve an editor endpoint only? `TenantGateMiddleware` and `/tenants/` would need a per-endpoint rule.
+5. Editor read scope. Confirm the table in [Editor read scope](#editor-read-scope), especially the curation queue, which exposes content not yet published anywhere.
+6. Rate limit numbers. 60 per hour and 500 per day are placeholders. Set them from expected editor workload.
+7. Login identity. Django username and password only, or single sign-on (for example Google) for client editors who don't have a Django password?
+8. Notification. Should the site's admin email receive a digest of MCP edits, alongside `send_admin_summary`?
 
 ## Non-goals
 
@@ -311,5 +345,5 @@ Each phase is one PR and leaves production working.
 - Editing `access`, `retracted`, `kind`, subjects, or categories over MCP (D7).
 - A draft or approval workflow (D9).
 - API keys (`APIAccessScheme`) as an MCP credential. They stay for server-to-server REST use.
-- Cross-site credentials (D4).
+- Cross-site credentials (D4), a single editor address covering several sites, or a site switcher inside one connector (D13).
 - Bulk edits. Each tool call changes one article.
