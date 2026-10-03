@@ -1176,6 +1176,15 @@ paths:
                   description: Comma-separated list of subject IDs with OR semantics
                     — returns articles tagged with *any* of the listed subjects, e.g.
                     ?subjects_any=1,2.
+                include:
+                  type: string
+                  enum:
+                  - editorial
+                  description: Opt in to extra content. Comma-separated; the only
+                    accepted value is `editorial`, which adds an `editorial` list
+                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
+                    Ignored for CSV output.
               required:
               - team_id
               - subject_id
@@ -1701,16 +1710,6 @@ paths:
         schema:
           type: string
         description: Case-insensitive substring match against the given (first) name.
-      - in: query
-        name: include
-        schema:
-          type: string
-          enum:
-          - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
       - in: query
         name: orcid
         schema:
@@ -5003,6 +5002,15 @@ paths:
                   description: Comma-separated list of subject IDs with OR semantics
                     — returns trials tagged with *any* of the listed subjects, e.g.
                     ?subjects_any=1,2.
+                include:
+                  type: string
+                  enum:
+                  - editorial
+                  description: Opt in to extra content. Comma-separated; the only
+                    accepted value is `editorial`, which adds an `editorial` list
+                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
+                    Ignored for CSV output.
               required:
               - team_id
               - subject_id
@@ -5734,7 +5742,6 @@ components:
       - authors
       - clinical_trials
       - discovery_date
-      - editorial
       - link
       - ml_predictions
       - ml_score
@@ -7144,7 +7151,6 @@ components:
       - articles
       - countries_normalized
       - discovery_date
-      - editorial
       - identifiers_normalized
       - inclusion_age_max_years
       - inclusion_age_min_years
@@ -7522,7 +7528,6 @@ components:
       - articles
       - countries_normalized
       - discovery_date
-      - editorial
       - identifiers_normalized
       - inclusion_age_max_years
       - inclusion_age_min_years

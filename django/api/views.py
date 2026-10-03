@@ -510,9 +510,12 @@ class CachedStatsActionMixin:
 			if key not in self._stats_key_ignored_params
 			for value in request.query_params.getlist(key)
 		)
-		digest = hashlib.sha256(
-			json.dumps({"subjects": subjects, "params": params}).encode()
-		).hexdigest()
+		key_parts = {"subjects": subjects, "params": params}
+		if "has_takeaways" in request.query_params:
+			# has_takeaways filters on the caller's editorial organisation(s),
+			# which two callers with the same subject scope can differ on.
+			key_parts["editorial_orgs"] = editorial_org_ids(request)
+		digest = hashlib.sha256(json.dumps(key_parts).encode()).hexdigest()
 		return f"{self.stats_cache_prefix}:{digest}"
 
 	def _stats_response(self, request):
@@ -1463,6 +1466,12 @@ _INCLUDE_PARAM = OpenApiParameter(
 		"CSV output."
 	),
 )
+
+_INCLUDE_BODY_SCHEMA = {
+	"type": "string",
+	"enum": ["editorial"],
+	"description": _INCLUDE_PARAM.description,
+}
 
 _INCLUDE_PUBLIC_PARAM = OpenApiParameter(
 	"include_public",
@@ -4135,6 +4144,7 @@ class ArticleSearchView(
 			"application/json": filterset_request_schema(
 				ArticleFilter,
 				required=["team_id", "subject_id"],
+				extra_properties={"include": _INCLUDE_BODY_SCHEMA},
 				extra_description=(
 					"Every ArticleFilter field is accepted here (identical semantics "
 					"to the matching GET query parameter — see /articles/). "
@@ -4391,6 +4401,7 @@ class TrialSearchView(
 			"application/json": filterset_request_schema(
 				TrialFilter,
 				required=["team_id", "subject_id"],
+				extra_properties={"include": _INCLUDE_BODY_SCHEMA},
 				extra_description=(
 					"Every TrialFilter field is accepted here (identical semantics "
 					"to the matching GET query parameter — see /trials/). "
@@ -4619,7 +4630,6 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 		self._check_subject_visibility(subject_id)
 		return self.list(request, *args, **kwargs)
 
-	@extend_schema(parameters=[_INCLUDE_PARAM])
 	def get(self, request, *args, **kwargs):
 		# Validate required parameters for GET requests
 		team_id = request.query_params.get("team_id")

@@ -81,7 +81,12 @@ def test_detail_endpoint_exists_in_schema(fn, path, schema_params):
 # added to a FilterSet that nobody thought to add to the matching tool).
 KNOWN_UNEXPOSED_PARAMS = {
 	"/articles/": {
-		"format",  # CSV — no export tool, see STAGE-2 plan "Risks"
+		"format",
+		# Editorial content (EDITORIAL-API-SPEC.md): the MCP server doesn't
+		# expose per-org takeaways/summaries, so neither the opt-in nor the
+		# filter on it is a tool parameter. Out of scope per the spec.
+		"include",
+		"has_takeaways",  # CSV — no export tool, see STAGE-2 plan "Risks"
 		# Adds public sites' scopes to an *identified* caller's own scope.
 		# GregoryClient sends no Authorization header (client.py) -- this
 		# server is always an anonymous caller upstream, and an anonymous
@@ -108,6 +113,11 @@ KNOWN_UNEXPOSED_PARAMS = {
 	},
 	"/trials/": {
 		"format",
+		# Editorial content (EDITORIAL-API-SPEC.md): the MCP server doesn't
+		# expose per-org takeaways/summaries, so neither the opt-in nor the
+		# filter on it is a tool parameter. Out of scope per the spec.
+		"include",
+		"has_takeaways",
 		# Adds public sites' scopes to an *identified* caller's own scope.
 		# GregoryClient sends no Authorization header (client.py) -- this
 		# server is always an anonymous caller upstream, and an anonymous

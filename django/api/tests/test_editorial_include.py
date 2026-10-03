@@ -405,3 +405,19 @@ class QueryCountTests(EditorialFixtureMixin, TestCase):
 		self.assertFalse(
 			any("gregory_articleorgcontent" in q["sql"] for q in ctx.captured_queries)
 		)
+
+
+class StatsCacheTests(EditorialFixtureMixin, TestCase):
+	def test_has_takeaways_stats_do_not_collide_across_orgs(self):
+		from django.core.cache import cache
+
+		cache.clear()
+		extra = Articles.objects.create(title="Only A", link="https://e.test/only-a")
+		extra.subjects.add(self.subject_a, self.subject_b)
+		ArticleOrgContent.objects.create(article=extra, organization=self.org_a, takeaways="x")
+		# Same subject scope (both subjects), different editorial org.
+		a = self.keyed(self.key_a, "/articles/stats/?has_takeaways=true")
+		b = self.keyed(self.key_b, "/articles/stats/?has_takeaways=true")
+		self.assertEqual(a.status_code, 200)
+		self.assertEqual(a.data["total"], 2)
+		self.assertEqual(b.data["total"], 1)

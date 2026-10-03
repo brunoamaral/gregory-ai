@@ -298,6 +298,10 @@ REST_FRAMEWORK = {
 # /api/schema/redoc/ (admin/urls.py). Canonical prose reference is
 # docs/03-api-and-rss-feeds.md; this schema is the machine-checkable counterpart.
 SPECTACULAR_SETTINGS = {
+	'POSTPROCESSING_HOOKS': [
+		'drf_spectacular.hooks.postprocess_schema_enums',
+		'api.schema_hooks.make_editorial_optional',
+	],
 	'TITLE': 'GregoryAI API',
 	'DESCRIPTION': (
 		'REST API for GregoryAI: articles, clinical trials, authors, sources, '
