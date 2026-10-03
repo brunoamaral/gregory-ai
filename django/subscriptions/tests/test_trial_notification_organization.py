@@ -15,7 +15,13 @@ from django.core.management import call_command
 from django.test import TestCase
 from django.utils.timezone import now
 
-from gregory.models import Articles, ArticleOrgContent, Team, Trials
+from gregory.models import (
+	Articles,
+	ArticleSiteContent,
+	OrganizationSite,
+	Team,
+	Trials,
+)
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from subscriptions.models import Lists, ListSubscription, Subscribers
@@ -37,9 +43,12 @@ class TrialNotificationOrgContentMapTest(TestCase):
 			link="https://example.com/articles/trial-linked",
 			doi="10.9999/trial-linked",
 		)
-		ArticleOrgContent.objects.create(
+		OrganizationSite.objects.create(
+			organization=cls.org, site=cls.site, is_default=True
+		)
+		ArticleSiteContent.objects.create(
 			article=cls.article,
-			organization=cls.org,
+			site=cls.site,
 			takeaways="Org-specific takeaways",
 		)
 

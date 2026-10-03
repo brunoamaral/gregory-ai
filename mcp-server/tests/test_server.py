@@ -145,7 +145,7 @@ def test_every_cache_hint_is_private():
 def test_replace_handler_seam_still_exists():
 	"""_replace_handler (server.py, task C1) depends on the private SDK
 	attribute MCPServer._lowlevel_server.add_request_handler to serve
-	prompts/resources per resolved tenant. `mcp` is pinned to `==2.0.0`; an
+	prompts/resources per resolved tenant. `mcp` is pinned to `==2.3.0`; an
 	upgrade that removes or renames this attribute must fail loudly here,
 	not as prompts/resources silently reverting to whatever the SDK's own
 	decorator-based defaults would be."""
@@ -188,6 +188,83 @@ def test_replace_handler_raises_loudly_if_add_request_handler_disappears():
 
 
 def test_client_exposes_no_write_methods():
-	"""The server issues GET only — assert the client has no write verbs at all."""
+	"""The anonymous server still issues GET only. Writes exist on the client for
+	the editor address, but they are not retried and refuse to run without a
+	signed-in session holding the edit scope (the second lock after
+	ToolAccessMiddleware). The original intent stands: nothing on `/mcp` writes."""
 	for verb in ("post", "put", "patch", "delete"):
-		assert not hasattr(GregoryClient, verb), f"GregoryClient must not expose .{verb}()"
+		assert hasattr(GregoryClient, verb)
+
+	anonymous_tools = {t.name for t in build_server()._tool_manager.list_tools()}
+	assert not anonymous_tools & {
+		"update_article_editorial",
+		"set_article_relevance",
+		"link_trial_to_article",
+		"unlink_trial_from_article",
+	}
+
+
+@pytest.mark.parametrize("verb", ["post", "put", "patch", "delete"])
+async def test_client_writes_refuse_without_an_edit_session(mock_editor_gregory, verb):
+	from gregory_mcp.client import GregoryAPIError, get_client
+	from gregory_mcp.site_context import _editor_context, EditorSession
+
+	method = getattr(get_client(), verb)
+	for session in (None, EditorSession(7, 3, "editor", frozenset({"articles:read"})), EditorSession(7, 3, "public", frozenset({"articles:edit"}))):
+		token = _editor_context.set(session)
+		try:
+			with pytest.raises(GregoryAPIError) as caught:
+				await (method("/editor/articles/1/editorial/") if verb == "delete" else method("/editor/articles/1/editorial/", json={}))
+		finally:
+			_editor_context.reset(token)
+		assert caught.value.status_code == 403
+
+	assert mock_editor_gregory.requests == []
+
+
+async def test_client_writes_are_not_retried(mock_editor_gregory):
+	from gregory_mcp.client import GregoryAPIError, get_client
+	from gregory_mcp.site_context import _editor_context, EditorSession
+
+	mock_editor_gregory.set_handler(lambda request: httpx2.Response(503, text="down"))
+	token = _editor_context.set(EditorSession(7, 3, "editor", frozenset({"articles:edit"})))
+	try:
+		with pytest.raises(GregoryAPIError):
+			await get_client().patch("/editor/articles/1/editorial/", json={"takeaways": "x"})
+	finally:
+		_editor_context.reset(token)
+
+	assert len(mock_editor_gregory.requests) == 1
+
+
+def _tenant_routes(extra):
+	routes = {"/tenants/": lambda request: httpx2.Response(200, json=tenants_payload({"site_id": 3, "domain": "br.test"}))}
+	routes.update(extra)
+	return route_by_path(routes)
+
+
+@pytest.mark.parametrize(
+	("status", "expected_text"),
+	[
+		(404, "Article 123 was not found."),
+		(400, "Gregory API returned 400: bad filter"),
+	],
+)
+async def test_tool_errors_reach_the_model_through_the_sdk(mock_gregory, caplog, status, expected_text):
+	"""mcp 2.1+ hides the text of any exception escaping a tool other than
+	ToolError ("Error executing tool get_article") and logs it as a crash at
+	ERROR. The tool-level tests call get_article() directly and can't see
+	that wrapping, so this drives a real tools/call through Client: a
+	not-found record and an upstream 4xx must both keep their message and
+	must not be logged as crashes."""
+	mock_gregory.set_handler(
+		_tenant_routes({"/articles/123/": lambda request: httpx2.Response(status, text="bad filter")})
+	)
+	init_tenant_resolution(dataclasses.replace(TEST_SETTINGS, site_id_override=3))
+
+	async with Client(build_server()) as client:
+		result = await client.call_tool("get_article", {"article_id": 123})
+
+	assert result.is_error
+	assert expected_text in result.content[0].text
+	assert not [r for r in caplog.records if "unexpected exception" in r.getMessage()]

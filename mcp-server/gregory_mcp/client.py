@@ -1,8 +1,11 @@
-"""Thin, GET-only HTTP client for the GregoryAI REST API.
+"""Thin HTTP client for the GregoryAI REST API.
 
-The MCP server is a stateless proxy: it never writes, never holds a
-database connection, and only ever issues `GET` requests against the
-instance named by `GREGORY_API_URL`.
+The MCP server is a stateless proxy: it never holds a database connection
+and only ever talks to the instance named by `GREGORY_API_URL`. The anonymous
+address only ever issues `GET` requests. The editor address (MCP-AUTH-PLAN.md)
+can also write, and only through `post`/`put`/`patch`/`delete` below, which are
+refused unless the in-flight request belongs to an editor whose grant carries
+the edit scope.
 """
 
 from __future__ import annotations
@@ -15,9 +18,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx2
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .config import Settings
-from .site_context import get_current_site_id
+from .site_context import EditorSession, get_current_site_id, get_editor_context
 from .telemetry import record_truncation_error, record_upstream_call, record_upstream_error
 
 logger = logging.getLogger("gregory_mcp.client")
@@ -36,12 +40,23 @@ MAX_BACKOFF_SECONDS = 2.0
 _RETRYABLE_CLIENT_STATUS = {429}
 
 
-class GregoryAPIError(Exception):
-	"""Raised when the upstream Gregory API returns an error response."""
+class GregoryAPIError(ToolError):
+	"""Raised when the upstream Gregory API returns an error response.
 
-	def __init__(self, status_code: int, detail: str):
+	A `ToolError` so the SDK treats it as an anticipated failure: the model
+	reads this message (e.g. a 400 naming a bad filter value), and the SDK
+	logs it at INFO. Since mcp 2.1, any other exception escaping a tool is
+	treated as a crash: the model sees only "Error executing tool <name>"
+	and the SDK logs a traceback at ERROR. An upstream error is not a crash
+	of this server, and this client already logs and counts it.
+	"""
+
+	def __init__(self, status_code: int, detail: str, retry_after: str | None = None):
 		self.status_code = status_code
 		self.detail = detail
+		# The upstream's Retry-After, for a throttled write: the model is told how
+		# long to wait, since the client never retries a write itself.
+		self.retry_after = retry_after
 		super().__init__(f"Gregory API returned {status_code}: {detail}")
 
 
@@ -94,7 +109,9 @@ class GregoryClient:
 	async def aclose(self) -> None:
 		await self._client.aclose()
 
-	async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+	async def get(
+		self, path: str, params: dict[str, Any] | None = None, *, editor_routing: bool = True
+	) -> dict[str, Any]:
 		"""Issue a single GET, retrying transient network/5xx/429 failures
 		with exponential backoff and jitter between attempts.
 
@@ -107,18 +124,119 @@ class GregoryClient:
 		already set one explicitly. See site.py's module docstring for why
 		this is a transport-level concern rather than a parameter on each
 		tool.
+
+		For an editor-tier request (editor.py), the call goes to the matching
+		`/editor/...` route instead, carrying the service credential and the
+		verified editor and site in headers, and no `site_id`: Django takes the
+		site from the header. `editor_routing=False` opts out, for the tenant
+		directory fetch, which is not an editor call.
 		"""
 		clean_params = {k: v for k, v in (params or {}).items() if v is not None}
-		site_id = get_current_site_id()
-		if site_id is not None and "site_id" not in clean_params:
-			clean_params["site_id"] = site_id
-		attempts = self._settings.max_retries + 1
+		session = get_editor_context() if editor_routing else None
+		headers = None
+		if session is not None and session.is_editor:
+			path, headers = self._editor_route(path, session)
+		else:
+			site_id = get_current_site_id()
+			if site_id is not None and "site_id" not in clean_params:
+				clean_params["site_id"] = site_id
+		return await self._send(
+			"GET", path, params=clean_params, headers=headers, attempts=self._settings.max_retries + 1
+		)
+
+	async def get_as_service(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+		"""GET with the service credential alone, for routes that name no editor
+		(`/editor/tenants/`: which sites exist, asked before anyone has signed in)."""
+		clean_params = {k: v for k, v in (params or {}).items() if v is not None}
+		return await self._send(
+			"GET",
+			path,
+			params=clean_params,
+			headers=self._service_headers(),
+			attempts=self._settings.max_retries + 1,
+		)
+
+	async def introspect(self, token: str) -> dict[str, Any]:
+		"""RFC 7662 introspection of an editor token, via Django. The token is
+		sent in the form body, never in a URL or a log line."""
+		return await self._send(
+			"POST",
+			"/o/introspect/",
+			data={"token": token},
+			headers=self._service_headers(),
+			attempts=self._settings.max_retries + 1,
+		)
+
+	# Writes. Deliberately never retried: a write that timed out may already
+	# have been applied, and sending it again could apply it twice. The caller
+	# gets the failure and decides.
+
+	async def post(self, path: str, json: Any = None) -> dict[str, Any]:
+		return await self._write("POST", path, json)
+
+	async def put(self, path: str, json: Any = None) -> dict[str, Any]:
+		return await self._write("PUT", path, json)
+
+	async def patch(self, path: str, json: Any = None) -> dict[str, Any]:
+		return await self._write("PATCH", path, json)
+
+	async def delete(self, path: str) -> dict[str, Any]:
+		return await self._write("DELETE", path, None)
+
+	async def _write(self, method: str, path: str, json: Any) -> dict[str, Any]:
+		session = get_editor_context()
+		if session is None or not session.can_edit:
+			# Reaching here is a bug or an attack, not a user error: the tools
+			# are hidden from, and refused to, anyone without the edit scope.
+			raise GregoryAPIError(403, "this sign-in cannot edit")
+		path, headers = self._editor_route(path, session)
+		return await self._send(method, path, json=json, headers=headers, attempts=1)
+
+	def _service_headers(self) -> dict[str, str]:
+		if not self._settings.service_key:
+			raise GregoryAPIError(0, "the editor service credential is not configured")
+		return {"Authorization": f"Bearer {self._settings.service_key}"}
+
+	def _editor_route(self, path: str, session: EditorSession) -> tuple[str, dict[str, str]]:
+		"""The `/editor/...` form of `path`, and the headers that name the editor."""
+		if not path.startswith("/editor/"):
+			path = "/editor" + path
+		headers = self._service_headers()
+		headers["X-Gregory-Editor-User"] = str(session.user_id)
+		headers["X-Gregory-Editor-Site"] = str(session.site_id)
+		return path, headers
+
+	async def _send(
+		self,
+		method: str,
+		path: str,
+		*,
+		params: dict[str, Any] | None = None,
+		json: Any = None,
+		data: dict[str, Any] | None = None,
+		headers: dict[str, str] | None = None,
+		attempts: int,
+	) -> dict[str, Any]:
+		"""One request, up to `attempts` tries (retrying transport errors, 5xx
+		and 429 between them). Telemetry is recorded for every try."""
 		last_exc: Exception | None = None
+		extra: dict[str, Any] = {}
+		if params is not None:
+			extra["params"] = params
+		if json is not None:
+			extra["json"] = json
+		if data is not None:
+			extra["data"] = data
+		if headers:
+			extra["headers"] = headers
 
 		for attempt in range(1, attempts + 1):
 			call_start = time.monotonic()
 			try:
-				response = await self._client.get(path, params=clean_params)
+				if method == "GET":
+					response = await self._client.get(path, **extra)
+				else:
+					response = await self._client.request(method, path, **extra)
 			except httpx2.TransportError as exc:
 				record_upstream_call((time.monotonic() - call_start) * 1000)
 				last_exc = exc
@@ -140,7 +258,9 @@ class GregoryClient:
 
 			if response.status_code >= 400:
 				record_upstream_error(response.status_code)
-				raise GregoryAPIError(response.status_code, response.text[:500])
+				raise GregoryAPIError(
+					response.status_code, response.text[:500], retry_after=response.headers.get("Retry-After")
+				)
 
 			return response.json()
 

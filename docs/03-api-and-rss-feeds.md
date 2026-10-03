@@ -95,6 +95,67 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 | `POST /api/token/` | Obtain JWT token |
 | `GET /protected_endpoint/` | Test protected endpoint (requires auth header) |
 
+### OAuth 2.1 authorization server (MCP editor access)
+
+Named editors sign in to the MCP server's editor address with their Django username and password, through an OAuth 2.1 authorization server built on `django-oauth-toolkit`. These routes are served by Django on the API domain, not by the REST API: they are not part of `/api/schema/`. The flow, and what an editor sees, is described in [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#mcp-editor-access).
+
+| Endpoint | Purpose |
+|:---------|:--------|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 server metadata. `issuer` is `OAUTH_ISSUER`, or `https://api.<DOMAIN_NAME>`. Advertises the `authorization_code` and `refresh_token` grants, PKCE `S256`, the `articles:read` and `articles:edit` scopes, `registration_endpoint` and `client_id_metadata_document_supported` |
+| `GET /o/authorize/` | Authorization endpoint. Needs `response_type=code`, PKCE (`code_challenge`, `S256`) and exactly one `resource`: a site's editor address, `https://<host>/mcp/editor`. Sends an anonymous browser to `/o/login/`, then shows a consent screen naming the site and the client |
+| `POST /o/token/` | Token endpoint: authorization code (with `code_verifier`) and refresh. Access tokens last 1 hour; refresh tokens 30 days and are rotated on each use. Other grants are refused |
+| `POST /o/revoke/` | RFC 7009 revocation |
+| `POST /o/introspect/` | RFC 7662 introspection, for the MCP server only: `Authorization: Bearer <GREGORY_MCP_SERVICE_KEY>`. Returns `active`, `scope`, `exp`, `aud`, `user_id`, `site_id` and `tier`. Registration-management tokens are never active |
+| `POST /o/register/` | RFC 7591 dynamic client registration. Open, rate limited per address (`OAUTH_DCR_MAX_PER_HOUR`), `authorization_code` clients only, https or loopback redirect URIs |
+| `GET /o/login/` | The sign-in page for the flow (CSRF protected, not frameable, rate limited on failures) |
+
+Clients may instead use an `https` URL as their `client_id` (Client ID Metadata Documents); the server fetches the document with an SSRF-hardened fetcher and applies the same redirect and grant rules as for dynamic registration.
+
+Every token is bound to one site by its `resource`, and carries a tier: `editor` for a person with an active `SiteEditor` grant, `public` for a signed-in person without one on a site that has `api_public` data. A public-tier token never carries `articles:edit`. The `resource` is the only way to name a site; the MCP server rejects a token sent to any other host.
+
+---
+
+## Editor routes (`/editor/`)
+
+The MCP server calls these on behalf of a signed-in editor. They are not for browsers or API keys, and nginx keeps them off the public internet (see [MCP editor access](06-organisations-teams-and-sites.md#mcp-editor-access)); Django does not rely on that and checks every request itself.
+
+Every request carries:
+
+| Header | Value |
+|:-------|:------|
+| `Authorization` | `Bearer <GREGORY_MCP_SERVICE_KEY>` |
+| `X-Gregory-Editor-User` | The Django user id of the editor, verified by the MCP server through `/o/introspect/` |
+| `X-Gregory-Editor-Site` | The one site the editor's token is bound to |
+
+Rules:
+
+- Django re-checks the editor's active `SiteEditor` grant on every request, so a revocation takes effect on the next call whatever the MCP server has cached. A bad or missing credential, or an unknown or inactive user, is `401` with `WWW-Authenticate: Bearer`. A valid credential for an editor without an active grant on that site, or for a site with `mcp_enabled` off, is `403`. A grant with `can_edit` off reads but gets `403` on every write.
+- A request carrying either editor header without the credential is `401` on every route, and the headers are refused on any route outside `/editor/`.
+- The site is the token's, never a parameter. An article, trial or subject outside that site's `scope_subjects` is `404`, the same answer as one that doesn't exist.
+- Writes take effect immediately, run as the editor (history rows record the editor and `via = "mcp"`), and are throttled per (editor, site): 60 per hour and 500 per day by default (`MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY`). A throttled write is `429` with `Retry-After`. Reads are never throttled.
+
+### Reads
+
+The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
+
+Differences from the public endpoints:
+
+- `?include=editorial` returns only the editor's site, and each article entry also carries `updated_at` and `updated_by` (the name and email of whoever last changed it, or the API key's name when a key did).
+- `GET /editor/tenants/` lists every site with `mcp_enabled` and a non-empty scope, private ones included, each with its full scope and an `api_public` flag. It takes the service credential alone, with no editor headers. The MCP server's editor mount uses it to tell which site a host is.
+
+### Writes and history
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `GET /editor/articles/resolve/?doi=` | DOI to `article_id` among in-scope articles. `404` for none, or for one outside the scope. `409` with `article_ids` when several in-scope articles share the DOI |
+| `PATCH /editor/articles/{article_id}/editorial/` | Upsert this site's `takeaways` and/or `summary_plain_english`. Omitted fields are left alone; an empty string clears. Returns the stored values with `updated_by` and `updated_at` |
+| `PUT /editor/articles/{article_id}/relevance/{subject_id}/` | Body `{"is_relevant": true \| false \| null}`. The subject must be in the site's scope (`404` otherwise). Relevance is per subject, so the change applies to every site listing the subject |
+| `POST /editor/articles/{article_id}/trials/` | Body `{"trial_id": n}`. Adds a manual link, `201`; an already linked pair returns the existing link, `200`. The trial must be in scope |
+| `DELETE /editor/articles/{article_id}/trials/{trial_id}/` | Removes a manual link, or hides an auto-detected one (`suppressed`) so detection doesn't recreate it. `404` when the pair isn't linked |
+| `GET /editor/articles/{article_id}/history/?limit=` | Who changed this site's editorial content, the article's relevance for subjects in scope, and its links to trials in scope; newest first, `limit` up to 200 (default 50) |
+
+Trials are read-only over MCP: an editor can link a trial to an article but cannot change the trial. `access`, `retracted` and `kind` stay on `POST /articles/edit/` (API key) and the admin.
+
 ---
 
 ## Resolving a site for an anonymous caller
@@ -257,8 +318,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `relevant` | boolean | Relevant articles only. Scoped to `subject_id` when provided. |
 | `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
 | `open_access` | boolean | Open access articles only |
-| `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial |
-| `has_takeaways` | boolean | `true`: articles with non-empty takeaways written by the caller's own organisation (see [Editorial content](#editorial-content)). `false`: everything else. Doesn't require `include=editorial` |
+| `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial. A link an editor removed (an auto-detected link marked `suppressed`) doesn't count, and isn't listed in `clinical_trials` or a trial's `articles` either |
+| `has_takeaways` | boolean | `true`: articles with non-empty takeaways written for the caller's own site (see [Editorial content](#editorial-content)). `false`: everything else. Doesn't require `include=editorial` |
 | `include` | string | `editorial` adds the `editorial` list to each article (see [Editorial content](#editorial-content)). Unknown values return 400 |
 | `last_days` | integer | Articles from the last N days |
 | `week` | integer 1–52 | Filter by week number (requires `year`) |
@@ -288,26 +349,43 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 ## Editorial content
 
-Editorial content is the per-organisation `takeaways` and `summary_plain_english`. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field). CSV output never includes it.
+Editorial content is the `takeaways` and `summary_plain_english` of a record. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field). CSV output never includes it.
+
+Articles carry editorial content **per site**, so two sites of one organisation can say different things about the same article. Each entry is labelled by site:
 
 ```json
 "editorial": [
 	{
-		"organization": {"id": 1, "name": "Brain Regeneration"},
+		"site": {"id": 1, "domain": "brain-regeneration.com", "name": "Brain Regeneration"},
 		"takeaways": "Experimental autoimmune encephalomyelitis ...",
 		"summary_plain_english": null
 	}
 ]
 ```
 
-- `editorial` is always a list, sorted by organisation id. When the organisation has no content for a record, its fields are `null`. When the caller has no editorial organisation, the list is `[]`.
-- **Which organisation** is decided by the caller, never by a parameter: an API key gets its own organisation, a logged-in user gets every organisation they belong to, and an anonymous caller gets the organisation that owns the `api_public` site resolved from `?site_id=`, `Origin`, `Referer` or the single public site (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)). `?team_id=` has no effect, and there is no way to request another organisation's content.
-- Anonymous and API-key callers get 0 or 1 entries; a logged-in user in two organisations gets 2.
+Trials still carry editorial content **per organisation**, and each trial entry is labelled by organisation:
+
+```json
+"editorial": [
+	{
+		"organization": {"id": 1, "name": "Brain Regeneration"},
+		"takeaways": "...",
+		"summary_plain_english": null
+	}
+]
+```
+
+- `editorial` is always a list, sorted by site id (articles) or organisation id (trials). When the site or organisation has no content for a record, its fields are `null`. When the caller has no editorial site or organisation, the list is `[]`.
+- **Which site** (articles) is decided by the caller, never by a parameter: an API key gets its own site, a logged-in user gets every site owned by an organisation they belong to, and an anonymous caller gets the `api_public` site resolved from `?site_id=`, `Origin`, `Referer` or the single public site (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)). An API key whose site is missing, or belongs to a different organisation, gets `[]`. `?team_id=` has no effect, and there is no way to request another site's content.
+- **Which organisation** (trials) follows the same rule: an API key gets its own organisation, a logged-in user gets every organisation they belong to, and an anonymous caller gets the organisation that owns the resolved site.
+- Anonymous and API-key callers get 0 or 1 entries; a logged-in user whose organisations own two sites gets 2 on articles.
 - `?include=` is a comma-separated list; the only accepted value is `editorial`, and an unknown value returns 400.
-- `?has_takeaways=true|false` filters on the same organisation(s) and doesn't need `include=editorial`. Empty-string takeaways count as missing.
+- `?has_takeaways=true|false` filters on the same site(s) (articles) or organisation(s) (trials) and doesn't need `include=editorial`. Empty-string takeaways count as missing.
 - Responses already vary by `Origin` whenever site resolution depends on it, so caches in front of the API must honour `Vary: Origin`.
 
-**Breaking change.** The top-level `takeaways` and `summary_plain_english` fields were removed from article and trial responses, and `?team_id=` (or an API key) no longer unlocks them. Read `editorial[0].takeaways` after adding `?include=editorial`.
+**Breaking change (articles).** `editorial[].organization` was replaced by `editorial[].site` (`id`, `domain`, `name`) on article responses, and the content is now selected by site instead of by organisation. Existing content was copied to every site of its organisation, so a single-site organisation sees the same text. Clients that read `editorial[0].takeaways` keep working; clients that read `editorial[].organization` on articles must switch to `editorial[].site`. See the [changelog entry](changelog/article-editorial-per-site.md). Trial responses are unchanged.
+
+**Earlier breaking change.** The top-level `takeaways` and `summary_plain_english` fields were removed from article and trial responses, and `?team_id=` (or an API key) no longer unlocks them. Read `editorial[0].takeaways` after adding `?include=editorial`.
 
 ## Available endpoints
 
@@ -315,6 +393,7 @@ Editorial content is the per-organisation `takeaways` and `summary_plain_english
 |:------|:---------|:-----------|:------|
 | Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
+| Articles | `POST /articles/edit/` | `doi` *(req)*, `takeaways`, `summary_plain_english`, `access`, `retracted`, `kind` | Edit an existing article, API key required — see [below](#post-articlesedit) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results`, plus every `GET /articles/` filter (`published_date_after`, `published_date_before`, `relevant`, `subjects`, …) | See [Search endpoints](#search-endpoints) below |
@@ -690,6 +769,26 @@ This endpoint requires an `APIAccessScheme` API key (sent as the raw value in th
 | `summary` | no | Abstract or description |
 | `published_date` | no | ISO 8601 date string |
 | `identifiers` | no | JSON object with trial identifiers (`euct`, `nct`, `eudract`) — `trials` kind only |
+
+### `POST /articles/edit/`
+
+Edits an existing article, looked up by `doi` (case-insensitive). Requires an `APIAccessScheme` API key bound to a site of its organisation. The article must belong to the key's organisation through one of its teams.
+
+| Field | Scope | Description |
+|:------|:------|:------------|
+| `takeaways`, `summary_plain_english` | The key's site | Upserted into the article's `ArticleSiteContent` row for the key's site. An empty string clears the field (stored as `NULL`). Fields absent from the payload are left alone. Other sites' text is never touched |
+| `access`, `retracted`, `kind` | The article | Written to the article itself, so every site sees the change |
+
+| HTTP status | Condition |
+|:------------|:----------|
+| `200 OK` | Edited. The body carries `article_id`, `doi`, `organization_id`, `site_id` and `updated_fields` |
+| `400 Bad Request` | `doi` missing, or an invalid `access`, `retracted` or `kind` value |
+| `401 Unauthorized` | No API key, key invalid, or the request IP is not in the key's allowlist |
+| `403 Forbidden` | The key has no organisation, no site, or a site that belongs to another organisation; or the article is not visible to the key's organisation |
+| `404 Not Found` | No article has that DOI |
+| `409 Conflict` | The DOI matches more than one article (`article_ids` lists them) |
+
+> **Breaking change.** Before per-site editorial content, `takeaways` and `summary_plain_english` were written for the key's organisation, and the response had no `site_id`. A key with no site can no longer edit these fields: bind it to a site in the admin (**API access schemes**).
 
 ---
 

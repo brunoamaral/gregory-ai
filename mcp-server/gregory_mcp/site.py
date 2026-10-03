@@ -31,7 +31,7 @@ from urllib.parse import urlparse
 
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 
-from .site_context import _current_site_id, _current_tenant
+from .site_context import _current_site_id, _current_tenant, get_editor_context
 
 
 def _normalize_host(raw: str | None) -> str | None:
@@ -89,7 +89,17 @@ class SiteMiddleware(ServerMiddleware[Any]):
 	TenantGateMiddleware (see server.py) so a cold-cache `GET /tenants/`
 	fetch's latency is never smeared into some unrelated tool call's own
 	`upstream_ms`/`upstream_calls` telemetry.
+
+	On the editor address (`editor=True`) the signed-in person's
+	`EditorSession` was already set by `auth.py` before the request got here.
+	The tenant directory it resolves from depends on the tier: an editor reads
+	`GET /editor/tenants/` (private sites included, each with its whole scope),
+	while the public tier reads the same anonymous directory `/mcp` does, so a
+	signed-in person without a grant sees exactly what an anonymous caller would.
 	"""
+
+	def __init__(self, editor: bool = False):
+		self._editor = editor
 
 	async def __call__(self, ctx: ServerRequestContext[Any, Any], call_next: CallNext) -> HandlerResult:
 		if ctx.request_id is None:
@@ -97,7 +107,10 @@ class SiteMiddleware(ServerMiddleware[Any]):
 
 		from .tenants import resolve_tenant  # lazy: see module docstring
 
-		tenant = await resolve_tenant(_extract_host_header(ctx))
+		session = get_editor_context() if self._editor else None
+		tenant = await resolve_tenant(
+			_extract_host_header(ctx), editor=session is not None and session.is_editor
+		)
 		site_token = _current_site_id.set(tenant.site_id if tenant is not None else None)
 		tenant_token = _current_tenant.set(tenant)
 		try:

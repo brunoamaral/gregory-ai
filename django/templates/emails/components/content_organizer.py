@@ -514,7 +514,7 @@ class EmailRenderingPipeline:
 
 		# Build per-org content map for email templates
 		if organization is not None:
-			from gregory.models import ArticleOrgContent
+			from gregory.models import ArticleSiteContent, OrganizationSite
 
 			all_email_articles = list(context.get("articles", [])) + list(
 				context.get("additional_articles", [])
@@ -526,11 +526,25 @@ class EmailRenderingPipeline:
 			article_ids = [
 				a.article_id for a in all_email_articles if hasattr(a, "article_id")
 			]
+			# Editorial content is per site. An email carries the text of the
+			# site it is sent and branded for (the List's site, resolved by
+			# get_site_and_settings), provided the organisation owns it; else the
+			# organisation's default site, the same fallback Lists use when they
+			# name no site.
+			owned_site_ids = OrganizationSite.objects.filter(organization=organization)
+			if site is not None and owned_site_ids.filter(site_id=site.pk).exists():
+				content_site_id = site.pk
+			else:
+				content_site_id = (
+					owned_site_ids.order_by("-is_default", "id")
+					.values_list("site_id", flat=True)
+					.first()
+				)
 			org_contents = {
-				oc.article_id: oc
-				for oc in ArticleOrgContent.objects.filter(
+				sc.article_id: sc
+				for sc in ArticleSiteContent.objects.filter(
 					article_id__in=article_ids,
-					organization=organization,
+					site_id=content_site_id,
 				)
 			}
 			context["org_content_map"] = org_contents

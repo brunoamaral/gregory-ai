@@ -13,7 +13,6 @@ from gregory.models import (
 	ArticleSubjectRelevance,
 	TeamCategory,
 	ArticleTrialReference,
-	ArticleOrgContent,
 	TrialOrgContent,
 	TrialCountry,
 	TrialSite,
@@ -26,7 +25,15 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.editorial import editorial_org_ids, editorial_org_names, editorial_requested
+from api.editorial import (
+	article_site_contents,
+	editorial_org_ids,
+	editorial_org_names,
+	editorial_requested,
+	editorial_site_ids,
+	editorial_sites,
+	is_editor_request,
+)
 from api.serializers.mixins import ScopedSerializerMixin
 
 
@@ -424,20 +431,81 @@ class EditorialEntrySerializer(serializers.Serializer):
 	summary_plain_english = serializers.CharField(allow_null=True)
 
 
-class EditorialFieldMixin:
-	"""``?include=editorial`` support for the article and trial serializers.
+class EditorialSiteSerializer(serializers.Serializer):
+	id = serializers.IntegerField()
+	domain = serializers.CharField()
+	name = serializers.CharField()
 
-	``editorial`` is declared as a field so it appears in the schema, but is
-	popped from the output unless the caller opted in; ``get_editorial()``
-	returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-	EDITORIAL-API-SPEC.md.
+
+class EditorialSiteEntrySerializer(serializers.Serializer):
+	"""One site's editorial content for an article (``?include=editorial``).
+
+	``updated_at`` and ``updated_by`` appear only for an MCP editor
+	(``/editor/`` routes): when the entry last changed and who changed it.
 	"""
+
+	site = EditorialSiteSerializer()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True, required=False)
+	updated_by = serializers.CharField(allow_null=True, required=False)
+
+
+class _EditorialIncludeMixin:
+	"""Pops ``editorial`` from the output unless the caller opted in with
+	``?include=editorial``. ``editorial`` is declared as a field so it appears
+	in the schema; the ``get_editorial()`` of each subclass returns
+	immediately when it was not requested, so default responses cost nothing.
+	See api/editorial.py and EDITORIAL-API-SPEC.md."""
 
 	def to_representation(self, instance):
 		ret = super().to_representation(instance)
 		if not editorial_requested(self.context.get("request")):
 			ret.pop("editorial", None)
 		return ret
+
+
+class SiteEditorialFieldMixin(_EditorialIncludeMixin):
+	"""``?include=editorial`` for articles: one entry per site, since article
+	editorial content is per site (``ArticleSiteContent``)."""
+
+	@extend_schema_field(EditorialSiteEntrySerializer(many=True))
+	def get_editorial(self, obj) -> list:
+		"""One entry per editorial site (sorted by id); null fields when that
+		site has no content row. Uses ``_prefetched_site_contents`` when the
+		view attached it, else one query per object (single-object
+		serialisation)."""
+		request = self.context.get("request")
+		if not editorial_requested(request):
+			return []  # popped in to_representation
+		site_ids = editorial_site_ids(request)
+		if not site_ids:
+			return []
+		sites = editorial_sites(request)
+		prefetched = getattr(obj, "_prefetched_site_contents", None)
+		rows = prefetched if prefetched is not None else article_site_contents(request).filter(
+			article=obj
+		)
+		by_site = {row.site_id: row for row in rows}
+		with_audit = is_editor_request(request)
+		entries = []
+		for site_id in site_ids:
+			row = by_site.get(site_id)
+			entry = {
+				"site": sites.get(site_id, {"id": site_id, "domain": "", "name": ""}),
+				"takeaways": row.takeaways if row else None,
+				"summary_plain_english": row.summary_plain_english if row else None,
+			}
+			if with_audit:
+				entry["updated_at"] = row.updated_at if row else None
+				entry["updated_by"] = getattr(row, "last_editor", None) if row else None
+			entries.append(entry)
+		return entries
+
+
+class EditorialFieldMixin(_EditorialIncludeMixin):
+	"""``?include=editorial`` for trials: one entry per organisation, since
+	trial editorial content is still per organisation (``TrialOrgContent``)."""
 
 	@extend_schema_field(EditorialEntrySerializer(many=True))
 	def get_editorial(self, obj) -> list:
@@ -470,7 +538,7 @@ class EditorialFieldMixin:
 
 
 class ArticleSerializer(
-	EditorialFieldMixin,
+	SiteEditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
 ):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
@@ -518,7 +586,9 @@ class ArticleSerializer(
 	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
 		references = obj.trial_references.all()
-		trials = [ref.trial for ref in references]
+		# The view's prefetch already drops suppressed links; this keeps an
+		# unprefetched caller from listing one.
+		trials = [ref.trial for ref in references if not ref.suppressed]
 		return TrialReferenceSerializer(trials, many=True).data
 
 
@@ -669,7 +739,7 @@ class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.Hy
 		to avoid one query per trial on list responses.
 		"""
 		references = obj.article_references.all()
-		articles = [ref.article for ref in references]
+		articles = [ref.article for ref in references if not ref.suppressed]
 		return ArticleReferenceSerializer(articles, many=True).data
 
 	def get_countries_normalized(self, obj) -> Optional[list]:

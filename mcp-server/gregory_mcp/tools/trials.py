@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from typing import Literal
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from .. import intent as intent_module
 from ..client import GregoryAPIError, get_client
 from ..compact import compact_trial, strip_team_data
 from ..enums import CategoryModality
 from ..pagination import clamp_page, clamp_page_size
+from ..site_context import get_editor_context
 from ..zero_result import guidance_for
 
 SexEligibility = Literal["all", "female", "male"]
@@ -136,19 +139,28 @@ async def search_trials(
 	return response
 
 
+def _detail_params() -> dict | None:
+	"""An editor's detail read includes the site's editorial content (the
+	takeaways and summary they may be about to edit), which Django leaves out
+	without ``?include=editorial``. Anonymous and public-tier reads are
+	unchanged."""
+	session = get_editor_context()
+	return {"include": "editorial"} if session is not None and session.is_editor else None
+
+
 async def get_trial(trial_id: int) -> dict:
 	"""Fetch the full record for one clinical trial by ID, including
 	trial_sites (detail-only), eligibility criteria, and results detail.
 
 	Raises:
-		ValueError: If the trial can't be found.
+		ToolError: If the trial can't be found.
 	"""
 	try:
-		trial = await get_client().get(f"/trials/{trial_id}/")
+		trial = await get_client().get(f"/trials/{trial_id}/", _detail_params())
 	except GregoryAPIError as exc:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".
 		if exc.status_code == 404:
-			raise ValueError(f"Trial {trial_id} was not found.") from exc
+			raise ToolError(f"Trial {trial_id} was not found.") from exc
 		raise
 	return strip_team_data(trial)

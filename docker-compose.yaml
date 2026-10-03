@@ -50,6 +50,13 @@ services:
       - DJANGO_DEBUG=${DJANGO_DEBUG}
       - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+      # MCP editor access (docs/07-mcp-server.md, "Editor access"). The key is
+      # shared with the `gregory-mcp` service; with it unset, /editor/ and
+      # token introspection refuse every request. Unset values fall back to
+      # Django's defaults (issuer https://api.<DOMAIN_NAME>, prefix gregory-ai).
+      - GREGORY_MCP_SERVICE_KEY=${GREGORY_MCP_SERVICE_KEY:-}
+      - OAUTH_ISSUER=${OAUTH_ISSUER:-}
+      - MCP_EDITOR_HOST_PREFIX=${MCP_EDITOR_HOST_PREFIX:-gregory-ai}
     networks:
       - gregory_network
     depends_on:
@@ -86,6 +93,16 @@ services:
       # see docs/07-mcp-server.md, "Tenant resolution". Empty in production,
       # where the inbound Host resolves the tenant on its own.
       - GREGORY_SITE_ID=${GREGORY_MCP_SITE_ID:-}
+      # Editor access (/mcp/editor, docs/07-mcp-server.md "Editor access"). The
+      # editor address exists only when BOTH are set; without them this container
+      # serves /mcp exactly as before. The key is the same value as on the
+      # `gregory` service. The issuer is the authorization server's public URL
+      # (https://api.<DOMAIN_NAME> unless OAUTH_ISSUER says otherwise), the
+      # same value the `gregory` service uses. Keep
+      # GREGORY_MCP_API_URL on the internal URL: nginx hides /editor/ and
+      # /o/introspect/ from the public host, and this container needs both.
+      - GREGORY_MCP_SERVICE_KEY=${GREGORY_MCP_SERVICE_KEY:-}
+      - GREGORY_OAUTH_ISSUER=${OAUTH_ISSUER:-https://api.${DOMAIN_NAME:-localhost}}
       - MCP_LOG_DIR=/var/log/gregory-mcp
     networks:
       - gregory_network

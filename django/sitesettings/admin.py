@@ -5,6 +5,8 @@ from django.contrib.sites.models import Site
 
 from .models import CustomSetting, SiteMcpDocument, SiteMcpPrompt
 from gregory.models import OrganizationSite
+from mcpauth.admin import SiteEditorInline, editor_address_display
+from mcpauth.models import SiteEditor
 from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 
 
@@ -190,12 +192,31 @@ class OrganizationSiteInline(admin.TabularInline):
 
 
 class SiteWithSettingsAdmin(SiteAdmin):
+	fields = ("domain", "name", "mcp_editor_address")
+	readonly_fields = ("mcp_editor_address",)
 	inlines = [
 		CustomSettingInline,
 		SiteMcpPromptInline,
 		SiteMcpDocumentInline,
 		OrganizationSiteInline,
+		SiteEditorInline,
 	]
+
+	@admin.display(description="MCP editor address")
+	def mcp_editor_address(self, obj):
+		"""What a new editor adds to their MCP client for this site."""
+		return editor_address_display(obj)
+
+	def save_formset(self, request, form, formset, change):
+		# Record who granted editor access; the inline doesn't show the field.
+		if formset.model is SiteEditor:
+			for editor in formset.save(commit=False):
+				if editor.pk is None:
+					editor.granted_by = request.user
+				editor.save()
+			formset.save_m2m()
+			return
+		super().save_formset(request, form, formset, change)
 
 
 admin.site.unregister(Site)

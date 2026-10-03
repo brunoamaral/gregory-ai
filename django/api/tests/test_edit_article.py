@@ -2,8 +2,10 @@
 Tests for POST /articles/edit/
 
 Covers spec §10.1:
-  - Successful upsert (no prior ArticleOrgContent row)
-  - Successful update of existing ArticleOrgContent
+  - Successful upsert (no prior ArticleSiteContent row)
+  - Successful update of existing ArticleSiteContent
+  - Two sites of one organisation keep separate editorial content
+  - API key without a usable site → 403
   - Per-article fields (access, retracted, kind) persist on Articles
   - Article not found by DOI → 404
   - Multiple articles match DOI → 409 DuplicateArticleError with ids; no write
@@ -22,6 +24,7 @@ import json
 from contextlib import contextmanager
 from datetime import timedelta
 
+from django.contrib.sites.models import Site
 from django.db import connection
 from django.test import TestCase, Client
 from django.utils.timezone import now
@@ -30,7 +33,8 @@ from organizations.models import Organization
 from api.models import APIAccessScheme, APIAccessSchemeLog
 from gregory.models import (
 	Articles,
-	ArticleOrgContent,
+	ArticleSiteContent,
+	OrganizationSite,
 	Sources,
 	Team,
 	Subject,
@@ -75,8 +79,22 @@ def _make_source(team, subject, name):
 	)
 
 
-def _make_scheme(org, name, ip_addresses=""):
+def _make_site(org, domain, is_default=False):
+	site = Site.objects.create(domain=domain, name=domain)
+	OrganizationSite.objects.create(organization=org, site=site, is_default=is_default)
+	return site
+
+
+def _make_scheme(org, name, ip_addresses="", site=None):
+	"""A key bound to ``site``, or to a new default site of ``org`` (editorial
+	content is per site, so a key without one cannot edit articles)."""
+	if site is None:
+		site = OrganizationSite.objects.filter(organization=org).first()
+		site = site.site if site else _make_site(
+			org, f"{org.slug}.edit.test.example.com", is_default=True
+		)
 	return APIAccessScheme.objects.create(
+		site=site,
 		client_name=name,
 		client_contacts=f"{name}@example.com",
 		organization=org,
@@ -123,8 +141,8 @@ def without_doi_constraint():
 # ---------------------------------------------------------------------------
 
 
-class EditArticleOrgContentTest(TestCase):
-	"""Per-org fields (takeaways, summary_plain_english)."""
+class EditArticleSiteContentTest(TestCase):
+	"""Per-site fields (takeaways, summary_plain_english)."""
 
 	def setUp(self):
 		self.client = Client()
@@ -135,7 +153,7 @@ class EditArticleOrgContentTest(TestCase):
 		self.article = _make_article(self.team, doi="10.1111/upsert")
 
 	def test_upsert_creates_new_row(self):
-		"""No prior ArticleOrgContent → row is created."""
+		"""No prior ArticleSiteContent → row is created."""
 		resp = _edit(
 			self.client,
 			self.scheme.api_key,
@@ -147,15 +165,15 @@ class EditArticleOrgContentTest(TestCase):
 		self.assertEqual(resp.status_code, 200)
 		data = resp.json()
 		self.assertIn("takeaways", data["updated_fields"])
-		content = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org
+		content = ArticleSiteContent.objects.get(
+			article=self.article, site=self.scheme.site
 		)
 		self.assertEqual(content.takeaways, "First takeaway")
 
 	def test_upsert_updates_existing_row(self):
-		"""Existing ArticleOrgContent row is updated in place."""
-		ArticleOrgContent.objects.create(
-			article=self.article, organization=self.org, takeaways="Old value"
+		"""Existing ArticleSiteContent row is updated in place."""
+		ArticleSiteContent.objects.create(
+			article=self.article, site=self.scheme.site, takeaways="Old value"
 		)
 		resp = _edit(
 			self.client,
@@ -166,21 +184,21 @@ class EditArticleOrgContentTest(TestCase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
-		content = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org
+		content = ArticleSiteContent.objects.get(
+			article=self.article, site=self.scheme.site
 		)
 		self.assertEqual(content.takeaways, "New value")
 		self.assertEqual(
-			ArticleOrgContent.objects.filter(
-				article=self.article, organization=self.org
+			ArticleSiteContent.objects.filter(
+				article=self.article, site=self.scheme.site
 			).count(),
 			1,
 		)
 
 	def test_empty_string_clears_takeaways(self):
 		"""Empty string takeaways is stored as NULL."""
-		ArticleOrgContent.objects.create(
-			article=self.article, organization=self.org, takeaways="Something"
+		ArticleSiteContent.objects.create(
+			article=self.article, site=self.scheme.site, takeaways="Something"
 		)
 		resp = _edit(
 			self.client,
@@ -191,15 +209,15 @@ class EditArticleOrgContentTest(TestCase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
-		content = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org
+		content = ArticleSiteContent.objects.get(
+			article=self.article, site=self.scheme.site
 		)
 		self.assertIsNone(content.takeaways)
 
 	def test_omitted_field_not_changed(self):
 		"""Fields absent from the payload are not modified."""
-		ArticleOrgContent.objects.create(
-			article=self.article, organization=self.org, takeaways="Keep me"
+		ArticleSiteContent.objects.create(
+			article=self.article, site=self.scheme.site, takeaways="Keep me"
 		)
 		resp = _edit(
 			self.client,
@@ -210,8 +228,8 @@ class EditArticleOrgContentTest(TestCase):
 			},
 		)
 		self.assertEqual(resp.status_code, 200)
-		content = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org
+		content = ArticleSiteContent.objects.get(
+			article=self.article, site=self.scheme.site
 		)
 		self.assertEqual(content.takeaways, "Keep me")
 		self.assertEqual(content.summary_plain_english, "A summary")
@@ -340,7 +358,7 @@ class EditArticleErrorsTest(TestCase):
 		self.assertIn(self.article.article_id, data["extra_data"]["article_ids"])
 		self.assertIn(duplicate.article_id, data["extra_data"]["article_ids"])
 		# No writes should have occurred
-		self.assertEqual(ArticleOrgContent.objects.count(), 0)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)
 
 	def test_cross_org_article_returns_403(self):
 		"""Article belongs to other_org only → 403."""
@@ -356,7 +374,7 @@ class EditArticleErrorsTest(TestCase):
 			},
 		)
 		self.assertEqual(resp.status_code, 403)
-		self.assertEqual(ArticleOrgContent.objects.count(), 0)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)
 
 
 class EditArticleAuditLogTest(TestCase):
@@ -399,3 +417,60 @@ class EditArticleAuditLogTest(TestCase):
 			"access_date"
 		)
 		self.assertEqual(log.http_code, 403)
+
+
+class EditArticlePerSiteTest(TestCase):
+	"""Editorial content is per site: the key's site decides where it lands."""
+
+	def setUp(self):
+		self.client = Client()
+		self.org = _make_org("Org F")
+		self.team = _make_team(self.org, "Team F")
+		self.site_one = _make_site(self.org, "one.edit.test.example.com", is_default=True)
+		self.site_two = _make_site(self.org, "two.edit.test.example.com")
+		self.key_one = _make_scheme(self.org, "key-one", site=self.site_one)
+		self.key_two = _make_scheme(self.org, "key-two", site=self.site_two)
+		self.article = _make_article(self.team, doi="10.6666/persite")
+
+	def test_two_sites_of_one_org_keep_separate_text(self):
+		_edit(self.client, self.key_one.api_key, {"doi": "10.6666/persite", "takeaways": "One"})
+		_edit(self.client, self.key_two.api_key, {"doi": "10.6666/persite", "takeaways": "Two"})
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=self.article, site=self.site_one).takeaways,
+			"One",
+		)
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=self.article, site=self.site_two).takeaways,
+			"Two",
+		)
+
+	def test_response_names_the_site(self):
+		resp = _edit(
+			self.client, self.key_two.api_key, {"doi": "10.6666/persite", "takeaways": "x"}
+		)
+		self.assertEqual(resp.json()["site_id"], self.site_two.id)
+
+	def test_edit_does_not_touch_the_other_site(self):
+		ArticleSiteContent.objects.create(
+			article=self.article, site=self.site_one, takeaways="Untouched"
+		)
+		_edit(self.client, self.key_two.api_key, {"doi": "10.6666/persite", "takeaways": "Two"})
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=self.article, site=self.site_one).takeaways,
+			"Untouched",
+		)
+
+	def test_key_without_site_returns_403_and_writes_nothing(self):
+		key = _make_scheme(self.org, "key-siteless", site=self.site_one)
+		APIAccessScheme.objects.filter(pk=key.pk).update(site=None)
+		resp = _edit(self.client, key.api_key, {"doi": "10.6666/persite", "takeaways": "x"})
+		self.assertEqual(resp.status_code, 403)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)
+
+	def test_key_with_another_orgs_site_returns_403_and_writes_nothing(self):
+		other_org = _make_org("Org G", "org-g")
+		other_site = _make_site(other_org, "other.edit.test.example.com", is_default=True)
+		key = _make_scheme(self.org, "key-mismatch", site=other_site)
+		resp = _edit(self.client, key.api_key, {"doi": "10.6666/persite", "takeaways": "x"})
+		self.assertEqual(resp.status_code, 403)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)

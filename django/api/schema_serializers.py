@@ -203,3 +203,102 @@ class GlobalStatsSerializer(serializers.Serializer):
 		many=True,
 		help_text="Present only when ?subject= is given — every in-scope subject, including zero-count ones.",
 	)
+
+
+# --- /editor/ routes (MCP editor access) -- see api/editor_views.py ---------
+
+
+class EditorErrorSerializer(serializers.Serializer):
+	"""DRF's standard error body on the ``/editor/`` routes."""
+
+	detail = serializers.CharField()
+	article_ids = serializers.ListField(
+		child=serializers.IntegerField(),
+		required=False,
+		help_text="On 409 from the DOI lookup: the articles that share the DOI.",
+	)
+
+
+class EditorResolveResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	doi = serializers.CharField()
+	title = serializers.CharField()
+
+
+class EditorialUpdateRequestSerializer(serializers.Serializer):
+	takeaways = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
+	summary_plain_english = serializers.CharField(
+		required=False, allow_blank=True, trim_whitespace=False
+	)
+
+
+class EditorialUpdateResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	site_id = serializers.IntegerField()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+	updated_by = serializers.CharField(
+		allow_null=True, help_text="Name and email of whoever last changed the row."
+	)
+	updated_at = serializers.DateTimeField()
+
+
+class RelevanceRequestSerializer(serializers.Serializer):
+	is_relevant = serializers.BooleanField(
+		allow_null=True,
+		help_text="true, false, or null for not reviewed.",
+	)
+
+
+class RelevanceResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	subject_id = serializers.IntegerField()
+	is_relevant = serializers.BooleanField(allow_null=True)
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorTrialLinkRequestSerializer(serializers.Serializer):
+	trial_id = serializers.IntegerField(min_value=1)
+
+
+class EditorTrialLinkResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	trial_id = serializers.IntegerField()
+	source = serializers.ChoiceField(choices=["auto", "manual"])
+	identifier_type = serializers.CharField()
+	identifier_value = serializers.CharField()
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorTrialUnlinkResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	trial_id = serializers.IntegerField()
+	removed = serializers.ListField(
+		child=serializers.CharField(),
+		help_text=(
+			"Which kinds of link were removed, `manual` and/or `auto`: a manual "
+			"one is deleted, an auto-detected one is hidden."
+		),
+	)
+
+
+class EditorHistoryEntrySerializer(serializers.Serializer):
+	kind = serializers.ChoiceField(choices=["editorial", "relevance", "trial_link"])
+	change = serializers.ChoiceField(choices=["created", "updated", "deleted"])
+	changed_at = serializers.DateTimeField()
+	changed_by = serializers.CharField(
+		allow_null=True,
+		help_text="Name and email, or the API key's name. Null for a change with no recorded author (the pipeline).",
+	)
+	via = serializers.ChoiceField(choices=["mcp", "api_key", "admin"], allow_null=True)
+	details = serializers.DictField(
+		help_text="The values after the change: the editorial text, the relevance, or the link's source."
+	)
+
+
+class EditorHistoryResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	entries = EditorHistoryEntrySerializer(many=True)
+

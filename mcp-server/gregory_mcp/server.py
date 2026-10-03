@@ -1,9 +1,14 @@
 """Builds the MCPServer: registers tools, resources, and prompts.
 
-Everything here is read-only. Every tool is annotated
-`read_only_hint=True, idempotent_hint=True, open_world_hint=False` since none
-of them write, and every one only ever talks to the one Gregory instance
-named by `GREGORY_API_URL`.
+`build_server()` is the anonymous server behind `/mcp`: everything on it is
+read-only. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
+open_world_hint=False` since none of them write, and every one only ever talks
+to the one Gregory instance named by `GREGORY_API_URL`.
+
+`build_server(editor=True)` is the server behind `/mcp/editor`
+(MCP-AUTH-PLAN.md): the same ten read tools, plus `get_article_history` and four
+write tools. What a given request may see and call depends on who signed in
+(tool_access.py); the process registers every tool once, like the anonymous one.
 """
 
 from __future__ import annotations
@@ -19,9 +24,22 @@ from .identity import SERVER_VERSION, TenantIdentityMiddleware
 from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tenants import TenantGateMiddleware
+from .tool_access import ToolAccessMiddleware
 from .tools import articles, authors, catalog, stats, trials
+from .tools import editor as editor_tools
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
+
+# The write tools ask the client for confirmation (`destructive_hint`), which
+# clients may or may not honour: the edit rate limit and Django's history are
+# the safeguards that don't depend on the client. All are idempotent (the same
+# call twice leaves the same state). Linking only adds, so it isn't destructive.
+EDIT_DESTRUCTIVE = ToolAnnotations(
+	read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False
+)
+EDIT_ADDITIVE = ToolAnnotations(
+	read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
+)
 
 # All five cache hints are "private" (decision 3, MCP-MULTI-TENANCY-PHASE-3-PLAN.md):
 # every response now carries the resolved tenant's own serverInfo stamp
@@ -65,12 +83,24 @@ CACHE_HINTS = {
 }
 
 
+# The editor address: a newly granted editor should see the edit tools soon
+# after reconnecting, and what tools/list and server/discover say depends on the
+# signed-in person's tier, so they get 5 minutes instead of STATIC_CACHE's 30.
+# Still private: never shared between callers.
+EDITOR_LIST_CACHE = CacheHint(ttl_ms=5 * 60 * 1000, scope="private")
+EDITOR_CACHE_HINTS = {
+	**CACHE_HINTS,
+	"tools/list": EDITOR_LIST_CACHE,
+	"server/discover": EDITOR_LIST_CACHE,
+}
+
+
 def _replace_handler(server: MCPServer, method: str, params_type: type, handler) -> None:
 	"""Registers `handler` for `method`, replacing whatever the SDK's own
 	high-level decorators would have registered.
 
 	`server._lowlevel_server.add_request_handler` is private SDK API (`mcp`
-	pinned to `==2.0.0` in pyproject.toml) — the one seam this server uses to
+	pinned to `==2.3.0` in pyproject.toml) — the one seam this server uses to
 	serve prompts/resources per resolved tenant, since the
 	`@server.prompt()`/`@server.resource()` decorators fix their
 	registration at construction time, once for the whole process, while
@@ -90,7 +120,7 @@ def _replace_handler(server: MCPServer, method: str, params_type: type, handler)
 	lowlevel.add_request_handler(method, params_type, handler)
 
 
-def build_server() -> MCPServer:
+def build_server(editor: bool = False) -> MCPServer:
 	server = MCPServer(
 		# Neutral defaults, naming no platform (decision F) — a client only
 		# ever sees these if no tenant resolved, and TenantGateMiddleware
@@ -99,9 +129,13 @@ def build_server() -> MCPServer:
 		# instead (identity.py).
 		name="gregory-ai",
 		title="Research assistant",
-		description="Read-only access to a research database of articles, clinical trials, authors, and sponsors.",
+		description=(
+			"Access for editors to a research database of articles, clinical trials, authors, and sponsors."
+			if editor
+			else "Read-only access to a research database of articles, clinical trials, authors, and sponsors."
+		),
 		version=SERVER_VERSION,
-		cache_hints=CACHE_HINTS,
+		cache_hints=EDITOR_CACHE_HINTS if editor else CACHE_HINTS,
 		# SiteMiddleware first (outermost): it resolves this request's tenant
 		# — env override, else inbound Host via GET /tenants/ — before
 		# anything else runs, so a cold-cache /tenants/ fetch's latency lands
@@ -114,7 +148,22 @@ def build_server() -> MCPServer:
 		# result, including its default identity stamp, *inside* the
 		# middleware chain, so only the middleware closest to the handler
 		# sees that stamp on the dict call_next returns (see identity.py).
-		middleware=[SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware(), TenantIdentityMiddleware()],
+		#
+		# On the editor address SiteMiddleware reads the signed-in person's
+		# EditorSession (auth.py set it) to pick the tenant directory, the gate also
+		# checks the token's site against the host's, and ToolAccessMiddleware
+		# hides and refuses the tools that person may not use.
+		middleware=(
+			[
+				SiteMiddleware(editor=True),
+				TelemetryMiddleware(),
+				TenantGateMiddleware(editor=True),
+				ToolAccessMiddleware(),
+				TenantIdentityMiddleware(),
+			]
+			if editor
+			else [SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware(), TenantIdentityMiddleware()]
+		),
 	)
 
 	server.add_tool(catalog.list_subjects, annotations=READ_ONLY)
@@ -127,6 +176,13 @@ def build_server() -> MCPServer:
 	server.add_tool(catalog.list_categories, annotations=READ_ONLY)
 	server.add_tool(catalog.list_sponsors, annotations=READ_ONLY)
 	server.add_tool(stats.get_stats, annotations=READ_ONLY)
+
+	if editor:
+		server.add_tool(editor_tools.get_article_history, annotations=READ_ONLY)
+		server.add_tool(editor_tools.update_article_editorial, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.set_article_relevance, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.link_trial_to_article, annotations=EDIT_ADDITIVE)
+		server.add_tool(editor_tools.unlink_trial_from_article, annotations=EDIT_DESTRUCTIVE)
 
 	_replace_handler(server, "prompts/list", types.PaginatedRequestParams, prompts.list_prompts)
 	_replace_handler(server, "prompts/get", types.GetPromptRequestParams, prompts.get_prompt)

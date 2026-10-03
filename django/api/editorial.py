@@ -4,20 +4,37 @@ api/editorial.py
 Opt-in editorial content (``?include=editorial``) for article and trial
 responses -- see EDITORIAL-API-SPEC.md.
 
-"Editorial" is ``takeaways`` and ``summary_plain_english``, written per
-organisation (``ArticleOrgContent`` / ``TrialOrgContent``). Which
-organisation's content a caller gets is decided by *who the caller is*, never
-by a parameter, so nobody can ask for another organisation's content:
+"Editorial" is ``takeaways`` and ``summary_plain_english``. Articles carry it
+per site (``ArticleSiteContent``): two sites of one organisation can say
+different things about the same article. Trials still carry it per
+organisation (``TrialOrgContent``) until trials are brought into the per-site
+model. Whose content a caller gets is decided by *who the caller is*, never by
+a parameter, so nobody can ask for another site's or organisation's content.
+
+Articles (sites):
+
+  - Valid API key         -> the key's site (none if the key's site does not
+                             belong to the key's organisation).
+  - MCP editor            -> the one site their token is bound to (and, on
+                             top of the usual fields, who last changed each
+                             entry and when).
+  - Logged-in user        -> every site owned by an organisation the user
+                             belongs to, each labelled by site.
+  - Anonymous             -> the ``api_public`` site ``resolve_anonymous_site()``
+                             picks (``?site_id=`` -> Origin -> Referer -> the
+                             one public site). None when there is no public
+                             site.
+
+Trials (organisations):
 
   - Valid API key         -> the key's organisation.
+  - MCP editor            -> the organisation that owns their site.
   - Logged-in user        -> every organisation the user belongs to.
   - Anonymous             -> the organisation that owns the ``api_public``
-                             site ``resolve_anonymous_site()`` picks
-                             (``?site_id=`` -> Origin -> Referer -> the one
-                             public site). None when there is no public site.
+                             site the anonymous resolution above picks.
 
-``?team_id=`` plays no part. Both helpers cache their answer on the request,
-so a list endpoint resolves once however many rows it serialises.
+``?team_id=`` plays no part. The helpers cache their answer on the request, so
+a list endpoint resolves once however many rows it serialises.
 """
 
 from rest_framework.exceptions import ValidationError
@@ -28,6 +45,8 @@ INCLUDE_CHOICES = ("editorial",)
 _INCLUDE_ATTR = "_editorial_requested"
 _ORG_IDS_ATTR = "_editorial_org_ids"
 _ORG_NAMES_ATTR = "_editorial_org_names"
+_SITE_IDS_ATTR = "_editorial_site_ids"
+_SITES_ATTR = "_editorial_sites"
 
 
 def _is_csv(request) -> bool:
@@ -80,11 +99,19 @@ def editorial_org_ids(request) -> list:
 	from gregory.models import OrganizationSite
 	from gregory.site_resolution import resolve_anonymous_site
 	from gregory.visibility import _resolve_api_scheme
+	from mcpauth.editor_auth import editor_auth_of
 
 	org_ids = set()
 	scheme = _resolve_api_scheme(request)
+	editor = editor_auth_of(request)
 	if scheme is not None:
 		org_ids.add(scheme.organization_id)
+	elif editor is not None:
+		org_ids.update(
+			OrganizationSite.objects.filter(site_id=editor.site_id).values_list(
+				"organization_id", flat=True
+			)
+		)
 	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
 		org_ids.update(
 			request.user.organizations_organizationuser.values_list(
@@ -120,3 +147,94 @@ def editorial_org_names(request) -> dict:
 	)
 	setattr(request, _ORG_NAMES_ATTR, names)
 	return names
+
+
+def editorial_site_ids(request) -> list:
+	"""Site ids whose article editorial content the caller may read, sorted."""
+	if request is None:
+		return []
+	cached = getattr(request, _SITE_IDS_ATTR, None)
+	if cached is not None:
+		return cached
+
+	from gregory.models import OrganizationSite
+	from gregory.site_resolution import resolve_anonymous_site
+	from gregory.visibility import _resolve_api_scheme, site_id_for_api_scheme
+	from mcpauth.editor_auth import editor_auth_of
+
+	site_ids = set()
+	scheme = _resolve_api_scheme(request)
+	editor = editor_auth_of(request)
+	if scheme is not None:
+		site_id = site_id_for_api_scheme(scheme)
+		if site_id is not None:
+			site_ids.add(site_id)
+	elif editor is not None:
+		site_ids.add(editor.site_id)
+	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
+		org_ids = request.user.organizations_organizationuser.values_list(
+			"organization_id", flat=True
+		)
+		site_ids.update(
+			OrganizationSite.objects.filter(organization_id__in=org_ids).values_list(
+				"site_id", flat=True
+			)
+		)
+	else:
+		# Ambiguity (two public sites, no indicator) was already refused with
+		# a 400 by the visibility layer before any serializer runs.
+		site_id, _varies, ambiguous = resolve_anonymous_site(request)
+		if site_id is not None and not ambiguous:
+			site_ids.add(site_id)
+
+	result = sorted(site_ids)
+	setattr(request, _SITE_IDS_ATTR, result)
+	return result
+
+
+def editorial_sites(request) -> dict:
+	"""``{site_id: {"id", "domain", "name"}}`` for the caller's editorial
+	sites, one query per request."""
+	cached = getattr(request, _SITES_ATTR, None)
+	if cached is not None:
+		return cached
+	from django.contrib.sites.models import Site
+
+	sites = {
+		site.pk: {"id": site.pk, "domain": site.domain, "name": site.name}
+		for site in Site.objects.filter(pk__in=editorial_site_ids(request))
+	}
+	setattr(request, _SITES_ATTR, sites)
+	return sites
+
+
+def is_editor_request(request) -> bool:
+	"""True for an MCP editor's request, which sees who last changed each
+	editorial entry (``updated_by``) and when (``updated_at``)."""
+	from mcpauth.editor_auth import editor_auth_of
+
+	return request is not None and editor_auth_of(request) is not None
+
+
+def article_site_contents(request):
+	"""The ``ArticleSiteContent`` rows ``?include=editorial`` may show this caller.
+
+	For an editor each row also carries ``last_editor``: the name recorded on
+	its newest history row (or the API key's label when a key made the change),
+	as one correlated subquery, so a page of articles stays one extra query.
+	"""
+	from django.db.models import OuterRef, Subquery, Value
+	from django.db.models.functions import Coalesce, NullIf
+
+	from gregory.models import ArticleSiteContent
+
+	queryset = ArticleSiteContent.objects.filter(site_id__in=editorial_site_ids(request))
+	if is_editor_request(request):
+		newest = ArticleSiteContent.history.filter(id=OuterRef("id")).order_by("-history_date")
+		queryset = queryset.annotate(
+			last_editor=Coalesce(
+				NullIf(Subquery(newest.values("editor_label")[:1]), Value("")),
+				NullIf(Subquery(newest.values("api_access_scheme_label")[:1]), Value("")),
+			)
+		)
+	return queryset

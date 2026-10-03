@@ -67,8 +67,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
-        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
-        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
+        - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -189,24 +189,26 @@ paths:
         schema:
           type: boolean
         description: Filter for articles linked to one or more clinical trials (true/false).
+          A link an editor removed does not count.
       - in: query
         name: has_takeaways
         schema:
           type: boolean
-        description: 'true: records with non-empty takeaways written by the caller''s
-          own organisation (API key''s organisation, the organisations of a logged-in
-          user, or the organisation owning the resolved public site). false: everything
-          else. Does not require include=editorial.'
+        description: 'true: records with non-empty takeaways written for the caller''s
+          own site (API key''s site, the sites of the organisations of a logged-in
+          user, or the resolved public site). false: everything else. Does not require
+          include=editorial.'
       - in: query
         name: include
         schema:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -410,8 +412,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
-        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
-        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
+        - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -493,10 +495,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       tags:
       - articles
       security:
@@ -521,10 +524,11 @@ paths:
       description: Edit editorial and metadata fields on an existing article. Lookup
         is by `doi` (required). Raises 404 if not found, 409 if the DOI matches multiple
         articles (data quality issue), and 403 if the article is not associated with
-        the API key's organisation. Per-org fields (`takeaways`, `summary_plain_english`)
-        are upserted into ArticleOrgContent for the key's organisation — empty string
-        clears the field (stored as NULL). Per-article fields (`access`, `retracted`,
-        `kind`) are written back to the Articles row directly.
+        the API key's organisation, or 403 if the key is not bound to a site. Per-site
+        fields (`takeaways`, `summary_plain_english`) are upserted into ArticleSiteContent
+        for the key's site — empty string clears the field (stored as NULL). Per-article
+        fields (`access`, `retracted`, `kind`) are written back to the Articles row
+        directly.
       parameters:
       - in: query
         name: format
@@ -831,24 +835,26 @@ paths:
         schema:
           type: boolean
         description: Filter for articles linked to one or more clinical trials (true/false).
+          A link an editor removed does not count.
       - in: query
         name: has_takeaways
         schema:
           type: boolean
-        description: 'true: records with non-empty takeaways written by the caller''s
-          own organisation (API key''s organisation, the organisations of a logged-in
-          user, or the organisation owning the resolved public site). false: everything
-          else. Does not require include=editorial.'
+        description: 'true: records with non-empty takeaways written for the caller''s
+          own site (API key''s site, the sites of the organisations of a logged-in
+          user, or the resolved public site). false: everything else. Does not require
+          include=editorial.'
       - in: query
         name: include
         schema:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: journal_slug
         schema:
@@ -1144,13 +1150,13 @@ paths:
                 has_clinical_trials:
                   type: boolean
                   description: Filter for articles linked to one or more clinical
-                    trials (true/false).
+                    trials (true/false). A link an editor removed does not count.
                 has_takeaways:
                   type: boolean
-                  description: 'true: records with non-empty takeaways written by
-                    the caller''s own organisation (API key''s organisation, the organisations
-                    of a logged-in user, or the organisation owning the resolved public
-                    site). false: everything else. Does not require include=editorial.'
+                  description: 'true: records with non-empty takeaways written for
+                    the caller''s own site (API key''s site, the sites of the organisations
+                    of a logged-in user, or the resolved public site). false: everything
+                    else. Does not require include=editorial.'
                 published_date_after:
                   type: string
                   format: date
@@ -1180,11 +1186,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: Opt in to extra content. Comma-separated; the only
+                  description: 'Opt in to extra content. Comma-separated; the only
                     accepted value is `editorial`, which adds an `editorial` list
-                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    of the caller''s own `takeaways` and `summary_plain_english`:
+                    one entry per site on articles, one per organisation on trials
                     (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.
+                    Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -2233,6 +2240,589 @@ paths:
             text/csv:
               schema:
                 $ref: '#/components/schemas/Category'
+          description: ''
+  /editor/articles/{article_id}/editorial/:
+    patch:
+      operationId: editor_articles_editorial_partial_update
+      description: Editor-only. Upserts `takeaways` and/or `summary_plain_english`
+        of the article for the editor's site; fields not sent are left alone and an
+        empty string clears a field (stored as NULL). Applies immediately and is recorded
+        under the editor's name. Returns the stored values and who last changed them.
+        Writes are throttled per editor and site.
+      summary: Set this site's editorial content for an article (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorialUpdateResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorialUpdateResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/articles/{article_id}/history/:
+    get:
+      operationId: editor_articles_history_retrieve
+      description: Editor-only. Who changed this article's editorial content for the
+        editor's site, its relevance for subjects in that site's scope, and its links
+        to trials in scope, and when. Newest first. Changes made by an API key name
+        the key instead of a person; changes made by the pipeline have no name.
+      summary: Edit history of an article (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Entries to return (default 50, max 200).
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorHistoryResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorHistoryResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/articles/{article_id}/relevance/{subject_id}/:
+    put:
+      operationId: editor_articles_relevance_update
+      description: Editor-only. Sets `is_relevant` (true, false or null for not reviewed)
+        for one subject. The subject must be in the editor's site scope, else 404.
+        Relevance is per subject, so the change applies to every site whose scope
+        lists the subject. Returns the stored value and who last changed it.
+      summary: Set an article's relevance for a subject (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: subject_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelevanceRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RelevanceRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RelevanceRequest'
+        required: true
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelevanceResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/RelevanceResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/articles/{article_id}/trials/:
+    post:
+      operationId: editor_articles_trials_create
+      description: 'Editor-only. Adds a manual link between the article and a trial.
+        Both must be inside the editor''s site scope, else 404. Idempotent: linking
+        a pair that is already linked returns the existing link (200) and creates
+        nothing; a new link is 201. A link an editor added is never changed or duplicated
+        by `detect_trial_references`.'
+      summary: Link a trial to an article (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorTrialLinkRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EditorTrialLinkRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EditorTrialLinkRequest'
+        required: true
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTrialLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorTrialLinkResponse'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTrialLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorTrialLinkResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/articles/{article_id}/trials/{trial_id}/:
+    delete:
+      operationId: editor_articles_trials_destroy
+      description: Editor-only. Removes the link between the article and a trial.
+        A link an editor added is deleted. An auto-detected link is hidden instead
+        (it stays, marked `suppressed`) so the next `detect_trial_references` run
+        doesn't recreate it. 404 when the pair isn't linked, or either side is outside
+        the editor's site scope.
+      summary: Unlink a trial from an article (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: trial_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorTrialUnlinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorTrialUnlinkResponse'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/articles/resolve/:
+    get:
+      operationId: editor_articles_resolve_retrieve
+      description: Editor-only. Finds the article with this DOI (case-insensitive)
+        among the articles inside the editor's site scope. 404 when there is none,
+        which is also the answer for an article outside that scope. 409 when more
+        than one in-scope article has the DOI, with their ids.
+      summary: Resolve a DOI to an article id (editor)
+      parameters:
+      - in: query
+        name: doi
+        schema:
+          type: string
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorResolveResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorResolveResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/tenants/:
+    get:
+      operationId: editor_tenants_list
+      description: 'Service-credential only. Like `GET /tenants/`, but lists every
+        site with `mcp_enabled` and a non-empty scope, whether or not it is `api_public`,
+        each with its full published scope. The MCP server''s editor mount uses this
+        to resolve a host to a site: a private site has an editor address but no anonymous
+        one (`api_public` tells the two mounts apart).'
+      summary: List every MCP tenant, private included (MCP server)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTenant'
+            text/csv:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/McpTenant'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
           description: ''
   /protected_endpoint/:
     get:
@@ -3486,10 +4076,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -4032,10 +4623,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: path
         name: trial_id
         schema:
@@ -4377,10 +4969,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: inclusion_agemax
         schema:
@@ -5006,11 +5599,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: Opt in to extra content. Comma-separated; the only
+                  description: 'Opt in to extra content. Comma-separated; the only
                     accepted value is `editorial`, which adds an `editorial` list
-                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    of the caller''s own `takeaways` and `summary_plain_english`:
+                    one entry per site on articles, one per organisation on trials
                     (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.
+                    Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -5631,12 +6225,8 @@ components:
     Article:
       type: object
       description: |-
-        ``?include=editorial`` support for the article and trial serializers.
-
-        ``editorial`` is declared as a field so it appears in the schema, but is
-        popped from the output unless the caller opted in; ``get_editorial()``
-        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-        EDITORIAL-API-SPEC.md.
+        ``?include=editorial`` for articles: one entry per site, since article
+        editorial content is per site (``ArticleSiteContent``).
       properties:
         article_id:
           type: integer
@@ -5711,7 +6301,7 @@ components:
         editorial:
           type: array
           items:
-            $ref: '#/components/schemas/EditorialEntry'
+            $ref: '#/components/schemas/EditorialSiteEntry'
           readOnly: true
         team_categories:
           type: array
@@ -6005,6 +6595,139 @@ components:
       description: |-
         * `manual` - Manual
         * `automatic` - Automatic
+    ChangeEnum:
+      enum:
+      - created
+      - updated
+      - deleted
+      type: string
+      description: |-
+        * `created` - created
+        * `updated` - updated
+        * `deleted` - deleted
+    EditorError:
+      type: object
+      description: DRF's standard error body on the ``/editor/`` routes.
+      properties:
+        detail:
+          type: string
+        article_ids:
+          type: array
+          items:
+            type: integer
+          description: 'On 409 from the DOI lookup: the articles that share the DOI.'
+      required:
+      - detail
+    EditorHistoryEntry:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/KindEnum'
+        change:
+          $ref: '#/components/schemas/ChangeEnum'
+        changed_at:
+          type: string
+          format: date-time
+        changed_by:
+          type: string
+          nullable: true
+          description: Name and email, or the API key's name. Null for a change with
+            no recorded author (the pipeline).
+        via:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ViaEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        details:
+          type: object
+          additionalProperties: {}
+          description: 'The values after the change: the editorial text, the relevance,
+            or the link''s source.'
+      required:
+      - change
+      - changed_at
+      - changed_by
+      - details
+      - kind
+      - via
+    EditorHistoryResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorHistoryEntry'
+      required:
+      - article_id
+      - entries
+    EditorResolveResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        doi:
+          type: string
+        title:
+          type: string
+      required:
+      - article_id
+      - doi
+      - title
+    EditorTrialLinkRequest:
+      type: object
+      properties:
+        trial_id:
+          type: integer
+          minimum: 1
+      required:
+      - trial_id
+    EditorTrialLinkResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        trial_id:
+          type: integer
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        identifier_type:
+          type: string
+        identifier_value:
+          type: string
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - article_id
+      - identifier_type
+      - identifier_value
+      - source
+      - trial_id
+      - updated_at
+      - updated_by
+    EditorTrialUnlinkResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        trial_id:
+          type: integer
+        removed:
+          type: array
+          items:
+            type: string
+          description: 'Which kinds of link were removed, `manual` and/or `auto`:
+            a manual one is deleted, an auto-detected one is hidden.'
+      required:
+      - article_id
+      - removed
+      - trial_id
     EditorialEntry:
       type: object
       description: One organisation's editorial content for a record (``?include=editorial``).
@@ -6031,6 +6754,73 @@ components:
       required:
       - id
       - name
+    EditorialSite:
+      type: object
+      properties:
+        id:
+          type: integer
+        domain:
+          type: string
+        name:
+          type: string
+      required:
+      - domain
+      - id
+      - name
+    EditorialSiteEntry:
+      type: object
+      description: |-
+        One site's editorial content for an article (``?include=editorial``).
+
+        ``updated_at`` and ``updated_by`` appear only for an MCP editor
+        (``/editor/`` routes): when the entry last changed and who changed it.
+      properties:
+        site:
+          $ref: '#/components/schemas/EditorialSite'
+        takeaways:
+          type: string
+          nullable: true
+        summary_plain_english:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+      required:
+      - site
+      - summary_plain_english
+      - takeaways
+    EditorialUpdateResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        site_id:
+          type: integer
+        takeaways:
+          type: string
+          nullable: true
+        summary_plain_english:
+          type: string
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+          description: Name and email of whoever last changed the row.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - article_id
+      - site_id
+      - summary_plain_english
+      - takeaways
+      - updated_at
+      - updated_by
     ErrorResponse:
       type: object
       description: 'Generic ``{"error": "..."}`` shape used by hand-written error
@@ -6118,6 +6908,16 @@ components:
       - by_domain
       - by_type
       - total
+    KindEnum:
+      enum:
+      - editorial
+      - relevance
+      - trial_link
+      type: string
+      description: |-
+        * `editorial` - editorial
+        * `relevance` - relevance
+        * `trial_link` - trial_link
     MLPredictionSubject:
       type: object
       properties:
@@ -6548,6 +7348,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrialSiteRow'
+    PatchedEditorialUpdateRequest:
+      type: object
+      properties:
+        takeaways:
+          type: string
+        summary_plain_english:
+          type: string
     PublicSite:
       type: object
       description: |-
@@ -6577,6 +7384,38 @@ components:
       - domain
       - name
       - site_id
+    RelevanceRequest:
+      type: object
+      properties:
+        is_relevant:
+          type: boolean
+          nullable: true
+          description: true, false, or null for not reviewed.
+      required:
+      - is_relevant
+    RelevanceResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        subject_id:
+          type: integer
+        is_relevant:
+          type: boolean
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - article_id
+      - is_relevant
+      - subject_id
+      - updated_at
+      - updated_by
     Source:
       type: object
       properties:
@@ -6612,6 +7451,14 @@ components:
       - source_id
       - subject_id
       - team_id
+    SourceEnum:
+      enum:
+      - auto
+      - manual
+      type: string
+      description: |-
+        * `auto` - auto
+        * `manual` - manual
     SourceForEnum:
       enum:
       - science paper
@@ -6827,12 +7674,8 @@ components:
     Trial:
       type: object
       description: |-
-        ``?include=editorial`` support for the article and trial serializers.
-
-        ``editorial`` is declared as a field so it appears in the schema, but is
-        popped from the output unless the caller opted in; ``get_editorial()``
-        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-        EDITORIAL-API-SPEC.md.
+        ``?include=editorial`` for trials: one entry per organisation, since
+        trial editorial content is still per organisation (``TrialOrgContent``).
       properties:
         trial_id:
           type: integer
@@ -7786,6 +8629,16 @@ components:
       - no_sponsor
       - no_status
       - total
+    ViaEnum:
+      enum:
+      - mcp
+      - api_key
+      - admin
+      type: string
+      description: |-
+        * `mcp` - mcp
+        * `api_key` - api_key
+        * `admin` - admin
   securitySchemes:
     apiKeyAuth:
       type: apiKey
@@ -7802,6 +8655,13 @@ components:
       type: apiKey
       in: cookie
       name: sessionid
+    editorServiceAuth:
+      type: http
+      scheme: bearer
+      description: The MCP server's service credential (GREGORY_MCP_SERVICE_KEY),
+        sent with X-Gregory-Editor-User and X-Gregory-Editor-Site naming the verified
+        editor and the one site. Only the MCP server holds it; /editor/ is not reachable
+        from the public internet.
     jwtAuth:
       type: http
       scheme: bearer
