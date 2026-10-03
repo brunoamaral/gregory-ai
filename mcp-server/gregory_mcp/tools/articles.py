@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from mcp.server.mcpserver.exceptions import ToolError
+
 from .. import intent as intent_module
 from ..client import GregoryAPIError, get_client
 from ..compact import compact_article, strip_team_data
@@ -108,7 +110,7 @@ async def get_article(article_id: int) -> dict:
 	ML predictions, linked clinical trials, and the untruncated summary.
 
 	Raises:
-		ValueError: If the article can't be found.
+		ToolError: If the article can't be found.
 	"""
 	try:
 		article = await get_client().get(f"/articles/{article_id}/")
@@ -120,6 +122,6 @@ async def get_article(article_id: int) -> dict:
 		# might exist somewhere else (decision F drops "in this instance" —
 		# no client-visible text names the platform or its multi-tenancy).
 		if exc.status_code == 404:
-			raise ValueError(f"Article {article_id} was not found.") from exc
+			raise ToolError(f"Article {article_id} was not found.") from exc
 		raise
 	return strip_team_data(article)

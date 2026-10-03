@@ -77,7 +77,7 @@ class TenantIdentityMiddleware(ServerMiddleware[Any]):
 
 	Must be registered innermost (see server.py): the SDK's runner
 	serializes each result, including its default `_meta` `serverInfo`
-	stamp, *inside* the middleware chain (mcp 2.0.0's `Runner._serialize`),
+	stamp, *inside* the middleware chain (mcp 2.3.0's `Runner._serialize`),
 	so a middleware only sees that stamp on the dict `call_next` returns
 	if it sits closer to the handler than the serialization step — which,
 	among this server's own middleware, means last in `build_server()`'s

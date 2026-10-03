@@ -70,7 +70,7 @@ def _replace_handler(server: MCPServer, method: str, params_type: type, handler)
 	high-level decorators would have registered.
 
 	`server._lowlevel_server.add_request_handler` is private SDK API (`mcp`
-	pinned to `==2.0.0` in pyproject.toml) — the one seam this server uses to
+	pinned to `==2.3.0` in pyproject.toml) — the one seam this server uses to
 	serve prompts/resources per resolved tenant, since the
 	`@server.prompt()`/`@server.resource()` decorators fix their
 	registration at construction time, once for the whole process, while
