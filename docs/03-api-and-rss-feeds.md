@@ -253,7 +253,7 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `relevant` | boolean | Relevant articles only. Scoped to `subject_id` when provided. |
 | `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
 | `open_access` | boolean | Open access articles only |
-| `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial |
+| `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial. A link an editor removed (an auto-detected link marked `suppressed`) doesn't count, and isn't listed in `clinical_trials` or a trial's `articles` either |
 | `has_takeaways` | boolean | `true`: articles with non-empty takeaways written for the caller's own site (see [Editorial content](#editorial-content)). `false`: everything else. Doesn't require `include=editorial` |
 | `include` | string | `editorial` adds the `editorial` list to each article (see [Editorial content](#editorial-content)). Unknown values return 400 |
 | `last_days` | integer | Articles from the last N days |

@@ -1,3 +1,5 @@
+import logging
+
 from simple_history.signals import (
 	post_create_historical_record,
 	pre_create_historical_record,
@@ -7,6 +9,8 @@ from django.dispatch import receiver
 from organizations.models import Organization
 
 MAX_AUTHOR_HISTORY = 5
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(pre_create_historical_record)
@@ -36,6 +40,37 @@ def stamp_api_access_scheme_on_history(sender, history_instance, **kwargs):
 	except Exception:  # noqa: S110
 		# Never let a signal failure break a save.
 		pass
+
+
+@receiver(pre_create_historical_record)
+def stamp_editor_on_history(sender, history_instance, **kwargs):
+	"""Populate editor_user, editor_label and via on any historical model that
+	carries EditorHistoryMixin fields.
+
+	The answer comes from gregory.editor_history.current_editor(): an explicit
+	``editing_as()`` scope, else the request simple-history's middleware
+	stashed. A change made with neither (a command, the shell) is left blank.
+	"""
+	if not hasattr(history_instance, "editor_user_id"):
+		return
+	try:
+		from simple_history.models import HistoricalRecords
+
+		from gregory.editor_history import current_editor
+
+		editor = current_editor(getattr(HistoricalRecords.context, "request", None))
+		if editor is None:
+			return
+		history_instance.editor_user = editor.user
+		history_instance.editor_label = editor.label
+		history_instance.via = editor.via
+	except Exception:
+		# Never let a signal failure break a save, but never lose it silently
+		# either: a history row without its editor is a gap in the audit trail.
+		logger.exception(
+			"Failed to stamp the editor on a %s history row; saved without attribution.",
+			type(history_instance).__name__,
+		)
 
 
 @receiver(post_create_historical_record)

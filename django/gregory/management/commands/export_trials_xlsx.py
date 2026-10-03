@@ -1083,7 +1083,9 @@ class Command(BaseCommand):
 								)
 							)
 						elif col_name == "articles":
-							refs = list(trial.article_references.all())
+							refs = [
+								r for r in trial.article_references.all() if not r.suppressed
+							]
 							if refs:
 								links = "; ".join(r.article.link for r in refs)
 								row_data.append(f"{len(refs)}: {links}")

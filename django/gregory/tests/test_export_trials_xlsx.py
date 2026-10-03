@@ -311,6 +311,32 @@ class ExportTrialsXlsxTests(TestCase):
 		finally:
 			os.unlink(path)
 
+	def test_articles_column_omits_suppressed_links(self):
+		"""An editor-unlinked reference stays in the table but not in the export."""
+		ArticleTrialReference.objects.update(suppressed=True)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			ws = wb["Multiple Sclerosis"]
+			headers = [
+				ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)
+			]
+			articles_col = headers.index("articles") + 1
+			title_col = headers.index("title") + 1
+			for r in range(2, ws.max_row + 1):
+				if (
+					ws.cell(row=r, column=title_col).value
+					== "A randomised trial of natalizumab in MS"
+				):
+					self.assertNotIn(
+						"pubmed.ncbi.nlm.nih.gov",
+						ws.cell(row=r, column=articles_col).value or "",
+					)
+					break
+			else:
+				self.fail("MS trial row not found")
+		finally:
+			os.unlink(path)
+
 	def test_empty_subject_still_has_header(self):
 		"""A subject with no trials must still produce a headed (non-crashing) sheet."""
 		empty_subject = Subject.objects.create(

@@ -1,5 +1,6 @@
 from collections import defaultdict
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 from gregory.models import Articles, Trials, ArticleTrialReference
@@ -24,7 +25,10 @@ class Command(BaseCommand):
 		parser.add_argument(
 			"--reset",
 			action="store_true",
-			help="Remove all existing article-trial references before scanning",
+			help=(
+				"Remove the auto-detected article-trial references before scanning. "
+				"Links added by an editor and links an editor unlinked are kept."
+			),
 		)
 		parser.add_argument(
 			"--limit", type=int, help="Limit the number of articles processed"
@@ -47,15 +51,30 @@ class Command(BaseCommand):
 		)
 
 	def handle(self, *args, **options):
-		# Handle optional reset of all references
+		# Handle optional reset of auto-detected references. Manual links are an
+		# editor's work and unlinked ones (suppressed) are an editor's decision,
+		# so neither is something detection may regenerate or throw away.
 		if options["reset"]:
+			resettable = ArticleTrialReference.objects.filter(
+				source=ArticleTrialReference.SOURCE_AUTO, suppressed=False
+			)
+			count = resettable.count()
 			if options["dry_run"]:
-				count = ArticleTrialReference.objects.count()
 				self.stdout.write(f"Would delete {count} existing references (dry run)")
 			else:
-				count = ArticleTrialReference.objects.count()
-				ArticleTrialReference.objects.all().delete()
+				resettable.delete()
 				self.stdout.write(f"Deleted {count} existing references")
+
+		# (article, trial) pairs detection must leave alone: ones an editor
+		# unlinked (suppressed), and ones an editor linked by hand (manual), which
+		# a second, auto row would only list twice. Skipped whatever identifier
+		# found them: a trial matched by a second identifier type is still the
+		# link that was removed.
+		skip_pairs = set(
+			ArticleTrialReference.objects.filter(
+				Q(suppressed=True) | Q(source=ArticleTrialReference.SOURCE_MANUAL)
+			).values_list("article_id", "trial_id")
+		)
 
 		# Setup article query
 		if options["article_id"]:
@@ -121,6 +140,8 @@ class Command(BaseCommand):
 			for canonical_id in extract_identifiers(text):
 				id_type, id_value = canonical_id
 				for trial_id in identifier_index.get(canonical_id, []):
+					if (article.article_id, trial_id) in skip_pairs:
+						continue
 					total_references += 1
 					article_refs_count += 1
 					total_articles_with_refs.add(article.article_id)

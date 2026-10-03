@@ -17,6 +17,7 @@ from gregory.models import (
 	Sponsor,
 	TrialCountry,
 	ArticleSiteContent,
+	ArticleTrialReference,
 	TrialOrgContent,
 )
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -365,7 +366,10 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	has_clinical_trials = filters.BooleanFilter(
 		method="filter_has_clinical_trials",
 		label="Has Clinical Trials",
-		help_text="Filter for articles linked to one or more clinical trials (true/false).",
+		help_text=(
+			"Filter for articles linked to one or more clinical trials (true/false). "
+			"A link an editor removed does not count."
+		),
 	)
 	has_takeaways = filters.BooleanFilter(
 		method="filter_has_takeaways",
@@ -689,9 +693,13 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		"""
 		if value is None:
 			return queryset
-		if value:
-			return queryset.filter(trial_references__isnull=False).distinct()
-		return queryset.filter(trial_references__isnull=True)
+		# suppressed links (unlinked by an editor) don't count as linked.
+		linked = Exists(
+			ArticleTrialReference.objects.filter(
+				article=OuterRef("pk"), suppressed=False
+			)
+		)
+		return queryset.filter(linked) if value else queryset.exclude(linked)
 
 	def filter_has_takeaways(self, queryset, name, value):
 		return _filter_has_takeaways(

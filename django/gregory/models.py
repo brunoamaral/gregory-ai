@@ -609,6 +609,57 @@ class ApiKeyHistoryMixin(models.Model):
 		abstract = True
 
 
+class EditorHistoryMixin(models.Model):
+	"""Abstract mixin that adds named-person attribution to historical models.
+
+	Attach to HistoricalRecords via bases=[..., EditorHistoryMixin] so every
+	historical row records who changed it and through which door. The API-key
+	mixin above records a credential; this one records a person.
+
+	- editor_user (FK, SET_NULL): live link; NULL for changes with no signed-in
+	  person (API key, command, shell) or after the user is deleted.
+	- editor_label (CharField): name and email at save time. Preserved after
+	  the user is deleted, keeping the audit trail readable.
+	- via: ``mcp`` (an editor over the MCP server), ``api_key`` (a key on the
+	  REST API) or ``admin``. Blank for a change made outside a request.
+
+	Populated by the ``stamp_editor_on_history`` signal handler in
+	gregory/signals.py.
+	"""
+
+	VIA_MCP = "mcp"
+	VIA_API_KEY = "api_key"
+	VIA_ADMIN = "admin"
+	VIA_CHOICES = [
+		(VIA_MCP, "MCP"),
+		(VIA_API_KEY, "API key"),
+		(VIA_ADMIN, "Admin"),
+	]
+
+	editor_user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="+",
+	)
+	editor_label = models.CharField(
+		max_length=300,
+		blank=True,
+		help_text="Snapshot of the editor's name and email at the time of the "
+		"change. Preserved after the user is deleted.",
+	)
+	via = models.CharField(
+		max_length=20,
+		blank=True,
+		choices=VIA_CHOICES,
+		help_text="Which door the change came through.",
+	)
+
+	class Meta:
+		abstract = True
+
+
 class Articles(models.Model):
 	KINDS = [("science paper", "Science Paper"), ("news article", "News Article")]
 	ACCESS_OPTIONS = [
@@ -1676,7 +1727,7 @@ class ArticleSiteContent(models.Model):
 	summary_plain_english = models.TextField(blank=True, null=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
-	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):
 		return f"{self.article_id}/{self.site_id}"
@@ -2045,6 +2096,7 @@ class ArticleSubjectRelevance(models.Model):
 		default=None,
 		help_text="Indicates if the article is relevant for the subject. NULL means not reviewed.",
 	)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	class Meta:
 		constraints = [
@@ -2083,6 +2135,34 @@ class ArticleTrialReference(models.Model):
 		max_length=100, help_text="The actual identifier value"
 	)
 	discovered_date = models.DateTimeField(auto_now_add=True)
+	SOURCE_AUTO = "auto"
+	SOURCE_MANUAL = "manual"
+	SOURCE_CHOICES = [
+		(SOURCE_AUTO, "Auto-detected"),
+		(SOURCE_MANUAL, "Added by an editor"),
+	]
+	source = models.CharField(
+		max_length=10,
+		choices=SOURCE_CHOICES,
+		default=SOURCE_AUTO,
+		help_text="auto: found by detect_trial_references. manual: added by an "
+		"editor, with identifier_type 'manual'. Detection never touches manual rows.",
+	)
+	created_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="+",
+		help_text="The editor who added a manual link. NULL for auto rows.",
+	)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text="Set when an editor unlinks an auto-detected link. The row is "
+		"hidden from every read and detect_trial_references leaves it alone, "
+		"so the next detection run doesn't recreate the link.",
+	)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	class Meta:
 		constraints = [
