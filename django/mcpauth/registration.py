@@ -12,7 +12,11 @@ registration needs, applied the same way to both doors:
 - authorization-code clients only (with refresh_token). A client asking for the
   password, client-credentials, implicit or device grant is told so, instead of
   DOT creating a client that the token endpoint would then refuse for a less
-  obvious reason.
+  obvious reason. The one difference between the doors: a metadata document is
+  published once for every authorization server, so it may list grants other
+  servers support (claude.ai's lists the JWT bearer grant). There the list is
+  narrowed to the grants we support, as long as authorization_code is one of
+  them; a dynamic registration is addressed to us alone and stays strict.
 - dynamic registrations are limited per client address.
 - an RFC 7592 update (``PUT /o/register/<client_id>/``) passes the same policy:
   DOT's own handler would let a registered client switch to any grant type or
@@ -57,6 +61,20 @@ def check_registration_metadata(metadata: dict) -> None:
 		raise ValueError("Redirect URIs must be https, or http on a loopback address.")
 
 
+def narrow_document_grants(metadata: dict) -> dict:
+	"""A metadata document with its grant_types narrowed to the ones we register.
+
+	Only a document that asks for authorization_code is narrowed; anything else
+	is returned as it came, for check_registration_metadata to refuse. Grants
+	dropped here are never usable: the token endpoint refuses all but the code
+	and refresh grants whatever the client was registered with.
+	"""
+	grants = metadata.get("grant_types")
+	if not isinstance(grants, list) or "authorization_code" not in grants:
+		return metadata
+	return dict(metadata, grant_types=[g for g in grants if g in ALLOWED_REGISTRATION_GRANTS])
+
+
 class PolicyMetadataFetcher(SafeMetadataFetcher):
 	"""DOT's SSRF-hardened document fetcher, followed by our registration policy.
 
@@ -66,6 +84,7 @@ class PolicyMetadataFetcher(SafeMetadataFetcher):
 
 	def fetch(self, client_id):
 		metadata, max_age = self.fetch_document(client_id)
+		metadata = narrow_document_grants(metadata)
 		try:
 			check_registration_metadata(metadata)
 		except ValueError as exc:
