@@ -26,6 +26,8 @@ These come from the requirements discussion on 2026-10-03.
 | D3 | Editorial content becomes per site, not per organisation. Two sites of the same organisation can carry different takeaways for the same article. This needs a schema change. |
 | D4 | One credential grants exactly one site. An editor working on two sites holds two grants and signs in twice. |
 | D13 | Each site has its own editor address. The editor adds that address to their MCP client, signs in through it, and gets permissions for that site only. An organisation with more sites means one more connector per site, each with its own sign-in. There is no site switcher and no address that covers several sites. |
+| D14 | Deployment option A: one process serves every site, with our own per-`Host` auth middleware on the editor mount. |
+| D15 | Signing in on a site's editor address without editor access for that site still gives read access to that site's public data, if it has any. |
 | D5 | Editors read more than anonymous callers. |
 | D6 | Editable: `takeaways`, `summary_plain_english`, subject relevance (`ArticleSubjectRelevance.is_relevant`), and links between an article and a trial. |
 | D7 | Global article fields (`access`, `retracted`, `kind`) are not editable over MCP. They stay on `POST /articles/edit/` (API key) and the admin. |
@@ -88,7 +90,7 @@ Each tenant hostname serves two MCP endpoints from the same process:
 | `https://gregory-ai.<domain>/mcp` | None (unchanged) | The ten read tools |
 | `https://gregory-ai.<domain>/mcp/editor` | OAuth 2.1 bearer token, required | The ten read tools plus the editor tools |
 
-`__main__.py` builds two `MCPServer` instances (`build_server(editor=False|True)`) and mounts both in one Starlette app. Because each endpoint has a fixed tool list, `tools/list` doesn't have to change per request, and the `STATIC_CACHE` hint still holds.
+`__main__.py` builds two `MCPServer` instances (`build_server(editor=False|True)`) and mounts both in one Starlette app. The anonymous mount's tool list stays fixed. The editor mount's `tools/list` depends on the token's tier (see [Access tiers on the editor address](#access-tiers-on-the-editor-address)), so it's served per request through `_replace_handler`, the seam prompts and resources already use. Its cache hint is `private` with a 5-minute TTL instead of `STATIC_CACHE`'s 30 minutes, so a newly granted editor sees the edit tools soon after reconnecting.
 
 The editor mount doesn't use the SDK's `auth=` wiring, because that takes a single resource URL (see [MCP SDK](#mcp-sdk)). It sits behind a small Starlette middleware of our own that works per `Host`:
 
@@ -116,18 +118,44 @@ D13 in practice. Example: Ana edits for an organisation that owns `brain-regener
 Rules this implies:
 
 - One connector, one site, one token. Permissions are checked against the site the address belongs to, never against a site the user or the model names.
-- A user with no active grant for the address's site reaches the consent step and is refused with a page saying they have no editor access to that site. No token is issued, and the page names who can grant access: the site's admin email from `CustomSetting`.
-- Revoking a grant for one site ends that connector only. The user's other connectors keep working.
+- A user with no active grant for the address's site gets the public tier if the site has public data, and is refused otherwise (D15; see [Access tiers on the editor address](#access-tiers-on-the-editor-address)).
+- Revoking a grant for one site ends that connector's editor access only. On its next request the client gets a 401, signs in again, and receives the public tier. The user's other connectors keep working.
 - Signing out of one connector (token revocation) doesn't affect the others.
 - The editor address for each site is shown on the Site admin page, next to the `SiteEditor` inline, so it can be sent to new editors. The connection guide in `docs/07-mcp-server.md` says to add one connector per site.
 
+### Access tiers on the editor address
+
+D15 means the editor address serves two tiers. The tier is fixed when the token is issued and stored on the token, next to `site_id`.
+
+| Signed-in user | Site has public data (`api_public=True`) | Site has no public data |
+|:--|:--|:--|
+| Active `SiteEditor` grant | Editor tier: [editor read scope](#editor-read-scope) and the editor tools | Editor tier |
+| No grant | Public tier: the same data and tools as the anonymous `/mcp` address | Refused at consent. No token is issued. |
+
+What counts as "auth fails" decides the response:
+
+| Situation | Response | Why |
+|:--|:--|:--|
+| No token | 401 with `WWW-Authenticate` | MCP clients only start the sign-in flow on a 401. Serving public data here would mean the client never asks the user to sign in. |
+| Expired, revoked or malformed token | 401 with `WWW-Authenticate` | The client refreshes the token or signs in again. Falling back to public data here would hide an expired session, and the editor tools would disappear without explanation. |
+| Token for another site's address | 401 | Tokens are never accepted across sites (D4). |
+| Valid token, no editor grant | Public tier | The user signed in successfully but has no editor access. This is D15's fallback. |
+| User declines consent, or sign-in fails | No token, so the connector doesn't connect | The anonymous `/mcp` address stays available for public data without signing in. |
+
+Public-tier details:
+
+- The consent screen says the user has read access to public data only, and names the site's admin email from `CustomSetting` as the contact for editor access.
+- The token carries only `articles:read`. Upstream reads go out exactly like anonymous ones (`?site_id=`, no editor headers), so the public tier can never see more than `/mcp`.
+- `tools/list` returns the ten read tools. `instructions_for()` uses the anonymous wording, plus one line saying editing needs editor access on this site.
+- Telemetry records `tier: "public"`, so we can count users who sign in without a grant.
+
 ### Deployment options
 
-One address per site works with either deployment. The choice only changes where the per-site auth code lives.
+D14 chose option A. Option B stays documented as the fallback if the per-`Host` middleware proves harder than expected.
 
 | Option | How | Trade-off |
 |:--|:--|:--|
-| A. One process for all sites (recommended) | Today's `gregory-mcp` container serves every hostname. The editor mount uses the per-`Host` auth middleware described above. | One container to deploy and monitor, as today. About 150 lines of our own auth code, reusing the SDK's types. |
+| A. One process for all sites (chosen, D14) | Today's `gregory-mcp` container serves every hostname. The editor mount uses the per-`Host` auth middleware described above. | One container to deploy and monitor, as today. About 150 lines of our own auth code, reusing the SDK's types. |
 | B. One process per site | One `gregory-mcp` container per site, each with `GREGORY_SITE_ID` set and the SDK's built-in `auth=AuthSettings(resource_server_url=<site's editor address>, validate_token_resource=True)` | No custom auth middleware. A container, a compose service and an nginx upstream per site, and every new site needs a deploy change rather than only the `mcp_enabled` tick. |
 
 Option A keeps the current operating model, where turning on a site's assistant is a Site admin change. If the SDK later accepts a resource URL per request, option A switches to the built-in wiring without changing anything editors see.
@@ -149,7 +177,7 @@ Django becomes the OAuth 2.1 authorization server with `django-oauth-toolkit` (D
 | Login and consent | A minimal, branded login page plus a consent screen naming the site, the client application, and the actions it can take. Not the Django admin login. |
 | Token lifetime | Access token 1 hour. Refresh token 30 days, rotated on each use. |
 | Site binding | Set at authorization time from the `resource` parameter: resource URL → host → site, the same matching rule as `site._match_domain()`. Stored on a custom access token model (`OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL`) as `site_id`. |
-| Scopes | `articles:read` and `articles:edit`. Consent can grant read without edit. |
+| Scopes and tier | `articles:read` and `articles:edit`. The token also stores `tier` (`editor` or `public`); a public-tier token never carries `articles:edit`. |
 
 The MCP editor endpoint serves `/.well-known/oauth-protected-resource/mcp/editor` (RFC 9728), naming the Django API domain as its authorization server.
 
@@ -177,7 +205,7 @@ class SiteEditor(models.Model):
 ```
 
 - Managed from a `SiteEditor` inline on the Site admin page, next to the MCP prompt and document inlines.
-- `/o/authorize/` refuses a user with no active grant for the requested site.
+- `/o/authorize/` issues an editor-tier token to a user with an active grant for the requested site, a public-tier token to a user without one when the site is `api_public`, and refuses otherwise (D15).
 - Revoking a grant (setting `revoked_at`) deletes that user's tokens for that site in the same transaction, so access ends immediately rather than when the token expires.
 - A client editor's grant is allowed only on a site owned (`OrganizationSite`) by an organisation they belong to (`OrganizationUser`). Our own team members are granted explicitly too. Superuser status doesn't grant MCP edit access by itself, so every editor appears in the grant list.
 
@@ -186,9 +214,9 @@ class SiteEditor(models.Model):
 The MCP authorization spec forbids passing the client's token to a downstream API. The token's audience is the MCP endpoint, not the Django API. The editor endpoint therefore:
 
 1. Validates the inbound token through Django's introspection endpoint (RFC 7662). Results are cached in-process for 60 seconds, keyed by a hash of the token.
-2. Gets back `user_id`, `site_id`, `scope`, and `exp`, and stores them in a new `ContextVar` (`editor_context`).
-3. Calls Django with its own service credential (`GREGORY_MCP_SERVICE_KEY`, a new single-purpose credential, not an `APIAccessScheme`), plus the verified editor in headers: `X-Gregory-Editor-User` and `X-Gregory-Editor-Site`.
-4. Django accepts these headers only together with a valid service credential. It then runs the request as that user, restricted to that site. Requests carrying either header without the service credential are rejected with 401.
+2. Gets back `user_id`, `site_id`, `tier`, `scope`, and `exp`, and stores them in a new `ContextVar` (`editor_context`).
+3. For a public-tier token, calls Django anonymously with `?site_id=`, exactly like `/mcp`, and skips the rest of this list. For an editor-tier token, calls Django with its own service credential (`GREGORY_MCP_SERVICE_KEY`, a new single-purpose credential, not an `APIAccessScheme`), plus the verified editor in headers: `X-Gregory-Editor-User` and `X-Gregory-Editor-Site`.
+4. Django accepts these headers only together with a valid service credential, and re-checks the user's active `SiteEditor` grant on every write. It then runs the request as that user, restricted to that site. Requests carrying either header without the service credential are rejected with 401.
 
 `client.py` gains `post()`, `put()`, `patch()`, and `delete()`. These methods don't retry. An edit that timed out may already have been applied, and retrying it would create duplicates. `get()` keeps its current retry behaviour.
 
@@ -295,7 +323,7 @@ A throttled write returns 429. The MCP tool turns that into a clear error and do
 
 ### Telemetry and logs
 
-- `mcp_request` gains `tier` (`anon` or `editor`) and `user_id` (Django user id, editor only).
+- `mcp_request` gains `tier` (`anon`, `public` or `editor`) and `user_id` (Django user id, editor only).
 - `mcp_intent` still carries neither `site_id` nor any user field. The rule in `docs/07-mcp-server.md` keeps intent text from being joined to other records, and adding a named person would make that join trivial.
 - Write tools log an `mcp_edit` event: tool, `article_id`, field names changed (never the values), outcome. The values live in Django history, which has its own access control.
 - `Authorization` headers are never logged. A test asserts this, in the same style as `test_no_internal_url_leak.py`.
@@ -324,20 +352,20 @@ Each phase is one PR and leaves production working.
 ## Testing
 
 - Django: grant checks (no grant, revoked grant, wrong organisation), token bound to the wrong site, service credential missing or wrong, editor headers without credential, every write endpoint inside and outside scope, DOI resolution with zero, one, or several matches, throttle, history attribution, migration from organisation content to site content on an organisation with two sites, detection reset keeping manual links and respecting suppressed ones.
-- Multi-site editor: one user with grants on two sites of the same organisation signs in on each address and gets two tokens; each token works only on its own address; revoking one grant leaves the other connector working; a user with no grant on the second site is refused at consent with no token issued.
+- Multi-site editor: one user with grants on two sites of the same organisation signs in on each address and gets two tokens; each token works only on its own address; revoking one grant leaves the other connector working; a user with no grant on the second site gets a public-tier token with the ten read tools when that site is `api_public`, and is refused at consent when it isn't.
+- Tier fallback: no token, an expired token, and another site's token all return 401, never public data; a public-tier token can't call write endpoints even if a client sends a `tools/call` for an editor tool; revoking a grant turns the next sign-in into the public tier.
 - MCP: `/mcp` behaves exactly as before (all existing tests pass without changes); `/mcp/editor` returns 401 with `WWW-Authenticate` and a resource metadata URL; protected resource metadata content; token for site A refused on site B's host; write tools absent from `/mcp`'s `tools/list`; no retries on writes; annotations on each tool; editor identity text; cache tier separation; no token in logs.
 - End to end on a staging tenant, once with each of Claude Code, Claude Desktop, and a claude.ai connector, before production.
 
 ## Open questions
 
-1. Deployment. Confirm option A (one process, per-host auth middleware) over option B (one container per site); see [Deployment options](#deployment-options).
-2. Relevance per site. Keep relevance per subject and accept that sites sharing a subject share relevance? Or add a `site` field to `ArticleSubjectRelevance`? The second option also changes the ML training labels and every `relevant=` filter. Answering needs a production count of subjects that appear in more than one site's `scope_subjects`.
-3. Client registration. claude.ai and Claude Desktop need a client to register itself. Build dynamic client registration on DOT, support Client ID Metadata Documents only, or both? Check which one each target client uses at implementation time.
-4. Private sites. Should an `mcp_enabled` site with `api_public=False` serve an editor endpoint only? `TenantGateMiddleware` and `/tenants/` would need a per-endpoint rule.
-5. Editor read scope. Confirm the table in [Editor read scope](#editor-read-scope), especially the curation queue, which exposes content not yet published anywhere.
-6. Rate limit numbers. 60 per hour and 500 per day are placeholders. Set them from expected editor workload.
-7. Login identity. Django username and password only, or single sign-on (for example Google) for client editors who don't have a Django password?
-8. Notification. Should the site's admin email receive a digest of MCP edits, alongside `send_admin_summary`?
+1. Relevance per site. Keep relevance per subject and accept that sites sharing a subject share relevance? Or add a `site` field to `ArticleSubjectRelevance`? The second option also changes the ML training labels and every `relevant=` filter. Answering needs a production count of subjects that appear in more than one site's `scope_subjects`.
+2. Client registration. claude.ai and Claude Desktop need a client to register itself. Build dynamic client registration on DOT, support Client ID Metadata Documents only, or both? Check which one each target client uses at implementation time.
+3. Private sites. Should an `mcp_enabled` site with `api_public=False` serve an editor endpoint only? `TenantGateMiddleware` and `/tenants/` would need a per-endpoint rule.
+4. Editor read scope. Confirm the table in [Editor read scope](#editor-read-scope), especially the curation queue, which exposes content not yet published anywhere.
+5. Rate limit numbers. 60 per hour and 500 per day are placeholders. Set them from expected editor workload.
+6. Login identity. Django username and password only, or single sign-on (for example Google) for client editors who don't have a Django password?
+7. Notification. Should the site's admin email receive a digest of MCP edits, alongside `send_admin_summary`?
 
 ## Non-goals
 
