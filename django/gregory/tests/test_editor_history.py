@@ -275,3 +275,23 @@ class EndToEndAttributionTest(EditorHistoryFixture, TestCase):
 		row = ArticleSubjectRelevance.history.get()
 		self.assertEqual(row.editor_user, staff)
 		self.assertEqual(row.via, "admin")
+
+
+class StampFailureTest(EditorHistoryFixture, TestCase):
+	def test_a_stamp_failure_keeps_the_save_and_is_logged(self):
+		"""A broken stamp must not break the save, and must not vanish either:
+		a history row without its editor is a gap in the audit trail."""
+		from unittest import mock
+
+		with (
+			mock.patch("gregory.editor_history.current_editor", side_effect=RuntimeError("boom")),
+			self.assertLogs("gregory.signals", level="ERROR") as logs,
+		):
+			ArticleSubjectRelevance.objects.create(
+				article=self.article, subject=self.subject, is_relevant=True
+			)
+
+		row = ArticleSubjectRelevance.history.get(article=self.article)
+		self.assertIsNone(row.editor_user)
+		self.assertEqual(row.editor_label, "")
+		self.assertIn("HistoricalArticleSubjectRelevance", logs.output[0])

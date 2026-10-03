@@ -1,3 +1,5 @@
+import logging
+
 from simple_history.signals import (
 	post_create_historical_record,
 	pre_create_historical_record,
@@ -7,6 +9,8 @@ from django.dispatch import receiver
 from organizations.models import Organization
 
 MAX_AUTHOR_HISTORY = 5
+
+logger = logging.getLogger(__name__)
 
 
 @receiver(pre_create_historical_record)
@@ -60,9 +64,13 @@ def stamp_editor_on_history(sender, history_instance, **kwargs):
 		history_instance.editor_user = editor.user
 		history_instance.editor_label = editor.label
 		history_instance.via = editor.via
-	except Exception:  # noqa: S110
-		# Never let a signal failure break a save.
-		pass
+	except Exception:
+		# Never let a signal failure break a save, but never lose it silently
+		# either: a history row without its editor is a gap in the audit trail.
+		logger.exception(
+			"Failed to stamp the editor on a %s history row; saved without attribution.",
+			type(history_instance).__name__,
+		)
 
 
 @receiver(post_create_historical_record)
