@@ -24,12 +24,13 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 
 **Article/trial/RSS content visibility does not use this section at all** — it is subject-scoped via `CustomSetting.scope_subjects` + `api_public` on the site(s) an organisation owns; see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#visibility-rules-summary). `OrganizationApiSettings.make_api_public` was replaced for that purpose, deliberately, by the site-scoped API visibility project.
 
-The flag survives for two organisation-keyed surfaces that the site project kept organisation-scoped on purpose, because they answer an organisation-shaped question rather than a content-shaped one:
+The flag survives for one organisation-keyed surface that the site project kept organisation-scoped on purpose, because it answers an organisation-shaped question rather than a content-shaped one:
 
 - **`/organizations/`**, and every `?team_id=`/`?organization=` scope validation elsewhere in the API (`gregory.visibility.visible_org_ids()`).
-- **Per-org serializer fields** exposed to an anonymous `?team_id=` request (`api.serializers.mixins._resolve_per_org_fields_org()`).
 
-- When `make_api_public = True`, anonymous callers can see the organisation in `/organizations/`, validate `?team_id=`/`?organization=` against it, and see its per-org fields via `?team_id=`.
+Editorial content (`takeaways`, `summary_plain_english`) no longer reads this flag. It is opt-in with `?include=editorial` and follows the caller's site instead; see [Editorial content](#editorial-content-includeeditorial) below.
+
+- When `make_api_public = True`, anonymous callers can see the organisation in `/organizations/` and validate `?team_id=`/`?organization=` against it.
 - When `make_api_public = False` (the default), only callers granted access — an API key or a member account — get through those checks for that organisation.
 
 ### Granting access to a private organisation, for these org-keyed surfaces
@@ -206,3 +207,16 @@ The Django settings fallback uses these variables from `.env`:
 EMAIL_POSTMARK_API_KEY=your-postmark-server-token
 EMAIL_POSTMARK_API_URL=https://api.postmarkapp.com/email
 ```
+
+## Editorial content (`?include=editorial`)
+
+Editorial content is the per-organisation `takeaways` and `summary_plain_english` stored in `ArticleOrgContent` / `TrialOrgContent`. Article and trial responses include it only when the caller sends `?include=editorial`, nested under `editorial`. Which organisation's content comes back is decided by who the caller is, never by `?team_id=` or any other parameter:
+
+| Caller | Organisation(s) whose content is returned |
+|:-------|:------------------------------------------|
+| Valid API key | The key's organisation |
+| Logged-in user | Every organisation the user belongs to |
+| Anonymous | The organisation that owns the `api_public` site resolved from `?site_id=`, `Origin`, `Referer`, or the single public site |
+| Anonymous, no `api_public` site | None (`editorial: []`) |
+
+Because the anonymous case goes through `OrganizationSite`, a site must belong to exactly one organisation (database constraint `unique_site_organization`). See [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#editorial-content) for the response shape and the `has_takeaways` filter.

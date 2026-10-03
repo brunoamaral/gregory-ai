@@ -321,7 +321,7 @@ SPECTACULAR_SETTINGS = {
 					'organisation. Required for write endpoints '
 					'(articles/post, articles/edit, trials/edit); optional '
 					'on read endpoints, where it scopes org-visibility and '
-					'unlocks per-org fields (takeaways, summary_plain_english).'
+					'does not unlock editorial content (use ?include=editorial).'
 				),
 			},
 		},

@@ -138,7 +138,7 @@ import traceback
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now as tz_now
 
-from api.serializers.mixins import _resolve_per_org_fields_org
+from api.editorial import editorial_org_ids, editorial_requested
 from api.utils.utils import (
 	checkValidAccess,
 	getAPIKey,
@@ -1450,6 +1450,20 @@ _OPTIONAL_API_KEY_SECURITY = [
 ]
 
 
+_INCLUDE_PARAM = OpenApiParameter(
+	"include",
+	OpenApiTypes.STR,
+	OpenApiParameter.QUERY,
+	enum=["editorial"],
+	description=(
+		"Opt in to extra content. Comma-separated; the only accepted value is "
+		"`editorial`, which adds an `editorial` list of the caller's own "
+		"organisation's `takeaways` and `summary_plain_english` (see "
+		"docs/03-api-and-rss-feeds.md). Unknown values return 400. Ignored for "
+		"CSV output."
+	),
+)
+
 _INCLUDE_PUBLIC_PARAM = OpenApiParameter(
 	"include_public",
 	OpenApiTypes.BOOL,
@@ -1519,9 +1533,11 @@ _ARTICLES_ORDERING_PARAM = _ordering_param(
 @extend_schema_view(
 	list=extend_schema(
 		auth=_OPTIONAL_API_KEY_SECURITY,
-		parameters=[_ARTICLES_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+		parameters=[_ARTICLES_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM, _INCLUDE_PARAM],
 	),
-	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	retrieve=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_INCLUDE_PARAM]
+	),
 )
 class ArticleViewSet(
 	BulkExportThrottleMixin,
@@ -1548,6 +1564,8 @@ class ArticleViewSet(
 	- **source_id** - filter by source ID
 	- **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
 	- **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+	- **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
+	- **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
 	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
 	- **title** - search only in the title field (case-insensitive substring)
 	- **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -1648,12 +1666,12 @@ class ArticleViewSet(
 	ordering = ["-discovery_date"]
 
 	def get_queryset(self):
-		"""Prefetch the caller-org's ArticleOrgContent to avoid N+1 on list responses.
+		"""Prefetch the caller's ArticleOrgContent to avoid N+1 on list responses.
 
-		When a request resolves to an organisation (API key or public-org
-		filter), attach the matching ``ArticleOrgContent`` rows as
-		``_prefetched_org_contents`` so the serializer can resolve per-org
-		fields without issuing one query per article.
+		Only when ``?include=editorial`` was requested: attach the rows of the
+		caller's editorial orgs (see api/editorial.py) as
+		``_prefetched_org_contents`` so the serializer's ``editorial`` field
+		costs no query per article. Default requests skip the prefetch.
 		"""
 		qs = super().get_queryset()
 		# Scoped here, not on the class-level `queryset` attribute, because it
@@ -1668,12 +1686,13 @@ class ArticleViewSet(
 				),
 			)
 		)
-		org = _resolve_per_org_fields_org(self.request)
-		if org is not None:
+		if editorial_requested(self.request):
 			qs = qs.prefetch_related(
 				Prefetch(
 					"org_contents",
-					queryset=ArticleOrgContent.objects.filter(organization=org),
+					queryset=ArticleOrgContent.objects.filter(
+						organization_id__in=editorial_org_ids(self.request)
+					),
 					to_attr="_prefetched_org_contents",
 				)
 			)
@@ -2392,9 +2411,11 @@ _TRIALS_ORDERING_PARAM = _ordering_param(
 @extend_schema_view(
 	list=extend_schema(
 		auth=_OPTIONAL_API_KEY_SECURITY,
-		parameters=[_TRIALS_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+		parameters=[_TRIALS_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM, _INCLUDE_PARAM],
 	),
-	retrieve=extend_schema(auth=_OPTIONAL_API_KEY_SECURITY),
+	retrieve=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_INCLUDE_PARAM]
+	),
 )
 class TrialViewSet(
 	BulkExportThrottleMixin,
@@ -2564,6 +2585,8 @@ class TrialViewSet(
 
 	# Results Parameters:
 	- **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
+	- **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the trial
+	- **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
 
 	# Date Range Parameters:
 	Filter by trial registration date (the date the trial was first registered with its registry).
@@ -2605,12 +2628,12 @@ class TrialViewSet(
 		)
 
 	def get_queryset(self):
-		"""Prefetch the caller-org's TrialOrgContent to avoid N+1 on list responses.
+		"""Prefetch the caller's TrialOrgContent to avoid N+1 on list responses.
 
-		When a request resolves to an organisation (API key or public-org
-		filter), attach the matching ``TrialOrgContent`` rows as
-		``_prefetched_org_contents`` so the serializer can resolve per-org
-		fields without issuing one query per trial.
+		Only when ``?include=editorial`` was requested: attach the rows of the
+		caller's editorial orgs (see api/editorial.py) as
+		``_prefetched_org_contents`` so the serializer's ``editorial`` field
+		costs no query per trial. Default requests skip the prefetch.
 		"""
 		# Prefetch m2m/reverse-FK relations the serializer reads (sources, team_categories,
 		# article_references, trial_countries) so list/CSV-export responses don't issue one
@@ -2653,12 +2676,13 @@ class TrialViewSet(
 		# render. See TRIAL-GEOGRAPHY-PLAN.md PR G3.
 		if self.action == "retrieve":
 			qs = qs.prefetch_related("trial_sites")
-		org = _resolve_per_org_fields_org(self.request)
-		if org is not None:
+		if editorial_requested(self.request):
 			qs = qs.prefetch_related(
 				Prefetch(
 					"org_contents",
-					queryset=TrialOrgContent.objects.filter(organization=org),
+					queryset=TrialOrgContent.objects.filter(
+						organization_id__in=editorial_org_ids(self.request)
+					),
 					to_attr="_prefetched_org_contents",
 				)
 			)
@@ -4082,15 +4106,16 @@ class ArticleSearchView(
 				),
 			)
 
-			# Prefetch the caller-org's ArticleOrgContent so the serializer's
-			# per-org fields don't issue one query per article. Mirrors
+			# Prefetch the caller's ArticleOrgContent (only for ?include=editorial)
+			# so the serializer's editorial field doesn't issue one query per article. Mirrors
 			# ArticleViewSet.get_queryset.
-			org = _resolve_per_org_fields_org(self.request)
-			if org is not None:
+			if editorial_requested(self.request):
 				queryset = queryset.prefetch_related(
 					Prefetch(
 						"org_contents",
-						queryset=ArticleOrgContent.objects.filter(organization=org),
+						queryset=ArticleOrgContent.objects.filter(
+							organization_id__in=editorial_org_ids(self.request)
+						),
 						to_attr="_prefetched_org_contents",
 					)
 				)
@@ -4113,7 +4138,8 @@ class ArticleSearchView(
 				extra_description=(
 					"Every ArticleFilter field is accepted here (identical semantics "
 					"to the matching GET query parameter — see /articles/). "
-					"team_id and subject_id are required."
+					"team_id and subject_id are required. `include` (only value: "
+					"`editorial`) is also accepted in the body."
 				),
 			),
 		},
@@ -4155,6 +4181,7 @@ class ArticleSearchView(
 		# Delegate to the list method which uses get_queryset
 		return self.list(request, *args, **kwargs)
 
+	@extend_schema(parameters=[_INCLUDE_PARAM])
 	def get(self, request, *args, **kwargs):
 		# Validate required parameters for GET requests
 		team_id = request.query_params.get("team_id")
@@ -4343,15 +4370,16 @@ class TrialSearchView(
 			Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 		)
 
-		# Prefetch the caller-org's TrialOrgContent so the serializer's
-		# per-org fields don't issue one query per trial. Mirrors
+		# Prefetch the caller's TrialOrgContent (only for ?include=editorial)
+		# so the serializer's editorial field doesn't issue one query per trial. Mirrors
 		# TrialViewSet.get_queryset.
-		org = _resolve_per_org_fields_org(self.request)
-		if org is not None:
+		if editorial_requested(self.request):
 			queryset = queryset.prefetch_related(
 				Prefetch(
 					"org_contents",
-					queryset=TrialOrgContent.objects.filter(organization=org),
+					queryset=TrialOrgContent.objects.filter(
+						organization_id__in=editorial_org_ids(self.request)
+					),
 					to_attr="_prefetched_org_contents",
 				)
 			)
@@ -4366,7 +4394,8 @@ class TrialSearchView(
 				extra_description=(
 					"Every TrialFilter field is accepted here (identical semantics "
 					"to the matching GET query parameter — see /trials/). "
-					"team_id and subject_id are required."
+					"team_id and subject_id are required. `include` (only value: "
+					"`editorial`) is also accepted in the body."
 				),
 			),
 		},
@@ -4408,6 +4437,7 @@ class TrialSearchView(
 		# Delegate to the list method which uses get_queryset
 		return self.list(request, *args, **kwargs)
 
+	@extend_schema(parameters=[_INCLUDE_PARAM])
 	def get(self, request, *args, **kwargs):
 		# Validate required parameters for GET requests
 		team_id = request.query_params.get("team_id")
@@ -4589,6 +4619,7 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 		self._check_subject_visibility(subject_id)
 		return self.list(request, *args, **kwargs)
 
+	@extend_schema(parameters=[_INCLUDE_PARAM])
 	def get(self, request, *args, **kwargs):
 		# Validate required parameters for GET requests
 		team_id = request.query_params.get("team_id")

@@ -1871,15 +1871,15 @@ class OrganizationApiSettings(models.Model):
 	moved article/trial/RSS visibility onto CustomSetting.scope_subjects +
 	api_public (see SITE-API-VISIBILITY-SPEC.md, "Removing Team.site" and
 	its neighbouring sections). make_api_public no longer governs content --
-	only these two organisation-keyed surfaces, which were kept
+	only this organisation-keyed surface, which was kept
 	organisation-keyed on purpose:
 	  - gregory.visibility.visible_org_ids()'s anonymous branch, which
 	    /organizations/ and every ?team_id=/?organization= scope validation
 	    (api/views.py) still read.
-	  - api.serializers.mixins._resolve_per_org_fields_org(), which decides
-	    whether an anonymous ?team_id= request may see per-org fields.
-	Both are org-shaped, not subject-shaped, so an org-level flag is still
-	the right unit for them -- this is not a leftover to migrate away.
+	It is org-shaped, not subject-shaped, so an org-level flag is still
+	the right unit for it -- this is not a leftover to migrate away.
+	Editorial content (?include=editorial) no longer reads it: that follows
+	the caller's site, see api/editorial.py.
 	"""
 
 	organization = models.OneToOneField(
@@ -1892,8 +1892,8 @@ class OrganizationApiSettings(models.Model):
 		default=False,
 		help_text=(
 			"When true, anonymous callers can see this organisation in "
-			"/organizations/, validate ?team_id=/?organization= against it, "
-			"and see its per-org serializer fields via ?team_id=. Does NOT "
+			"/organizations/ and validate ?team_id=/?organization= against it. "
+			"Does NOT "
 			"govern article/trial/RSS content visibility -- that is "
 			"CustomSetting.scope_subjects + api_public on the site(s) this "
 			"organisation owns."
