@@ -1617,7 +1617,11 @@ class TrialSite(models.Model):
 
 
 class ArticleOrgContent(models.Model):
-	"""Per-organisation editorial content for an article."""
+	"""Per-organisation editorial content for an article.
+
+	Read-only since ``ArticleSiteContent`` replaced it (editorial content is
+	per site now); nothing writes to it. Kept until a later release drops it.
+	"""
 
 	article = models.ForeignKey(
 		Articles,
@@ -1646,6 +1650,45 @@ class ArticleOrgContent(models.Model):
 		]
 		verbose_name = "article org content"
 		verbose_name_plural = "article org contents"
+
+
+class ArticleSiteContent(models.Model):
+	"""Per-site editorial content for an article.
+
+	Replaces ``ArticleOrgContent`` as the source of ``takeaways`` and
+	``summary_plain_english``: two sites of one organisation can carry
+	different text for the same article. ``ArticleOrgContent`` is read-only
+	after the data migration that copied it here and is dropped in a later
+	release.
+	"""
+
+	article = models.ForeignKey(
+		Articles,
+		on_delete=models.CASCADE,
+		related_name="site_contents",
+	)
+	site = models.ForeignKey(
+		"sites.Site",
+		on_delete=models.CASCADE,
+		related_name="article_contents",
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin])
+
+	def __str__(self):
+		return f"{self.article_id}/{self.site_id}"
+
+	class Meta:
+		constraints = [
+			models.UniqueConstraint(
+				fields=["article", "site"], name="unique_article_site_content"
+			)
+		]
+		verbose_name = "article site content"
+		verbose_name_plural = "article site contents"
 
 
 class TrialOrgContent(models.Model):
