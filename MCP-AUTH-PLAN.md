@@ -69,7 +69,12 @@ Two existing behaviours conflict with this feature:
 
 ### MCP SDK
 
-`mcp==2.0.0` includes resource-server support: `MCPServer(auth=AuthSettings(...), token_verifier=...)`, protected resource metadata, and `WWW-Authenticate` on 401. `streamable_http_app()` wraps the whole endpoint in `RequireAuthMiddleware`, so with auth enabled every caller must authenticate. MCP clients start the OAuth flow only when they receive an HTTP 401, so a single URL can't serve anonymous callers and still prompt editors to sign in.
+The server is pinned to `mcp==2.3.0` (upgraded from 2.0.0 on branch `claude/mcp-sdk-2.3`). The SDK includes resource-server support: `MCPServer(auth=AuthSettings(...), token_verifier=...)`, protected resource metadata, and `WWW-Authenticate` on 401. Since 2.2.0, `AuthSettings.validate_token_resource=True` rejects a token whose RFC 8707 resource isn't `resource_server_url`. It defaults to off and warns when unset, and 3.0 will turn it on by default.
+
+Two limits shape this design:
+
+- `streamable_http_app()` wraps the whole endpoint in `RequireAuthMiddleware`, so with auth enabled every caller must authenticate. MCP clients start the OAuth flow only when they receive an HTTP 401, so a single URL can't serve anonymous callers and still prompt editors to sign in.
+- `AuthSettings` takes one fixed `resource_server_url` per server. That one URL drives the token audience check, the protected resource metadata route, and the `WWW-Authenticate` header. This process serves every tenant hostname, and each tenant needs its own resource URL. The SDK's `auth=` wiring can't express that.
 
 ## Design
 
@@ -82,13 +87,22 @@ Each tenant hostname serves two MCP endpoints from the same process:
 | `https://gregory-ai.<domain>/mcp` | None (unchanged) | The ten read tools |
 | `https://gregory-ai.<domain>/mcp/editor` | OAuth 2.1 bearer token, required | The ten read tools plus the editor tools |
 
-`__main__.py` builds two `MCPServer` instances (`build_server(editor=False|True)`) and mounts both in one Starlette app. The editor instance is built with `auth=AuthSettings(...)` and a `token_verifier`. Because each endpoint has a fixed tool list, `tools/list` doesn't have to change per request, and the `STATIC_CACHE` hint still holds.
+`__main__.py` builds two `MCPServer` instances (`build_server(editor=False|True)`) and mounts both in one Starlette app. Because each endpoint has a fixed tool list, `tools/list` doesn't have to change per request, and the `STATIC_CACHE` hint still holds.
+
+The editor mount doesn't use the SDK's `auth=` wiring, because that takes a single resource URL (see [MCP SDK](#mcp-sdk)). It sits behind a small Starlette middleware of our own that works per `Host`:
+
+1. Resolves the tenant from `Host`, the same way `SiteMiddleware` does, and derives that tenant's resource URL: `https://<host>/mcp/editor`.
+2. Serves `/.well-known/oauth-protected-resource/mcp/editor` for that resource URL.
+3. With no valid token, returns 401 with a `WWW-Authenticate` header pointing at that tenant's metadata URL.
+4. With a token, verifies it through a `TokenVerifier` and accepts it only if `AccessToken.resource` equals the tenant's resource URL. The comparison follows the SDK's `BearerAuthBackend._issued_for_this_resource()` (URL-normalised, trailing slash ignored).
+
+The middleware reuses the SDK's types (`TokenVerifier`, `AccessToken`, the protected resource metadata model) so the protocol details stay the SDK's. If a later SDK release accepts a resource URL per request, the editor mount switches to the built-in wiring with `validate_token_resource=True`.
 
 Editors add the editor URL as a separate connector. The anonymous connector stays as it is.
 
 ### Why the token is per site
 
-The OAuth resource indicator (RFC 8707) for the editor endpoint is that tenant's URL, for example `https://gregory-ai.brain-regeneration.com/mcp/editor`. A token issued for one tenant's URL is rejected on any other tenant's hostname. This implements D4 at the protocol level. The verifier also checks that the token's site matches the tenant resolved from `Host`, so a mismatch fails even if the resource check has a bug.
+The OAuth resource indicator (RFC 8707) for the editor endpoint is that tenant's URL, for example `https://gregory-ai.brain-regeneration.com/mcp/editor`. A token issued for one tenant's URL is rejected on any other tenant's hostname by step 4 of the editor middleware above. This implements D4 at the protocol level. The verifier also checks that the token's site matches the tenant resolved from `Host`, so a mismatch fails even if the resource check has a bug.
 
 ### Authorization server: Django
 
@@ -272,7 +286,7 @@ Each phase is one PR and leaves production working.
 2. Attribution and trial-link safety. Add `EditorHistoryMixin`, history on relevance and trial links, and `source`/`suppressed` on `ArticleTrialReference`, then update `detect_trial_references`.
 3. OAuth authorization server. Install DOT, add the custom token model with `site_id`, `SiteEditor` and its admin inline, the login and consent pages, metadata, introspection, and client registration.
 4. Django editor endpoints. Add `EditorServiceAuthentication`, the `/editor/` views, the editor branch in `visible_subject_ids`, throttles, docs, and `schema.yml`.
-5. MCP editor endpoint. Add the second mount, token verifier, `editor_context`, write methods on the client, editor tools, identity variant, cache tier, telemetry, and tests.
+5. MCP editor endpoint. Add the second mount, the per-host auth middleware and protected resource metadata, token verifier, `editor_context`, write methods on the client, editor tools, identity variant, cache tier, telemetry, and tests.
 6. Deployment. Add the nginx location and rate-limit zone, compose env (`GREGORY_MCP_SERVICE_KEY`), the `docs/07-mcp-server.md` Auth section, and a connection guide for editors per client.
 
 ## Testing
