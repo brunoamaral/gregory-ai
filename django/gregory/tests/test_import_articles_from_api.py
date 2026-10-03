@@ -10,8 +10,9 @@ django.setup()
 from django.test import TestCase
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.contrib.sites.models import Site
 from organizations.models import Organization
-from gregory.models import Articles, ArticleOrgContent
+from gregory.models import Articles, ArticleSiteContent, OrganizationSite
 
 
 def _make_response(results, next_url=None):
@@ -44,9 +45,13 @@ ARTICLE = {
 class ImportArticlesFromApiTest(TestCase):
 	def setUp(self):
 		self.org = Organization.objects.create(name="Test Org", slug="test-org")
+		self.site = Site.objects.create(domain="import.test.example.com", name="Import")
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.site, is_default=True
+		)
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
-	def test_import_populates_article_org_content(self, mock_get):
+	def test_import_populates_article_site_content(self, mock_get):
 		mock_get.return_value = _make_response([ARTICLE])
 
 		call_command(
@@ -57,12 +62,12 @@ class ImportArticlesFromApiTest(TestCase):
 		)
 
 		article = Articles.objects.get(title="Test Article")
-		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
+		content = ArticleSiteContent.objects.get(article=article, site=self.site)
 		self.assertEqual(content.takeaways, "Key finding A.")
 		self.assertEqual(content.summary_plain_english, "Simple explanation.")
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
-	def test_reimport_updates_existing_org_content(self, mock_get):
+	def test_reimport_updates_existing_site_content(self, mock_get):
 		mock_get.return_value = _make_response([ARTICLE])
 		call_command(
 			"import_articles_from_api",
@@ -85,25 +90,25 @@ class ImportArticlesFromApiTest(TestCase):
 		)
 
 		article = Articles.objects.get(title="Test Article")
-		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
+		content = ArticleSiteContent.objects.get(article=article, site=self.site)
 		self.assertEqual(content.takeaways, "Updated takeaway.")
 		self.assertEqual(content.summary_plain_english, "Updated summary.")
 		self.assertEqual(
-			ArticleOrgContent.objects.filter(
-				article=article, organization=self.org
+			ArticleSiteContent.objects.filter(
+				article=article, site=self.site
 			).count(),
 			1,
 		)
 
 	@patch("gregory.management.commands.import_articles_from_api.requests.get")
 	def test_none_takeaways_leaves_existing_row_untouched(self, mock_get):
-		"""Absent / null fields must not overwrite existing ArticleOrgContent values."""
+		"""Absent / null fields must not overwrite existing ArticleSiteContent values."""
 		article = Articles.objects.create(
 			title="Test Article", link="https://example.com/article/1"
 		)
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=article,
-			organization=self.org,
+			site=self.site,
 			takeaways="Original takeaway.",
 			summary_plain_english="Original summary.",
 		)
@@ -117,7 +122,7 @@ class ImportArticlesFromApiTest(TestCase):
 			"test-org",
 		)
 
-		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
+		content = ArticleSiteContent.objects.get(article=article, site=self.site)
 		self.assertEqual(content.takeaways, "Original takeaway.")
 		self.assertEqual(content.summary_plain_english, "Original summary.")
 
@@ -127,9 +132,9 @@ class ImportArticlesFromApiTest(TestCase):
 		article = Articles.objects.create(
 			title="Test Article", link="https://example.com/article/1"
 		)
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=article,
-			organization=self.org,
+			site=self.site,
 			takeaways="Stale takeaway.",
 			summary_plain_english="Stale summary.",
 		)
@@ -143,7 +148,7 @@ class ImportArticlesFromApiTest(TestCase):
 			"test-org",
 		)
 
-		content = ArticleOrgContent.objects.get(article=article, organization=self.org)
+		content = ArticleSiteContent.objects.get(article=article, site=self.site)
 		self.assertIsNone(content.takeaways)
 		self.assertIsNone(content.summary_plain_english)
 
@@ -162,4 +167,62 @@ class ImportArticlesFromApiTest(TestCase):
 				"https://api.example.com/articles/",
 				"--target-org",
 				"nonexistent-org",
+			)
+
+	@patch("gregory.management.commands.import_articles_from_api.requests.get")
+	def test_every_site_of_the_org_receives_the_content(self, mock_get):
+		mock_get.return_value = _make_response([ARTICLE])
+		second = Site.objects.create(domain="import2.test.example.com", name="Import 2")
+		OrganizationSite.objects.create(organization=self.org, site=second)
+
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
+
+		article = Articles.objects.get(title="Test Article")
+		self.assertEqual(
+			set(ArticleSiteContent.objects.filter(article=article).values_list("site_id", flat=True)),
+			{self.site.pk, second.pk},
+		)
+
+	@patch("gregory.management.commands.import_articles_from_api.requests.get")
+	def test_nested_editorial_entry_is_imported(self, mock_get):
+		item = {
+			**ARTICLE,
+			"takeaways": None,
+			"summary_plain_english": None,
+			"editorial": [
+				{
+					"site": {"id": 1, "domain": "x.example.com", "name": "X"},
+					"takeaways": "From the nested entry.",
+					"summary_plain_english": None,
+				}
+			],
+		}
+		mock_get.return_value = _make_response([item])
+
+		call_command(
+			"import_articles_from_api",
+			"https://api.example.com/articles/",
+			"--target-org",
+			"test-org",
+		)
+
+		article = Articles.objects.get(title="Test Article")
+		content = ArticleSiteContent.objects.get(article=article, site=self.site)
+		self.assertEqual(content.takeaways, "From the nested entry.")
+
+	@patch("gregory.management.commands.import_articles_from_api.requests.get")
+	def test_org_without_a_site_raises_command_error(self, mock_get):
+		mock_get.return_value = _make_response([ARTICLE])
+		Organization.objects.create(name="No Site Org", slug="no-site-org")
+		with self.assertRaises(CommandError):
+			call_command(
+				"import_articles_from_api",
+				"https://api.example.com/articles/",
+				"--target-org",
+				"no-site-org",
 			)

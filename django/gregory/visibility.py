@@ -199,6 +199,9 @@ def visible_subject_ids(request) -> set[int]:
 	        frontend reads its own scope. Empty set until the key's
 	        ``site`` is resolved (backfilled by data migration for existing
 	        keys; Phase 1 does not yet enforce that every key has one).
+	  - MCP editor (``request.auth`` is a ``mcpauth.editor_auth.EditorAuth``)
+	      → that one site's ``scope_subjects``, whether or not the site is
+	        ``api_public``. Checked before the user rule below.
 	  - Authenticated user
 	      → the union of ``scope_subjects`` across every site owned (via
 	        ``OrganizationSite``) by an organisation the user belongs to
@@ -260,6 +263,17 @@ def visible_subject_ids(request) -> set[int]:
 		if site_id is None:
 			return _resolve(set())
 		return _resolve(site_scope_subject_ids(site_id, public_only=False))
+
+	# An MCP editor (MCP-AUTH-PLAN.md): the one site their token is bound to,
+	# private or not. Placed before the user branch, whose "every site of every
+	# organisation the user belongs to" is exactly what a single-site credential
+	# must not get (D4). ``include_public`` is ignored: it would widen the scope
+	# past that site.
+	from mcpauth.editor_auth import editor_auth_of
+
+	editor = editor_auth_of(request)
+	if editor is not None:
+		return site_scope_subject_ids(editor.site_id, public_only=False)
 
 	if getattr(request, "user", None) is not None and request.user.is_authenticated:
 		from gregory.models import OrganizationSite
@@ -327,13 +341,25 @@ def visible_org_ids(request) -> set[int]:
 	owned_ids: set[int] = set()
 	is_identified = False  # True when caller has a non-anonymous identity
 
+	from mcpauth.editor_auth import editor_auth_of
+
 	# --- 1. Try API key identity ---
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
 		owned_ids.add(api_scheme.organization_id)
 		is_identified = True
 
-	# --- 2. Try authenticated-user identity (only if no API key found) ---
+	# --- 2. An MCP editor: the organisation(s) owning their one site ---
+	elif editor_auth_of(request) is not None:
+		from gregory.models import OrganizationSite
+
+		return set(
+			OrganizationSite.objects.filter(
+				site_id=editor_auth_of(request).site_id
+			).values_list("organization_id", flat=True)
+		)
+
+	# --- 3. Try authenticated-user identity (only if no API key found) ---
 	elif getattr(request, "user", None) is not None and request.user.is_authenticated:
 		user_org_ids = set(
 			request.user.organizations_organizationuser.values_list(
@@ -343,7 +369,7 @@ def visible_org_ids(request) -> set[int]:
 		owned_ids |= user_org_ids
 		is_identified = True
 
-	# --- 3. Resolve final set ---
+	# --- 4. Resolve final set ---
 	if not is_identified:
 		# Anonymous caller → public orgs only (flag is a no-op)
 		return _public_org_ids()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx2
 import pytest
+from mcp.server.mcpserver.exceptions import ToolError
 
 from gregory_mcp.client import GregoryAPIError
 from gregory_mcp.tools.authors import get_author, search_authors
@@ -116,7 +117,7 @@ async def test_get_author_without_coauthors_makes_one_call(mock_gregory):
 async def test_get_author_404_says_not_found(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(404, json={"detail": "Not found."}))
 
-	with pytest.raises(ValueError) as exc_info:
+	with pytest.raises(ToolError) as exc_info:
 		await get_author(123)
 
 	message = str(exc_info.value)
@@ -221,7 +222,7 @@ async def test_get_stats_trials_scope(mock_gregory):
 
 
 async def test_get_stats_rejects_unknown_scope(mock_gregory):
-	with pytest.raises(ValueError, match="unknown scope"):
+	with pytest.raises(ToolError, match="unknown scope"):
 		await get_stats(scope="bogus")
 
 	assert mock_gregory.requests == []

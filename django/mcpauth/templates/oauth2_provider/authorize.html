@@ -1,0 +1,47 @@
+{% extends "mcpauth/base.html" %}
+{% block title %}Connect to {{ site.name }}{% endblock %}
+{% block content %}
+{% if access is None %}
+	<h1>No access to {{ site.name }}</h1>
+	<p>You are signed in as <strong>{{ signed_in_as }}</strong>, and this account has no access to {{ site.name }}.</p>
+	<p class="muted">{% if contact_email %}Contact <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> to be given editor access.{% else %}Ask the site's administrator to give you editor access.{% endif %}</p>
+	<p class="muted">You can close this window.</p>
+{% else %}
+	<h1>Connect {% if application.name %}{{ application.name }}{% else %}an application{% endif %} to {{ site.name }}</h1>
+	<p class="muted">Signed in as <strong>{{ signed_in_as }}</strong>. This connection is for {{ site.name }} only.</p>
+
+	<p>If you approve, the application will be able to:</p>
+	<ul class="can">
+		{% for description in scopes_descriptions %}<li>{{ description }}</li>{% endfor %}
+	</ul>
+
+	{% if not is_editor %}
+		<div class="note">
+			You have read access to public data only{% if contact_email %}. To edit, contact <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> for editor access{% endif %}.
+		</div>
+	{% elif not can_edit %}
+		<div class="note">You have read-only editor access on this site.</div>
+	{% else %}
+		<div class="note">Edits made through this connection are live immediately and recorded under your name.</div>
+	{% endif %}
+
+	<dl>
+		<dt>Application</dt>
+		<dd>{{ application.name|default:client_id }}</dd>
+		<dt>Returns you to</dt>
+		<dd>{{ redirect_uri }}</dd>
+	</dl>
+
+	<form method="post" action="">
+		{% csrf_token %}
+		{% for field in form %}
+			{% if field.is_hidden %}{{ field }}{% endif %}
+		{% endfor %}
+		{{ form.errors }}
+		<div class="actions">
+			<button type="submit" name="cancel">Cancel</button>
+			<button type="submit" name="allow" value="Authorize" class="primary">Approve</button>
+		</div>
+	</form>
+{% endif %}
+{% endblock %}

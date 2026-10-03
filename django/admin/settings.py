@@ -107,11 +107,15 @@ INSTALLED_APPS = [
 	'sitesettings',
 	'indexers',
 	'api',
+	# mcpauth before oauth2_provider: its authorize.html must win the template lookup.
+	'mcpauth',
+	'oauth2_provider',
 	'django_ckeditor_5',
 ]
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	'mcpauth.middleware.EditorHeaderGuardMiddleware',
 	'corsheaders.middleware.CorsMiddleware',
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	'django.middleware.common.CommonMiddleware',
@@ -316,6 +320,16 @@ SPECTACULAR_SETTINGS = {
 	# by hand here and referenced via `security=` on the views that use it.
 	'APPEND_COMPONENTS': {
 		'securitySchemes': {
+			'editorServiceAuth': {
+				'type': 'http',
+				'scheme': 'bearer',
+				'description': (
+					'The MCP server\'s service credential (GREGORY_MCP_SERVICE_KEY), '
+					'sent with X-Gregory-Editor-User and X-Gregory-Editor-Site naming the '
+					'verified editor and the one site. Only the MCP server holds it; '
+					'/editor/ is not reachable from the public internet.'
+				),
+			},
 			'apiKeyAuth': {
 				'type': 'apiKey',
 				'in': 'header',
@@ -330,6 +344,94 @@ SPECTACULAR_SETTINGS = {
 			},
 		},
 	},
+}
+
+# --- MCP editor access: OAuth 2.1 authorization server (MCP-AUTH-PLAN.md) ---
+#
+# django-oauth-toolkit is the authorization server; mcpauth/ holds the pieces
+# that are ours: the per-site editor grant, the access token that carries one
+# site and one tier (swapped in below), the login and consent pages, and the
+# introspection endpoint the MCP server calls. The MCP server never sees a
+# user's password and never forwards a user's token to this API: it asks
+# /o/introspect/ who a token belongs to, then calls /editor/ with
+# GREGORY_MCP_SERVICE_KEY (a single-purpose credential, not an APIAccessScheme).
+OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL = 'mcpauth.AccessToken'
+# DOT's migrations read every swappable model setting. The three token models
+# are swapped together (they reference each other); application and grant stay
+# DOT's own.
+OAUTH2_PROVIDER_APPLICATION_MODEL = 'oauth2_provider.Application'
+OAUTH2_PROVIDER_GRANT_MODEL = 'oauth2_provider.Grant'
+OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = 'mcpauth.RefreshToken'
+OAUTH2_PROVIDER_ID_TOKEN_MODEL = 'mcpauth.IDToken'
+OAUTH2_PROVIDER_DEVICE_GRANT_MODEL = 'oauth2_provider.DeviceGrant'
+
+# Shared secret between this API and the MCP server. Unset means the
+# introspection and /editor/ endpoints refuse every request.
+GREGORY_MCP_SERVICE_KEY = os.environ.get('GREGORY_MCP_SERVICE_KEY', '')
+
+# The editor address of a site is https://<prefix>.<site domain>/mcp/editor.
+MCP_EDITOR_HOST_PREFIX = os.environ.get('MCP_EDITOR_HOST_PREFIX', 'gregory-ai')
+
+# MCP editor writes allowed per (user, site) per window (D21). Start here and
+# tune from production logs.
+MCP_EDITOR_RATE_LIMITS = {
+	'hour': int(os.environ.get('MCP_EDITOR_WRITES_PER_HOUR', '60')),
+	'day': int(os.environ.get('MCP_EDITOR_WRITES_PER_DAY', '500')),
+}
+
+# Failed sign-ins allowed per window on the OAuth login page, per client
+# address and per username.
+OAUTH_LOGIN_MAX_FAILURES = int(os.environ.get('OAUTH_LOGIN_MAX_FAILURES', '10'))
+OAUTH_LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+
+# Dynamic registrations accepted per client address per hour.
+OAUTH_DCR_MAX_PER_HOUR = int(os.environ.get('OAUTH_DCR_MAX_PER_HOUR', '30'))
+
+# Registered clients unused this long are deleted (prune_oauth_clients).
+OAUTH_CLIENT_UNUSED_DAYS = 90
+
+OAUTH2_PROVIDER = {
+	# Authorization code with PKCE (S256) only: no implicit, password or
+	# client-credentials grants. The validator enforces this at the token
+	# endpoint; the flags below make DOT's own checks agree with it.
+	'PKCE_REQUIRED': True,
+	'OAUTH2_VALIDATOR_CLASS': 'mcpauth.validators.EditorOAuth2Validator',
+	'SCOPES': {
+		'articles:read': 'Read articles, trials and authors for this site',
+		'articles:edit': "Edit this site's article takeaways, relevance and trial links",
+	},
+	'DEFAULT_SCOPES': ['articles:read'],
+	'ACCESS_TOKEN_EXPIRE_SECONDS': 60 * 60,
+	'REFRESH_TOKEN_EXPIRE_SECONDS': 30 * 24 * 60 * 60,
+	'ROTATE_REFRESH_TOKEN': True,
+	'REFRESH_TOKEN_REUSE_PROTECTION': True,
+	'AUTHORIZATION_CODE_EXPIRE_SECONDS': 60,
+	# Native clients (Claude Code, Claude Desktop) redirect to a loopback port
+	# chosen at run time (RFC 8252); everything else must be https.
+	'ALLOWED_REDIRECT_URI_SCHEMES': ['https', 'http'],
+	'ALLOW_LOCALHOST_LOOPBACK': True,
+	# Client registration: RFC 7591 and Client ID Metadata Documents (D20).
+	# Registration is open, so it is rate limited and restricted to
+	# authorization-code clients (mcpauth.registration).
+	'DCR_ENABLED': True,
+	'DCR_REGISTRATION_PERMISSION_CLASSES': ('oauth2_provider.dcr.AllowAllDCRPermission',),
+	'CIMD_ENABLED': True,
+	'CIMD_METADATA_FETCHER': 'mcpauth.registration.PolicyMetadataFetcher',
+	'OAUTH2_RESPONSE_TYPES_SUPPORTED': ['code'],
+	'OAUTH2_GRANT_TYPES_SUPPORTED': ['authorization_code', 'refresh_token'],
+	'OAUTH2_TOKEN_ENDPOINT_AUTH_METHODS_SUPPORTED': ['none', 'client_secret_post', 'client_secret_basic'],
+	# RFC 9700 hardening: adopt the compliant behaviour rather than warn.
+	'COMPLIANT_BCP_RFC9700_IMPLICIT_GRANT': True,
+	'COMPLIANT_BCP_RFC9700_PASSWORD_GRANT': True,
+	'COMPLIANT_BCP_RFC9700_PKCE_METHOD': True,
+	'COMPLIANT_BCP_RFC9700_PKCE_REQUIRED': True,
+	'COMPLIANT_BCP_RFC9700_ACCESS_TOKEN_TRANSPORT': True,
+	'COMPLIANT_BCP_RFC9700_AUTHZ_RESPONSE_ISS': True,
+	'COMPLIANT_BCP_RFC9700_TOKEN_STORAGE': True,
+	'COMPLIANT_BCP_RFC9700_REFRESH_TOKEN': True,
+	# The issuer is the API domain over https. Django sits behind a TLS-terminating
+	# proxy here, so deriving it from the request would advertise http://.
+	'OIDC_ISS_ENDPOINT': os.environ.get('OAUTH_ISSUER') or (f'https://api.{_domain}' if _domain else ''),
 }
 
 # Email Settings

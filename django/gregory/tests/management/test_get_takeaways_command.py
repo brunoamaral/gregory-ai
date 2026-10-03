@@ -2,7 +2,8 @@
 Tests for the get_takeaways management command.
 
 The command summarises article abstracts and writes the result into
-ArticleOrgContent for every organisation the article belongs to via teams.
+ArticleSiteContent for every site of the organisations the article belongs to
+via teams.
 
 Run with:
     docker exec gregory python manage.py test gregory.tests.management.test_get_takeaways_command
@@ -17,12 +18,19 @@ django.setup()
 from io import StringIO
 from unittest.mock import patch, MagicMock
 
+from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
 from organizations.models import Organization
 
 from gregory.management.commands.get_takeaways import Command
-from gregory.models import Articles, ArticleOrgContent, OrganizationApiSettings, Team
+from gregory.models import (
+	Articles,
+	ArticleSiteContent,
+	OrganizationApiSettings,
+	OrganizationSite,
+	Team,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +44,10 @@ def _make_org(name, slug=""):
 	OrganizationApiSettings.objects.filter(organization=org).update(
 		make_api_public=False
 	)
+	# Editorial content is per site: the organisation's site is where
+	# takeaways land. Kept on the instance so tests can address it.
+	org.site = Site.objects.create(domain=f"{slug}.takeaways.test.example.com", name=name)
+	OrganizationSite.objects.create(organization=org, site=org.site, is_default=True)
 	return org
 
 
@@ -112,9 +124,9 @@ class GetTakeawaysFanOutTest(TestCase):
 		call_command("get_takeaways", stdout=StringIO())
 
 		# Both orgs should now have rows with the generated takeaway.
-		self.assertEqual(ArticleOrgContent.objects.count(), 2)
+		self.assertEqual(ArticleSiteContent.objects.count(), 2)
 		for org in (self.org_a, self.org_b):
-			row = ArticleOrgContent.objects.get(article=self.article, organization=org)
+			row = ArticleSiteContent.objects.get(article=self.article, site=org.site)
 			self.assertEqual(row.takeaways, "GENERATED")
 
 		# Crucially, the summariser ran exactly once even though we wrote two rows.
@@ -132,16 +144,16 @@ class GetTakeawaysFanOutTest(TestCase):
 
 		call_command("get_takeaways", org_id=self.org_a.pk, stdout=StringIO())
 
-		self.assertEqual(ArticleOrgContent.objects.count(), 1)
-		row = ArticleOrgContent.objects.get()
-		self.assertEqual(row.organization_id, self.org_a.pk)
+		self.assertEqual(ArticleSiteContent.objects.count(), 1)
+		row = ArticleSiteContent.objects.get()
+		self.assertEqual(row.site_id, self.org_a.site.pk)
 		self.assertEqual(row.takeaways, "SCOPED")
 
 	@patch("gregory.management.commands.get_takeaways.pipeline")
 	def test_skips_orgs_that_already_have_takeaways(self, mock_pipeline):
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=self.article,
-			organization=self.org_a,
+			site=self.org_a.site,
 			takeaways="Editor wrote this",
 		)
 		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
@@ -151,20 +163,20 @@ class GetTakeawaysFanOutTest(TestCase):
 		call_command("get_takeaways", stdout=StringIO())
 
 		# Org A row stays untouched, Org B gets a new row.
-		row_a = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org_a
+		row_a = ArticleSiteContent.objects.get(
+			article=self.article, site=self.org_a.site
 		)
-		row_b = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org_b
+		row_b = ArticleSiteContent.objects.get(
+			article=self.article, site=self.org_b.site
 		)
 		self.assertEqual(row_a.takeaways, "Editor wrote this")
 		self.assertEqual(row_b.takeaways, "GENERATED")
 
 	@patch("gregory.management.commands.get_takeaways.pipeline")
 	def test_fills_existing_row_with_empty_takeaways(self, mock_pipeline):
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=self.article,
-			organization=self.org_a,
+			site=self.org_a.site,
 			takeaways="",
 			summary_plain_english="Pre-existing plain english",
 		)
@@ -174,8 +186,8 @@ class GetTakeawaysFanOutTest(TestCase):
 
 		call_command("get_takeaways", stdout=StringIO())
 
-		row_a = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org_a
+		row_a = ArticleSiteContent.objects.get(
+			article=self.article, site=self.org_a.site
 		)
 		self.assertEqual(row_a.takeaways, "GENERATED")
 		# The previously-set plain English text must not be wiped.
@@ -202,7 +214,7 @@ class GetTakeawaysOrphanTest(TestCase):
 		err = StringIO()
 		call_command("get_takeaways", stdout=StringIO(), stderr=err)
 
-		self.assertEqual(ArticleOrgContent.objects.count(), 0)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)
 		# Model is never loaded because no work was found: the upfront
 		# queryset filter excludes the orphan entirely (it has zero orgs
 		# linked via teams, so there's nothing it could fill), so it's never
@@ -236,11 +248,11 @@ class GetTakeawaysOrderingTest(TestCase):
 		call_command("get_takeaways", limit=1, stdout=StringIO())
 
 		# Only the older article should have been summarised.
-		self.assertEqual(ArticleOrgContent.objects.count(), 1)
-		row = ArticleOrgContent.objects.get()
+		self.assertEqual(ArticleSiteContent.objects.count(), 1)
+		row = ArticleSiteContent.objects.get()
 		self.assertEqual(row.article_id, self.older.article_id)
 		self.assertFalse(
-			ArticleOrgContent.objects.filter(article=self.newer).exists()
+			ArticleSiteContent.objects.filter(article=self.newer).exists()
 		)
 
 
@@ -258,8 +270,8 @@ class GetTakeawaysUpfrontFilterTest(TestCase):
 		self.pending = _make_article(
 			[self.team], "Still pending", "https://example.com/pending", _LONG_ABSTRACT
 		)
-		ArticleOrgContent.objects.create(
-			article=self.filled, organization=self.org, takeaways="Pre-existing"
+		ArticleSiteContent.objects.create(
+			article=self.filled, site=self.org.site, takeaways="Pre-existing"
 		)
 
 	@patch("gregory.management.commands.get_takeaways.pipeline")
@@ -271,16 +283,16 @@ class GetTakeawaysUpfrontFilterTest(TestCase):
 		call_command("get_takeaways", limit=1, stdout=StringIO())
 
 		# The already-filled (older) article is untouched...
-		row_filled = ArticleOrgContent.objects.get(
-			article=self.filled, organization=self.org
+		row_filled = ArticleSiteContent.objects.get(
+			article=self.filled, site=self.org.site
 		)
 		self.assertEqual(row_filled.takeaways, "Pre-existing")
 
 		# ...and the newer, eligible article behind it still gets processed
 		# even though --limit=1, because the filled article never consumed
 		# the budget in the first place.
-		row_pending = ArticleOrgContent.objects.get(
-			article=self.pending, organization=self.org
+		row_pending = ArticleSiteContent.objects.get(
+			article=self.pending, site=self.org.site
 		)
 		self.assertEqual(row_pending.takeaways, "GENERATED")
 
@@ -299,9 +311,9 @@ class GetTakeawaysPartialFillTest(TestCase):
 			"https://example.com/partial",
 			_LONG_ABSTRACT,
 		)
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=self.article,
-			organization=self.org_filled,
+			site=self.org_filled.site,
 			takeaways="Already have this",
 		)
 
@@ -313,12 +325,12 @@ class GetTakeawaysPartialFillTest(TestCase):
 
 		call_command("get_takeaways", stdout=StringIO())
 
-		self.assertEqual(ArticleOrgContent.objects.count(), 2)
-		row_filled = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org_filled
+		self.assertEqual(ArticleSiteContent.objects.count(), 2)
+		row_filled = ArticleSiteContent.objects.get(
+			article=self.article, site=self.org_filled.site
 		)
-		row_empty = ArticleOrgContent.objects.get(
-			article=self.article, organization=self.org_empty
+		row_empty = ArticleSiteContent.objects.get(
+			article=self.article, site=self.org_empty.site
 		)
 		self.assertEqual(row_filled.takeaways, "Already have this")
 		self.assertEqual(row_empty.takeaways, "GENERATED")
@@ -340,5 +352,56 @@ class GetTakeawaysDryRunTest(TestCase):
 	def test_dry_run_writes_nothing_and_skips_model(self, mock_pipeline):
 		call_command("get_takeaways", dry_run=True, stdout=StringIO())
 
-		self.assertEqual(ArticleOrgContent.objects.count(), 0)
+		self.assertEqual(ArticleSiteContent.objects.count(), 0)
 		mock_pipeline.assert_not_called()
+
+
+class GetTakeawaysMultiSiteTest(TestCase):
+	"""Content is per site, so an organisation with two sites gets a row on each."""
+
+	def setUp(self):
+		self.org = _make_org("Multi Site Org", "multi-site-org")
+		self.second_site = Site.objects.create(
+			domain="second.takeaways.test.example.com", name="Second"
+		)
+		OrganizationSite.objects.create(organization=self.org, site=self.second_site)
+		self.team = _make_team(self.org, "Multi Site Team")
+		self.article = _make_article(
+			[self.team], "Two site article", "https://example.com/two", _LONG_ABSTRACT
+		)
+
+	@patch("gregory.management.commands.get_takeaways.pipeline")
+	def test_every_site_of_the_org_gets_a_row_from_one_inference(self, mock_pipeline):
+		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
+		summarizer.tokenizer = MagicMock()
+		mock_pipeline.return_value = summarizer
+
+		call_command("get_takeaways", stdout=StringIO())
+
+		self.assertEqual(
+			set(ArticleSiteContent.objects.values_list("site_id", flat=True)),
+			{self.org.site.pk, self.second_site.pk},
+		)
+		self.assertEqual(summarizer.call_count, 1)
+
+	@patch("gregory.management.commands.get_takeaways.pipeline")
+	def test_only_the_site_without_takeaways_is_filled(self, mock_pipeline):
+		ArticleSiteContent.objects.create(
+			article=self.article, site=self.org.site, takeaways="Editor wrote this"
+		)
+		summarizer = MagicMock(return_value=[{"summary_text": "GENERATED"}])
+		summarizer.tokenizer = MagicMock()
+		mock_pipeline.return_value = summarizer
+
+		call_command("get_takeaways", stdout=StringIO())
+
+		self.assertEqual(
+			ArticleSiteContent.objects.get(article=self.article, site=self.org.site).takeaways,
+			"Editor wrote this",
+		)
+		self.assertEqual(
+			ArticleSiteContent.objects.get(
+				article=self.article, site=self.second_site
+			).takeaways,
+			"GENERATED",
+		)

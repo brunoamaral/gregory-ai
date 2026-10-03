@@ -4,6 +4,8 @@ Tests for ``?include=editorial`` and ``?has_takeaways`` (EDITORIAL-API-SPEC.md).
 Editorial content (takeaways, summary_plain_english) is off by default, comes
 back nested under ``editorial`` only on request, and which organisation's
 content it is follows the caller's identity / site -- never ``?team_id=``.
+Article editorial content is per site (``ArticleSiteContent``); trial editorial
+content is still per organisation (``TrialOrgContent``).
 
 Run with:
     docker exec gregory python manage.py test api.tests.test_editorial_include
@@ -25,7 +27,7 @@ from rest_framework.test import APIClient
 from api.models import APIAccessScheme
 from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import (
-	ArticleOrgContent,
+	ArticleSiteContent,
 	Articles,
 	OrganizationApiSettings,
 	Subject,
@@ -62,7 +64,8 @@ def _key(org, site, name):
 
 class EditorialFixtureMixin:
 	"""Org A owns the one public site; org B owns a private site. Both
-	subjects are on every record so every caller can see them."""
+	subjects are on every record so every caller can see them. Article
+	content is per site; trial content per organisation."""
 
 	@classmethod
 	def setUpTestData(cls):
@@ -85,15 +88,15 @@ class EditorialFixtureMixin:
 		for article in (cls.with_content, cls.without_content, cls.empty_takeaways):
 			article.subjects.add(cls.subject_a, cls.subject_b)
 			article.teams.add(cls.subject_a.team, cls.subject_b.team)
-		ArticleOrgContent.objects.create(
-			article=cls.with_content, organization=cls.org_a, takeaways="A takeaway"
+		ArticleSiteContent.objects.create(
+			article=cls.with_content, site=cls.public_site, takeaways="A takeaway"
 		)
-		ArticleOrgContent.objects.create(
-			article=cls.with_content, organization=cls.org_b, takeaways="B takeaway",
+		ArticleSiteContent.objects.create(
+			article=cls.with_content, site=cls.private_site, takeaways="B takeaway",
 			summary_plain_english="B plain",
 		)
-		ArticleOrgContent.objects.create(
-			article=cls.empty_takeaways, organization=cls.org_a, takeaways=""
+		ArticleSiteContent.objects.create(
+			article=cls.empty_takeaways, site=cls.public_site, takeaways=""
 		)
 
 		cls.trial = Trials.objects.create(title="Trial with content", link="https://t.test/1")
@@ -147,7 +150,7 @@ class DefaultResponseTests(EditorialFixtureMixin, TestCase):
 
 
 class AnonymousIncludeTests(EditorialFixtureMixin, TestCase):
-	def test_origin_resolves_the_sites_org(self):
+	def test_origin_resolves_the_site(self):
 		resp = self.anon("/articles/?include=editorial")
 		self.assertEqual(resp.status_code, 200)
 		row = self.by_title(resp, "With content")
@@ -155,32 +158,37 @@ class AnonymousIncludeTests(EditorialFixtureMixin, TestCase):
 			row["editorial"],
 			[
 				{
-					"organization": {"id": self.org_a.id, "name": "Editorial Org A"},
+					"site": {
+						"id": self.public_site.id,
+						"domain": PUBLIC_DOMAIN,
+						"name": self.public_site.name,
+					},
 					"takeaways": "A takeaway",
 					"summary_plain_english": None,
 				}
 			],
 		)
 
-	def test_site_id_param_resolves_the_same_org(self):
+	def test_site_id_param_resolves_the_same_site(self):
 		resp = APIClient().get(f"/articles/?include=editorial&site_id={self.public_site.id}")
 		row = self.by_title(resp, "With content")
-		self.assertEqual(row["editorial"][0]["organization"]["id"], self.org_a.id)
+		self.assertEqual(row["editorial"][0]["site"]["id"], self.public_site.id)
 
-	def test_team_id_does_not_pick_the_org(self):
-		# Org B's team asked for, but the site owner (org A) decides.
+	def test_team_id_does_not_pick_the_site(self):
+		# Org B's team asked for, but the resolved public site decides.
 		resp = self.anon(f"/articles/?include=editorial&team_id={self.subject_b.team_id}")
 		row = self.by_title(resp, "With content")
-		self.assertEqual([e["organization"]["id"] for e in row["editorial"]], [self.org_a.id])
+		self.assertEqual([e["site"]["id"] for e in row["editorial"]], [self.public_site.id])
 
-	def test_private_site_origin_never_yields_the_private_sites_org(self):
+	def test_private_site_origin_never_yields_the_private_sites_content(self):
 		resp = self.anon(
 			"/articles/?include=editorial",
 			HTTP_ORIGIN=f"https://{self.private_site.domain}",
 		)
 		self.assertEqual(resp.status_code, 200)
 		row = self.by_title(resp, "With content")
-		self.assertEqual(row["editorial"][0]["organization"]["id"], self.org_a.id)
+		self.assertEqual(row["editorial"][0]["site"]["id"], self.public_site.id)
+		self.assertEqual(row["editorial"][0]["takeaways"], "A takeaway")
 
 	def test_record_without_content_row_has_null_fields(self):
 		row = self.by_title(self.anon("/articles/?include=editorial"), "No content")
@@ -199,15 +207,15 @@ class AnonymousIncludeTests(EditorialFixtureMixin, TestCase):
 
 
 class ApiKeyIncludeTests(EditorialFixtureMixin, TestCase):
-	def test_returns_only_the_keys_org(self):
+	def test_returns_only_the_keys_site(self):
 		row = self.by_title(self.keyed(self.key_b, "/articles/?include=editorial"), "With content")
 		self.assertEqual(len(row["editorial"]), 1)
 		entry = row["editorial"][0]
-		self.assertEqual(entry["organization"]["id"], self.org_b.id)
+		self.assertEqual(entry["site"]["id"], self.private_site.id)
 		self.assertEqual(entry["takeaways"], "B takeaway")
 		self.assertEqual(entry["summary_plain_english"], "B plain")
 
-	def test_key_for_org_a_never_sees_org_b_content(self):
+	def test_key_for_site_a_never_sees_site_b_content(self):
 		row = self.by_title(self.keyed(self.key_a, "/articles/?include=editorial"), "With content")
 		self.assertEqual([e["takeaways"] for e in row["editorial"]], ["A takeaway"])
 
@@ -218,7 +226,7 @@ class ApiKeyIncludeTests(EditorialFixtureMixin, TestCase):
 
 
 class SessionUserIncludeTests(EditorialFixtureMixin, TestCase):
-	def test_user_in_two_orgs_gets_two_entries_sorted_by_org_id(self):
+	def test_user_in_two_orgs_gets_one_entry_per_site_sorted_by_site_id(self):
 		user = User.objects.create_user(username="both", password="x")
 		self.org_b.add_user(user)
 		self.org_a.add_user(user)
@@ -226,12 +234,12 @@ class SessionUserIncludeTests(EditorialFixtureMixin, TestCase):
 		client.force_authenticate(user=user)
 		resp = client.get("/articles/?include=editorial")
 		row = self.by_title(resp, "No content")
-		ids = [e["organization"]["id"] for e in row["editorial"]]
-		self.assertEqual(ids, sorted([self.org_a.id, self.org_b.id]))
+		ids = [e["site"]["id"] for e in row["editorial"]]
+		self.assertEqual(ids, sorted([self.public_site.id, self.private_site.id]))
 		row = self.by_title(resp, "With content")
-		by_org = {e["organization"]["id"]: e for e in row["editorial"]}
-		self.assertEqual(by_org[self.org_a.id]["takeaways"], "A takeaway")
-		self.assertEqual(by_org[self.org_b.id]["takeaways"], "B takeaway")
+		by_site = {e["site"]["id"]: e for e in row["editorial"]}
+		self.assertEqual(by_site[self.public_site.id]["takeaways"], "A takeaway")
+		self.assertEqual(by_site[self.private_site.id]["takeaways"], "B takeaway")
 
 	def test_user_in_no_org_gets_empty_list(self):
 		user = User.objects.create_user(username="orphan", password="x")
@@ -264,7 +272,7 @@ class HasTakeawaysTests(EditorialFixtureMixin, TestCase):
 		self.assertEqual(resp.status_code, 200)
 		return sorted(r["title"] for r in resp.data["results"])
 
-	def test_true_matches_only_non_empty_takeaways_of_callers_org(self):
+	def test_true_matches_only_non_empty_takeaways_of_callers_site(self):
 		self.assertEqual(self.titles(self.anon("/articles/?has_takeaways=true")), ["With content"])
 
 	def test_false_is_everything_else_with_empty_string_counting_as_missing(self):
@@ -273,8 +281,8 @@ class HasTakeawaysTests(EditorialFixtureMixin, TestCase):
 			["Empty takeaways", "No content"],
 		)
 
-	def test_follows_the_callers_org(self):
-		# Org B only has content on "With content" too, but via its own row.
+	def test_follows_the_callers_site(self):
+		# Site B only has content on "With content" too, but via its own row.
 		resp = self.keyed(self.key_b, "/articles/?has_takeaways=true")
 		self.assertEqual(self.titles(resp), ["With content"])
 
@@ -282,7 +290,7 @@ class HasTakeawaysTests(EditorialFixtureMixin, TestCase):
 		resp = self.anon("/articles/?has_takeaways=true")
 		self.assertNotIn("editorial", resp.data["results"][0])
 
-	def test_no_editorial_orgs_true_is_empty_false_is_everything(self):
+	def test_no_editorial_sites_true_is_empty_false_is_everything(self):
 		from sitesettings.models import CustomSetting
 
 		CustomSetting.objects.filter(site=self.public_site).update(api_public=False)
@@ -290,7 +298,7 @@ class HasTakeawaysTests(EditorialFixtureMixin, TestCase):
 		self.assertEqual(client.get("/articles/?has_takeaways=true").data["count"], 0)
 		self.assertEqual(client.get("/articles/?has_takeaways=false").data["count"], 0)
 
-	def test_no_duplicate_rows_with_multiple_orgs(self):
+	def test_no_duplicate_rows_with_multiple_sites(self):
 		user = User.objects.create_user(username="dup", password="x")
 		self.org_a.add_user(user)
 		self.org_b.add_user(user)
@@ -391,33 +399,141 @@ class QueryCountTests(EditorialFixtureMixin, TestCase):
 		for i in range(8):
 			article = Articles.objects.create(title=f"Bulk {i}", link=f"https://bulk.test/{i}")
 			article.subjects.add(self.subject_a)
-			ArticleOrgContent.objects.create(
-				article=article, organization=self.org_a, takeaways=f"t{i}"
+			ArticleSiteContent.objects.create(
+				article=article, site=self.public_site, takeaways=f"t{i}"
 			)
 		self._count("/articles/?include=editorial&page_size=2")  # warm caches
 		small = self._count("/articles/?include=editorial&page_size=2")
 		large = self._count("/articles/?include=editorial&page_size=10")
 		self.assertEqual(small, large)
 
-	def test_default_path_does_not_prefetch_org_contents(self):
+	def test_default_path_does_not_prefetch_site_contents(self):
 		with CaptureQueriesContext(connection) as ctx:
 			self.anon("/articles/")
 		self.assertFalse(
-			any("gregory_articleorgcontent" in q["sql"] for q in ctx.captured_queries)
+			any("gregory_articlesitecontent" in q["sql"] for q in ctx.captured_queries)
 		)
 
 
 class StatsCacheTests(EditorialFixtureMixin, TestCase):
-	def test_has_takeaways_stats_do_not_collide_across_orgs(self):
+	def test_has_takeaways_stats_do_not_collide_across_sites(self):
 		from django.core.cache import cache
 
 		cache.clear()
 		extra = Articles.objects.create(title="Only A", link="https://e.test/only-a")
 		extra.subjects.add(self.subject_a, self.subject_b)
-		ArticleOrgContent.objects.create(article=extra, organization=self.org_a, takeaways="x")
-		# Same subject scope (both subjects), different editorial org.
+		ArticleSiteContent.objects.create(article=extra, site=self.public_site, takeaways="x")
+		# Same subject scope (both subjects), different editorial site.
 		a = self.keyed(self.key_a, "/articles/stats/?has_takeaways=true")
 		b = self.keyed(self.key_b, "/articles/stats/?has_takeaways=true")
 		self.assertEqual(a.status_code, 200)
 		self.assertEqual(a.data["total"], 2)
 		self.assertEqual(b.data["total"], 1)
+
+
+class SameOrganisationTwoSitesTests(EditorialFixtureMixin, TestCase):
+	"""Editorial content is per site (D3): two sites of one organisation carry
+	different takeaways for the same article."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.second_site = private_site_publishing(
+			cls.subject_a, cls.subject_b, organization=cls.org_a
+		)
+		cls.second_key = _key(cls.org_a, cls.second_site, "editorial-key-a2")
+		ArticleSiteContent.objects.create(
+			article=cls.with_content, site=cls.second_site, takeaways="Second site takeaway"
+		)
+
+	def test_each_sites_key_gets_its_own_text(self):
+		first = self.by_title(
+			self.keyed(self.key_a, "/articles/?include=editorial"), "With content"
+		)
+		second = self.by_title(
+			self.keyed(self.second_key, "/articles/?include=editorial"), "With content"
+		)
+		self.assertEqual([e["takeaways"] for e in first["editorial"]], ["A takeaway"])
+		self.assertEqual(first["editorial"][0]["site"]["id"], self.public_site.id)
+		self.assertEqual(
+			[e["takeaways"] for e in second["editorial"]], ["Second site takeaway"]
+		)
+		self.assertEqual(second["editorial"][0]["site"]["id"], self.second_site.id)
+
+	def test_has_takeaways_follows_the_keys_site(self):
+		# A third article has text on the second site alone.
+		only_second = Articles.objects.create(title="Second only", link="https://e.test/s")
+		only_second.subjects.add(self.subject_a)
+		ArticleSiteContent.objects.create(
+			article=only_second, site=self.second_site, takeaways="x"
+		)
+		resp = self.keyed(self.second_key, "/articles/?has_takeaways=true")
+		self.assertEqual(
+			sorted(r["title"] for r in resp.data["results"]),
+			["Second only", "With content"],
+		)
+		resp = self.keyed(self.key_a, "/articles/?has_takeaways=true")
+		self.assertEqual([r["title"] for r in resp.data["results"]], ["With content"])
+
+	def test_organisation_member_gets_every_site_of_the_organisation(self):
+		user = User.objects.create_user(username="two-sites", password="x")
+		self.org_a.add_user(user)
+		client = APIClient()
+		client.force_authenticate(user=user)
+		row = self.by_title(client.get("/articles/?include=editorial"), "With content")
+		by_site = {e["site"]["id"]: e["takeaways"] for e in row["editorial"]}
+		self.assertEqual(
+			by_site,
+			{self.public_site.id: "A takeaway", self.second_site.id: "Second site takeaway"},
+		)
+
+
+class KeyWithoutUsableSiteTests(EditorialFixtureMixin, TestCase):
+	def test_key_without_site_gets_empty_editorial(self):
+		key = _key(self.org_a, None, "editorial-siteless")
+		# include_public so the key's (empty) own scope still returns rows.
+		resp = self.keyed(key, "/articles/?include=editorial&include_public=true")
+		row = self.by_title(resp, "With content")
+		self.assertEqual(row["editorial"], [])
+
+	def test_key_whose_site_belongs_to_another_org_gets_empty_editorial(self):
+		# Fails closed, like visible_subject_ids: never another org's site.
+		key = _key(self.org_a, self.private_site, "editorial-mismatch")
+		resp = self.keyed(key, "/articles/?include=editorial")
+		self.assertEqual(resp.status_code, 200)
+		for row in resp.data["results"]:
+			self.assertEqual(row["editorial"], [])
+
+
+class TrialEditorialStaysPerOrganisationTests(EditorialFixtureMixin, TestCase):
+	def test_trial_entries_are_still_labelled_by_organisation(self):
+		row = self.by_title(
+			self.keyed(self.key_a, "/trials/?include=editorial"), "Trial with content"
+		)
+		self.assertEqual(
+			row["editorial"][0]["organization"],
+			{"id": self.org_a.id, "name": "Editorial Org A"},
+		)
+		self.assertNotIn("site", row["editorial"][0])
+
+
+class CountCacheTests(EditorialFixtureMixin, TestCase):
+	"""The paginator's cached count must not serve one site's has_takeaways
+	count to another caller who shares the subject scope."""
+
+	def test_has_takeaways_count_is_not_shared_across_sites_with_the_same_scope(self):
+		from django.core.cache import cache
+
+		cache.clear()
+		second_site = publish_subjects(
+			self.subject_a, self.subject_b, organization=self.org_a, domain="count-two.test.example.com"
+		)
+		second_key = _key(self.org_a, second_site, "editorial-count-two")
+		for article in (self.without_content, self.empty_takeaways):
+			ArticleSiteContent.objects.create(article=article, site=second_site, takeaways="text")
+
+		first = self.keyed(self.key_a, "/articles/?has_takeaways=true")
+		second = self.keyed(second_key, "/articles/?has_takeaways=true")
+
+		self.assertEqual(first.data["count"], 1)
+		self.assertEqual(second.data["count"], 2)

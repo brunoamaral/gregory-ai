@@ -1,0 +1,23 @@
+{% extends "mcpauth/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<h1>Sign in to GregoryAI</h1>
+<p class="muted">An application is asking to connect to your account. Sign in with your GregoryAI username and password to continue.</p>
+
+<form method="post" autocomplete="on">
+	{% csrf_token %}
+	{% if form.non_field_errors %}
+		<div class="error" role="alert">
+			{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+		</div>
+	{% endif %}
+	<label for="{{ form.username.id_for_label }}">Username</label>
+	<input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}" autocomplete="username" autocapitalize="none" autofocus required>
+	<label for="{{ form.password.id_for_label }}">Password</label>
+	<input type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}" autocomplete="current-password" required>
+	<input type="hidden" name="next" value="{{ next }}">
+	<div class="actions">
+		<button type="submit" class="primary">Sign in</button>
+	</div>
+</form>
+{% endblock %}

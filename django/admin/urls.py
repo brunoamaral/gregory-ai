@@ -47,6 +47,17 @@ from api.views import (
 	PublicSitesView,
 	McpTenantsView,
 )
+from api.editor_views import (
+	EDITOR_READ_ROUTES,
+	EditorArticleEditorialView,
+	EditorArticleHistoryView,
+	EditorArticleRelevanceView,
+	EditorArticleResolveView,
+	EditorArticleTrialDetailView,
+	EditorArticleTrialsView,
+	EditorStatsView,
+	EditorTenantsView,
+)
 from rss.views import (
 	SiteArticlesByAuthorFeed,
 	SiteTrialsBySubjectFeed,
@@ -87,6 +98,11 @@ router.register(r"sponsors", SponsorViewSet, basename="sponsors")
 # Teams router (excluded from API root listing)
 teams_router = routers.SimpleRouter()
 teams_router.register(r"teams", TeamsViewSet)
+
+# Editor routes: the read viewsets again, behind editor authentication.
+editor_router = routers.SimpleRouter()
+for _prefix, _viewset, _basename in EDITOR_READ_ROUTES:
+	editor_router.register(_prefix, _viewset, basename=_basename)
 
 # Define URL patterns
 urlpatterns = (
@@ -235,6 +251,42 @@ urlpatterns = (
 		# site-bound key, that caller's own private tenant -- sites/ must
 		# stay unscoped public discovery only.
 		path("tenants/", McpTenantsView.as_view(), name="mcp_tenants"),
+		# MCP editor routes (api/editor_views.py): the service credential plus a
+		# verified editor and site. Specific paths first -- the read viewsets
+		# below would otherwise take "resolve" for an article id.
+		path("editor/articles/resolve/", EditorArticleResolveView.as_view(), name="editor-article-resolve"),
+		path(
+			"editor/articles/<int:article_id>/editorial/",
+			EditorArticleEditorialView.as_view(),
+			name="editor-article-editorial",
+		),
+		path(
+			"editor/articles/<int:article_id>/relevance/<int:subject_id>/",
+			EditorArticleRelevanceView.as_view(),
+			name="editor-article-relevance",
+		),
+		path(
+			"editor/articles/<int:article_id>/trials/",
+			EditorArticleTrialsView.as_view(),
+			name="editor-article-trials",
+		),
+		path(
+			"editor/articles/<int:article_id>/trials/<int:trial_id>/",
+			EditorArticleTrialDetailView.as_view(),
+			name="editor-article-trial",
+		),
+		path(
+			"editor/articles/<int:article_id>/history/",
+			EditorArticleHistoryView.as_view(),
+			name="editor-article-history",
+		),
+		path("editor/tenants/", EditorTenantsView.as_view(), name="editor-tenants"),
+		path("editor/stats/", EditorStatsView.as_view(), name="editor-stats"),
+		path("editor/", include(editor_router.urls)),
+		# OAuth 2.1 authorization server for MCP editor access (MCP-AUTH-PLAN.md):
+		# /o/authorize/, /o/token/, /o/revoke/, /o/introspect/, /o/register/ and
+		# the RFC 8414 metadata at /.well-known/oauth-authorization-server.
+		path("", include("mcpauth.urls")),
 		# Gregory app routes
 		path("", include("gregory.urls")),
 		# Include router routes

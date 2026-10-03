@@ -22,6 +22,7 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.contrib.sites.models import Site
 from django.db import IntegrityError
 from django.test import TestCase, Client
 from django.utils.timezone import now, is_aware
@@ -32,6 +33,7 @@ from api.utils.responses import ARTICLE_EXISTS, INVALID_JSON
 from api.views import generateAccessSchemeLog
 from gregory.models import (
 	Articles,
+	OrganizationSite,
 	Sources,
 	Team,
 	Subject,
@@ -410,6 +412,11 @@ class CaseVariantDoiTest(TestCase):
 		self.team = _make_team(self.org, "Case Team")
 		self.subject = _make_subject(self.team, "Case Subject")
 		self.scheme = _make_scheme(self.org, "hardening-case-key")
+		# edit_article writes per-site content, so the key needs a site.
+		site = Site.objects.create(domain="hardening-case.test.example.com", name="Case")
+		OrganizationSite.objects.create(organization=self.org, site=site, is_default=True)
+		self.scheme.site = site
+		self.scheme.save()
 		self.existing_source = _make_source(
 			self.team, self.subject, "hardening-case-existing-source"
 		)

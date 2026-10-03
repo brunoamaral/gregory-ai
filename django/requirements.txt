@@ -24,6 +24,7 @@ django-cors-headers==4.7.0
 django-countries==7.6.1
 django-extensions==4.1
 django-filter>=25.1
+django-oauth-toolkit==3.4.1
 django-organizations==2.5.0
 django-simple-history==3.8.0
 djangorestframework==3.17.1
@@ -49,6 +50,7 @@ idna==3.4
 Jinja2==3.1.3
 joblib==1.5.0
 jsonschema==4.19.2
+jwcrypto==1.5.6
 libclang==18.1.1
 lightgbm==4.6.0
 lxml==5.4.0
@@ -66,7 +68,7 @@ networkx==3.4.2
 nltk==3.10.3
 numexpr==2.8.7
 numpy==1.26.3
-oauthlib==3.2.2
+oauthlib==3.3.1
 openpyxl>=3.1.0
 opt_einsum==3.4.0
 optree==0.15.0

@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx2
+from mcp.server.mcpserver.exceptions import ToolError
 
 from .config import Settings
 from .site_context import get_current_site_id
@@ -36,8 +37,16 @@ MAX_BACKOFF_SECONDS = 2.0
 _RETRYABLE_CLIENT_STATUS = {429}
 
 
-class GregoryAPIError(Exception):
-	"""Raised when the upstream Gregory API returns an error response."""
+class GregoryAPIError(ToolError):
+	"""Raised when the upstream Gregory API returns an error response.
+
+	A `ToolError` so the SDK treats it as an anticipated failure: the model
+	reads this message (e.g. a 400 naming a bad filter value), and the SDK
+	logs it at INFO. Since mcp 2.1, any other exception escaping a tool is
+	treated as a crash: the model sees only "Error executing tool <name>"
+	and the SDK logs a traceback at ERROR. An upstream error is not a crash
+	of this server, and this client already logs and counts it.
+	"""
 
 	def __init__(self, status_code: int, detail: str):
 		self.status_code = status_code

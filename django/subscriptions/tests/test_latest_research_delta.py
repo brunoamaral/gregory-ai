@@ -29,7 +29,8 @@ from django.utils import timezone
 
 from gregory.models import (
 	Articles,
-	ArticleOrgContent,
+	ArticleSiteContent,
+	OrganizationSite,
 	Subject,
 	Team,
 	TeamCategory,
@@ -346,14 +347,17 @@ class OrgContentMapCoverageTest(TestCase):
 		self.site = Site.objects.create(
 			domain="lrmaporg.example.com", name="LR Map Org"
 		)
+		OrganizationSite.objects.create(
+			organization=self.org, site=self.site, is_default=True
+		)
 		self.article = Articles.objects.create(
 			title="LR Map Article",
 			link="https://example.com/article/lr-map",
 		)
 		self.article.team_categories.add(self.category)
-		ArticleOrgContent.objects.create(
+		ArticleSiteContent.objects.create(
 			article=self.article,
-			organization=self.org,
+			site=self.site,
 			takeaways="LR takeaway",
 		)
 
