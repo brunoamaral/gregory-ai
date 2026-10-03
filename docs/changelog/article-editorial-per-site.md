@@ -34,4 +34,4 @@ Migration `gregory/0105` copies every `ArticleOrgContent` row to each site its o
 - Clients that read `editorial[].organization` on articles must read `editorial[].site` instead. The site's `id`, `domain` and `name` replace the organisation's `id` and `name`.
 - Clients that write through `POST /articles/edit/` need an API key bound to a site (**Admin → API → API access schemes → Site**). Keys that already had a site keep working.
 - `import_articles_from_api --target-org` now writes a copy to every site of that organisation, and fails if the organisation owns none. `get_takeaways` fills each site of the article's organisations, and `--org-id` limits it to that organisation's sites.
-- Newsletters carry the text of the organisation's default site.
+- Newsletters carry the text of the site their List is sent for, falling back to the organisation's default site.

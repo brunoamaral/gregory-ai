@@ -113,10 +113,10 @@ def _merge_editorial_contents(keep, rem, accessor, owner_field, stdout=None):
 	preserving the text.
 
 	Editorial content (takeaways, plain-english summary) is hand-written
-	curation, so -- as with relevance decisions -- a filled row on the removed
-	article fills an empty slot on the survivor rather than being dropped by
-	the generic repoint-on-collision. The survivor's own content otherwise
-	wins. ``accessor`` is the reverse relation on Articles and ``owner_field``
+	curation, so -- as with relevance decisions -- a filled field on the
+	removed article fills the same empty field on the survivor rather than
+	being dropped by the generic repoint-on-collision. The survivor's own
+	text otherwise wins. ``accessor`` is the reverse relation on Articles and ``owner_field``
 	the FK on the row naming who it belongs to.
 	"""
 	owner_id_attr = f"{owner_field}_id"
@@ -131,21 +131,20 @@ def _merge_editorial_contents(keep, rem, accessor, owner_field, stdout=None):
 			rem_content.save(update_fields=["article"])
 			keep_by_owner[owner_id] = rem_content
 			continue
-		survivor_empty = not (
-			existing.takeaways or existing.summary_plain_english
-		)
-		loser_has = bool(
-			rem_content.takeaways or rem_content.summary_plain_english
-		)
-		if survivor_empty and loser_has:
-			existing.takeaways = rem_content.takeaways
-			existing.summary_plain_english = rem_content.summary_plain_english
-			existing.save(
-				update_fields=["takeaways", "summary_plain_english"]
-			)
+		# Field by field: a survivor with only takeaways still adopts the
+		# removed row's plain-English summary, and the other way round.
+		adopted = [
+			field
+			for field in ("takeaways", "summary_plain_english")
+			if not getattr(existing, field) and getattr(rem_content, field)
+		]
+		if adopted:
+			for field in adopted:
+				setattr(existing, field, getattr(rem_content, field))
+			existing.save(update_fields=adopted)
 			_log(
 				stdout,
-				f"   adopted editorial content for {owner_field} "
+				f"   adopted editorial {', '.join(adopted)} for {owner_field} "
 				f"{owner_id} from article {rem.article_id}",
 			)
 		rem_content.delete()
