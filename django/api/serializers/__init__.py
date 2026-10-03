@@ -1,5 +1,6 @@
 from typing import Optional
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from gregory.models import (
 	Articles,
@@ -25,7 +26,8 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Q
 
-from api.serializers.mixins import ScopedSerializerMixin, _resolve_per_org_fields_org
+from api.editorial import editorial_org_ids, editorial_org_names, editorial_requested
+from api.serializers.mixins import ScopedSerializerMixin
 
 
 def get_custom_settings():
@@ -409,7 +411,66 @@ class ArticleAuthorSerializer(serializers.ModelSerializer):
 		return obj.full_name
 
 
+class EditorialOrganizationSerializer(serializers.Serializer):
+	id = serializers.IntegerField()
+	name = serializers.CharField()
+
+
+class EditorialEntrySerializer(serializers.Serializer):
+	"""One organisation's editorial content for a record (``?include=editorial``)."""
+
+	organization = EditorialOrganizationSerializer()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+
+
+class EditorialFieldMixin:
+	"""``?include=editorial`` support for the article and trial serializers.
+
+	``editorial`` is declared as a field so it appears in the schema, but is
+	popped from the output unless the caller opted in; ``get_editorial()``
+	returns immediately in that case, so default responses cost nothing. See api/editorial.py and
+	EDITORIAL-API-SPEC.md.
+	"""
+
+	def to_representation(self, instance):
+		ret = super().to_representation(instance)
+		if not editorial_requested(self.context.get("request")):
+			ret.pop("editorial", None)
+		return ret
+
+	@extend_schema_field(EditorialEntrySerializer(many=True))
+	def get_editorial(self, obj) -> list:
+		"""One entry per editorial org (sorted by id); null fields when that org
+		has no content row. Uses ``_prefetched_org_contents`` when the view
+		attached it, else one query per object (single-object serialisation)."""
+		request = self.context.get("request")
+		if not editorial_requested(request):
+			return []  # popped in to_representation
+		org_ids = editorial_org_ids(request)
+		if not org_ids:
+			return []
+		names = editorial_org_names(request)
+		prefetched = getattr(obj, "_prefetched_org_contents", None)
+		rows = prefetched if prefetched is not None else obj.org_contents.filter(
+			organization_id__in=org_ids
+		)
+		by_org = {row.organization_id: row for row in rows}
+		entries = []
+		for org_id in org_ids:
+			row = by_org.get(org_id)
+			entries.append(
+				{
+					"organization": {"id": org_id, "name": names.get(org_id, "")},
+					"takeaways": row.takeaways if row else None,
+					"summary_plain_english": row.summary_plain_english if row else None,
+				}
+			)
+		return entries
+
+
 class ArticleSerializer(
+	EditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
 ):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
@@ -424,11 +485,7 @@ class ArticleSerializer(
 		many=True, read_only=True
 	)
 	clinical_trials = serializers.SerializerMethodField()
-	takeaways = serializers.SerializerMethodField()
-	summary_plain_english = serializers.SerializerMethodField()
-
-	# Omit these fields from the response when there is no organisation context
-	_per_org_fields = ["takeaways", "summary_plain_english"]
+	editorial = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Articles
@@ -437,7 +494,6 @@ class ArticleSerializer(
 			"article_id",
 			"title",
 			"summary",
-			"summary_plain_english",
 			"link",
 			"links",
 			"published_date",
@@ -451,7 +507,7 @@ class ArticleSerializer(
 			"article_subject_relevances",
 			"doi",
 			"access",
-			"takeaways",
+			"editorial",
 			"team_categories",
 			"ml_predictions",
 			"ml_score",
@@ -464,51 +520,6 @@ class ArticleSerializer(
 		references = obj.trial_references.all()
 		trials = [ref.trial for ref in references]
 		return TrialReferenceSerializer(trials, many=True).data
-
-	def _get_org_content(self, obj, org):
-		"""Return the caller-org's ArticleOrgContent for *obj*, or None.
-
-		Uses the per-org prefetch attached by ``ArticleViewSet.get_queryset``
-		when present (zero extra queries per row); falls back to a single
-		``.get()`` lookup for detail responses and other callers that didn't
-		prefetch.  Result is cached per serializer instance so calling this
-		from both ``get_takeaways`` and ``get_summary_plain_english`` only
-		costs one lookup.
-		"""
-		if not hasattr(self, "_org_content_cache"):
-			self._org_content_cache = {}
-		key = (obj.pk, org.pk)
-		if key in self._org_content_cache:
-			return self._org_content_cache[key]
-
-		prefetched = getattr(obj, "_prefetched_org_contents", None)
-		if prefetched is not None:
-			match = next((c for c in prefetched if c.organization_id == org.pk), None)
-			self._org_content_cache[key] = match
-			return match
-
-		try:
-			content = obj.org_contents.get(organization=org)
-		except ArticleOrgContent.DoesNotExist:
-			content = None
-		self._org_content_cache[key] = content
-		return content
-
-	def get_takeaways(self, obj) -> Optional[str]:
-		"""Return takeaways from ArticleOrgContent for the caller's org, or None."""
-		org = _resolve_per_org_fields_org(self.context.get("request"))
-		if org is None:
-			return None  # field will be popped in to_representation
-		content = self._get_org_content(obj, org)
-		return content.takeaways if content else None
-
-	def get_summary_plain_english(self, obj) -> Optional[str]:
-		"""Return plain-English summary from ArticleOrgContent for the caller's org, or None."""
-		org = _resolve_per_org_fields_org(self.context.get("request"))
-		if org is None:
-			return None  # field will be popped in to_representation
-		content = self._get_org_content(obj, org)
-		return content.summary_plain_english if content else None
 
 
 class TrialCountrySerializer(serializers.ModelSerializer):
@@ -552,13 +563,11 @@ class SponsorSerializer(serializers.ModelSerializer):
 		fields = ["id", "slug", "name", "sponsor_type", "trials_count"]
 
 
-class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
+class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
 	team_categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
-	takeaways = serializers.SerializerMethodField()
-	summary_plain_english = serializers.SerializerMethodField()
 	# Normalized per-country breakdown (country, status, decision_date, sources) — see
 	# docs/trials-field-normalization.md. Relies on TrialViewSet.get_queryset()
 	# prefetching "trial_countries" to avoid one query per trial on list responses.
@@ -570,9 +579,7 @@ class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSeriali
 	# unresolved. Relies on TrialViewSet.get_queryset() select_related'ing
 	# primary_sponsor_normalized to avoid one query per trial on list responses.
 	sponsor = TrialSponsorSerializer(source="primary_sponsor_normalized", read_only=True)
-
-	# Omit these fields from the response when there is no organisation context
-	_per_org_fields = ["takeaways", "summary_plain_english"]
+	editorial = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Trials
@@ -580,7 +587,6 @@ class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSeriali
 			"trial_id",
 			"title",
 			"summary",
-			"summary_plain_english",
 			"ctg_detailed_description",
 			"published_date",
 			"discovery_date",
@@ -649,7 +655,7 @@ class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSeriali
 			"results_posted",
 			"overall_decision_date",
 			"countries_decision_date",
-			"takeaways",
+			"editorial",
 			"articles",
 			"subjects",
 		]
@@ -672,49 +678,6 @@ class TrialSerializer(ScopedSerializerMixin, serializers.HyperlinkedModelSeriali
 		same prefetched cache as the `trial_countries` field."""
 		codes = {tc.country.code for tc in obj.trial_countries.all() if tc.country}
 		return sorted(codes) if codes else None
-
-	def _get_org_content(self, obj, org):
-		"""Return the caller-org's TrialOrgContent for *obj*, or None.
-
-		Uses the per-org prefetch attached by ``TrialViewSet.get_queryset``
-		when present (zero extra queries per row); falls back to a single
-		``.get()`` lookup for detail responses and other callers that didn't
-		prefetch.  Result is cached per serializer instance.
-		"""
-		if not hasattr(self, "_org_content_cache"):
-			self._org_content_cache = {}
-		key = (obj.pk, org.pk)
-		if key in self._org_content_cache:
-			return self._org_content_cache[key]
-
-		prefetched = getattr(obj, "_prefetched_org_contents", None)
-		if prefetched is not None:
-			match = next((c for c in prefetched if c.organization_id == org.pk), None)
-			self._org_content_cache[key] = match
-			return match
-
-		try:
-			content = obj.org_contents.get(organization=org)
-		except TrialOrgContent.DoesNotExist:
-			content = None
-		self._org_content_cache[key] = content
-		return content
-
-	def get_takeaways(self, obj) -> Optional[str]:
-		"""Return takeaways from TrialOrgContent for the caller's org, or None."""
-		org = _resolve_per_org_fields_org(self.context.get("request"))
-		if org is None:
-			return None  # field will be popped in to_representation
-		content = self._get_org_content(obj, org)
-		return content.takeaways if content else None
-
-	def get_summary_plain_english(self, obj) -> Optional[str]:
-		"""Return plain-English summary from TrialOrgContent for the caller's org, or None."""
-		org = _resolve_per_org_fields_org(self.context.get("request"))
-		if org is None:
-			return None  # field will be popped in to_representation
-		content = self._get_org_content(obj, org)
-		return content.summary_plain_english if content else None
 
 
 class TrialSiteSerializer(serializers.ModelSerializer):

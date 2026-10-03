@@ -156,40 +156,26 @@ class StreamingCSVRendererTest(TestCase):
 		finally:
 			ArticleViewSet.csv_stream_chunk_size = original_chunk_size
 
-	def test_header_omits_per_org_fields_with_no_org_context(self):
-		"""Anonymous callers with no team_id and no public org see neither
-		takeaways nor summary_plain_english in the header, and every data
-		row lines up with the header length."""
-		anon_client = APIClient()
-		response = anon_client.get(
-			reverse("articles-list"), {"format": "csv", "all_results": "true"}
-		)
-		content = b"".join(response.streaming_content).decode("utf-8")
-		rows = list(csv.reader(io.StringIO(content)))
-		header = rows[0]
-
-		self.assertNotIn("takeaways", header)
-		self.assertNotIn("summary_plain_english", header)
-		for row in rows[1:]:
-			self.assertEqual(len(row), len(header))
-
-	def test_header_includes_per_org_fields_with_public_team_id(self):
-		"""Per spec §6: an anonymous caller with ?team_id on a public org
-		gets the org context, so both per-org columns appear."""
+	def test_header_never_has_editorial_columns(self):
+		"""CSV never carries editorial content, with or without
+		?include=editorial or ?team_id, and rows line up with the header."""
 		OrganizationApiSettings.objects.update_or_create(
 			organization=self.organization, defaults={"make_api_public": True}
 		)
 		anon_client = APIClient()
-		response = anon_client.get(
-			reverse("articles-list"),
-			{"format": "csv", "all_results": "true", "team_id": self.team.id},
-		)
-		content = b"".join(response.streaming_content).decode("utf-8")
-		rows = list(csv.reader(io.StringIO(content)))
-		header = rows[0]
+		for extra in ({}, {"include": "editorial"}, {"team_id": self.team.id}):
+			response = anon_client.get(
+				reverse("articles-list"),
+				{"format": "csv", "all_results": "true", **extra},
+			)
+			content = b"".join(response.streaming_content).decode("utf-8")
+			rows = list(csv.reader(io.StringIO(content)))
+			header = rows[0]
 
-		self.assertIn("takeaways", header)
-		self.assertIn("summary_plain_english", header)
+			for column in ("editorial", "takeaways", "summary_plain_english"):
+				self.assertNotIn(column, header)
+			for row in rows[1:]:
+				self.assertEqual(len(row), len(header))
 
 
 class StreamingCSVQueryBoundsTest(TestCase):

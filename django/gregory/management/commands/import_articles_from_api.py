@@ -74,6 +74,12 @@ class Command(BaseCommand):
 				_missing = object()
 				takeaways_raw = item.get("takeaways", _missing)
 				spe_raw = item.get("summary_plain_english", _missing)
+				# Newer APIs nest these under `editorial` (?include=editorial);
+				# older ones return them at the top level.
+				editorial = item.get("editorial")
+				if isinstance(editorial, list) and editorial:
+					takeaways_raw = editorial[0].get("takeaways", _missing)
+					spe_raw = editorial[0].get("summary_plain_english", _missing)
 				discovery_date = (
 					parse_datetime(item.get("discovery_date"))
 					if item.get("discovery_date")

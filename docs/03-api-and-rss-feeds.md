@@ -254,6 +254,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
 | `open_access` | boolean | Open access articles only |
 | `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial |
+| `has_takeaways` | boolean | `true`: articles with non-empty takeaways written by the caller's own organisation (see [Editorial content](#editorial-content)). `false`: everything else. Doesn't require `include=editorial` |
+| `include` | string | `editorial` adds the `editorial` list to each article (see [Editorial content](#editorial-content)). Unknown values return 400 |
 | `last_days` | integer | Articles from the last N days |
 | `week` | integer 1–52 | Filter by week number (requires `year`) |
 | `year` | integer | Year for week filtering |
@@ -280,11 +282,34 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 ---
 
+## Editorial content
+
+Editorial content is the per-organisation `takeaways` and `summary_plain_english`. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field). CSV output never includes it.
+
+```json
+"editorial": [
+	{
+		"organization": {"id": 1, "name": "Brain Regeneration"},
+		"takeaways": "Experimental autoimmune encephalomyelitis ...",
+		"summary_plain_english": null
+	}
+]
+```
+
+- `editorial` is always a list, sorted by organisation id. When the organisation has no content for a record, its fields are `null`. When the caller has no editorial organisation, the list is `[]`.
+- **Which organisation** is decided by the caller, never by a parameter: an API key gets its own organisation, a logged-in user gets every organisation they belong to, and an anonymous caller gets the organisation that owns the `api_public` site resolved from `?site_id=`, `Origin`, `Referer` or the single public site (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)). `?team_id=` has no effect, and there is no way to request another organisation's content.
+- Anonymous and API-key callers get 0 or 1 entries; a logged-in user in two organisations gets 2.
+- `?include=` is a comma-separated list; the only accepted value is `editorial`, and an unknown value returns 400.
+- `?has_takeaways=true|false` filters on the same organisation(s) and doesn't need `include=editorial`. Empty-string takeaways count as missing.
+- Responses already vary by `Origin` whenever site resolution depends on it, so caches in front of the API must honour `Vary: Origin`.
+
+**Breaking change.** The top-level `takeaways` and `summary_plain_english` fields were removed from article and trial responses, and `?team_id=` (or an API key) no longer unlocks them. Read `editorial[0].takeaways` after adding `?include=editorial`.
+
 ## Available endpoints
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
@@ -537,6 +562,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | Parameter | Description |
 |:----------|:------------|
 | `trial_id` | Filter by specific trial ID |
+| `has_takeaways` | `true`/`false`: whether the caller's own organisation has written takeaways for the trial (see [Editorial content](#editorial-content)) |
+| `include` | `editorial` adds the `editorial` list to each trial (see [Editorial content](#editorial-content)) |
 | `internal_number` | Filter by WHO internal number |
 | `phase` | Filter by trial phase (e.g., `Phase III`) |
 | `phase_normalized` | Exact match against the canonical phase: `early_phase_1`, `phase_1`, `phase_1_2`, `phase_2`, `phase_2_3`, `phase_3`, `phase_3_4`, `phase_4`, `post_market`, `not_applicable`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?phase_normalized=phase_2,phase_3` |

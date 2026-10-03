@@ -16,7 +16,10 @@ from gregory.models import (
 	Subject,
 	Sponsor,
 	TrialCountry,
+	ArticleOrgContent,
+	TrialOrgContent,
 )
+from api.editorial import editorial_org_ids
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
@@ -169,6 +172,29 @@ class SubjectFilterMixin:
 			.filter(matched_subjects_count=len(unique_ids))
 			.distinct()
 		)
+
+
+_HAS_TAKEAWAYS_HELP = (
+	"true: records with non-empty takeaways written by the caller's own "
+	"organisation (API key's organisation, the organisations of a logged-in "
+	"user, or the organisation owning the resolved public site). false: "
+	"everything else. Does not require include=editorial."
+)
+
+
+def _filter_has_takeaways(request, queryset, content_model, fk_name, value):
+	"""Shared by ArticleFilter/TrialFilter. Exists() so it adds no DISTINCT and
+	cannot duplicate rows. With no editorial orgs, true matches nothing."""
+	if value is None:
+		return queryset
+	has = Exists(
+		content_model.objects.filter(
+			**{fk_name: OuterRef("pk")},
+			organization_id__in=editorial_org_ids(request),
+			takeaways__isnull=False,
+		).exclude(takeaways="")
+	)
+	return queryset.filter(has) if value else queryset.exclude(has)
 
 
 class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
@@ -332,6 +358,11 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Has Clinical Trials",
 		help_text="Filter for articles linked to one or more clinical trials (true/false).",
 	)
+	has_takeaways = filters.BooleanFilter(
+		method="filter_has_takeaways",
+		label="Has takeaways",
+		help_text=_HAS_TAKEAWAYS_HELP,
+	)
 	published_date_after = filters.DateFilter(
 		method="filter_published_date_after",
 		input_formats=["%Y-%m-%d"],
@@ -375,6 +406,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"week",
 			"year",
 			"has_clinical_trials",
+			"has_takeaways",
 			"published_date_after",
 			"published_date_before",
 		]
@@ -652,6 +684,11 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			return queryset.filter(trial_references__isnull=False).distinct()
 		return queryset.filter(trial_references__isnull=True)
 
+	def filter_has_takeaways(self, queryset, name, value):
+		return _filter_has_takeaways(
+			self.request, queryset, ArticleOrgContent, "article", value
+		)
+
 	def filter_published_date_after(self, queryset, name, value):
 		# Use datetime boundary so the btree index on published_date is usable.
 		start = timezone.make_aware(datetime(value.year, value.month, value.day))
@@ -885,6 +922,11 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"active_not_recruiting, not_recruiting, suspended, completed, "
 			"terminated, withdrawn, unknown, other."
 		),
+	)
+	has_takeaways = filters.BooleanFilter(
+		method="filter_has_takeaways",
+		label="Has takeaways",
+		help_text=_HAS_TAKEAWAYS_HELP,
 	)
 	internal_number = filters.CharFilter(
 		field_name="internal_number",
@@ -1142,7 +1184,13 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"has_results",
 			"date_registration_after",
 			"date_registration_before",
+			"has_takeaways",
 		]
+
+	def filter_has_takeaways(self, queryset, name, value):
+		return _filter_has_takeaways(
+			self.request, queryset, TrialOrgContent, "trial", value
+		)
 
 	def filter_title(self, queryset, name, value):
 		"""

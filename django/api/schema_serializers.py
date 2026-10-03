@@ -11,7 +11,9 @@ from django_filters import rest_framework as filters
 from rest_framework import serializers
 
 
-def filterset_request_schema(filterset_class, required=(), extra_description=""):
+def filterset_request_schema(
+	filterset_class, required=(), extra_description="", extra_properties=None
+):
 	"""Build a raw OpenAPI request-body schema from a django-filter ``FilterSet``.
 
 	Used for the ``POST /*/search/`` endpoints (see
@@ -44,6 +46,7 @@ def filterset_request_schema(filterset_class, required=(), extra_description="")
 		if description:
 			schema["description"] = description
 		properties[name] = schema
+	properties.update(extra_properties or {})
 	schema = {"type": "object", "properties": properties}
 	if required:
 		schema["required"] = list(required)

@@ -67,6 +67,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -187,6 +189,24 @@ paths:
         schema:
           type: boolean
         description: Filter for articles linked to one or more clinical trials (true/false).
+      - in: query
+        name: has_takeaways
+        schema:
+          type: boolean
+        description: 'true: records with non-empty takeaways written by the caller''s
+          own organisation (API key''s organisation, the organisations of a logged-in
+          user, or the organisation owning the resolved public site). false: everything
+          else. Does not require include=editorial.'
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
       - in: query
         name: include_public
         schema:
@@ -390,6 +410,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -465,6 +487,16 @@ paths:
           enum:
           - csv
           - json
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
       tags:
       - articles
       security:
@@ -800,6 +832,24 @@ paths:
           type: boolean
         description: Filter for articles linked to one or more clinical trials (true/false).
       - in: query
+        name: has_takeaways
+        schema:
+          type: boolean
+        description: 'true: records with non-empty takeaways written by the caller''s
+          own organisation (API key''s organisation, the organisations of a logged-in
+          user, or the organisation owning the resolved public site). false: everything
+          else. Does not require include=editorial.'
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
+      - in: query
         name: journal_slug
         schema:
           type: string
@@ -1095,6 +1145,12 @@ paths:
                   type: boolean
                   description: Filter for articles linked to one or more clinical
                     trials (true/false).
+                has_takeaways:
+                  type: boolean
+                  description: 'true: records with non-empty takeaways written by
+                    the caller''s own organisation (API key''s organisation, the organisations
+                    of a logged-in user, or the organisation owning the resolved public
+                    site). false: everything else. Does not require include=editorial.'
                 published_date_after:
                   type: string
                   format: date
@@ -1120,12 +1176,22 @@ paths:
                   description: Comma-separated list of subject IDs with OR semantics
                     — returns articles tagged with *any* of the listed subjects, e.g.
                     ?subjects_any=1,2.
+                include:
+                  type: string
+                  enum:
+                  - editorial
+                  description: Opt in to extra content. Comma-separated; the only
+                    accepted value is `editorial`, which adds an `editorial` list
+                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
+                    Ignored for CSV output.
               required:
               - team_id
               - subject_id
-              description: Every ArticleFilter field is accepted here (identical semantics
-                to the matching GET query parameter — see /articles/). team_id and
-                subject_id are required.
+              description: 'Every ArticleFilter field is accepted here (identical
+                semantics to the matching GET query parameter — see /articles/). team_id
+                and subject_id are required. `include` (only value: `editorial`) is
+                also accepted in the body.'
       security:
       - basicAuth: []
       - cookieAuth: []
@@ -3230,6 +3296,8 @@ paths:
 
         # Results Parameters:
         - **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
+        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the trial
+        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
 
         # Date Range Parameters:
         Filter by trial registration date (the date the trial was first registered with its registry).
@@ -3389,6 +3457,14 @@ paths:
         description: true/false; a trial counts as having results when any of results_posted,
           results completion date, results link, or results-available = "Yes" is set.
       - in: query
+        name: has_takeaways
+        schema:
+          type: boolean
+        description: 'true: records with non-empty takeaways written by the caller''s
+          own organisation (API key''s organisation, the organisations of a logged-in
+          user, or the organisation owning the resolved public site). false: everything
+          else. Does not require include=editorial.'
+      - in: query
         name: identifiers
         schema:
           type: array
@@ -3404,6 +3480,16 @@ paths:
           excluded (not unique) — use acronym for those.
         explode: false
         style: form
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
       - in: query
         name: include_public
         schema:
@@ -3914,6 +4000,8 @@ paths:
 
         # Results Parameters:
         - **has_results** - `true`/`false`; a trial counts as having results when any of `results_posted`, results completion date, results link, or results-available = "Yes" is set
+        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the trial
+        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
 
         # Date Range Parameters:
         Filter by trial registration date (the date the trial was first registered with its registry).
@@ -3938,6 +4026,16 @@ paths:
           enum:
           - csv
           - json
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
       - in: path
         name: trial_id
         schema:
@@ -4250,6 +4348,14 @@ paths:
         description: true/false; a trial counts as having results when any of results_posted,
           results completion date, results link, or results-available = "Yes" is set.
       - in: query
+        name: has_takeaways
+        schema:
+          type: boolean
+        description: 'true: records with non-empty takeaways written by the caller''s
+          own organisation (API key''s organisation, the organisations of a logged-in
+          user, or the organisation owning the resolved public site). false: everything
+          else. Does not require include=editorial.'
+      - in: query
         name: identifiers
         schema:
           type: array
@@ -4265,6 +4371,16 @@ paths:
           excluded (not unique) — use acronym for those.
         explode: false
         style: form
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; the only accepted value
+          is `editorial`, which adds an `editorial` list of the caller's own organisation's
+          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.
       - in: query
         name: inclusion_agemax
         schema:
@@ -4866,6 +4982,12 @@ paths:
                   format: date
                   description: Trials registered on or before this date (YYYY-MM-DD,
                     inclusive). Invalid or non-ISO-8601 dates return 400 Bad Request.
+                has_takeaways:
+                  type: boolean
+                  description: 'true: records with non-empty takeaways written by
+                    the caller''s own organisation (API key''s organisation, the organisations
+                    of a logged-in user, or the organisation owning the resolved public
+                    site). false: everything else. Does not require include=editorial.'
                 subjects:
                   type: array
                   items:
@@ -4880,12 +5002,22 @@ paths:
                   description: Comma-separated list of subject IDs with OR semantics
                     — returns trials tagged with *any* of the listed subjects, e.g.
                     ?subjects_any=1,2.
+                include:
+                  type: string
+                  enum:
+                  - editorial
+                  description: Opt in to extra content. Comma-separated; the only
+                    accepted value is `editorial`, which adds an `editorial` list
+                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
+                    Ignored for CSV output.
               required:
               - team_id
               - subject_id
-              description: Every TrialFilter field is accepted here (identical semantics
+              description: 'Every TrialFilter field is accepted here (identical semantics
                 to the matching GET query parameter — see /trials/). team_id and subject_id
-                are required.
+                are required. `include` (only value: `editorial`) is also accepted
+                in the body.'
       security:
       - basicAuth: []
       - cookieAuth: []
@@ -5080,6 +5212,14 @@ paths:
           type: boolean
         description: true/false; a trial counts as having results when any of results_posted,
           results completion date, results link, or results-available = "Yes" is set.
+      - in: query
+        name: has_takeaways
+        schema:
+          type: boolean
+        description: 'true: records with non-empty takeaways written by the caller''s
+          own organisation (API key''s organisation, the organisations of a logged-in
+          user, or the organisation owning the resolved public site). false: everything
+          else. Does not require include=editorial.'
       - in: query
         name: identifiers
         schema:
@@ -5491,17 +5631,12 @@ components:
     Article:
       type: object
       description: |-
-        Mixin for DRF serializers that strips nested associations the caller
-        cannot see.
+        ``?include=editorial`` support for the article and trial serializers.
 
-        Usage::
-
-            class ArticleSerializer(ScopedSerializerMixin,
-                                    serializers.HyperlinkedModelSerializer):
-                ...
-
-        Set ``_per_org_fields`` to a list of field names that should be omitted
-        entirely when there is no organisation context (spec §6.2).
+        ``editorial`` is declared as a field so it appears in the schema, but is
+        popped from the output unless the caller opted in; ``get_editorial()``
+        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
+        EDITORIAL-API-SPEC.md.
       properties:
         article_id:
           type: integer
@@ -5511,12 +5646,6 @@ components:
         summary:
           type: string
           nullable: true
-        summary_plain_english:
-          type: string
-          nullable: true
-          description: Return plain-English summary from ArticleOrgContent for the
-            caller's org, or None.
-          readOnly: true
         link:
           type: string
           format: uri
@@ -5579,11 +5708,10 @@ components:
           oneOf:
           - $ref: '#/components/schemas/AccessEnum'
           - $ref: '#/components/schemas/NullEnum'
-        takeaways:
-          type: string
-          nullable: true
-          description: Return takeaways from ArticleOrgContent for the caller's org,
-            or None.
+        editorial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorialEntry'
           readOnly: true
         team_categories:
           type: array
@@ -5619,8 +5747,6 @@ components:
       - ml_score
       - sources
       - subjects
-      - summary_plain_english
-      - takeaways
       - team_categories
       - teams
       - title
@@ -5879,6 +6005,32 @@ components:
       description: |-
         * `manual` - Manual
         * `automatic` - Automatic
+    EditorialEntry:
+      type: object
+      description: One organisation's editorial content for a record (``?include=editorial``).
+      properties:
+        organization:
+          $ref: '#/components/schemas/EditorialOrganization'
+        takeaways:
+          type: string
+          nullable: true
+        summary_plain_english:
+          type: string
+          nullable: true
+      required:
+      - organization
+      - summary_plain_english
+      - takeaways
+    EditorialOrganization:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
     ErrorResponse:
       type: object
       description: 'Generic ``{"error": "..."}`` shape used by hand-written error
@@ -6675,17 +6827,12 @@ components:
     Trial:
       type: object
       description: |-
-        Mixin for DRF serializers that strips nested associations the caller
-        cannot see.
+        ``?include=editorial`` support for the article and trial serializers.
 
-        Usage::
-
-            class ArticleSerializer(ScopedSerializerMixin,
-                                    serializers.HyperlinkedModelSerializer):
-                ...
-
-        Set ``_per_org_fields`` to a list of field names that should be omitted
-        entirely when there is no organisation context (spec §6.2).
+        ``editorial`` is declared as a field so it appears in the schema, but is
+        popped from the output unless the caller opted in; ``get_editorial()``
+        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
+        EDITORIAL-API-SPEC.md.
       properties:
         trial_id:
           type: integer
@@ -6695,12 +6842,6 @@ components:
         summary:
           type: string
           nullable: true
-        summary_plain_english:
-          type: string
-          nullable: true
-          description: Return plain-English summary from TrialOrgContent for the caller's
-            org, or None.
-          readOnly: true
         ctg_detailed_description:
           type: string
           nullable: true
@@ -6986,11 +7127,10 @@ components:
           nullable: true
         countries_decision_date:
           nullable: true
-        takeaways:
-          type: string
-          nullable: true
-          description: Return takeaways from TrialOrgContent for the caller's org,
-            or None.
+        editorial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorialEntry'
           readOnly: true
         articles:
           type: array
@@ -7024,8 +7164,6 @@ components:
       - sponsor
       - study_type_normalized
       - subjects
-      - summary_plain_english
-      - takeaways
       - team_categories
       - title
       - trial_countries
@@ -7076,12 +7214,6 @@ components:
         summary:
           type: string
           nullable: true
-        summary_plain_english:
-          type: string
-          nullable: true
-          description: Return plain-English summary from TrialOrgContent for the caller's
-            org, or None.
-          readOnly: true
         ctg_detailed_description:
           type: string
           nullable: true
@@ -7367,11 +7499,10 @@ components:
           nullable: true
         countries_decision_date:
           nullable: true
-        takeaways:
-          type: string
-          nullable: true
-          description: Return takeaways from TrialOrgContent for the caller's org,
-            or None.
+        editorial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorialEntry'
           readOnly: true
         articles:
           type: array
@@ -7410,8 +7541,6 @@ components:
       - sponsor
       - study_type_normalized
       - subjects
-      - summary_plain_english
-      - takeaways
       - team_categories
       - title
       - trial_countries
@@ -7664,8 +7793,8 @@ components:
       name: Authorization
       description: Raw API key (no "Bearer"/"Basic" prefix) issued per organisation.
         Required for write endpoints (articles/post, articles/edit, trials/edit);
-        optional on read endpoints, where it scopes org-visibility and unlocks per-org
-        fields (takeaways, summary_plain_english).
+        optional on read endpoints, where it scopes org-visibility and does not unlock
+        editorial content (use ?include=editorial).
     basicAuth:
       type: http
       scheme: basic

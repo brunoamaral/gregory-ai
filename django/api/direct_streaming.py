@@ -40,21 +40,19 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"relevant_subjects",
 		"article_subject_relevances",
 		"sources",
-		"takeaways",
 		"ml_predictions",
 		"clinical_trials",
 		"team_categories",
 	]
 
 	# Define columns to exclude from the CSV output
-	EXCLUDED_COLUMNS = ["teams"]
+	EXCLUDED_COLUMNS = ["teams", "editorial"]
 
 	# List of text fields to clean line breaks from (for articles and trials)
 	TEXT_FIELDS_TO_CLEAN = [
 		# Trials
 		"title",
 		"summary",
-		"summary_plain_english",
 		"scientific_title",
 		"primary_sponsor",
 		"target_size",
@@ -85,7 +83,6 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"summary",
 		"subjects",
 		"relevant_subjects",
-		"takeaways",
 		"ml_predictions",
 		"clinical_trials",
 		"team_categories",
@@ -319,16 +316,11 @@ def order_columns(keys):
 def csv_header_fields(serializer, request):
 	"""Static CSV header for a serializer, matching per-row behavior.
 
-	ScopedSerializerMixin pops _per_org_fields from every row when the
-	request has no org context, so the header must drop them under the same
-	condition or rows and header would misalign.
+	CSV never carries editorial content: editorial_requested() is False for
+	CSV output, so the serializer pops ``editorial`` from every row, and
+	EXCLUDED_COLUMNS drops it from the header to match.
 	"""
-	from api.serializers.mixins import _resolve_per_org_fields_org
-
 	field_names = list(serializer.fields.keys())
-	per_org = list(getattr(serializer, "_per_org_fields", []))
-	if per_org and _resolve_per_org_fields_org(request) is None:
-		field_names = [name for name in field_names if name not in per_org]
 	field_names = [
 		name for name in field_names
 		if name not in DirectStreamingCSVRenderer.EXCLUDED_COLUMNS
