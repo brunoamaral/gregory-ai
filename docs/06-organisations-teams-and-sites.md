@@ -43,7 +43,7 @@ Editorial content (`takeaways`, `summary_plain_english`) no longer reads this fl
 | Organisation | The private organisation |
 | Site | The site this key reads content from (governs article/trial/RSS scope — independent of `make_api_public`) |
 | Begin / end date | Validity window |
-| IP addresses | Optional comma-separated allowlist |
+| IP addresses | Optional comma-separated allowlist, matched exactly against the address nginx saw (`X-Real-IP`, else the socket address; `X-Forwarded-For` is ignored). Requires Django to be proxied through nginx or another proxy that sets `X-Real-IP` — see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#option-1--api-key-bound-to-a-site) |
 
 The consumer sends the generated key in every request:
 

@@ -22,16 +22,22 @@ def getAPIKey(request):
 	raise APINoAPIKeyError("No API Key found")
 
 
-# Only two ways to retrieve the client's IP address:
-# 1. from the HTTP_X_FORWARDED_FOR header
-# 2. from the REMOTE_ADDR header
 def getIPAddress(request):
-	x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-	if x_forwarded_for:
-		ip = x_forwarded_for.split(",")[0]
-	else:
-		ip = request.META.get("REMOTE_ADDR")
-	return ip
+	"""The client's address as nginx saw it.
+
+	Checked against the per-key IP allowlist (``APIAccessScheme.ip_addresses``)
+	and written to ``APIAccessSchemeLog.ip_addr``, so it must not be something
+	the client can choose. ``X-Forwarded-For`` is not read: nginx's
+	``$proxy_add_x_forwarded_for`` appends to whatever the client sent, so its
+	first entry is the client's to pick. nginx sets ``X-Real-IP`` to
+	``$remote_addr`` on every proxied location, replacing any client-sent
+	value; without it (a request that didn't come through nginx) the socket
+	address is all there is.
+
+	Behind a CDN (e.g. Cloudflare) ``$remote_addr`` is the CDN's edge unless
+	nginx's ``real_ip`` module is configured to restore the client address.
+	"""
+	return request.META.get("HTTP_X_REAL_IP", "").strip() or request.META.get("REMOTE_ADDR")
 
 
 def checkValidAccess(api_key, ip_address):
