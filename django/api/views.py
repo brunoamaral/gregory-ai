@@ -82,7 +82,7 @@ from gregory.utils.trial_field_normalizers import (
 from gregory.models import (
 	Articles,
 	ArticleCategoryAssignment,
-	ArticleOrgContent,
+	ArticleSiteContent,
 	ArticleSubjectRelevance,
 	ArticleTrialReference,
 	Trials,
@@ -138,7 +138,11 @@ import traceback
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now as tz_now
 
-from api.editorial import editorial_org_ids, editorial_requested
+from api.editorial import (
+	editorial_org_ids,
+	editorial_requested,
+	editorial_site_ids,
+)
 from api.utils.utils import (
 	checkValidAccess,
 	getAPIKey,
@@ -147,6 +151,7 @@ from api.utils.utils import (
 )
 from gregory.utils.registry_utils import merge_links
 from gregory.site_resolution import public_sites
+from gregory.visibility import site_id_for_api_scheme
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,
@@ -512,9 +517,11 @@ class CachedStatsActionMixin:
 		)
 		key_parts = {"subjects": subjects, "params": params}
 		if "has_takeaways" in request.query_params:
-			# has_takeaways filters on the caller's editorial organisation(s),
-			# which two callers with the same subject scope can differ on.
+			# has_takeaways filters on the caller's editorial site(s) (articles)
+			# or organisation(s) (trials), which two callers with the same
+			# subject scope can differ on.
 			key_parts["editorial_orgs"] = editorial_org_ids(request)
+			key_parts["editorial_sites"] = editorial_site_ids(request)
 		digest = hashlib.sha256(json.dumps(key_parts).encode()).hexdigest()
 		return f"{self.stats_cache_prefix}:{digest}"
 
@@ -1075,11 +1082,11 @@ def post_article(request):
 		"Edit editorial and metadata fields on an existing article. Lookup is "
 		"by `doi` (required). Raises 404 if not found, 409 if the DOI matches "
 		"multiple articles (data quality issue), and 403 if the article is not "
-		"associated with the API key's organisation. Per-org fields "
-		"(`takeaways`, `summary_plain_english`) are upserted into "
-		"ArticleOrgContent for the key's organisation — empty string clears the "
-		"field (stored as NULL). Per-article fields (`access`, `retracted`, "
-		"`kind`) are written back to the Articles row directly."
+		"associated with the API key's organisation, or 403 if the key is not "
+		"bound to a site. Per-site fields (`takeaways`, `summary_plain_english`) "
+		"are upserted into ArticleSiteContent for the key's site — empty string "
+		"clears the field (stored as NULL). Per-article fields (`access`, "
+		"`retracted`, `kind`) are written back to the Articles row directly."
 	),
 )
 @api_view(["POST"])
@@ -1089,11 +1096,12 @@ def edit_article(request):
 
 	Lookup is by ``doi`` (required).  Raises 404 if not found, 409 if the DOI
 	matches multiple articles (data quality issue), and 403 if the article is
-	not associated with the API key's organisation.
+	not associated with the API key's organisation or the key is not bound to a
+	site.
 
-	Per-org fields (``takeaways``, ``summary_plain_english``) are upserted into
-	``ArticleOrgContent`` for the key's organisation.  Empty string clears the
-	field (stored as NULL).
+	Per-site fields (``takeaways``, ``summary_plain_english``) are upserted into
+	``ArticleSiteContent`` for the key's site.  Empty string clears the field
+	(stored as NULL).
 
 	Per-article fields (``access``, ``retracted``, ``kind``) are written back to
 	the ``Articles`` row directly.
@@ -1116,6 +1124,15 @@ def edit_article(request):
 		if access_scheme.organization is None:
 			raise APIAccessDeniedError(
 				"API keys without an associated organisation cannot edit articles."
+			)
+
+		# Editorial content is per site, so the key must resolve to one. A key
+		# whose site is unset, or belongs to another organisation, resolves to
+		# None -- refuse rather than guess a site to write to.
+		site_id = site_id_for_api_scheme(access_scheme)
+		if site_id is None:
+			raise APIAccessDeniedError(
+				"API keys without a site of their organisation cannot edit articles."
 			)
 
 		doi = post_data.get("doi")
@@ -1175,22 +1192,22 @@ def edit_article(request):
 		if article_fields_changed:
 			article.save(update_fields=article_fields_changed)
 
-		# --- Per-org fields -----------------------------------------------
-		org_fields = {}
+		# --- Per-site fields ----------------------------------------------
+		site_fields = {}
 		for field in ("takeaways", "summary_plain_english"):
 			if field in post_data:
 				val = post_data[field]
-				org_fields[field] = None if val == "" else val
+				site_fields[field] = None if val == "" else val
 
-		if org_fields:
-			org_content, _ = ArticleOrgContent.objects.get_or_create(
+		if site_fields:
+			site_content, _ = ArticleSiteContent.objects.get_or_create(
 				article=article,
-				organization=access_scheme.organization,
+				site_id=site_id,
 			)
-			for field, val in org_fields.items():
-				setattr(org_content, field, val)
+			for field, val in site_fields.items():
+				setattr(site_content, field, val)
 				updated_fields.append(field)
-			org_content.save()
+			site_content.save()
 
 		generateAccessSchemeLog(
 			call_type,
@@ -1205,6 +1222,7 @@ def edit_article(request):
 				"article_id": article.article_id,
 				"doi": article.doi,
 				"organization_id": access_scheme.organization_id,
+				"site_id": site_id,
 				"updated_fields": updated_fields,
 			}
 		)
@@ -1461,7 +1479,8 @@ _INCLUDE_PARAM = OpenApiParameter(
 	description=(
 		"Opt in to extra content. Comma-separated; the only accepted value is "
 		"`editorial`, which adds an `editorial` list of the caller's own "
-		"organisation's `takeaways` and `summary_plain_english` (see "
+		"`takeaways` and `summary_plain_english`: one entry per site on "
+		"articles, one per organisation on trials (see "
 		"docs/03-api-and-rss-feeds.md). Unknown values return 400. Ignored for "
 		"CSV output."
 	),
@@ -1573,8 +1592,8 @@ class ArticleViewSet(
 	- **source_id** - filter by source ID
 	- **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
 	- **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
-	- **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
-	- **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
+	- **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
+	- **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
 	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
 	- **title** - search only in the title field (case-insensitive substring)
 	- **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -1675,11 +1694,11 @@ class ArticleViewSet(
 	ordering = ["-discovery_date"]
 
 	def get_queryset(self):
-		"""Prefetch the caller's ArticleOrgContent to avoid N+1 on list responses.
+		"""Prefetch the caller's ArticleSiteContent to avoid N+1 on list responses.
 
 		Only when ``?include=editorial`` was requested: attach the rows of the
-		caller's editorial orgs (see api/editorial.py) as
-		``_prefetched_org_contents`` so the serializer's ``editorial`` field
+		caller's editorial sites (see api/editorial.py) as
+		``_prefetched_site_contents`` so the serializer's ``editorial`` field
 		costs no query per article. Default requests skip the prefetch.
 		"""
 		qs = super().get_queryset()
@@ -1698,11 +1717,11 @@ class ArticleViewSet(
 		if editorial_requested(self.request):
 			qs = qs.prefetch_related(
 				Prefetch(
-					"org_contents",
-					queryset=ArticleOrgContent.objects.filter(
-						organization_id__in=editorial_org_ids(self.request)
+					"site_contents",
+					queryset=ArticleSiteContent.objects.filter(
+						site_id__in=editorial_site_ids(self.request)
 					),
-					to_attr="_prefetched_org_contents",
+					to_attr="_prefetched_site_contents",
 				)
 			)
 		return qs
@@ -4115,17 +4134,17 @@ class ArticleSearchView(
 				),
 			)
 
-			# Prefetch the caller's ArticleOrgContent (only for ?include=editorial)
+			# Prefetch the caller's ArticleSiteContent (only for ?include=editorial)
 			# so the serializer's editorial field doesn't issue one query per article. Mirrors
 			# ArticleViewSet.get_queryset.
 			if editorial_requested(self.request):
 				queryset = queryset.prefetch_related(
 					Prefetch(
-						"org_contents",
-						queryset=ArticleOrgContent.objects.filter(
-							organization_id__in=editorial_org_ids(self.request)
+						"site_contents",
+						queryset=ArticleSiteContent.objects.filter(
+							site_id__in=editorial_site_ids(self.request)
 						),
-						to_attr="_prefetched_org_contents",
+						to_attr="_prefetched_site_contents",
 					)
 				)
 

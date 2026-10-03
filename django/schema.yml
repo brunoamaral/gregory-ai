@@ -67,8 +67,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
-        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
-        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
+        - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -193,20 +193,21 @@ paths:
         name: has_takeaways
         schema:
           type: boolean
-        description: 'true: records with non-empty takeaways written by the caller''s
-          own organisation (API key''s organisation, the organisations of a logged-in
-          user, or the organisation owning the resolved public site). false: everything
-          else. Does not require include=editorial.'
+        description: 'true: records with non-empty takeaways written for the caller''s
+          own site (API key''s site, the sites of the organisations of a logged-in
+          user, or the resolved public site). false: everything else. Does not require
+          include=editorial.'
       - in: query
         name: include
         schema:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -410,8 +411,8 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
-        - **has_takeaways** - true/false: whether the caller's own organisation has written takeaways for the article
-        - **include** - `editorial` adds an `editorial` list (the caller's organisation's `takeaways` and `summary_plain_english`); JSON only
+        - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
+        - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
         - **title** - search only in the title field (case-insensitive substring)
         - **summary** - search only in the summary/abstract field (case-insensitive substring)
@@ -493,10 +494,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       tags:
       - articles
       security:
@@ -521,10 +523,11 @@ paths:
       description: Edit editorial and metadata fields on an existing article. Lookup
         is by `doi` (required). Raises 404 if not found, 409 if the DOI matches multiple
         articles (data quality issue), and 403 if the article is not associated with
-        the API key's organisation. Per-org fields (`takeaways`, `summary_plain_english`)
-        are upserted into ArticleOrgContent for the key's organisation — empty string
-        clears the field (stored as NULL). Per-article fields (`access`, `retracted`,
-        `kind`) are written back to the Articles row directly.
+        the API key's organisation, or 403 if the key is not bound to a site. Per-site
+        fields (`takeaways`, `summary_plain_english`) are upserted into ArticleSiteContent
+        for the key's site — empty string clears the field (stored as NULL). Per-article
+        fields (`access`, `retracted`, `kind`) are written back to the Articles row
+        directly.
       parameters:
       - in: query
         name: format
@@ -835,20 +838,21 @@ paths:
         name: has_takeaways
         schema:
           type: boolean
-        description: 'true: records with non-empty takeaways written by the caller''s
-          own organisation (API key''s organisation, the organisations of a logged-in
-          user, or the organisation owning the resolved public site). false: everything
-          else. Does not require include=editorial.'
+        description: 'true: records with non-empty takeaways written for the caller''s
+          own site (API key''s site, the sites of the organisations of a logged-in
+          user, or the resolved public site). false: everything else. Does not require
+          include=editorial.'
       - in: query
         name: include
         schema:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: journal_slug
         schema:
@@ -1147,10 +1151,10 @@ paths:
                     trials (true/false).
                 has_takeaways:
                   type: boolean
-                  description: 'true: records with non-empty takeaways written by
-                    the caller''s own organisation (API key''s organisation, the organisations
-                    of a logged-in user, or the organisation owning the resolved public
-                    site). false: everything else. Does not require include=editorial.'
+                  description: 'true: records with non-empty takeaways written for
+                    the caller''s own site (API key''s site, the sites of the organisations
+                    of a logged-in user, or the resolved public site). false: everything
+                    else. Does not require include=editorial.'
                 published_date_after:
                   type: string
                   format: date
@@ -1180,11 +1184,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: Opt in to extra content. Comma-separated; the only
+                  description: 'Opt in to extra content. Comma-separated; the only
                     accepted value is `editorial`, which adds an `editorial` list
-                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    of the caller''s own `takeaways` and `summary_plain_english`:
+                    one entry per site on articles, one per organisation on trials
                     (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.
+                    Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -3486,10 +3491,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -4032,10 +4038,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: path
         name: trial_id
         schema:
@@ -4377,10 +4384,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: Opt in to extra content. Comma-separated; the only accepted value
-          is `editorial`, which adds an `editorial` list of the caller's own organisation's
-          `takeaways` and `summary_plain_english` (see docs/03-api-and-rss-feeds.md).
-          Unknown values return 400. Ignored for CSV output.
+        description: 'Opt in to extra content. Comma-separated; the only accepted
+          value is `editorial`, which adds an `editorial` list of the caller''s own
+          `takeaways` and `summary_plain_english`: one entry per site on articles,
+          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
+          values return 400. Ignored for CSV output.'
       - in: query
         name: inclusion_agemax
         schema:
@@ -5006,11 +5014,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: Opt in to extra content. Comma-separated; the only
+                  description: 'Opt in to extra content. Comma-separated; the only
                     accepted value is `editorial`, which adds an `editorial` list
-                    of the caller's own organisation's `takeaways` and `summary_plain_english`
+                    of the caller''s own `takeaways` and `summary_plain_english`:
+                    one entry per site on articles, one per organisation on trials
                     (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.
+                    Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -5631,12 +5640,8 @@ components:
     Article:
       type: object
       description: |-
-        ``?include=editorial`` support for the article and trial serializers.
-
-        ``editorial`` is declared as a field so it appears in the schema, but is
-        popped from the output unless the caller opted in; ``get_editorial()``
-        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-        EDITORIAL-API-SPEC.md.
+        ``?include=editorial`` for articles: one entry per site, since article
+        editorial content is per site (``ArticleSiteContent``).
       properties:
         article_id:
           type: integer
@@ -5711,7 +5716,7 @@ components:
         editorial:
           type: array
           items:
-            $ref: '#/components/schemas/EditorialEntry'
+            $ref: '#/components/schemas/EditorialSiteEntry'
           readOnly: true
         team_categories:
           type: array
@@ -6031,6 +6036,35 @@ components:
       required:
       - id
       - name
+    EditorialSite:
+      type: object
+      properties:
+        id:
+          type: integer
+        domain:
+          type: string
+        name:
+          type: string
+      required:
+      - domain
+      - id
+      - name
+    EditorialSiteEntry:
+      type: object
+      description: One site's editorial content for an article (``?include=editorial``).
+      properties:
+        site:
+          $ref: '#/components/schemas/EditorialSite'
+        takeaways:
+          type: string
+          nullable: true
+        summary_plain_english:
+          type: string
+          nullable: true
+      required:
+      - site
+      - summary_plain_english
+      - takeaways
     ErrorResponse:
       type: object
       description: 'Generic ``{"error": "..."}`` shape used by hand-written error
@@ -6827,12 +6861,8 @@ components:
     Trial:
       type: object
       description: |-
-        ``?include=editorial`` support for the article and trial serializers.
-
-        ``editorial`` is declared as a field so it appears in the schema, but is
-        popped from the output unless the caller opted in; ``get_editorial()``
-        returns immediately in that case, so default responses cost nothing. See api/editorial.py and
-        EDITORIAL-API-SPEC.md.
+        ``?include=editorial`` for trials: one entry per organisation, since
+        trial editorial content is still per organisation (``TrialOrgContent``).
       properties:
         trial_id:
           type: integer
