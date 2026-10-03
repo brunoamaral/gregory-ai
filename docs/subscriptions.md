@@ -53,7 +53,7 @@ One row per subscriber/list pair. Stores consent data and per-list opt-out state
 | `subscriber` | FK → Subscribers | |
 | `list` | FK → Lists | |
 | `subscribed_at` | DateTimeField | Auto-set on creation |
-| `consent_ip` | GenericIPAddressField | Visitor IP at subscription time |
+| `consent_ip` | GenericIPAddressField | Visitor IP at subscription time, as nginx saw it — see [Consent IP](#consent-ip) |
 | `consent_source_site` | FK → Site | Which site the form was submitted from |
 | `consent_method` | CharField | `web_form` / `admin` / `api` / `import` |
 | `is_active` | BooleanField | `False` = unsubscribed from this list only |
@@ -103,6 +103,16 @@ code.
 - On error: redirect to `{origin}/error/`
 
 The request origin is validated against the `allowed_domains` field on the current site's `CustomSetting`. The site's own `Site.domain` is always accepted; additional domains can be added (comma-separated) in the **Sites → [site] → Custom Setting** inline. If the origin doesn't match, the request is rejected. For standard non-AJAX browser form submissions, any redirect fallback uses the current site's domain. AJAX or JSON-oriented clients may instead receive a `403` JSON response and should not assume the request will be redirected.
+
+#### Consent IP
+
+`consent_ip` is read from the `X-Real-IP` request header, falling back to the socket address (`REMOTE_ADDR`) when it is absent — the same rule as the API key IP allowlist (`api.utils.utils.getIPAddress()`). It is written when a list subscription is created and refreshed when an inactive one is reactivated.
+
+`X-Forwarded-For` and `CF-Connecting-IP` are ignored. nginx's `$proxy_add_x_forwarded_for` appends to whatever `X-Forwarded-For` the client sent, so its first entry is the client's to choose, and nginx passes a client-sent `CF-Connecting-IP` straight through on hostnames that don't go through Cloudflare. Either could otherwise put an arbitrary address in the consent record. `X-Real-IP` is safe only because the bundled nginx configuration overwrites it (`proxy_set_header X-Real-IP $remote_addr;` on every proxied location); don't expose Django directly, or through a proxy that passes a client-sent `X-Real-IP` through.
+
+**Behind Cloudflare** (or another CDN), `$remote_addr` is the CDN's edge, so without further configuration every consent row records a Cloudflare address. Fix this in nginx, not Django: enable the commented `set_real_ip_from` / `real_ip_header CF-Connecting-IP` block in `nginx-example-configuration/nginx.conf`. nginx then takes the visitor's address from `CF-Connecting-IP` only when the connection comes from a Cloudflare range, so a client connecting straight to the origin can't spoof it. Django can't make that distinction itself, which is why it doesn't read `CF-Connecting-IP`. The block is safe to enable for the whole `http` context on a server where only some hostnames are proxied by Cloudflare.
+
+Rows written before this change may hold a client-supplied address, since the view used to prefer `CF-Connecting-IP`, then the first `X-Forwarded-For` entry.
 
 ---
 

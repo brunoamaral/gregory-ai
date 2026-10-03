@@ -18,6 +18,7 @@ from django.views.decorators.http import require_POST
 from PIL import Image, ImageOps
 from urllib.parse import urlparse
 
+from api.utils.utils import getIPAddress
 from gregory.site_resolution import find_site_by_domain
 from sitesettings.models import CustomSetting
 from subscriptions.forms import SubscribersForm
@@ -77,20 +78,18 @@ def _get_redirect_base(request, site):
 
 
 def _get_client_ip(request):
-	"""Return the real client IP.
+	"""The client address recorded as ``ListSubscription.consent_ip``.
 
-	Priority order:
-	1. CF-Connecting-IP — set by Cloudflare, always the true client IP.
-	2. X-Forwarded-For  — first entry when behind a trusted reverse proxy.
-	3. REMOTE_ADDR      — direct connection fallback.
+	Delegates to ``getIPAddress()`` (``X-Real-IP``, else ``REMOTE_ADDR``) so the
+	GDPR consent record holds the address nginx saw, not one the client chose.
+	``CF-Connecting-IP`` and ``X-Forwarded-For`` are not read: both arrive from
+	the client unless a CDN in front overwrites them, and Django can't tell
+	which happened. Behind Cloudflare, nginx's ``real_ip`` module restores the
+	client address into ``$remote_addr`` (and so ``X-Real-IP``), trusting
+	``CF-Connecting-IP`` only from Cloudflare's ranges; see
+	``nginx-example-configuration/nginx.conf``.
 	"""
-	cf_ip = request.META.get("HTTP_CF_CONNECTING_IP")
-	if cf_ip:
-		return cf_ip.strip()
-	x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
-	if x_forwarded_for:
-		return x_forwarded_for.split(",")[0].strip()
-	return request.META.get("REMOTE_ADDR")
+	return getIPAddress(request)
 
 
 def _origin_matches_allowed(origin_host, allowed_domains_str):
