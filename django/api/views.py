@@ -595,8 +595,10 @@ def getDateRangeFromWeek(p_year, p_week):
 # Note on ip_addr: it is also passed to checkValidAccess, which exact-matches
 # it against the comma-separated APIAccessScheme.ip_addresses allowlist. The
 # truncation below is local to this function and must stay that way — trim
-# it before the allowlist check and a long spoofed X-Forwarded-For could be
-# cut down into matching an allowlisted prefix.
+# it before the allowlist check and an over-long ip_addr could be cut down into
+# matching an allowlisted prefix. (getIPAddress reads X-Real-IP / REMOTE_ADDR,
+# not the client-controlled X-Forwarded-For, but keep the check on the
+# untruncated value regardless.)
 def generateAccessSchemeLog(
 	call_type, ip_addr, access_scheme, http_code, error_message, post_data
 ):

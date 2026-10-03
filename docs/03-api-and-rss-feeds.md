@@ -196,6 +196,10 @@ Authorization: <raw_api_key>
 
 The key is validated against its date window (`begin_date` / `end_date`) and, if configured, an IP allowlist. A valid key grants that site's `scope_subjects`, whether or not the site is `api_public`.
 
+The IP allowlist (`APIAccessScheme.ip_addresses`, comma-separated, exact match) is checked against the `X-Real-IP` request header, falling back to the socket address (`REMOTE_ADDR`) when it is absent. `X-Forwarded-For` is ignored, because its first entry is whatever the client chose to send. The same address is what `APIAccessSchemeLog.ip_addr` records.
+
+This means the allowlist only sees real client addresses when Django runs behind a reverse proxy that **overwrites** `X-Real-IP` with the connecting address, as the bundled nginx configuration does (`proxy_set_header X-Real-IP $remote_addr;` on every proxied location). Don't expose Django directly, or through a proxy that passes a client-sent `X-Real-IP` through, if any key has an allowlist. If nginx itself sits behind a CDN such as Cloudflare, `$remote_addr` is the CDN's edge address: configure nginx's `real_ip` module (`set_real_ip_from <CDN ranges>; real_ip_header CF-Connecting-IP;`) so `$remote_addr` is the client again, or allowlisted keys will be refused.
+
 ### Option 2 — Authenticated Django user
 
 A user account that is a member of the organisation owning the site (an `OrganizationUser` record exists) sees the scopes of every site that organisation owns, automatically, after logging in via the session-based endpoints.
