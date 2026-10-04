@@ -673,9 +673,26 @@ class ArticleSiteContentInline(admin.StackedInline):
 	model = ArticleSiteContent
 	extra = 0
 	fields = ("site", "takeaways", "summary_plain_english", "updated_at")
-	readonly_fields = ("updated_at",)
+	readonly_fields = ("updated_at", "history_link")
 	verbose_name = "Editorial content (per site)"
 	verbose_name_plural = "Editorial content (per site)"
+
+	def get_fields(self, request, obj=None):
+		# The article's own History button covers the Articles row only; edits
+		# to a site's takeaways and summary (admin, API key or MCP) are recorded
+		# on this row, whose history page is otherwise reachable by URL alone.
+		fields = super().get_fields(request, obj)
+		history_admin = self.admin_site._registry.get(ArticleSiteContent)
+		if history_admin and history_admin.has_view_history_or_change_history_permission(request):
+			fields = (*fields, "history_link")
+		return fields
+
+	@admin.display(description="History")
+	def history_link(self, obj):
+		if obj is None or not obj.pk:
+			return "-"
+		url = reverse("admin:gregory_articlesitecontent_history", args=[obj.pk])
+		return format_html('<a href="{}">Changes to this site\'s content</a>', url)
 
 	@staticmethod
 	def _user_sites(request):

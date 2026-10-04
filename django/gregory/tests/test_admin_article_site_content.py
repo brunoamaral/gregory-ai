@@ -76,6 +76,37 @@ class ArticleSiteContentInlineTest(TestCase):
 		self.assertContains(resp, "First site")
 		self.assertNotContains(resp, "Foreign site")
 
+	def test_each_row_links_to_its_own_history(self):
+		self.client.force_login(self.superuser)
+		resp = self.client.get(self.url)
+		for content in ArticleSiteContent.objects.filter(article=self.article):
+			self.assertContains(
+				resp, reverse("admin:gregory_articlesitecontent_history", args=[content.pk])
+			)
+
+	def test_history_link_opens_the_history_page(self):
+		content = ArticleSiteContent.objects.get(article=self.article, site=self.site)
+		self.client.force_login(self.staff)
+		resp = self.client.get(
+			reverse("admin:gregory_articlesitecontent_history", args=[content.pk])
+		)
+		self.assertEqual(resp.status_code, 200)
+
+	def test_no_history_link_without_permission_to_view_it(self):
+		self.staff.user_permissions.remove(
+			*Permission.objects.filter(
+				content_type__model="articlesitecontent",
+				codename__in=["view_articlesitecontent", "change_articlesitecontent"],
+			)
+		)
+		self.client.force_login(self.staff)
+		resp = self.client.get(self.url)
+		self.assertEqual(resp.status_code, 200)
+		content = ArticleSiteContent.objects.get(article=self.article, site=self.site)
+		self.assertNotContains(
+			resp, reverse("admin:gregory_articlesitecontent_history", args=[content.pk])
+		)
+
 	def test_staff_site_choices_exclude_other_organisations_sites(self):
 		request = type("R", (), {"user": self.staff})()
 		sites = ArticleSiteContentInline._user_sites(request)
