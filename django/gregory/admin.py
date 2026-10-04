@@ -3963,6 +3963,40 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 			)
 		)
 
+	def has_view_history_or_change_history_permission(self, request, obj=None):
+		# simple_history fetches the object outside get_queryset in two places:
+		# history_view falls back to the latest historical record when the
+		# scoped queryset misses, and history_form_view reads the historical
+		# record directly. Both then check this permission with that object,
+		# so refusing out-of-scope sites here turns those into a 403. Checked
+		# here rather than in has_view_permission so it holds whether or not
+		# SIMPLE_HISTORY_ENFORCE_HISTORY_MODEL_PERMISSIONS is on.
+		if not super().has_view_history_or_change_history_permission(request, obj):
+			return False
+		if obj is None or request.user.is_superuser:
+			return True
+		return ArticleSiteContentInline._user_sites(request).filter(
+			pk=obj.site_id
+		).exists()
+
+	def get_history_queryset(self, request, history_manager, pk_name, object_id):
+		# The history list covers every record of the row, including ones from
+		# before a superuser moved it to another site. Drop the records whose
+		# site is out of scope, so neither the list nor its change diffs show
+		# another organisation's text. If the row's latest record is itself out
+		# of scope, list nothing, so a deleted row that ended on a foreign site
+		# 404s instead of showing its earlier in-scope records.
+		qs = super().get_history_queryset(request, history_manager, pk_name, object_id)
+		if request.user.is_superuser:
+			return qs
+		site_ids = ArticleSiteContentInline._user_sites(request).values("pk")
+		latest_site_id = (
+			qs.order_by("-history_date").values_list("site_id", flat=True).first()
+		)
+		if latest_site_id is None or not site_ids.filter(pk=latest_site_id).exists():
+			return qs.none()
+		return qs.filter(site_id__in=site_ids)
+
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):
