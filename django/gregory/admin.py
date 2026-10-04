@@ -3946,6 +3946,22 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 			)
 		)
 
+	def has_view_history_or_change_history_permission(self, request, obj=None):
+		# simple_history fetches the object outside get_queryset in two places:
+		# history_view falls back to the latest historical record when the
+		# scoped queryset misses, and history_form_view reads the historical
+		# record directly. Both then check this permission with that object,
+		# so refusing out-of-scope sites here turns those into a 403. Checked
+		# here rather than in has_view_permission so it holds whether or not
+		# SIMPLE_HISTORY_ENFORCE_HISTORY_MODEL_PERMISSIONS is on.
+		if not super().has_view_history_or_change_history_permission(request, obj):
+			return False
+		if obj is None or request.user.is_superuser:
+			return True
+		return ArticleSiteContentInline._user_sites(request).filter(
+			pk=obj.site_id
+		).exists()
+
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):

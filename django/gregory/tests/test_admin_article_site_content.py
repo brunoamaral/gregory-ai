@@ -123,6 +123,50 @@ class ArticleSiteContentInlineTest(TestCase):
 		self.assertNotEqual(resp.status_code, 302)
 		self.assertEqual(row.site, self.site)
 
+	def _history_urls(self, row):
+		version = row.history.latest("history_date")
+		return (
+			reverse("admin:gregory_articlesitecontent_history", args=[row.pk]),
+			reverse(
+				"admin:gregory_articlesitecontent_simple_history",
+				args=[row.pk, version.history_id],
+			),
+		)
+
+	def test_staff_can_open_history_for_their_own_sites_row(self):
+		row = ArticleSiteContent.objects.get(article=self.article, site=self.site)
+		history_url, version_url = self._history_urls(row)
+		self.client.force_login(self.staff)
+		resp = self.client.get(history_url)
+		self.assertEqual(resp.status_code, 200)
+		self.assertEqual(self.client.get(version_url).status_code, 200)
+
+	def test_staff_is_refused_history_for_another_organisations_row(self):
+		"""simple_history falls back to the historical record when the scoped
+		queryset misses, and reads versions straight from the history table;
+		neither may expose another organisation's content."""
+		row = ArticleSiteContent.objects.get(article=self.article, site=self.foreign_site)
+		history_url, version_url = self._history_urls(row)
+		self.client.force_login(self.staff)
+		for url in (history_url, version_url):
+			resp = self.client.get(url)
+			self.assertIn(resp.status_code, (403, 404), url)
+			self.assertNotContains(resp, "Foreign site", status_code=resp.status_code)
+
+	def test_staff_is_refused_history_of_a_deleted_foreign_row(self):
+		row = ArticleSiteContent.objects.get(article=self.article, site=self.foreign_site)
+		history_url, _ = self._history_urls(row)
+		row.delete()
+		self.client.force_login(self.staff)
+		self.assertIn(self.client.get(history_url).status_code, (403, 404))
+
+	def test_superuser_can_open_history_for_every_sites_row(self):
+		self.client.force_login(self.superuser)
+		for site in (self.site, self.foreign_site):
+			row = ArticleSiteContent.objects.get(article=self.article, site=site)
+			for url in self._history_urls(row):
+				self.assertEqual(self.client.get(url).status_code, 200, url)
+
 
 class LegacyOrgContentAdminTest(TestCase):
 	def test_article_org_content_admin_is_read_only(self):
