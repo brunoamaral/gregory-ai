@@ -3962,6 +3962,24 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 			pk=obj.site_id
 		).exists()
 
+	def get_history_queryset(self, request, history_manager, pk_name, object_id):
+		# The history list covers every record of the row, including ones from
+		# before a superuser moved it to another site. Drop the records whose
+		# site is out of scope, so neither the list nor its change diffs show
+		# another organisation's text. If the row's latest record is itself out
+		# of scope, list nothing, so a deleted row that ended on a foreign site
+		# 404s instead of showing its earlier in-scope records.
+		qs = super().get_history_queryset(request, history_manager, pk_name, object_id)
+		if request.user.is_superuser:
+			return qs
+		site_ids = ArticleSiteContentInline._user_sites(request).values("pk")
+		latest_site_id = (
+			qs.order_by("-history_date").values_list("site_id", flat=True).first()
+		)
+		if latest_site_id is None or not site_ids.filter(pk=latest_site_id).exists():
+			return qs.none()
+		return qs.filter(site_id__in=site_ids)
+
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):

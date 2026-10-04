@@ -160,6 +160,41 @@ class ArticleSiteContentInlineTest(TestCase):
 		self.client.force_login(self.staff)
 		self.assertIn(self.client.get(history_url).status_code, (403, 404))
 
+	def test_history_of_a_row_moved_in_from_a_foreign_site_hides_its_foreign_records(self):
+		row = ArticleSiteContent.objects.get(article=self.article, site=self.foreign_site)
+		foreign_version = row.history.latest("history_date")
+		row.site = self.second_site
+		row.takeaways = "Moved in"
+		row.save()
+		self.client.force_login(self.staff)
+		resp = self.client.get(
+			reverse("admin:gregory_articlesitecontent_history", args=[row.pk])
+		)
+		self.assertEqual(resp.status_code, 200)
+		self.assertNotContains(resp, "Foreign site")
+		resp = self.client.get(
+			reverse(
+				"admin:gregory_articlesitecontent_simple_history",
+				args=[row.pk, foreign_version.history_id],
+			)
+		)
+		self.assertIn(resp.status_code, (403, 404))
+
+	def test_staff_is_refused_history_of_a_deleted_row_moved_out_to_a_foreign_site(self):
+		other_article = Articles.objects.create(title="Moved out", link="https://i.test/2")
+		row = ArticleSiteContent.objects.create(
+			article=other_article, site=self.site, takeaways="Own text"
+		)
+		row_pk = row.pk
+		row.site = self.foreign_site
+		row.save()
+		row.delete()
+		self.client.force_login(self.staff)
+		resp = self.client.get(
+			reverse("admin:gregory_articlesitecontent_history", args=[row_pk])
+		)
+		self.assertIn(resp.status_code, (403, 404))
+
 	def test_superuser_can_open_history_for_every_sites_row(self):
 		self.client.force_login(self.superuser)
 		for site in (self.site, self.foreign_site):
