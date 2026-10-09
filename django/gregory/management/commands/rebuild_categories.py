@@ -216,9 +216,11 @@ class Command(BaseCommand):
 		"""
 		now = timezone.now()
 		for cat in self.target_categories():
-			cat.match_config_hash = self.category_config_hash(cat)
-			cat.last_synced_at = now
-			cat.save(update_fields=["match_config_hash", "last_synced_at"])
+			# A queryset update, not save(): sync state is bookkeeping, and save()
+			# would add a TeamCategory history row for every category on every run.
+			TeamCategory.objects.filter(pk=cat.pk).update(
+				match_config_hash=self.category_config_hash(cat), last_synced_at=now
+			)
 
 	def sync_category(self, manager, desired_ids, automatic_ids, manual_ids):
 		"""Diff desired vs current automatic associations and apply only the changes.

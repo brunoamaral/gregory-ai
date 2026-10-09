@@ -10,9 +10,9 @@ does not rely on that.
 
 Three rules hold for every view:
 
-- The site is the token's, never a parameter. An article, trial or subject
-  outside that site's ``scope_subjects`` is "not found", the same answer as one
-  that doesn't exist, so its existence isn't revealed.
+- The site is the token's, never a parameter. An article, trial, subject or
+  category outside that site's ``scope_subjects`` is "not found", the same
+  answer as one that doesn't exist, so its existence isn't revealed.
 - The grant is re-checked on every request (``mcpauth.editor_auth``), and
   writes need ``can_edit``.
 - Writes run inside ``editing_as(user, "mcp")``, so the history row names the
@@ -24,9 +24,16 @@ authentication, with ``gregory.visibility`` giving them the editor's site scope.
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Case, When
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, OpenApiTypes, extend_schema
+from django.utils.text import slugify
+from drf_spectacular.utils import (
+	OpenApiParameter,
+	OpenApiResponse,
+	OpenApiTypes,
+	extend_schema,
+	extend_schema_view,
+)
 from rest_framework import permissions, status
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import (
@@ -52,6 +59,11 @@ from api.views import (
 	TrialViewSet,
 )
 from api.schema_serializers import (
+	EditorCategoryAssignmentResponseSerializer,
+	EditorCategoryCreateSerializer,
+	EditorCategoryResponseSerializer,
+	EditorCategoryUnassignResponseSerializer,
+	EditorCategoryUpdateSerializer,
 	EditorErrorSerializer,
 	EditorialUpdateRequestSerializer,
 	EditorialUpdateResponseSerializer,
@@ -65,10 +77,15 @@ from api.schema_serializers import (
 )
 from gregory.editor_history import editing_as
 from gregory.models import (
+	ArticleCategoryAssignment,
 	Articles,
 	ArticleSiteContent,
 	ArticleSubjectRelevance,
 	ArticleTrialReference,
+	CategoryAssignmentSource,
+	CategoryType,
+	Subject,
+	TeamCategory,
 	Trials,
 )
 from gregory.visibility import site_scope_subject_ids
@@ -187,6 +204,52 @@ class _EditorView(APIView):
 		if trial is None:
 			raise NotFound("Trial not found.")
 		return trial
+
+
+class _CategoryScopeMixin:
+	"""Which categories an editor may touch, shared by the category routes.
+
+	A category is in scope when one of its subjects is in the site's scope:
+	that is when the site shows it. Assigning an article to it needs only that.
+	Changing the category itself needs every one of its subjects in scope,
+	because the change shows on every site that lists any of them.
+	"""
+
+	def category_in_scope(self, category_id):
+		category = (
+			TeamCategory.objects.filter(pk=category_id, subjects__id__in=self.site_scope())
+			.distinct()
+			.prefetch_related("subjects")
+			.first()
+		)
+		if category is None:
+			raise NotFound("Category not found.")
+		return category
+
+	def category_for_edit(self, category_id):
+		category = self.category_in_scope(category_id)
+		outside = {s.id for s in category.subjects.all()} - set(self.site_scope())
+		if outside:
+			raise PermissionDenied(
+				"This category also covers subjects outside this site, so it can only be changed in the admin."
+			)
+		return category
+
+	def subjects_for_category(self, subject_ids, team_id=None):
+		"""The subjects, all in scope and in one team (``team_id`` when given)."""
+		scope = set(self.site_scope())
+		wanted = set(subject_ids)
+		if wanted - scope:
+			raise NotFound("Subject not found.")
+		subjects = list(Subject.objects.filter(pk__in=wanted).select_related("team"))
+		if len(subjects) != len(wanted):
+			raise NotFound("Subject not found.")
+		teams = {s.team_id for s in subjects}
+		if len(teams) != 1:
+			raise ValidationError({"subject_ids": ["All subjects must belong to the same team."]})
+		if team_id is not None and teams != {team_id}:
+			raise ValidationError({"subject_ids": ["Subjects must belong to the category's team."]})
+		return subjects
 
 
 def _last_change(history_model, **lookup):
@@ -489,6 +552,259 @@ class EditorArticleTrialDetailView(_EditorView):
 		return Response({"article_id": article.article_id, "trial_id": trial.trial_id, "removed": sorted(set(removed))})
 
 
+# --- Write: categories -------------------------------------------------
+
+
+def _category_payload(category):
+	updated_by, updated_at = _last_change(TeamCategory.history, id=category.pk)
+	return {
+		"id": category.pk,
+		"category_name": category.category_name,
+		"category_slug": category.category_slug,
+		"category_description": category.category_description,
+		"category_terms": list(category.category_terms or []),
+		"modality": category.modality,
+		"category_type": category.category_type,
+		"match_scope": category.match_scope,
+		"team_id": category.team_id,
+		"subject_ids": sorted(s.id for s in category.subjects.all()),
+		"article_count": category.articles.count(),
+		"trials_count": category.trials.count(),
+		"last_synced_at": category.last_synced_at,
+		"updated_by": updated_by,
+		"updated_at": updated_at,
+	}
+
+
+def _merge_terms(current, add=(), remove=()):
+	"""``current`` plus ``add`` minus ``remove``, comparing case-insensitively
+	and keeping the stored spelling and order."""
+	removed = {term.lower() for term in remove}
+	terms = [term for term in current if term.lower() not in removed]
+	have = {term.lower() for term in terms}
+	for term in add:
+		if term.lower() not in have:
+			have.add(term.lower())
+			terms.append(term)
+	return terms
+
+
+_CATEGORY_WRITE_ERRORS = {
+	400: EDITOR_VALIDATION_ERROR,
+	401: EditorErrorSerializer,
+	403: EditorErrorSerializer,
+	404: EditorErrorSerializer,
+	429: EditorErrorSerializer,
+}
+
+
+@extend_schema_view(
+	list=extend_schema(exclude=True),
+	retrieve=extend_schema(exclude=True),
+	authors=extend_schema(exclude=True),
+	create=extend_schema(
+		summary="Create a category (editor)",
+		description=(
+			"Editor-only. Creates a category for the subjects given, which must all be "
+			"in the editor's site scope (404 otherwise) and belong to one team, which "
+			"becomes the category's team. An automatic category needs at least one "
+			"term; the next pipeline run matches every article and trial against it, "
+			"so it starts empty. The slug defaults to the slugified name and is "
+			"unique across every team: a taken slug is 409, with the holder's "
+			"`category_id` when that category is in scope. Recorded under the "
+			"editor's name."
+		),
+		request=EditorCategoryCreateSerializer,
+		responses={201: EditorCategoryResponseSerializer, 409: EditorErrorSerializer, **_CATEGORY_WRITE_ERRORS},
+		auth=[{"editorServiceAuth": []}],
+	),
+	partial_update=extend_schema(
+		summary="Change a category (editor)",
+		description=(
+			"Editor-only. Changes the fields sent. `category_terms` replaces every "
+			"term; `add_terms` and `remove_terms` edit the current list instead "
+			"(case-insensitive). `subject_ids` replaces the subjects, which must be "
+			"in scope and in the category's team. The slug and team never change. "
+			"Every subject of the category must be in the editor's site scope, "
+			"since the change shows wherever the category does: 404 when none is, "
+			"403 when only some are. A change to terms, subjects or `match_scope` "
+			"makes the next pipeline run re-match all content for the category. "
+			"Recorded under the editor's name."
+		),
+		request=EditorCategoryUpdateSerializer,
+		responses={200: EditorCategoryResponseSerializer, **_CATEGORY_WRITE_ERRORS},
+		auth=[{"editorServiceAuth": []}],
+	),
+)
+class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
+	"""``/editor/categories/``: the categories list and detail as on
+	``/categories/``, scoped to the editor's site, plus create (``POST``) and
+	change (``PATCH /editor/categories/{id}/``) for editors who can edit."""
+
+	authentication_classes = [EditorServiceAuthentication]
+	permission_classes = [IsEditorWriter]
+	throttle_classes = [EditorHourThrottle, EditorDayThrottle]
+
+	def site_scope(self):
+		return site_scope_subject_ids(self.request.auth.site_id, public_only=False)
+
+	def create(self, request):
+		body = EditorCategoryCreateSerializer(data=request.data)
+		body.is_valid(raise_exception=True)
+		data = body.validated_data
+		subjects = self.subjects_for_category(data["subject_ids"])
+		slug = data.get("category_slug") or slugify(data["category_name"])[:50]
+		self._refuse_taken_slug(slug)
+		try:
+			with transaction.atomic(), editing_as(request.user, "mcp"):
+				category = TeamCategory.objects.create(
+					team_id=subjects[0].team_id,
+					category_name=data["category_name"],
+					category_slug=slug,
+					category_description=data["category_description"] or None,
+					category_terms=data["category_terms"],
+					category_type=data["category_type"],
+					modality=data["modality"],
+					match_scope=data["match_scope"],
+				)
+				category.subjects.set(subjects)
+		except IntegrityError:
+			# Two creates with the same slug at once: the loser gets the same 409.
+			self._refuse_taken_slug(slug)
+			raise
+		return Response(_category_payload(category), status=status.HTTP_201_CREATED)
+
+	def _refuse_taken_slug(self, slug):
+		holder = TeamCategory.objects.filter(category_slug=slug).first()
+		if holder is None:
+			return
+		error = ConflictError(f"A category with the slug {slug} already exists.")
+		error.detail = {"detail": f"A category with the slug {slug} already exists."}
+		if holder.subjects.filter(pk__in=self.site_scope()).exists():
+			error.detail["category_id"] = holder.pk
+		raise error
+
+	def partial_update(self, request, pk=None):
+		category = self.category_for_edit(pk)
+		body = EditorCategoryUpdateSerializer(data=request.data)
+		body.is_valid(raise_exception=True)
+		data = body.validated_data
+		subjects = None
+		if "subject_ids" in data:
+			subjects = self.subjects_for_category(data["subject_ids"], team_id=category.team_id)
+
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			category = TeamCategory.objects.select_for_update().get(pk=category.pk)
+			terms = list(category.category_terms or [])
+			if "category_terms" in data:
+				terms = data["category_terms"]
+			elif "add_terms" in data or "remove_terms" in data:
+				terms = _merge_terms(terms, data.get("add_terms", ()), data.get("remove_terms", ()))
+			if category.category_type == CategoryType.AUTOMATIC and not terms:
+				raise ValidationError({"category_terms": ["An automatic category needs at least one term."]})
+
+			changed = []
+			for field in ("category_name", "modality", "match_scope"):
+				if field in data and getattr(category, field) != data[field]:
+					setattr(category, field, data[field])
+					changed.append(field)
+			if "category_description" in data:
+				description = data["category_description"] or None
+				if category.category_description != description:
+					category.category_description = description
+					changed.append("category_description")
+			if terms != list(category.category_terms or []):
+				category.category_terms = terms
+				changed.append("category_terms")
+			if changed:
+				category.save(update_fields=changed)
+			if subjects is not None and {s.id for s in subjects} != {s.id for s in category.subjects.all()}:
+				category.subjects.set(subjects)
+		category = TeamCategory.objects.prefetch_related("subjects").get(pk=category.pk)
+		return Response(_category_payload(category))
+
+
+@extend_schema(
+	summary="Assign an article to a category (editor)",
+	description=(
+		"Editor-only. Assigns the article to the category by hand. Both must be "
+		"in the editor's site scope (a category is in scope when one of its "
+		"subjects is), else 404. A new assignment is 201. An article the pipeline "
+		"already matched becomes a hand assignment (200), which the pipeline then "
+		"never removes; one already assigned by hand is returned unchanged (200). "
+		"Recorded under the editor's name."
+	),
+	request=None,
+	responses={
+		200: EditorCategoryAssignmentResponseSerializer,
+		201: EditorCategoryAssignmentResponseSerializer,
+		**_CATEGORY_WRITE_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorArticleCategoryView(_CategoryScopeMixin, _EditorView):
+	"""``PUT`` and ``DELETE /editor/articles/{article_id}/categories/{category_id}/``"""
+
+	def put(self, request, article_id, category_id):
+		article = self.get_article(article_id)
+		category = self.category_in_scope(category_id)
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			assignment, created = ArticleCategoryAssignment.objects.select_for_update().get_or_create(
+				articles=article, teamcategory=category, defaults={"source": CategoryAssignmentSource.MANUAL}
+			)
+			if not created and assignment.source != CategoryAssignmentSource.MANUAL:
+				assignment.source = CategoryAssignmentSource.MANUAL
+				assignment.save()
+		return Response(
+			self.serialize(assignment),
+			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+		)
+
+	@extend_schema(
+		summary="Remove an article from a category (editor)",
+		description=(
+			"Editor-only. Removes a hand assignment. An assignment the pipeline "
+			"made from the category's terms is 409: it would come back on the next "
+			"run, so change the terms instead. 404 when the article is not in the "
+			"category, or either is outside the editor's site scope."
+		),
+		request=None,
+		responses={
+			200: EditorCategoryUnassignResponseSerializer,
+			409: EditorErrorSerializer,
+			**_CATEGORY_WRITE_ERRORS,
+		},
+		auth=[{"editorServiceAuth": []}],
+	)
+	def delete(self, request, article_id, category_id):
+		article = self.get_article(article_id)
+		category = self.category_in_scope(category_id)
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			assignment = ArticleCategoryAssignment.objects.filter(articles=article, teamcategory=category).first()
+			if assignment is None:
+				raise NotFound("The article is not in this category.")
+			if assignment.source != CategoryAssignmentSource.MANUAL:
+				raise ConflictError(
+					"The pipeline assigned this article from the category's terms and would add it back. "
+					"Change the category's terms instead."
+				)
+			assignment.delete()
+		return Response(
+			{"article_id": article.article_id, "category_id": category.pk, "removed": CategoryAssignmentSource.MANUAL}
+		)
+
+	@staticmethod
+	def serialize(assignment):
+		updated_by, updated_at = _last_change(ArticleCategoryAssignment.history, id=assignment.pk)
+		return {
+			"article_id": assignment.articles_id,
+			"category_id": assignment.teamcategory_id,
+			"source": assignment.source,
+			"updated_by": updated_by,
+			"updated_at": updated_at,
+		}
+
+
 # --- Read: history ------------------------------------------------------
 
 _CHANGE = {"+": "created", "~": "updated", "-": "deleted"}
@@ -509,10 +825,11 @@ def _history_entry(kind, row, details):
 	summary="Edit history of an article (editor)",
 	description=(
 		"Editor-only. Who changed this article's editorial content for the "
-		"editor's site, its relevance for subjects in that site's scope, and its "
-		"links to trials in scope, and when. Newest first. Changes made by an "
-		"API key name the key instead of a person; changes made by the pipeline "
-		"have no name."
+		"editor's site, its relevance for subjects in that site's scope, its "
+		"links to trials in scope, and its hand assignments to categories in "
+		"scope, and when. Newest first. Changes made by an API key name the key "
+		"instead of a person; changes made by the pipeline have no name, and the "
+		"pipeline's own category matching records none."
 	),
 	parameters=[
 		OpenApiParameter(
@@ -581,6 +898,15 @@ class EditorArticleHistoryView(_EditorView):
 						"identifier_type": row.identifier_type,
 					},
 				)
+			)
+
+		category_history = ArticleCategoryAssignment.history.filter(articles_id=article.pk)
+		visible_categories = TeamCategory.objects.filter(
+			pk__in=category_history.values("teamcategory_id"), subjects__id__in=scope
+		).values("pk")
+		for row in category_history.filter(teamcategory_id__in=visible_categories).order_by("-history_date")[:limit]:
+			entries.append(
+				_history_entry("category", row, {"category_id": row.teamcategory_id, "source": row.source})
 			)
 
 		entries.sort(key=lambda e: e["changed_at"], reverse=True)
@@ -658,7 +984,6 @@ def _editor_read_view(view_class):
 EditorArticleViewSet = _editor_read_view(ArticleViewSet)
 EditorTrialViewSet = _editor_read_view(TrialViewSet)
 EditorAuthorsViewSet = _editor_read_view(AuthorsViewSet)
-EditorCategoryViewSet = _editor_read_view(CategoryViewSet)
 EditorSubjectsViewSet = _editor_read_view(SubjectsViewSet)
 EditorSponsorViewSet = _editor_read_view(SponsorViewSet)
 class EditorStatsView(_editor_read_view(StatsView)):

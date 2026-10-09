@@ -2241,6 +2241,201 @@ paths:
               schema:
                 $ref: '#/components/schemas/Category'
           description: ''
+  /editor/articles/{article_id}/categories/{category_id}/:
+    put:
+      operationId: editor_articles_categories_update
+      description: Editor-only. Assigns the article to the category by hand. Both
+        must be in the editor's site scope (a category is in scope when one of its
+        subjects is), else 404. A new assignment is 201. An article the pipeline already
+        matched becomes a hand assignment (200), which the pipeline then never removes;
+        one already assigned by hand is returned unchanged (200). Recorded under the
+        editor's name.
+      summary: Assign an article to a category (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryAssignmentResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryAssignmentResponse'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryAssignmentResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryAssignmentResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+    delete:
+      operationId: editor_articles_categories_destroy
+      description: 'Editor-only. Removes a hand assignment. An assignment the pipeline
+        made from the category''s terms is 409: it would come back on the next run,
+        so change the terms instead. 404 when the article is not in the category,
+        or either is outside the editor''s site scope.'
+      summary: Remove an article from a category (editor)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryUnassignResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryUnassignResponse'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
   /editor/articles/{article_id}/editorial/:
     patch:
       operationId: editor_articles_editorial_partial_update
@@ -2340,9 +2535,11 @@ paths:
     get:
       operationId: editor_articles_history_retrieve
       description: Editor-only. Who changed this article's editorial content for the
-        editor's site, its relevance for subjects in that site's scope, and its links
-        to trials in scope, and when. Newest first. Changes made by an API key name
-        the key instead of a person; changes made by the pipeline have no name.
+        editor's site, its relevance for subjects in that site's scope, its links
+        to trials in scope, and its hand assignments to categories in scope, and when.
+        Newest first. Changes made by an API key name the key instead of a person;
+        changes made by the pipeline have no name, and the pipeline's own category
+        matching records none.
       summary: Edit history of an article (editor)
       parameters:
       - in: path
@@ -2772,6 +2969,207 @@ paths:
                 $ref: '#/components/schemas/EditorError'
           description: ''
         '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/categories/:
+    post:
+      operationId: editor_categories_create
+      description: 'Editor-only. Creates a category for the subjects given, which
+        must all be in the editor''s site scope (404 otherwise) and belong to one
+        team, which becomes the category''s team. An automatic category needs at least
+        one term; the next pipeline run matches every article and trial against it,
+        so it starts empty. The slug defaults to the slugified name and is unique
+        across every team: a taken slug is 409, with the holder''s `category_id` when
+        that category is in scope. Recorded under the editor''s name.'
+      summary: Create a category (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorCategoryCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EditorCategoryCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EditorCategoryCreate'
+        required: true
+      security:
+      - editorServiceAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryResponse'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/categories/{id}/:
+    patch:
+      operationId: editor_categories_partial_update
+      description: 'Editor-only. Changes the fields sent. `category_terms` replaces
+        every term; `add_terms` and `remove_terms` edit the current list instead (case-insensitive).
+        `subject_ids` replaces the subjects, which must be in scope and in the category''s
+        team. The slug and team never change. Every subject of the category must be
+        in the editor''s site scope, since the change shows wherever the category
+        does: 404 when none is, 403 when only some are. A change to terms, subjects
+        or `match_scope` makes the next pipeline run re-match all content for the
+        category. Recorded under the editor''s name.'
+      summary: Change a category (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this team category.
+        required: true
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorCategoryUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorCategoryUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorCategoryUpdate'
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorCategoryResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
           content:
             application/json:
               schema:
@@ -6605,6 +7003,161 @@ components:
         * `created` - created
         * `updated` - updated
         * `deleted` - deleted
+    EditorCategoryAssignmentResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        category_id:
+          type: integer
+        source:
+          type: string
+          description: Always `manual` after an editor assigns it; the pipeline never
+            removes a manual assignment.
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - article_id
+      - category_id
+      - source
+      - updated_at
+      - updated_by
+    EditorCategoryCreate:
+      type: object
+      properties:
+        category_name:
+          type: string
+          maxLength: 200
+        subject_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          description: Subjects the category applies to. Each must be in the editor's
+            site scope and all must belong to one team, which becomes the category's
+            team.
+          minItems: 1
+        category_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Words or phrases matched against titles and summaries, case-insensitively.
+            Blank entries are dropped and repeats (ignoring case) kept once. At least
+            one is required for an automatic category.
+        category_description:
+          type: string
+          default: ''
+        category_slug:
+          type: string
+          description: Defaults to the slugified name. Slugs are unique across every
+            team.
+          maxLength: 50
+          pattern: ^[-a-zA-Z0-9_]+$
+        modality:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ModalityEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        category_type:
+          allOf:
+          - $ref: '#/components/schemas/CategoryTypeEnum'
+          default: automatic
+          description: |-
+            `automatic` (default): the pipeline assigns content by the terms. `manual`: only hand assignments.
+
+            * `manual` - Manual
+            * `automatic` - Automatic
+        match_scope:
+          allOf:
+          - $ref: '#/components/schemas/MatchScopeEnum'
+          default: title_summary
+      required:
+      - category_name
+      - subject_ids
+    EditorCategoryResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        category_name:
+          type: string
+        category_slug:
+          type: string
+        category_description:
+          type: string
+          nullable: true
+        category_terms:
+          type: array
+          items:
+            type: string
+        modality:
+          type: string
+          nullable: true
+        category_type:
+          $ref: '#/components/schemas/CategoryTypeEnum'
+        match_scope:
+          $ref: '#/components/schemas/MatchScopeEnum'
+        team_id:
+          type: integer
+        subject_ids:
+          type: array
+          items:
+            type: integer
+        article_count:
+          type: integer
+        trials_count:
+          type: integer
+        last_synced_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the pipeline last matched content to this category. Null
+            for a new category; after a change to terms, subjects or scope the next
+            pipeline run re-matches all content for it.
+        updated_by:
+          type: string
+          nullable: true
+          description: Who last changed the category.
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - article_count
+      - category_description
+      - category_name
+      - category_slug
+      - category_terms
+      - category_type
+      - id
+      - last_synced_at
+      - match_scope
+      - modality
+      - subject_ids
+      - team_id
+      - trials_count
+      - updated_at
+      - updated_by
+    EditorCategoryUnassignResponse:
+      type: object
+      properties:
+        article_id:
+          type: integer
+        category_id:
+          type: integer
+        removed:
+          type: string
+          description: 'Always `manual`: only a hand assignment can be removed.'
+      required:
+      - article_id
+      - category_id
+      - removed
     EditorError:
       type: object
       description: DRF's standard error body on the ``/editor/`` routes.
@@ -6616,6 +7169,10 @@ components:
           items:
             type: integer
           description: 'On 409 from the DOI lookup: the articles that share the DOI.'
+        category_id:
+          type: integer
+          description: 'On 409 from creating a category: the existing category that
+            holds the slug, when it is inside the editor''s site scope.'
       required:
       - detail
     EditorHistoryEntry:
@@ -6642,7 +7199,7 @@ components:
           type: object
           additionalProperties: {}
           description: 'The values after the change: the editorial text, the relevance,
-            or the link''s source.'
+            the trial link''s source, or the category and how it was assigned.'
       required:
       - change
       - changed_at
@@ -6913,11 +7470,13 @@ components:
       - editorial
       - relevance
       - trial_link
+      - category
       type: string
       description: |-
         * `editorial` - editorial
         * `relevance` - relevance
         * `trial_link` - trial_link
+        * `category` - category
     MLPredictionSubject:
       type: object
       properties:
@@ -6975,6 +7534,14 @@ components:
       - created_date
       - id
       - subject
+    MatchScopeEnum:
+      enum:
+      - title
+      - title_summary
+      type: string
+      description: |-
+        * `title` - Title only
+        * `title_summary` - Title and summary
     McpTenant:
       type: object
       description: |-
@@ -7348,6 +7915,51 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TrialSiteRow'
+    PatchedEditorCategoryUpdate:
+      type: object
+      properties:
+        category_name:
+          type: string
+          maxLength: 200
+        category_description:
+          type: string
+        modality:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/ModalityEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        match_scope:
+          $ref: '#/components/schemas/MatchScopeEnum'
+        subject_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          description: Replaces the category's subjects. Each must be in scope and
+            in the category's team.
+          minItems: 1
+        category_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Replaces every term. Words or phrases matched against titles
+            and summaries, case-insensitively. Blank entries are dropped and repeats
+            (ignoring case) kept once. Not with `add_terms` or `remove_terms`.
+        add_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Terms to add to the current ones; a term already there (ignoring
+            case) is skipped.
+        remove_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Terms to remove, matched ignoring case. A term that isn't there
+            is ignored.
     PatchedEditorialUpdateRequest:
       type: object
       properties:

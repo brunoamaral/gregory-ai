@@ -633,7 +633,7 @@ SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
 |:---|:---|
 | Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
 | Editor, read-only grant | the ten read tools plus `get_article_history` |
-| Editor with the edit scope | all of those plus four write tools |
+| Editor with the edit scope | all of those plus eight write tools |
 
 `tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
 does not exist. `GregoryClient` refuses a write without an edit session as a second lock, and
@@ -648,11 +648,16 @@ answer is never served to `/mcp`.
 | `set_article_relevance` | `PUT /editor/articles/{id}/relevance/{subject_id}/` | `true`, `false` or `null` (not reviewed). Applies on every site covering the subject. |
 | `link_trial_to_article` | `POST /editor/articles/{id}/trials/` | Idempotent. |
 | `unlink_trial_from_article` | `DELETE /editor/articles/{id}/trials/{trial_id}/` | Deletes an editor link, hides an automatic one. |
-| `get_article_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. |
+| `create_category` | `POST /editor/categories/` | Name, subjects (one team) and terms. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
+| `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit. Refused for a category shared with another site. |
+| `assign_article_category` | `PUT /editor/articles/{id}/categories/{category_id}/` | Hand assignment, never removed by the pipeline. Idempotent. |
+| `unassign_article_category` | `DELETE /editor/articles/{id}/categories/{category_id}/` | Hand assignments only; a pipeline match is refused with the reason. |
+| `get_article_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. |
 
-Each takes `article_id` or `doi` (exactly one; both or neither is `INVALID_PARAMS`). A DOI shared
+Each article tool takes `article_id` or `doi` (exactly one; both or neither is `INVALID_PARAMS`); the category tools take a `category_id` from `list_categories`. A DOI shared
 by two articles is a readable error listing the ids. No tool takes a site. Write tools carry
-`destructive_hint` (except link, which only adds) and `idempotent_hint`, and ask the model to
+`destructive_hint` (except link, assign and create, which only add) and `idempotent_hint` (except
+`create_category`: a second identical call is refused because the slug is taken), and ask the model to
 show the proposed text and get confirmation first; the rate limit (60 per hour, 500 per day per
 editor and site) and Django's history are the safeguards that do not depend on the client.
 Failures raise `ToolError` with a message the model can act on; since mcp 2.1 any other
@@ -664,7 +669,7 @@ of 30, so a newly granted editor sees the edit tools soon after reconnecting.
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, article id, field names and outcome, never values (those live in
+`mcp_edit` line with the tool, article and/or category id, field names and outcome, never values (those live in
 Django's history). Tokens, authorization headers and the service key are never logged.
 
 ---

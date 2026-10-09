@@ -49,6 +49,7 @@ from api.views import (
 )
 from api.editor_views import (
 	EDITOR_READ_ROUTES,
+	EditorArticleCategoryView,
 	EditorArticleEditorialView,
 	EditorArticleHistoryView,
 	EditorArticleRelevanceView,
@@ -274,6 +275,11 @@ urlpatterns = (
 			"editor/articles/<int:article_id>/trials/<int:trial_id>/",
 			EditorArticleTrialDetailView.as_view(),
 			name="editor-article-trial",
+		),
+		path(
+			"editor/articles/<int:article_id>/categories/<int:category_id>/",
+			EditorArticleCategoryView.as_view(),
+			name="editor-article-category",
 		),
 		path(
 			"editor/articles/<int:article_id>/history/",
