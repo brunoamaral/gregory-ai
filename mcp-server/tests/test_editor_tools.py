@@ -46,6 +46,26 @@ def _editor_routes():
 		"/editor/articles/11/trials/": httpx2.Response(201, json={"article_id": 11, "trial_id": 5, "source": "editor"}),
 		"/editor/articles/11/trials/5/": httpx2.Response(200, json={"article_id": 11, "trial_id": 5, "removed": "deleted"}),
 		"/editor/articles/11/history/": httpx2.Response(200, json={"results": []}),
+		"/editor/categories/": lambda r: (
+			httpx2.Response(
+				409,
+				json={"detail": "A category with the slug taken already exists.", "category_id": 102},
+			)
+			if json.loads(r.content).get("category_slug") == "taken"
+			else httpx2.Response(201, json={"id": 140, **json.loads(r.content)})
+		),
+		"/editor/categories/140/": httpx2.Response(200, json={"id": 140, "category_terms": ["apotransferrin"]}),
+		"/editor/categories/141/": httpx2.Response(
+			403,
+			json={"detail": "This category also covers subjects outside this site, so it can only be changed in the admin."},
+		),
+		"/editor/articles/11/categories/140/": lambda r: httpx2.Response(
+			201 if r.method == "PUT" else 200,
+			json={"article_id": 11, "category_id": 140, "source": "manual"},
+		),
+		"/editor/articles/11/categories/141/": httpx2.Response(
+			409, json={"detail": "The pipeline assigned this article from the category's terms."}
+		),
 		"/editor/articles/404/editorial/": httpx2.Response(404, json={"detail": "nope"}),
 		"/editor/articles/405/editorial/": httpx2.Response(403, json={"detail": "nope"}),
 		"/editor/articles/429/editorial/": httpx2.Response(429, json={"detail": "slow"}, headers={"Retry-After": "30"}),
@@ -105,10 +125,14 @@ async def test_write_tools_are_annotated_and_never_read_only(django):
 	assert tools["get_article_history"].annotations.read_only_hint is True
 	for name in WRITE_TOOLS:
 		assert tools[name].annotations.read_only_hint is False
-		assert tools[name].annotations.idempotent_hint is True
+		assert tools[name].annotations.idempotent_hint is (name != "create_category")
 	assert tools["update_article_editorial"].annotations.destructive_hint is True
 	assert tools["link_trial_to_article"].annotations.destructive_hint is False
 	assert tools["unlink_trial_from_article"].annotations.destructive_hint is True
+	assert tools["create_category"].annotations.destructive_hint is False
+	assert tools["update_category"].annotations.destructive_hint is True
+	assert tools["assign_article_category"].annotations.destructive_hint is False
+	assert tools["unassign_article_category"].annotations.destructive_hint is True
 
 
 @pytest.mark.parametrize("token", ["readonly", "public"])
@@ -119,6 +143,10 @@ async def test_calling_a_hidden_write_tool_is_refused_and_writes_nothing(django,
 		"set_article_relevance": {"article_id": 11, "subject_id": 1, "is_relevant": True},
 		"link_trial_to_article": {"article_id": 11, "trial_id": 5},
 		"unlink_trial_from_article": {"article_id": 11, "trial_id": 5},
+		"create_category": {"category_name": "X", "subject_ids": [1], "category_terms": ["x"]},
+		"update_category": {"category_id": 140, "add_terms": ["x"]},
+		"assign_article_category": {"article_id": 11, "category_id": 140},
+		"unassign_article_category": {"article_id": 11, "category_id": 140},
 	}[tool]
 	app = new_app()
 	async with running(app):
@@ -150,7 +178,7 @@ async def _call(tool, args, token="editor"):
 
 
 def _writes(mock):
-	return [r for r in mock.requests if r.url.path.startswith("/editor/articles/") and r.method != "GET"]
+	return [r for r in mock.requests if r.url.path.startswith("/editor/") and r.method != "GET"]
 
 
 async def test_update_editorial_patches_as_the_signed_in_person(django, mock_editor_gregory):
@@ -263,6 +291,83 @@ async def test_link_and_unlink_trial(django, mock_editor_gregory):
 	post, delete = _writes(mock_editor_gregory)
 	assert (post.method, post.url.path, post.content) == ("POST", "/editor/articles/11/trials/", b'{"trial_id":5}')
 	assert (delete.method, delete.url.path) == ("DELETE", "/editor/articles/11/trials/5/")
+
+
+async def test_create_category_posts_only_what_was_given(django, mock_editor_gregory):
+	result = await _call(
+		"create_category",
+		{
+			"category_name": "Apotransferrin",
+			"subject_ids": [1],
+			"category_terms": ["apotransferrin", "apo-transferrin"],
+			"modality": "biologic_antibody",
+		},
+	)
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path) == ("POST", "/editor/categories/")
+	assert json.loads(request.content) == {
+		"category_name": "Apotransferrin",
+		"subject_ids": [1],
+		"category_terms": ["apotransferrin", "apo-transferrin"],
+		"category_type": "automatic",
+		"match_scope": "title_summary",
+		"modality": "biologic_antibody",
+	}
+
+
+async def test_a_taken_slug_names_the_existing_category(django):
+	result = await _call(
+		"create_category",
+		{"category_name": "Taken", "subject_ids": [1], "category_terms": ["x"], "category_slug": "taken"},
+	)
+
+	assert result.is_error
+	assert "already exists" in result.content[0].text
+	assert "category 102" in result.content[0].text
+
+
+async def test_update_category_patches_only_what_was_given(django, mock_editor_gregory):
+	result = await _call("update_category", {"category_id": 140, "remove_terms": ["3'-deoxyadenosine"]})
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path) == ("PATCH", "/editor/categories/140/")
+	assert json.loads(request.content) == {"remove_terms": ["3'-deoxyadenosine"]}
+
+
+async def test_update_category_with_nothing_to_change_sends_nothing(django, mock_editor_gregory):
+	result = await _call("update_category", {"category_id": 140})
+
+	assert result.is_error
+	assert "at least one field" in result.content[0].text
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_a_category_shared_with_another_site_is_a_readable_refusal(django):
+	result = await _call("update_category", {"category_id": 141, "category_name": "x"})
+
+	assert result.is_error
+	assert "only be changed in the admin" in result.content[0].text
+
+
+async def test_assign_and_unassign_article_category(django, mock_editor_gregory):
+	assigned = await _call("assign_article_category", {"article_id": 11, "category_id": 140})
+	unassigned = await _call("unassign_article_category", {"doi": "10.1/ok", "category_id": 140})
+
+	assert not assigned.is_error and not unassigned.is_error
+	put, delete = _writes(mock_editor_gregory)
+	assert (put.method, put.url.path) == ("PUT", "/editor/articles/11/categories/140/")
+	assert (delete.method, delete.url.path) == ("DELETE", "/editor/articles/11/categories/140/")
+
+
+async def test_unassigning_a_pipeline_match_explains_why_not(django):
+	result = await _call("unassign_article_category", {"article_id": 11, "category_id": 141})
+
+	assert result.is_error
+	assert "The edit was refused" in result.content[0].text
+	assert "category's terms" in result.content[0].text
 
 
 async def test_history_reads_with_a_clamped_limit(django, mock_editor_gregory):

@@ -252,6 +252,10 @@ All tools accept `article_id` or `doi`. Passing both, or neither, raises `INVALI
 | `set_article_relevance` | Sets `is_relevant` (`true`, `false`, `null`) for one `subject_id`. The subject must be in the site's `scope_subjects`. | `read_only=False`, `destructive=True`, `idempotent=True` |
 | `link_trial_to_article` | Adds a manual `ArticleTrialReference`. The trial must be visible to the editor. | `read_only=False`, `destructive=False`, `idempotent=True` |
 | `unlink_trial_from_article` | Removes a link. See [Manual trial links](#manual-trial-links) for what unlinking an auto-detected link does. | `read_only=False`, `destructive=True`, `idempotent=True` |
+| `create_category` | Creates a `TeamCategory` for in-scope subjects of one team. Added after the first release. | `read_only=False`, `destructive=False`, `idempotent=False` |
+| `update_category` | Changes a category whose subjects are all in the site's scope. Added after the first release. | `read_only=False`, `destructive=True`, `idempotent=True` |
+| `assign_article_category` | Adds a manual `ArticleCategoryAssignment`. Added after the first release. | `read_only=False`, `destructive=False`, `idempotent=True` |
+| `unassign_article_category` | Removes a manual assignment; an automatic one is refused. Added after the first release. | `read_only=False`, `destructive=True`, `idempotent=True` |
 | `get_article_history` | Read: who changed this article's site content, relevance, or links, and when | `READ_ONLY` |
 
 Every write tool returns the stored values after the write, plus `updated_by` and `updated_at`, so the model can confirm what changed without a second read. `destructive_hint=True` asks the client to confirm before calling. Clients decide how to act on it, so the confirmation isn't guaranteed. The rate limit and the audit trail are the safeguards that don't depend on the client.
