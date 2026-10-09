@@ -3,7 +3,16 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import mark_safe
-from django.db.models import Q, Count
+from django.db.models import (
+	Q,
+	Count,
+	Avg,
+	Exists,
+	F,
+	FloatField,
+	OuterRef,
+	Subquery,
+)
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
 from django.contrib import messages
 from django.utils.dateparse import parse_date
@@ -168,8 +177,38 @@ def article_review_status_view(request):
 	# Get sort parameter
 	sort_by = request.GET.get("sort_by", "-discovery_date")
 
-	# If not sorting by ML score, apply sorting to queryset before pagination
-	if sort_by not in ["ml_score", "-ml_score"]:
+	# Sort before pagination so the order spans every page, not just the current one
+	if sort_by in ["ml_score", "-ml_score"] and selected_subject_id:
+		# Average of the latest prediction per algorithm, matching the scores shown per row.
+		# Ties on created_date go to the highest pk, as in the per-row query below.
+		newer_prediction = MLPredictions.objects.filter(
+			Q(created_date__gt=OuterRef("created_date"))
+			| Q(created_date=OuterRef("created_date"), pk__gt=OuterRef("pk")),
+			article=OuterRef("article"),
+			subject=OuterRef("subject"),
+			algorithm=OuterRef("algorithm"),
+		)
+		avg_latest_score = (
+			MLPredictions.objects.filter(
+				article=OuterRef("pk"),
+				subject_id=selected_subject_id,
+				probability_score__isnull=False,
+			)
+			.filter(~Exists(newer_prediction))
+			.values("article")
+			.annotate(avg=Avg("probability_score"))
+			.values("avg")
+		)
+		queryset = queryset.annotate(
+			avg_ml_score=Subquery(avg_latest_score, output_field=FloatField())
+		)
+		# Articles with no predictions go to the end in both directions
+		if sort_by == "-ml_score":
+			score_order = F("avg_ml_score").desc(nulls_last=True)
+		else:
+			score_order = F("avg_ml_score").asc(nulls_last=True)
+		queryset = queryset.order_by(score_order, "-discovery_date").distinct()
+	else:
 		queryset = queryset.order_by(sort_by).distinct()
 
 	# Pagination
@@ -210,7 +249,7 @@ def article_review_status_view(request):
 			MLPredictions.objects.filter(
 				article=article, subject_id=selected_subject_id
 			)
-			.order_by("algorithm", "-created_date")
+			.order_by("algorithm", "-created_date", "-pk")
 			.distinct("algorithm")
 		)
 
@@ -237,18 +276,6 @@ def article_review_status_view(request):
 				"ml_predictions": predictions_dict,
 				"avg_ml_score": avg_score,
 			}
-		)
-
-	# If sorting by ML score, sort the articles_with_review_status list
-	if sort_by in ["ml_score", "-ml_score"]:
-		# Sort by average ML score
-		# Articles with no predictions (None) go to the end
-		articles_with_review_status.sort(
-			key=lambda x: (
-				x["avg_ml_score"] is None,
-				x["avg_ml_score"] if x["avg_ml_score"] is not None else 0,
-			),
-			reverse=(sort_by == "-ml_score"),
 		)
 
 	context = {
