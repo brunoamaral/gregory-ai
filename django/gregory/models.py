@@ -347,12 +347,14 @@ class TeamCategory(models.Model):
 		help_text="When rebuild_categories last synced this category.",
 	)
 	# Who created or changed a category, and through which door (admin, an MCP
-	# editor, an API key). The two sync-state columns are the pipeline's
+	# editor, an API key). `subjects` is tracked too, so a change of scope is
+	# its own history row. The two sync-state columns are the pipeline's
 	# bookkeeping, not an edit, so they are left out; rebuild_categories writes
 	# them with a queryset update, which records no history row at all.
 	history = HistoricalRecords(
 		excluded_fields=["match_config_hash", "last_synced_at"],
 		bases=[ApiKeyHistoryMixin, EditorHistoryMixin],
+		m2m_fields=["subjects"],
 	)
 
 	def save(self, *args, **kwargs):
@@ -436,8 +438,8 @@ class ArticleCategoryAssignment(models.Model):
 		default=CategoryAssignmentSource.MANUAL,
 	)
 	# Records a person's assignments (admin, an MCP editor). rebuild_categories
-	# adds and removes its automatic rows through the related manager, which
-	# bulk-writes and so records nothing: the history holds edits, not churn.
+	# adds its automatic rows through the related manager, which bulk-writes and
+	# records nothing; its removals are ordinary deletes, recorded with no editor.
 	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):

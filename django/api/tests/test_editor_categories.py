@@ -72,10 +72,11 @@ class CreateCategoryTest(CategoryFixture):
 
 	def test_history_names_the_editor_and_the_mcp_door(self):
 		category_id = self.create().json()["id"]
-		row = TeamCategory.history.get(id=category_id)
-		self.assertEqual(row.history_type, "+")
-		self.assertEqual(row.editor_user, self.ana)
-		self.assertEqual(row.via, "mcp")
+		rows = TeamCategory.history.filter(id=category_id)
+		self.assertEqual(rows.get(history_type="+").editor_user, self.ana)
+		# Setting the subjects is recorded too, under the same editor.
+		self.assertTrue(rows.exists())
+		self.assertEqual({(r.editor_user_id, r.via) for r in rows}, {(self.ana.pk, "mcp")})
 
 	def test_terms_are_trimmed_and_deduplicated_ignoring_case(self):
 		body = self.create(category_terms=[" apotransferrin ", "", "ApoTransferrin", "apo-transferrin"]).json()
@@ -150,11 +151,12 @@ class CreateCategoryTest(CategoryFixture):
 		self.art_a.title = "Apotransferrin promotes remyelination"
 		self.art_a.save()
 		category_id = self.create().json()["id"]
+		before = TeamCategory.history.filter(id=category_id).count()
 		call_command("rebuild_categories", category=category_id, verbosity=0)
 		assignment = ArticleCategoryAssignment.objects.get(teamcategory_id=category_id, articles=self.art_a)
 		self.assertEqual(assignment.source, CategoryAssignmentSource.AUTOMATIC)
 		# The sync is bookkeeping: no history row for the category, none for the match.
-		self.assertEqual(TeamCategory.history.filter(id=category_id).count(), 1)
+		self.assertEqual(TeamCategory.history.filter(id=category_id).count(), before)
 		self.assertFalse(ArticleCategoryAssignment.history.filter(teamcategory_id=category_id).exists())
 
 
@@ -195,6 +197,16 @@ class UpdateCategoryTest(CategoryFixture):
 		self.assertEqual(body["category_slug"], "cordycepin")
 		self.assertEqual(body["modality"], "natural_product")
 		self.assertEqual(body["subject_ids"], sorted([self.subject_a.pk, self.subject_a2.pk]))
+
+	def test_a_subjects_only_change_is_recorded_and_attributed(self):
+		before = TeamCategory.history.filter(id=self.cat_a.pk).count()
+		body = self.patch(self.cat_a, {"subject_ids": [self.subject_a.pk, self.subject_a2.pk]}).json()
+		self.assertGreater(TeamCategory.history.filter(id=self.cat_a.pk).count(), before)
+		self.assertIn("ana", body["updated_by"])
+		latest = TeamCategory.history.filter(id=self.cat_a.pk).order_by("-history_date").first()
+		self.assertEqual(
+			{s.subject_id for s in latest.subjects.all()}, {self.subject_a.pk, self.subject_a2.pk}
+		)
 
 	def test_empty_description_clears_it(self):
 		self.cat_a.category_description = "Old"
@@ -259,6 +271,30 @@ class ArticleCategoryTest(CategoryFixture):
 		self.assertEqual(response.json()["source"], "manual")
 		call_command("rebuild_categories", category=self.cat_a.pk, verbosity=0)
 		self.assertTrue(self.art_a.team_categories.filter(pk=self.cat_a.pk).exists())
+
+	def test_a_rebuild_never_deletes_an_assignment_pinned_after_it_read_the_ids(self):
+		"""The rebuild reads automatic ids, an editor pins one, then the rebuild
+		removes stale ids: the pinned row must survive."""
+		from gregory.management.commands.rebuild_categories import Command
+
+		self.art_a.team_categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
+		stale_automatic_ids = {self.art_a.pk}
+		self.send("put", self.path(self.art_a, self.cat_a))
+
+		command = Command()
+		command.dry_run = False
+		command.sync_category(
+			self.cat_a.articles,
+			ArticleCategoryAssignment.objects.filter(
+				teamcategory=self.cat_a, source=CategoryAssignmentSource.AUTOMATIC
+			),
+			"articles_id",
+			desired_ids=set(),
+			automatic_ids=stale_automatic_ids,
+			manual_ids=set(),
+		)
+		assignment = ArticleCategoryAssignment.objects.get(articles=self.art_a, teamcategory=self.cat_a)
+		self.assertEqual(assignment.source, CategoryAssignmentSource.MANUAL)
 
 	def test_a_shared_category_can_be_assigned(self):
 		self.assertEqual(self.send("put", self.path(self.art_a, self.cat_shared)).status_code, 201)
