@@ -179,12 +179,14 @@ def article_review_status_view(request):
 
 	# Sort before pagination so the order spans every page, not just the current one
 	if sort_by in ["ml_score", "-ml_score"] and selected_subject_id:
-		# Average of the latest prediction per algorithm, matching the scores shown per row
+		# Average of the latest prediction per algorithm, matching the scores shown per row.
+		# Ties on created_date go to the highest pk, as in the per-row query below.
 		newer_prediction = MLPredictions.objects.filter(
+			Q(created_date__gt=OuterRef("created_date"))
+			| Q(created_date=OuterRef("created_date"), pk__gt=OuterRef("pk")),
 			article=OuterRef("article"),
 			subject=OuterRef("subject"),
 			algorithm=OuterRef("algorithm"),
-			created_date__gt=OuterRef("created_date"),
 		)
 		avg_latest_score = (
 			MLPredictions.objects.filter(
@@ -247,7 +249,7 @@ def article_review_status_view(request):
 			MLPredictions.objects.filter(
 				article=article, subject_id=selected_subject_id
 			)
-			.order_by("algorithm", "-created_date")
+			.order_by("algorithm", "-created_date", "-pk")
 			.distinct("algorithm")
 		)
 

@@ -48,6 +48,17 @@ class ReviewStatusMLScoreSortTestCase(TestCase):
 		MLPredictions.objects.filter(pk=old.pk).update(created_date=now - timedelta(days=10))
 		cls._predict(cls.superseded, "pubmed_bert", 0.0, model_version="v2")
 
+		# Two pubmed_bert predictions with the same created_date: the higher pk wins,
+		# so the average is 0.05, not 0.33 from counting the tied 0.9 as well
+		cls.tied = Articles.objects.create(title="Tied", link="https://example.com/t")
+		cls.tied.subjects.add(cls.subject)
+		tied_ids = [
+			cls._predict(cls.tied, "pubmed_bert", 0.9).pk,
+			cls._predict(cls.tied, "pubmed_bert", 0.05, model_version="v2").pk,
+		]
+		MLPredictions.objects.filter(pk__in=tied_ids).update(created_date=now)
+		cls._predict(cls.tied, "lgbm_tfidf", 0.05)
+
 	@classmethod
 	def _predict(cls, article, algorithm, score, model_version="v1"):
 		return MLPredictions.objects.create(
@@ -79,6 +90,13 @@ class ReviewStatusMLScoreSortTestCase(TestCase):
 			last_page = self._rows(sort_by, page=2)
 			self.assertEqual(last_page[-1]["article"].pk, self.unscored.pk, sort_by)
 			self.assertIsNone(last_page[-1]["avg_ml_score"])
+
+	def test_tied_predictions_sort_by_the_displayed_average(self):
+		rows = self._rows("-ml_score") + self._rows("-ml_score", page=2)
+		tied_row = next(row for row in rows if row["article"].pk == self.tied.pk)
+		self.assertAlmostEqual(tied_row["avg_ml_score"], 0.05)
+		scored = [row["avg_ml_score"] for row in rows if row["avg_ml_score"] is not None]
+		self.assertEqual(scored, sorted(scored, reverse=True))
 
 	def test_ascending_uses_latest_prediction_per_algorithm(self):
 		rows = self._rows("ml_score")
