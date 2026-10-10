@@ -1187,6 +1187,18 @@ class Trials(models.Model):
 		help_text="Canonical sex eligibility (all/female/male) derived from the raw 'inclusion_gender' value; recomputed on every save.",
 	)
 	date_enrollement = models.DateField(null=True, blank=True)
+	# Raw-source completion dates. Unlike results_date_completed (the date results were
+	# posted), these are the trial's own primary / overall completion dates; the patent
+	# sponsor-timing signal is computed on them.
+	primary_completion_date = models.DateField(null=True, blank=True, db_index=True)
+	completion_date = models.DateField(null=True, blank=True, db_index=True)
+	completion_date_type = models.CharField(
+		max_length=10,
+		null=True,
+		blank=True,
+		choices=[("actual", "Actual"), ("estimated", "Estimated")],
+		help_text="Whether the completion dates are actual or estimated, as reported by the registry.",
+	)
 	target_size = models.TextField(null=True, blank=True)
 	study_type = models.TextField(null=True, blank=True)
 	# Canonical study type derived from `study_type` by
