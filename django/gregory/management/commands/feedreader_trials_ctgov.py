@@ -468,6 +468,9 @@ class Command(GregoryBaseCommand):
 				secondary_sponsor=extras.get("secondary_sponsor"),
 				last_refreshed_on=extras.get("last_refreshed_on"),
 				date_enrollement=extras.get("date_enrollement"),
+				primary_completion_date=extras.get("primary_completion_date"),
+				completion_date=extras.get("completion_date"),
+				completion_date_type=extras.get("completion_date_type"),
 				contact_affiliation=extras.get("contact_affiliation"),
 			)
 
@@ -600,6 +603,9 @@ class Command(GregoryBaseCommand):
 			"secondary_sponsor",
 			"last_refreshed_on",
 			"date_enrollement",
+			"primary_completion_date",
+			"completion_date",
+			"completion_date_type",
 			"contact_affiliation",
 		]
 

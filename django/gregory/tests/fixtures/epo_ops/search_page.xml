@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hand-made fixture in the shape of real OPS responses; modelled on the samples in
+     https://github.com/patent-dev/epo-ops (MIT). Content is invented. -->
+<ops:world-patent-data xmlns="http://www.epo.org/exchange" xmlns:ops="http://ops.epo.org" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<ops:biblio-search total-result-count="3" publications-count="3">
+		<ops:query syntax="CQL">ta="multiple sclerosis"</ops:query>
+		<ops:range begin="1" end="3"/>
+		<ops:search-result>
+			<ops:publication-reference system="ops.epo.org" family-id="900001">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>4100001</doc-number>
+					<kind>A1</kind>
+				</document-id>
+			</ops:publication-reference>
+			<ops:publication-reference system="ops.epo.org" family-id="900001">
+				<document-id document-id-type="docdb">
+					<country>WO</country>
+					<doc-number>2022200001</doc-number>
+					<kind>A1</kind>
+				</document-id>
+			</ops:publication-reference>
+			<ops:publication-reference system="ops.epo.org" family-id="900002">
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>2023300001</doc-number>
+					<kind>A1</kind>
+				</document-id>
+			</ops:publication-reference>
+		</ops:search-result>
+	</ops:biblio-search>
+</ops:world-patent-data>

@@ -7,9 +7,18 @@ the SponsorMergeCandidate admin merge action (PR D2). One implementation, severa
 callers.
 """
 
+import logging
+
 from django.db import transaction
 
-from gregory.models import Sponsor, SponsorAlias, _SPONSOR_TYPE_SOURCE_PRIORITY
+from gregory.models import (
+	PatentApplicant,
+	Sponsor,
+	SponsorAlias,
+	_SPONSOR_TYPE_SOURCE_PRIORITY,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _best_sponsor_type(sponsors: list[Sponsor]) -> tuple[str | None, str | None]:
@@ -27,13 +36,15 @@ def _best_sponsor_type(sponsors: list[Sponsor]) -> tuple[str | None, str | None]
 
 
 def merge_sponsors(target: Sponsor, others: list[Sponsor]) -> tuple[int, int]:
-	"""Merge `others` into `target`: repoint their trials and aliases onto `target`,
+	"""Merge `others` into `target`: repoint their trials, patent applicants and aliases
+	onto `target`,
 	carry `sponsor_type`/`sponsor_type_source` over to `target` only when it doesn't
 	already have one — picking deterministically among `others` via
 	_best_sponsor_type() rather than whichever happens to be processed first — then
 	delete the emptied sponsors. Trials are repointed before the source sponsors are
-	deleted, since Trials.primary_sponsor_normalized is on_delete=PROTECT. Returns
-	(trials_repointed, aliases_moved)."""
+	deleted, since Trials.primary_sponsor_normalized and PatentApplicant.sponsor are
+	on_delete=PROTECT. Returns (trials_repointed, aliases_moved); the number of patent
+	applicant rows repointed is logged, to keep the return shape stable for callers."""
 	total_trials = 0
 	total_aliases = 0
 	with transaction.atomic():
@@ -45,6 +56,16 @@ def merge_sponsors(target: Sponsor, others: list[Sponsor]) -> tuple[int, int]:
 				target.save(update_fields=["sponsor_type", "sponsor_type_source"])
 		for source in others:
 			total_trials += source.trials.update(primary_sponsor_normalized=target)
+			patents_repointed = PatentApplicant.objects.filter(sponsor=source).update(
+				sponsor=target
+			)
+			if patents_repointed:
+				logger.info(
+					"merge_sponsors: repointed %d patent applicant row(s) from %r to %r",
+					patents_repointed,
+					source.name,
+					target.name,
+				)
 			total_aliases += SponsorAlias.objects.filter(sponsor=source).update(sponsor=target)
 			source.delete()
 	return total_trials, total_aliases

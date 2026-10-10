@@ -28,6 +28,7 @@ walkthrough (read in order); everything else is reference or design material.
 |:----|:---------------|
 | [authors-api.md](authors-api.md) | Authors API — filtering, sorting, and category/timeframe options. |
 | [csv-export.md](csv-export.md) | CSV export options across the list and search endpoints. |
+| [patents.md](patents.md) | Patent families: what a record is, setting up an EPO OPS source, the importer and its options. |
 | [glossary.md](glossary.md) | Definitions of core terms. |
 | [ctis-public-api-schema.md](ctis-public-api-schema.md) | Observed schema of the EU CTIS public API. |
 | [clinicaltrialsgov-api/](clinicaltrialsgov-api/) | Reference snapshots of the ClinicalTrials.gov API. |

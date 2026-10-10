@@ -16,6 +16,7 @@ from subscriptions.management.commands.utils.send_email import (
 from subscriptions.management.commands.utils.subscription import (
 	get_trials_for_list,
 	get_articles_for_list,
+	get_patent_links_for_list,
 )
 from subscriptions.models import (
 	Lists,
@@ -32,7 +33,7 @@ from subscriptions.utils.postmark import (
 )
 from subscriptions.utils.suppression import deactivate_subscribers
 from subscriptions.utils.utm import build_utm_params
-from django.db.models import Prefetch
+from django.db.models import Max, Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
 from templates.emails.components.content_organizer import get_optimized_email_context
@@ -178,6 +179,26 @@ class Command(BaseCommand):
 				)
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
+				# Patent-trial links found since the previous summary this subscriber
+				# received (the latest sent article/trial notification), else within
+				# the list's look-back window.
+				last_sent = [
+					value
+					for value in (
+						SentArticleNotification.objects.filter(
+							list=admin_list, subscriber=subscriber
+						).aggregate(m=Max("sent_at"))["m"],
+						SentTrialNotification.objects.filter(
+							list=admin_list, subscriber=subscriber
+						).aggregate(m=Max("sent_at"))["m"],
+					)
+					if value
+				]
+				patent_links, patent_links_extra = get_patent_links_for_list(
+					admin_list,
+					max(last_sent) if last_sent else now() - timedelta(days=admin_list.lookback_days),
+				)
+
 				_context_holder = {}
 				utm_params = build_utm_params("admin_summary", admin_list, "article_card")
 
@@ -186,6 +207,8 @@ class Command(BaseCommand):
 					trials,
 					_admin_list=admin_list,
 					_subscriber=subscriber,
+					_patent_links=patent_links,
+					_patent_links_extra=patent_links_extra,
 				):
 					summary_context = get_optimized_email_context(
 						email_type="admin_summary",
@@ -210,6 +233,8 @@ class Command(BaseCommand):
 						_admin_list.show_header_tagline
 					)
 					summary_context["ml_drift"] = ml_drift
+					summary_context["patent_links"] = _patent_links
+					summary_context["patent_links_extra"] = _patent_links_extra
 
 					html = get_template("emails/admin_summary.html").render(
 						summary_context

@@ -32,6 +32,7 @@ django/gregory/ml_models/
 django/helper-scripts/import-articles.py
 django/helper-scripts/who.py
 django/helper-scripts/pubmed_pmid_coverage/
+django/helper-scripts/patent_ops_probe/
 django/indexers/input/*.json
 django/model_*.joblib
 django/source.csv

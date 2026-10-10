@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bulk biblio response with two documents: an EP publication (English abstract,
+     applicant repeated with different casing, free-text literature citations) and a US
+     publication without an abstract. Hand-made, in the shape of the patent-dev/epo-ops
+     (MIT) samples. -->
+<ops:world-patent-data xmlns="http://www.epo.org/exchange" xmlns:ops="http://ops.epo.org" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<exchange-documents>
+		<exchange-document system="ops.epo.org" family-id="900001" country="EP" doc-number="4100001" kind="A1">
+			<bibliographic-data>
+				<publication-reference>
+					<document-id document-id-type="docdb">
+						<country>EP</country>
+						<doc-number>4100001</doc-number>
+						<kind>A1</kind>
+						<date>20221207</date>
+					</document-id>
+				</publication-reference>
+				<classifications-ipcr>
+					<classification-ipcr sequence="1">
+						<text>A61K  31/    4045            A I                    </text>
+					</classification-ipcr>
+					<classification-ipcr sequence="2">
+						<text>A61P  25/    28            A I                    </text>
+					</classification-ipcr>
+				</classifications-ipcr>
+				<patent-classifications>
+					<patent-classification sequence="1">
+						<classification-scheme office="EP" scheme="CPCI"/>
+						<section>A</section>
+						<class>61</class>
+						<subclass>P</subclass>
+						<main-group>25</main-group>
+						<subgroup>28</subgroup>
+						<classification-value>I</classification-value>
+					</patent-classification>
+					<patent-classification sequence="2">
+						<classification-scheme office="EP" scheme="CPCI"/>
+						<section>A</section>
+						<class>61</class>
+						<subclass>K</subclass>
+						<main-group>31</main-group>
+						<subgroup>4045</subgroup>
+						<classification-value>I</classification-value>
+					</patent-classification>
+					<patent-classification sequence="3">
+						<classification-scheme office="EP" scheme="CPCI"/>
+						<section>A</section>
+						<class>61</class>
+						<subclass>P</subclass>
+						<main-group>25</main-group>
+						<subgroup>28</subgroup>
+						<classification-value>I</classification-value>
+					</patent-classification>
+				</patent-classifications>
+				<priority-claims>
+					<priority-claim sequence="1" kind="regional">
+						<document-id document-id-type="epodoc">
+							<doc-number>EP20210177001</doc-number>
+							<date>20210601</date>
+						</document-id>
+					</priority-claim>
+				</priority-claims>
+				<parties>
+					<applicants>
+						<applicant sequence="1" data-format="epodoc">
+							<applicant-name>
+								<name>NEURONOVA THERAPEUTICS INC [US]</name>
+							</applicant-name>
+						</applicant>
+						<applicant sequence="1" data-format="original">
+							<applicant-name>
+								<name>NEURONOVA THERAPEUTICS INC.</name>
+							</applicant-name>
+						</applicant>
+						<applicant sequence="2" data-format="original">
+							<applicant-name>
+								<name>Neuronova Therapeutics Inc.</name>
+							</applicant-name>
+						</applicant>
+						<applicant sequence="3" data-format="original">
+							<applicant-name>
+								<name>Garcia, Maria</name>
+							</applicant-name>
+						</applicant>
+					</applicants>
+					<inventors>
+						<inventor sequence="1" data-format="original">
+							<inventor-name>
+								<name>GARCIA, MARIA</name>
+							</inventor-name>
+						</inventor>
+						<inventor sequence="2" data-format="original">
+							<inventor-name>
+								<name>LINDQVIST, ERIK</name>
+							</inventor-name>
+						</inventor>
+						<inventor sequence="3" data-format="original">
+							<inventor-name>
+								<name>Lindqvist, Erik</name>
+							</inventor-name>
+						</inventor>
+					</inventors>
+				</parties>
+				<invention-title lang="de">VERFAHREN ZUR BEHANDLUNG VON MULTIPLER SKLEROSE</invention-title>
+				<invention-title lang="en">METHODS OF TREATING MULTIPLE SCLEROSIS</invention-title>
+				<references-cited>
+					<citation cited-phase="undefined" cited-by="applicant" sequence="1">
+						<nplcit num="1">
+							<text>- Smith et al., "Remyelination after oligodendrocyte precursor transplantation in demyelinated lesions", Journal of Neuroscience, vol. 41, 2021, pp. 100-110. doi:10.1523/JNEUROSCI.0001-21.2021 PMID: 34567890</text>
+						</nplcit>
+					</citation>
+					<citation cited-phase="undefined" cited-by="applicant" sequence="2">
+						<nplcit num="2">
+							<text>- Brochure for the OLIGO-1 infusion system, 4 pages, 2019.</text>
+						</nplcit>
+					</citation>
+					<citation cited-phase="national-search-report" cited-by="examiner" sequence="3">
+						<patcit dnum-type="publication number" num="1">
+							<document-id document-id-type="epodoc">
+								<doc-number>US5851483</doc-number>
+							</document-id>
+						</patcit>
+					</citation>
+				</references-cited>
+			</bibliographic-data>
+			<abstract lang="en">
+				<p>The invention relates to methods of treating multiple sclerosis by administering a remyelination-promoting compound.</p>
+			</abstract>
+		</exchange-document>
+		<exchange-document system="ops.epo.org" family-id="900002" country="US" doc-number="2023300001" kind="A1">
+			<bibliographic-data>
+				<publication-reference>
+					<document-id document-id-type="docdb">
+						<country>US</country>
+						<doc-number>2023300001</doc-number>
+						<kind>A1</kind>
+						<date>20231207</date>
+					</document-id>
+				</publication-reference>
+				<patent-classifications>
+					<patent-classification sequence="1">
+						<classification-scheme office="EP" scheme="CPCI"/>
+						<section>A</section>
+						<class>61</class>
+						<subclass>P</subclass>
+						<main-group>25</main-group>
+						<subgroup>16</subgroup>
+						<classification-value>I</classification-value>
+					</patent-classification>
+				</patent-classifications>
+				<parties>
+					<applicants>
+						<applicant sequence="1" data-format="epodoc">
+							<applicant-name>
+								<name>DOPAMINE LABS LTD [GB]</name>
+							</applicant-name>
+						</applicant>
+					</applicants>
+					<inventors>
+						<inventor sequence="1" data-format="epodoc">
+							<inventor-name>
+								<name>OKAFOR CHINEDU [GB]</name>
+							</inventor-name>
+						</inventor>
+					</inventors>
+				</parties>
+				<invention-title lang="en">DOPAMINE AGONIST FORMULATION</invention-title>
+			</bibliographic-data>
+		</exchange-document>
+	</exchange-documents>
+</ops:world-patent-data>

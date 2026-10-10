@@ -8128,11 +8128,13 @@ components:
       - science paper
       - trials
       - news article
+      - patents
       type: string
       description: |-
         * `science paper` - Science Paper
         * `trials` - Trials
         * `news article` - News Article
+        * `patents` - Patents
     Sponsor:
       type: object
       description: |-

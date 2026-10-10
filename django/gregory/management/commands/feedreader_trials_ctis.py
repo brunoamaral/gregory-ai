@@ -52,6 +52,8 @@ import re
 import time
 from datetime import timedelta
 
+from dateutil.parser import parse as parse_date
+
 from gregory.management.base import GregoryBaseCommand
 from django.db import IntegrityError
 from django.db.models import Q
@@ -134,6 +136,25 @@ def _extract_eligibility_criteria(payload: dict) -> tuple:
 	inclusion = _join(criteria.get("principalInclusionCriteria"), "principalInclusionCriteria")
 	exclusion = _join(criteria.get("principalExclusionCriteria"), "principalExclusionCriteria")
 	return inclusion, exclusion
+
+
+def _extract_estimated_end_date(payload: dict):
+	"""authorizedPartI.trialDetails.trialInformation.trialDuration.estimatedEndDate ->
+	date, or None. Accepts ISO (YYYY-MM-DD) and day-first (DD/MM/YYYY) strings."""
+	part_i = (payload.get("authorizedApplication") or {}).get("authorizedPartI") or {}
+	duration = (
+		((part_i.get("trialDetails") or {}).get("trialInformation") or {}).get(
+			"trialDuration"
+		)
+		or {}
+	)
+	raw = duration.get("estimatedEndDate")
+	if not raw or not isinstance(raw, str):
+		return None
+	try:
+		return parse_date(raw.strip(), dayfirst=not re.match(r"\d{4}-", raw.strip())).date()
+	except (ValueError, TypeError, OverflowError):
+		return None
 
 
 def _extract_recruitment_dates(payload: dict) -> dict:
@@ -619,6 +640,7 @@ class Command(GregoryBaseCommand):
 			changed = (
 				self._enrich_countries_by_source(trial, payload)
 				| self._enrich_recruitment_dates(trial, payload)
+				| self._enrich_completion_date(trial, payload)
 				| self._enrich_eligibility_criteria(trial, payload)
 			)
 		except Exception as e:
@@ -692,6 +714,22 @@ class Command(GregoryBaseCommand):
 		if not dates or dates == trial.countries_recruitment_date:
 			return False
 		trial.countries_recruitment_date = dates
+		return True
+
+	def _enrich_completion_date(self, trial, payload) -> bool:
+		"""Estimated end date from trialDuration.estimatedEndDate. Only fills
+		completion_date when the trial has none yet, so an actual end date from the
+		search endpoint is never replaced by an estimate. An existing *estimated* date
+		is refreshed, since sponsors revise it. Returns whether a value was written."""
+		if trial.completion_date and trial.completion_date_type != "estimated":
+			return False
+		estimated = _extract_estimated_end_date(payload)
+		if not estimated or (
+			trial.completion_date == estimated and trial.completion_date_type == "estimated"
+		):
+			return False
+		trial.completion_date = estimated
+		trial.completion_date_type = "estimated"
 		return True
 
 	def _enrich_eligibility_criteria(self, trial, payload) -> bool:
@@ -778,6 +816,8 @@ class Command(GregoryBaseCommand):
 		"inclusion_gender",
 		"target_size",
 		"last_refreshed_on",
+		"completion_date",
+		"completion_date_type",
 	]
 
 	def create_new_trial(self, clinical_trial: ClinicalTrial, source):
@@ -812,6 +852,8 @@ class Command(GregoryBaseCommand):
 				inclusion_gender=extras.get("inclusion_gender"),
 				target_size=extras.get("target_size"),
 				last_refreshed_on=extras.get("last_refreshed_on"),
+				completion_date=extras.get("completion_date"),
+				completion_date_type=extras.get("completion_date_type"),
 			)
 			if trial:
 				trial.sources.add(source)
