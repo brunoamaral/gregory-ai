@@ -87,12 +87,62 @@ quota is exhausted (HTTP 403 with `X-Rejection-Reason`, or 429) the run stops an
 reports; rerun after the reset. The summary line reports requests and megabytes
 received.
 
+## Sponsor-timing signal
+
+The question patents are collected to answer is whether a trial sponsor files a patent
+while one of its trials is ongoing or recently closed. `detect_patent_trial_links`
+materialises the answer as `PatentTrialLink` rows:
+
+```bash
+docker exec gregory python manage.py detect_patent_trial_links --recent
+```
+
+For every patent with a resolved applicant sponsor it compares the patent's earliest
+priority date (the date the sponsor first filed) with the window of each of that
+sponsor's trials:
+
+- **Start**: `date_enrollement`, else `published_date`.
+- **End**: `primary_completion_date`, else `completion_date`. For a trial that is still
+  not yet recruiting, recruiting, enrolling by invitation, active or suspended the window
+  is open.
+- `during`: the priority date is inside the window. `after`: it falls within 24 months
+  (`--after-months`) after the end.
+- Withdrawn trials, trials with no usable dates and priority dates outside the windows
+  produce no link.
+
+The patent and the trial must also share a subject. `basis="category"` means they also
+share a team category (typically the molecule) and is the strong signal; `basis="subject"`
+is noisy for sponsors with many trials and patents in one subject.
+
+| Option | Meaning |
+|:-------|:--------|
+| `--recent --days N` | Only patents discovered in the last N days (default 30). |
+| `--patent-id N` | One patent. |
+| `--after-months N` | Length of the "after" window (default 24). |
+| `--reset` | Delete the selected patents' non-suppressed links first. |
+| `--dry-run` | Report without writing. |
+
+Links that no longer qualify are removed on the next run. Links an editor suppressed in
+the admin are never recreated, modified or removed. Two limits are inherent to patents:
+applications publish about 18 months after the priority date, so a filing made during a
+trial can take that long to show up; and a later PCT or regional filing does not move the
+family's priority date.
+
+The admin summary email gains a "Sponsors filing patents around their trials" section
+listing the links discovered since the previous summary the subscriber received (category
+basis first, at most 15, then a count of the rest).
+
 ## Administration
 
 Patents are listed under *Gregory > Patents*, scoped to the organisations of the signed-in
 staff member through their sources. Filters cover team, subject, source, category,
 applicant type, grant and priority year. Importer-managed fields are read-only; editors
 curate sources, teams and subjects and can assign categories.
+
+*Gregory > Patent-trial links* lists the detected signals grouped by patent. It defaults
+to the category basis (a *basis* filter switches to subject-only or all), and the
+*Suppress* action dismisses links. Staff only see links of patents from their own
+organisations' sources.
 
 ## Categories
 

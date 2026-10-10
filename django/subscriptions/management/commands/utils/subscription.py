@@ -4,7 +4,14 @@ from datetime import timedelta
 from django.db.models import Exists, OuterRef, Q, F, prefetch_related_objects
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils.timezone import now
-from gregory.models import Articles, ArticleSubjectRelevance, Subject, Trials
+from django.db.models import Case, IntegerField, Value, When
+from gregory.models import (
+	Articles,
+	ArticleSubjectRelevance,
+	PatentTrialLink,
+	Subject,
+	Trials,
+)
 
 
 def get_trials_for_list(lst, days=30):
@@ -32,6 +39,35 @@ def get_trials_for_list(lst, days=30):
 		).filter(Q(effective_date__gte=cutoff) | Q(effective_date__isnull=True))
 
 	return qs.distinct()
+
+
+def get_patent_links_for_list(lst, since, limit=15):
+	"""
+	Patent-trial links (a trial sponsor filing a patent during or just after a trial)
+	discovered after `since` for the list's subjects, strongest signal first (shared
+	category before shared subject, then newest). Dismissed (suppressed) links are
+	excluded. Returns (links, extra) where `extra` is how many more matched beyond
+	`limit`.
+	"""
+	qs = (
+		PatentTrialLink.objects.filter(
+			suppressed=False,
+			discovered_date__gt=since,
+			patent__subjects__in=lst.subjects.all(),
+		)
+		.select_related("patent", "trial", "sponsor")
+		.annotate(
+			basis_rank=Case(
+				When(basis=PatentTrialLink.BASIS_CATEGORY, then=Value(0)),
+				default=Value(1),
+				output_field=IntegerField(),
+			)
+		)
+		.order_by("basis_rank", "-discovered_date")
+		.distinct()
+	)
+	links = list(qs[: limit + 1])
+	return links[:limit], max(len(links) - limit, 0)
 
 
 def apply_article_max_age_filter(qs, lst):

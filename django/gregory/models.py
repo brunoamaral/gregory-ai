@@ -2529,3 +2529,60 @@ class PatentCategoryAssignment(models.Model):
 		db_table = "patents_team_categories"
 		unique_together = (("patents", "teamcategory"),)
 		verbose_name = "patent category assignment"
+
+
+class PatentTrialLink(models.Model):
+	"""A sponsor filed a patent while one of its trials was running, or shortly after it
+	ended. Materialised by detect_patent_trial_links; modelled on ArticleTrialReference."""
+
+	TIMING_DURING = "during"
+	TIMING_AFTER = "after"
+	TIMING_CHOICES = [
+		(TIMING_DURING, "Filed during the trial"),
+		(TIMING_AFTER, "Filed after the trial ended"),
+	]
+	BASIS_CATEGORY = "category"
+	BASIS_SUBJECT = "subject"
+	BASIS_CHOICES = [
+		(BASIS_CATEGORY, "Shared team category"),
+		(BASIS_SUBJECT, "Shared subject only"),
+	]
+
+	patent = models.ForeignKey(
+		Patents, on_delete=models.CASCADE, related_name="trial_links"
+	)
+	trial = models.ForeignKey(
+		"Trials", on_delete=models.CASCADE, related_name="patent_links"
+	)
+	sponsor = models.ForeignKey(
+		"Sponsor", on_delete=models.CASCADE, related_name="patent_trial_links",
+		help_text="The sponsor shared by the patent (as applicant) and the trial.",
+	)
+	timing = models.CharField(max_length=10, choices=TIMING_CHOICES)
+	days_after_completion = models.IntegerField(
+		null=True,
+		blank=True,
+		help_text="For 'after' links: days between the trial's completion and the patent's earliest priority date.",
+	)
+	basis = models.CharField(
+		max_length=10,
+		choices=BASIS_CHOICES,
+		help_text="'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.",
+	)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text="Set when an editor dismissed the link. Detection never recreates or changes a suppressed link.",
+	)
+	discovered_date = models.DateTimeField(auto_now_add=True, db_index=True)
+
+	def __str__(self):
+		return f"patent {self.patent_id} / trial {self.trial_id} ({self.timing})"
+
+	class Meta:
+		db_table = "patent_trial_links"
+		verbose_name = "patent-trial link"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["patent", "trial"], name="unique_patent_trial_link"
+			)
+		]

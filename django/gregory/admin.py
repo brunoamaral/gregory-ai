@@ -40,6 +40,7 @@ from .models import (
 	PatentApplicant,
 	PatentCategoryAssignment,
 	PatentPublication,
+	PatentTrialLink,
 	Patents,
 	OrganizationSite,
 	OrganizationApiSettings,
@@ -3959,6 +3960,104 @@ class PatentCategoryAssignmentInline(admin.TabularInline):
 		)
 
 
+class PatentTrialLinkInline(admin.TabularInline):
+	"""Read-only list of the trials a patent is linked to."""
+
+	model = PatentTrialLink
+	extra = 0
+	can_delete = False
+	fields = ("trial", "sponsor", "timing", "days_after_completion", "basis", "suppressed")
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("trial", "sponsor")
+
+
+class LinkBasisFilter(admin.SimpleListFilter):
+	"""Defaults to the strong signal (a shared team category); 'all' shows both."""
+
+	title = "basis"
+	parameter_name = "basis"
+
+	def lookups(self, request, model_admin):
+		return (
+			("category", "Shared category (strong)"),
+			("subject", "Shared subject only"),
+			("all", "All"),
+		)
+
+	def value(self):
+		return super().value() or "category"
+
+	def choices(self, changelist):
+		for lookup, title in self.lookup_choices:
+			yield {
+				"selected": self.value() == lookup,
+				"query_string": changelist.get_query_string({self.parameter_name: lookup}),
+				"display": title,
+			}
+
+	def queryset(self, request, queryset):
+		if self.value() in ("category", "subject"):
+			return queryset.filter(basis=self.value())
+		return queryset
+
+
+class PatentTrialLinkAdmin(admin.ModelAdmin):
+	"""Sponsor-timing signals, grouped by patent. Scoped to the caller's organisations
+	through the patent's sources (OrganizationFilterMixin cannot do this: the model has
+	no sources of its own)."""
+
+	list_display = [
+		"patent",
+		"trial",
+		"sponsor",
+		"timing",
+		"days_after_completion",
+		"basis",
+		"suppressed",
+		"discovered_date",
+	]
+	list_filter = [LinkBasisFilter, "timing", "suppressed"]
+	list_select_related = ["patent", "trial", "sponsor"]
+	ordering = ["patent_id", "trial_id"]
+	search_fields = ["patent__title", "trial__title", "sponsor__name"]
+	readonly_fields = [
+		"patent",
+		"trial",
+		"sponsor",
+		"timing",
+		"days_after_completion",
+		"basis",
+		"discovered_date",
+	]
+	fields = readonly_fields + ["suppressed"]
+	actions = ["suppress_links", "restore_links"]
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(patent__sources__team__organization__id__in=user_orgs).distinct()
+
+	def has_add_permission(self, request):
+		return False
+
+	@admin.action(description="Suppress selected links (dismiss)")
+	def suppress_links(self, request, queryset):
+		updated = queryset.update(suppressed=True)
+		self.message_user(request, f"Suppressed {updated} link(s).")
+
+	@admin.action(description="Restore selected suppressed links")
+	def restore_links(self, request, queryset):
+		updated = queryset.update(suppressed=False)
+		self.message_user(request, f"Restored {updated} link(s).")
+
+
 class PriorityYearFilter(admin.SimpleListFilter):
 	"""Filter patent families by the year of their earliest priority date."""
 
@@ -4032,6 +4131,7 @@ class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	inlines = [
 		PatentPublicationInline,
 		PatentApplicantInline,
+		PatentTrialLinkInline,
 		PatentCategoryAssignmentInline,
 	]
 
@@ -4054,6 +4154,7 @@ admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(Patents, PatentAdmin)
+admin.site.register(PatentTrialLink, PatentTrialLinkAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 
