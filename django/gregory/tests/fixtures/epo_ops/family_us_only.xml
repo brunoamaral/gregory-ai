@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A US-only simple family: OPS has no claims for it. Hand-made. -->
+<ops:world-patent-data xmlns="http://www.epo.org/exchange" xmlns:ops="http://ops.epo.org" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<ops:patent-family legal="false" total-result-count="1">
+		<ops:family-member family-id="900002">
+			<publication-reference>
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>2023300001</doc-number>
+					<kind>A1</kind>
+					<date>20231207</date>
+				</document-id>
+			</publication-reference>
+			<application-reference doc-id="4" is-representative="YES">
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>202217888888</doc-number>
+					<kind>A</kind>
+					<date>20220610</date>
+				</document-id>
+			</application-reference>
+			<priority-claim sequence="1" kind="national">
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>202217888888</doc-number>
+					<kind>A</kind>
+					<date>20220610</date>
+				</document-id>
+			</priority-claim>
+		</ops:family-member>
+	</ops:patent-family>
+</ops:world-patent-data>

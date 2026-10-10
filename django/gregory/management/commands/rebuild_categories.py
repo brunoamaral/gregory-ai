@@ -7,9 +7,11 @@ from django.db.models import Q
 from django.utils import timezone
 from gregory.models import (
 	Articles,
+	Patents,
 	Trials,
 	TeamCategory,
 	ArticleCategoryAssignment,
+	PatentCategoryAssignment,
 	TrialCategoryAssignment,
 	CategoryAssignmentSource,
 	CategoryType,
@@ -52,11 +54,21 @@ TRIAL_FIELD_ATTR = {
 	"secondary_outcome": "secondary_outcome",
 	"therapeutic_areas": "therapeutic_areas",
 }
+PATENT_FIELD_QUERY = {
+	"title": ("utitle__contains", True),
+	"summary": ("usummary__contains", True),
+	"claims": ("claims__icontains", False),
+}
+PATENT_FIELD_ATTR = {
+	"title": "title",
+	"summary": "summary",
+	"claims": "claims",
+}
 
 
 class Command(BaseCommand):
 	help = (
-		"Rebuilds category associations for articles and trials by diffing the desired state against the "
+		"Rebuilds category associations for articles, trials and patents by diffing the desired state against the "
 		"current state: matching items are added and stale items removed, without ever clearing the tables. "
 		"Each category decides which fields are searched (title only, or title and summary/extra fields), "
 		"the per-field score weights, and the minimum score required to qualify."
@@ -81,6 +93,9 @@ class Command(BaseCommand):
 		)
 		parser.add_argument(
 			"--trials-only", action="store_true", help="Only rebuild trial categories"
+		)
+		parser.add_argument(
+			"--patents-only", action="store_true", help="Only rebuild patent categories"
 		)
 		parser.add_argument(
 			"--dry-run",
@@ -121,18 +136,28 @@ class Command(BaseCommand):
 				)
 			)
 
-		if not options.get("trials_only"):
+		only = [
+			name
+			for name in ("articles_only", "trials_only", "patents_only")
+			if options.get(name)
+		]
+		if len(only) > 1:
+			raise CommandError("--articles-only, --trials-only and --patents-only are mutually exclusive.")
+
+		if not options.get("trials_only") and not options.get("patents_only"):
 			self.rebuild_cats_articles(days, batch_size)
 
-		if not options.get("articles_only"):
+		if not options.get("articles_only") and not options.get("patents_only"):
 			self.rebuild_cats_trials(days, batch_size)
 
-		if (
-			not self.dry_run
-			and not options.get("articles_only")
-			and not options.get("trials_only")
-		):
+		if not options.get("articles_only") and not options.get("trials_only"):
+			self.rebuild_cats_patents(days, batch_size)
+
+		if not self.dry_run and not only:
 			self.finalize_sync_state()
+			self.finalize_patent_sync_state()
+		elif not self.dry_run and only == ["patents_only"]:
+			self.finalize_patent_sync_state()
 
 		self.stdout.write(
 			self.style.SUCCESS("Successfully rebuilt category associations.")
@@ -192,6 +217,25 @@ class Command(BaseCommand):
 		)
 		return hashlib.sha256(payload.encode()).hexdigest()
 
+	def patent_category_config_hash(self, cat):
+		"""Fingerprint of everything that affects which patents match this category.
+
+		Deliberately separate from category_config_hash(): adding patent settings to
+		that payload would change every category's hash and force a full article and
+		trial re-match on the next run.
+		"""
+		payload = json.dumps(
+			{
+				"terms": sorted(term.lower() for term in cat.category_terms or []),
+				"subjects": sorted(subject.id for subject in cat.subjects.all()),
+				"min_score_patents": cat.match_min_score_patents,
+				"scope": cat.match_scope,
+				"weights": self.active_weights(cat, "patent"),
+			},
+			sort_keys=True,
+		)
+		return hashlib.sha256(payload.encode()).hexdigest()
+
 	def category_cutoff(self, cat, cutoff_date, config_hash):
 		"""Return the cutoff to use for this category in incremental mode.
 
@@ -220,6 +264,15 @@ class Command(BaseCommand):
 			# would add a TeamCategory history row for every category on every run.
 			TeamCategory.objects.filter(pk=cat.pk).update(
 				match_config_hash=self.category_config_hash(cat), last_synced_at=now
+			)
+
+	def finalize_patent_sync_state(self):
+		"""Record the patent matching configuration each automatic category was synced
+		with. Only called after a completed patent pass, for the same reason as
+		finalize_sync_state."""
+		for cat in self.target_categories():
+			TeamCategory.objects.filter(pk=cat.pk).update(
+				patent_match_config_hash=self.patent_category_config_hash(cat)
 			)
 
 	def sync_category(self, manager, automatic_rows, id_field, desired_ids, automatic_ids, manual_ids):
@@ -627,5 +680,119 @@ class Command(BaseCommand):
 			self.stdout.write(
 				self.style.SUCCESS(
 					f"Added {total_added} and removed {total_removed} trial categorizations in total"
+				)
+			)
+
+	def rebuild_cats_patents(self, days=None, batch_size=1000):
+		self.stdout.write("Processing patents categorization...")
+
+		cutoff_date = None
+		if days:
+			cutoff_date = timezone.now() - timedelta(days=days)
+			self.stdout.write(f"Processing patents updated since {cutoff_date}")
+
+		categories = self.target_categories()
+		total_categories = categories.count()
+		total_added = 0
+		total_removed = 0
+
+		for index, cat in enumerate(categories, 1):
+			terms = cat.category_terms
+
+			self.stdout.write(
+				f"[{index}/{total_categories}] Processing category: {cat.category_name}"
+			)
+
+			config_hash = self.patent_category_config_hash(cat)
+			cat_cutoff = cutoff_date
+			if cutoff_date and cat.patent_match_config_hash != config_hash:
+				self.stdout.write(
+					f"  Patent matching configuration changed for '{cat.category_name}'; performing a full re-match"
+				)
+				cat_cutoff = None
+
+			weights = self.active_weights(cat, "patent")
+			min_score = cat.match_min_score_patents
+			term_patterns = [
+				re.compile(r"\b" + re.escape(term.lower()) + r"\b") for term in terms
+			]
+
+			# With no terms or no scored fields nothing qualifies and stale automatic
+			# links are removed.
+			desired_ids = set()
+			should_match = bool(terms) and bool(weights)
+
+			for subject in cat.subjects.all() if should_match else []:
+				self.log_message(f"  - Processing subject: {subject.subject_name}")
+				matched_for_subject = 0
+
+				base_query = Patents.objects.filter(subjects__id=subject.id)
+				if cat_cutoff:
+					base_query = base_query.filter(
+						Q(discovery_date__gte=cat_cutoff) | Q(last_updated__gte=cat_cutoff)
+					)
+				candidates = base_query.filter(
+					self.candidate_query(terms, weights, PATENT_FIELD_QUERY)
+				)
+				self.log_message(f"    Found {candidates.count()} candidate patents")
+
+				for batch in self.iter_batches(candidates, "patent_id", batch_size):
+					for patent in batch:
+						score, _matched = self.score_item(
+							patent, terms, term_patterns, weights, PATENT_FIELD_ATTR
+						)
+						if score >= min_score:
+							desired_ids.add(patent.patent_id)
+							matched_for_subject += 1
+
+				self.stdout.write(
+					f"    Matched {matched_for_subject} patents for subject '{subject.subject_name}'"
+				)
+
+			assignment_qs = PatentCategoryAssignment.objects.filter(teamcategory=cat)
+			if cat_cutoff:
+				assignment_qs = assignment_qs.filter(
+					Q(patents__discovery_date__gte=cat_cutoff)
+					| Q(patents__last_updated__gte=cat_cutoff)
+				)
+			automatic_ids = set(
+				assignment_qs.filter(source=CategoryAssignmentSource.AUTOMATIC).values_list(
+					"patents_id", flat=True
+				)
+			)
+			manual_ids = set(
+				assignment_qs.exclude(source=CategoryAssignmentSource.AUTOMATIC).values_list(
+					"patents_id", flat=True
+				)
+			)
+			if manual_ids:
+				self.log_message(f"  Preserving {len(manual_ids)} manual patent assignments")
+
+			added, removed = self.sync_category(
+				cat.patents,
+				PatentCategoryAssignment.objects.filter(
+					teamcategory=cat, source=CategoryAssignmentSource.AUTOMATIC
+				),
+				"patents_id",
+				desired_ids,
+				automatic_ids,
+				manual_ids,
+			)
+			total_added += added
+			total_removed += removed
+			self.stdout.write(
+				f"  Category '{cat.category_name}': +{added} added, -{removed} removed patents"
+			)
+
+		if self.dry_run:
+			self.stdout.write(
+				self.style.WARNING(
+					f"DRY RUN: Would have added {total_added} and removed {total_removed} patent categorizations"
+				)
+			)
+		else:
+			self.stdout.write(
+				self.style.SUCCESS(
+					f"Added {total_added} and removed {total_removed} patent categorizations in total"
 				)
 			)
