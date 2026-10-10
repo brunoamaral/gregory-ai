@@ -54,8 +54,9 @@ async def search_articles(
 	the subject's consensus rule: enough models must each have classed the
 	article relevant at that confidence, and models only do so at 0.8 or
 	above, so `ml_threshold` below 0.8 acts as 0.8 and can return far fewer
-	papers than `ml_score_min` at the same number. Both are scoped to
-	`subject_id` when it is given; `ml_score` itself is not.
+	papers than `ml_score_min` at the same number. `relevant` and
+	`ml_threshold` are scoped to `subject_id` when it is given; `ml_score`,
+	and so `ml_score_min`, is not.
 
 	Dates are YYYY-MM-DD. `last_days` is a simpler alternative to
 	`published_date_after` for "recent papers" (e.g. `last_days=30`) — it
