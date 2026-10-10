@@ -95,7 +95,10 @@ async def test_get_author_with_coauthors(mock_gregory):
 	def handler(request):
 		calls.append(request.url.path)
 		if request.url.path.endswith("/coauthors/"):
-			return httpx2.Response(200, json={"results": [{"author_id": 6}]})
+			return httpx2.Response(
+				200,
+				json={"count": 23, "next": "http://gregory:8000/authors/5/coauthors/?page=2", "results": [{"author_id": 6}]},
+			)
 		return httpx2.Response(200, json={"author_id": 5, "full_name": "Jane Doe"})
 
 	mock_gregory.set_handler(handler)
@@ -103,7 +106,23 @@ async def test_get_author_with_coauthors(mock_gregory):
 	result = await get_author(5, include_coauthors=True)
 
 	assert result["coauthors"] == [{"author_id": 6}]
+	# The list is only the first page; the total says how many there are in all.
+	assert result["coauthors_total"] == 23
 	assert calls == ["/authors/5/", "/authors/5/coauthors/"]
+
+
+async def test_get_author_with_unpaginated_coauthors_has_no_total(mock_gregory):
+	def handler(request):
+		if request.url.path.endswith("/coauthors/"):
+			return httpx2.Response(200, json=[{"author_id": 6}])
+		return httpx2.Response(200, json={"author_id": 5, "full_name": "Jane Doe"})
+
+	mock_gregory.set_handler(handler)
+
+	result = await get_author(5, include_coauthors=True)
+
+	assert result["coauthors"] == [{"author_id": 6}]
+	assert "coauthors_total" not in result
 
 
 async def test_get_author_without_coauthors_makes_one_call(mock_gregory):
