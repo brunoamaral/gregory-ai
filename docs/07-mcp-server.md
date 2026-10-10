@@ -73,7 +73,7 @@ crowds context and degrades model tool selection.
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
 | `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
-| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
+| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
 | `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`. Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
@@ -82,6 +82,14 @@ crowds context and degrades model tool selection.
 | `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. |
 | `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/` | `scope` selects which. |
+
+`ml_score_min` and `ml_threshold` are different filters. `ml_score_min` keeps articles whose
+`ml_score` — the score shown in each result — is at least that value, with no other rule; pair
+it with `ordering=-ml_score` for the top-scored papers. `ml_threshold` is the consensus rule
+behind `relevant=true`: a paper counts only when enough models (per the subject's consensus
+setting) classed it relevant, and they do so at 0.8 or above, so `ml_threshold` below 0.8 acts
+as 0.8. `relevant` and `ml_threshold` are scoped to `subject_id` when given; `ml_score` itself
+is not.
 
 ### `search` syntax
 
@@ -106,7 +114,7 @@ When `search_articles` or `search_trials` returns zero results, the response car
 - `applied_filters` — the names (never the values) of every filter that was set on the
   call, sorted.
 - `suggestions` — ranked, structural advice for what's most likely over-constraining the
-  search — e.g. drop `relevant`/`ml_threshold`, widen a date range, or double-check a
+  search — e.g. drop `relevant`/`ml_threshold`/`ml_score_min`, widen a date range, or double-check a
   taxonomy/registry/sponsor ID. Checked in priority order per tool; the broadest ones
   (like `search`) rank last since a narrower filter is a more likely culprit.
 - `fields_read` — which fields the *text-matching* filters actually searched: `search`

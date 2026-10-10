@@ -337,9 +337,35 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_ml_threshold",
 		label="ML Threshold (0.0-1.0)",
 		help_text=(
-			"Minimum ML prediction confidence (0.0-1.0, e.g. 0.75). Also scoped "
-			"to subject_id/subjects/subjects_any when provided. Defaults to 0.8 "
-			"when relevant=true and this is omitted."
+			"The consensus rule behind relevant=true, with a custom confidence. "
+			"An article matches when enough models (per its subject's ML "
+			"consensus setting: any, majority or all) classed it relevant with "
+			"at least this probability. Models only class an article relevant at "
+			"0.8 or above (the prediction pipeline's default cutoff), so values "
+			"below 0.8 return the same articles as 0.8. Subjects with ML "
+			"predictions turned off never match. Scoped to "
+			"subject_id/subjects/subjects_any when provided. Defaults to 0.8 "
+			"when relevant=true and this is omitted. To filter on the displayed "
+			"ml_score instead, use ml_score_min."
+		),
+		widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.0", "max": "1.0"}),
+	)
+	# Unlike ml_threshold this is a plain comparison on the stored column, so it
+	# can be a field_name/lookup_expr filter. min_value/max_value land on the
+	# form's DecimalField, which makes an out-of-range value a 400 instead of
+	# the silent empty page ml_threshold returns.
+	ml_score_min = filters.NumberFilter(
+		field_name="ml_score",
+		lookup_expr="gte",
+		min_value=0,
+		max_value=1,
+		label="Minimum ML score (0.0-1.0)",
+		help_text=(
+			"Only articles whose ml_score (the score shown on each article) is at "
+			"least this value. Articles without an ml_score are left out. Not "
+			"scoped by subject_id: ml_score averages the latest prediction of "
+			"every model for every subject the article was scored for. Unlike "
+			"ml_threshold it applies no consensus rule."
 		),
 		widget=forms.NumberInput(attrs={"step": "0.01", "min": "0.0", "max": "1.0"}),
 	)
@@ -414,6 +440,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"source_id",
 			"relevant",
 			"ml_threshold",
+			"ml_score_min",
 			"open_access",
 			"last_days",
 			"week",

@@ -99,6 +99,22 @@ async def test_search_articles_last_days(mock_gregory):
 	assert mock_gregory.requests[0].url.params["last_days"] == "30"
 
 
+async def test_search_articles_ml_score_min_is_forwarded(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(ml_score_min=0.7)
+
+	assert mock_gregory.requests[0].url.params["ml_score_min"] == "0.7"
+
+
+async def test_search_articles_omits_ml_score_min_when_unset(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(search="x")
+
+	assert "ml_score_min" not in mock_gregory.requests[0].url.params
+
+
 async def test_search_articles_zero_hits_adds_guidance(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "next": None, "results": []}))
 

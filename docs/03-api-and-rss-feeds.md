@@ -322,7 +322,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `source_id` | integer | Filter by source |
 | `search` | string | Search in title and summary |
 | `relevant` | boolean | Relevant articles only. Scoped to `subject_id` when provided. |
-| `ml_threshold` | float 0–1 | Minimum ML prediction confidence. Scoped to `subject_id` when provided. |
+| `ml_threshold` | float 0–1 | The consensus rule behind `relevant=true`, with a custom confidence: enough models (per the subject's ML consensus setting) must have classed the article relevant at this probability or higher. Models only do so at 0.8 or above, so values below 0.8 act as 0.8. Subjects with ML predictions turned off never match. Scoped to `subject_id` when provided. For the score shown on each article, use `ml_score_min` |
+| `ml_score_min` | float 0–1 | Only articles whose `ml_score` is at least this value (inclusive). Articles without an `ml_score` are left out. Applies no consensus rule and is not scoped by `subject_id`, because `ml_score` averages every subject the article was scored for. Out-of-range or non-numeric values return 400 |
 | `open_access` | boolean | Open access articles only |
 | `has_clinical_trials` | boolean | Filter by whether articles are linked to at least one trial. A link an editor removed (an auto-detected link marked `suppressed`) doesn't count, and isn't listed in `clinical_trials` or a trial's `articles` either |
 | `has_takeaways` | boolean | `true`: articles with non-empty takeaways written for the caller's own site (see [Editorial content](#editorial-content)). `false`: everything else. Doesn't require `include=editorial` |
@@ -342,7 +343,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 
 ```bash
 GET /articles/?team_id=1&subject_id=4&relevant=true
-GET /articles/?relevant=true&ml_threshold=0.75
+GET /articles/?relevant=true&ml_threshold=0.9
+GET /articles/?subject_id=1&ml_score_min=0.7&ordering=-ml_score
 GET /articles/?relevant=true&last_days=15
 GET /articles/?team_id=1&search=stem+cells
 GET /articles/?format=csv&all_results=true
