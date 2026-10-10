@@ -90,25 +90,10 @@ GET /articles/?relevant=true&ml_threshold=0.9
 GET /articles/?relevant=true&team_id=1&subject_id=4&ml_threshold=0.85
 ```
 
-The `relevance_counts` endpoint shows which threshold was applied:
+To count those articles without listing them, send the same parameters to `/articles/stats/`. Its `relevant` field is the number of articles `?relevant=true` would return, and it uses `ml_threshold` and `subject_id` the same way the list does. It doesn't split that number into manual and ML matches. See [Available endpoints](03-api-and-rss-feeds.md#available-endpoints).
 
 ```bash
-GET /api/articles/relevance_counts/?team_id=1&ml_threshold=0.9
-```
-
-```json
-{
-  "manual_relevant": 45,
-  "ml_relevant": 67,
-  "both_relevant": 12,
-  "total_unique_relevant": 100,
-  "ml_threshold_used": 0.9,
-  "breakdown": {
-    "manual_only": 33,
-    "ml_only": 55,
-    "both": 12
-  }
-}
+GET /articles/stats/?team_id=1&subject_id=4&ml_threshold=0.9
 ```
 
 ---

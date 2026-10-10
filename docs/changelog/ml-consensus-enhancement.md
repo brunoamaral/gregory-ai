@@ -46,6 +46,9 @@ GET /api/articles/?relevant=true&team_id=1&subject_id=4&ml_threshold=0.85
 ```
 
 #### Enhanced `/articles/relevance_counts/` Endpoint
+
+> Removed in January 2026. For a count of relevant articles, use the `relevant` field of `GET /articles/stats/`.
+
 Now shows which threshold was used in the analysis.
 
 **Example API Call:**
@@ -148,7 +151,7 @@ A Django migration `0025_add_ml_consensus_type_to_subject.py` adds the new field
 
 ## Monitoring and Analytics
 
-Use the new `/articles/relevance_counts/` endpoint to:
+Use the new `/articles/relevance_counts/` endpoint (since removed, see above) to:
 - Monitor the effectiveness of different consensus settings
 - Compare manual vs ML identification rates
 - Identify subjects that may need consensus adjustment
