@@ -63,9 +63,9 @@ _FIELDS_READ_BY_TOOL: dict[str, dict[str, tuple[str, ...]]] = {
 # names which filter args are involved, the same boundary telemetry.py holds
 # for `params_used`.
 _RELEVANCE_RULE = (
-	("relevant", "ml_threshold"),
-	"Drop `relevant`/`ml_threshold` — ML relevance predictions don't cover every "
-	"row, and a high threshold can exclude rows that would otherwise match.",
+	("relevant", "ml_threshold", "ml_score_min"),
+	"Drop `relevant`/`ml_threshold`/`ml_score_min` — ML relevance predictions don't "
+	"cover every row, and a high threshold can exclude rows that would otherwise match.",
 )
 
 _DATE_RULE = (

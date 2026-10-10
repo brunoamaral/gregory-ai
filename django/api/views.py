@@ -1614,7 +1614,8 @@ class ArticleViewSet(
 
 	# Special Article Types:
 	- **relevant** - filter for relevant articles (true/false). When combined with **subject_id**, relevance is scoped to that specific subject — only articles that are relevant *for that subject* (via ML predictions or manual marking) are returned. Without subject_id, relevance is checked across all subjects.
-	- **ml_threshold** - minimum ML prediction confidence (float 0.0-1.0, e.g., 0.75). Also scoped to subject_id when provided.
+	- **ml_threshold** - the consensus rule behind `relevant=true`, with a custom confidence (float 0.0-1.0, e.g., 0.9). An article matches when enough models (per its subject's ML consensus setting: any, majority or all) classed it relevant with at least this probability. A model classes an article relevant only at or above the cutoff its prediction run used (0.8 by default), so values below that cutoff return the same articles as the cutoff. Subjects with ML predictions turned off never match. Scoped to subject_id when provided; defaults to 0.8 when `relevant=true` and this is omitted. To filter on the displayed `ml_score` instead, use **ml_score_min**.
+	- **ml_score_min** - only articles whose `ml_score` (the score shown on each article) is at least this value (float 0.0-1.0, inclusive). Articles without an `ml_score` are left out. Applies no consensus rule and is not scoped by subject_id. Values outside 0.0-1.0 and non-numeric values return **400 Bad Request**.
 	- **open_access** - filter for open access articles (true/false)
 	- **last_days** - filter for articles from last N days (number)
 	- **week** - filter for specific week number (requires year parameter)
@@ -1641,7 +1642,8 @@ class ArticleViewSet(
 
 	# Response Fields:
 	Each article includes a **ml_score** field: the average ML probability score across the most recent
-	prediction per (algorithm, subject) pair. `null` when no predictions exist yet.
+	prediction per (algorithm, subject) pair. `null` when no predictions exist yet. Because it averages
+	every subject the article was scored for, it is not scoped by `subject_id`.
 
 	# Examples:
 	- By DOI (single): `/articles/?doi=10.1016/j.procs.2023.01.401`
@@ -1654,7 +1656,8 @@ class ArticleViewSet(
 	- Category by slug: `/articles/?team_id=1&category_slug=natalizumab`
 	- Category by ID: `/articles/?team_id=1&category_id=5`
 	- Relevant articles: `/articles/?relevant=true`
-	- Relevant with ML threshold: `/articles/?relevant=true&ml_threshold=0.75`
+	- Relevant with ML threshold: `/articles/?relevant=true&ml_threshold=0.9`
+	- Top-scored for a subject: `/articles/?subject_id=1&ml_score_min=0.7&ordering=-ml_score`
 	- Relevant from last 15 days: `/articles/?relevant=true&last_days=15`
 	- Relevant from specific week: `/articles/?relevant=true&week=52&year=2024`
 	- Open access articles: `/articles/?open_access=true`

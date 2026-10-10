@@ -29,6 +29,7 @@ async def search_articles(
 	author_id: int | None = None,
 	relevant: bool | None = None,
 	ml_threshold: float | None = None,
+	ml_score_min: float | None = None,
 	open_access: bool | None = None,
 	has_clinical_trials: bool | None = None,
 	published_date_after: str | None = None,
@@ -55,8 +56,16 @@ async def search_articles(
 	match contiguously, (parentheses) group. Use `title=`/`summary=` instead
 	of `search=` to match only one field.
 
-	`relevant` and `ml_threshold` are scoped to `subject_id` when it is
-	given — without a subject_id, relevance is checked across all subjects.
+	`ml_score_min` keeps articles whose `ml_score` (the score shown in
+	results) is at least that value — use it, with `ordering=-ml_score`, to
+	keep the top-scored papers. `relevant` and `ml_threshold` instead apply
+	the subject's consensus rule: enough models must each have classed the
+	article relevant at that confidence, and models only do so at or above
+	their prediction cutoff (0.8 by default), so `ml_threshold` below that
+	cutoff acts as the cutoff and can return far fewer papers than
+	`ml_score_min` at the same number. `relevant` and
+	`ml_threshold` are scoped to `subject_id` when it is given; `ml_score`,
+	and so `ml_score_min`, is not.
 
 	Dates are YYYY-MM-DD. `last_days` is a simpler alternative to
 	`published_date_after` for "recent papers" (e.g. `last_days=30`) — it
@@ -92,6 +101,7 @@ async def search_articles(
 		"author_id": author_id,
 		"relevant": relevant,
 		"ml_threshold": ml_threshold,
+		"ml_score_min": ml_score_min,
 		"open_access": open_access,
 		"has_clinical_trials": has_clinical_trials,
 		"published_date_after": published_date_after,

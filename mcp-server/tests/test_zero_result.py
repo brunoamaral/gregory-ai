@@ -37,6 +37,16 @@ def test_relevant_or_ml_threshold_triggers_relevance_suggestion():
 	assert guidance["suggestions"] == guidance2["suggestions"]
 
 
+def test_ml_score_min_triggers_the_relevance_suggestion():
+	# A search whose only ML filter is ml_score_min still gets the relevance
+	# advice: articles with no ml_score are left out, so a high cut-off can
+	# empty the page just as a high ml_threshold does.
+	guidance = guidance_for({"ml_score_min": 0.9}, "articles")
+	assert guidance["applied_filters"] == ["ml_score_min"]
+	assert any("ml_score_min" in s for s in guidance["suggestions"])
+	assert guidance["suggestions"] == guidance_for({"relevant": True}, "articles")["suggestions"]
+
+
 def test_date_filters_trigger_date_range_suggestion():
 	for key in ("published_date_after", "published_date_before", "last_days"):
 		guidance = guidance_for({key: "2026-01-01"}, "articles")

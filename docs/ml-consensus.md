@@ -77,10 +77,10 @@ Content-Type: application/json
 
 ## API integration
 
-The `ml_threshold` query parameter on `/articles/` lets callers override the subject's stored threshold at query time:
+The `ml_threshold` query parameter on `/articles/` sets the probability each counted prediction must reach, at query time. The subject's consensus type still decides how many models must agree. A prediction only counts if its model also classed the article relevant, which the prediction pipeline does at or above its cutoff (`predict_articles --prob-threshold`, default 0.8). So values below the cutoff a run used return the same articles as that cutoff. To filter on the averaged `ml_score` shown on each article, with no consensus rule, use `ml_score_min` instead.
 
 ```bash
-# Default threshold (subject's stored value, typically 0.8)
+# Default threshold (0.8)
 GET /articles/?relevant=true
 
 # Custom threshold
