@@ -60,9 +60,10 @@ async def search_articles(
 	results) is at least that value — use it, with `ordering=-ml_score`, to
 	keep the top-scored papers. `relevant` and `ml_threshold` instead apply
 	the subject's consensus rule: enough models must each have classed the
-	article relevant at that confidence, and models only do so at 0.8 or
-	above, so `ml_threshold` below 0.8 acts as 0.8 and can return far fewer
-	papers than `ml_score_min` at the same number. `relevant` and
+	article relevant at that confidence, and models only do so at or above
+	their prediction cutoff (0.8 by default), so `ml_threshold` below that
+	cutoff acts as the cutoff and can return far fewer papers than
+	`ml_score_min` at the same number. `relevant` and
 	`ml_threshold` are scoped to `subject_id` when it is given; `ml_score`,
 	and so `ml_score_min`, is not.
 

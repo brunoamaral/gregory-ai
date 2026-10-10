@@ -4,7 +4,9 @@
 results already show. ``ml_threshold`` is the consensus rule behind
 ``relevant=true``: it only counts a prediction whose model classed the article
 relevant (``predicted_relevant``), and the prediction pipeline sets that flag at
-probability >= 0.8. So an ``ml_threshold`` below 0.8 behaves like 0.8, and a
+its cutoff (``predict_articles --prob-threshold``, 0.8 by default). So for
+predictions made at the default, an ``ml_threshold`` below 0.8 behaves like
+0.8, and a
 subject whose consensus type is ``all`` drops an article as soon as one model
 sits just under the cutoff -- even when the average score is high. The
 regression tests here pin that documented difference so a change to either
@@ -29,7 +31,9 @@ from gregory.models import (
 )
 from gregory.relevance import recompute_article_ml_scores
 
-# The prediction pipeline's cutoff for predicted_relevant (predict_articles.py).
+# The prediction pipeline's default cutoff for predicted_relevant
+# (predict_articles.py DEFAULT_THRESHOLD). A run can override it with
+# --prob-threshold; these fixtures model predictions made at the default.
 PIPELINE_CUTOFF = 0.8
 
 
@@ -199,7 +203,7 @@ class MlScoreMinFilterTestCase(TestCase):
 		)
 
 	def test_ml_threshold_above_the_cutoff_still_narrows(self):
-		"""The floor only affects values below 0.8: 0.9 is a real, stricter rule."""
+		"""The floor only affects values below the cutoff: 0.9 is a real, stricter rule."""
 		strong = self._three_models("Strong", (0.95, 0.92, 0.91))
 		weak = self._three_models("Weak", (0.85, 0.84, 0.83))
 		scoped = {"subject_id": self.subject.id}

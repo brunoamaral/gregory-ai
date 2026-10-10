@@ -87,9 +87,9 @@ crowds context and degrades model tool selection.
 `ml_score` — the score shown in each result — is at least that value, with no other rule; pair
 it with `ordering=-ml_score` for the top-scored papers. `ml_threshold` is the consensus rule
 behind `relevant=true`: a paper counts only when enough models (per the subject's consensus
-setting) classed it relevant, and they do so at 0.8 or above, so `ml_threshold` below 0.8 acts
-as 0.8. `relevant` and `ml_threshold` are scoped to `subject_id` when given; `ml_score` itself
-is not.
+setting) classed it relevant, and they only do so at or above their prediction cutoff (0.8 by
+default), so `ml_threshold` below that cutoff acts as the cutoff. `relevant` and `ml_threshold`
+are scoped to `subject_id` when given; `ml_score` itself is not.
 
 ### `search` syntax
 
