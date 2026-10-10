@@ -37,6 +37,10 @@ from .models import (
 	Team,
 	ArticleTrialReference,
 	OrganizationCredentials,
+	PatentApplicant,
+	PatentCategoryAssignment,
+	PatentPublication,
+	Patents,
 	OrganizationSite,
 	OrganizationApiSettings,
 	ArticleOrgContent,
@@ -2016,6 +2020,18 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 				),
 			},
 		),
+		(
+			"EPO Open Patent Services Settings",
+			{
+				"fields": ("ops_cql_query",),
+				"classes": ("ops-settings",),
+				"description": (
+					"Settings for EPO Open Patent Services sources. Enter the CQL query without "
+					"a publication date clause. Credentials come from the team's organisation "
+					"(Organization credentials). Leave \"link\" empty."
+				),
+			},
+		),
 	)
 
 	class Media:
@@ -2064,6 +2080,8 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		"""Display the count of articles or trials from this source."""
 		if obj.source_for == "trials":
 			return obj.get_trial_count()
+		elif obj.source_for == "patents":
+			return obj.get_patent_count()
 		else:
 			return obj.get_article_count()
 
@@ -2782,6 +2800,11 @@ TEAMCATEGORY_WEIGHT_FIELDS = {
 		"secondary_outcome": "weight_trial_secondary_outcome",
 		"therapeutic_areas": "weight_trial_therapeutic_areas",
 	},
+	"patent": {
+		"title": "weight_patent_title",
+		"summary": "weight_patent_summary",
+		"claims": "weight_patent_claims",
+	},
 }
 
 
@@ -2806,6 +2829,9 @@ class TeamCategoryAdminForm(forms.ModelForm):
 	weight_trial_therapeutic_areas = forms.IntegerField(
 		min_value=0, label="Therapeutic areas"
 	)
+	weight_patent_title = forms.IntegerField(min_value=0, label="Title")
+	weight_patent_summary = forms.IntegerField(min_value=0, label="Abstract")
+	weight_patent_claims = forms.IntegerField(min_value=0, label="Claims")
 
 	class Meta:
 		model = TeamCategory
@@ -2850,6 +2876,8 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"modality",
 		"display_match_scope",
 		"article_count",
+		"trial_count",
+		"patent_count",
 		"display_subjects",
 	)
 	list_editable = ("modality",)
@@ -2887,6 +2915,7 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 					"match_scope",
 					"match_min_score_articles",
 					"match_min_score_trials",
+					"match_min_score_patents",
 				),
 				"description": (
 					"Automatic categories match content whose in-scope fields contain these "
@@ -2917,6 +2946,17 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 				),
 			},
 		),
+		(
+			"Patent score weights",
+			{
+				"classes": ("collapse",),
+				"fields": (
+					"weight_patent_title",
+					"weight_patent_summary",
+					"weight_patent_claims",
+				),
+			},
+		),
 	)
 
 	# Form fields that affect which articles/trials match the category
@@ -2927,6 +2967,10 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"match_scope",
 		"match_min_score_articles",
 		"match_min_score_trials",
+		"match_min_score_patents",
+		"weight_patent_title",
+		"weight_patent_summary",
+		"weight_patent_claims",
 		"weight_article_title",
 		"weight_article_summary",
 		"weight_trial_title",
@@ -2979,6 +3023,14 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 
 	article_count.short_description = "Articles"
 
+	@admin.display(description="Trials")
+	def trial_count(self, obj):
+		return obj.trials.count()
+
+	@admin.display(description="Patents")
+	def patent_count(self, obj):
+		return obj.patents.count()
+
 	@admin.display(description="Match scope", ordering="match_scope")
 	def display_match_scope(self, obj):
 		"""Human-readable label for the category's match scope."""
@@ -3028,7 +3080,7 @@ class OrganizationSiteInline(admin.TabularInline):
 
 
 class OrganizationCredentialsInline(admin.StackedInline):
-	"""Inline to manage Postmark/ORCID credentials for an organization."""
+	"""Inline to manage Postmark/ORCID/EPO OPS credentials for an organization."""
 
 	model = OrganizationCredentials
 	extra = 0
@@ -3038,6 +3090,8 @@ class OrganizationCredentialsInline(admin.StackedInline):
 		"postmark_api_url",
 		"orcid_client_id",
 		"orcid_client_secret",
+		"epo_ops_consumer_key",
+		"epo_ops_consumer_secret",
 	)
 	verbose_name = "Credentials"
 	verbose_name_plural = "Credentials"
@@ -3858,11 +3912,148 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		)
 
 
+
+class PatentPublicationInline(admin.TabularInline):
+	model = PatentPublication
+	extra = 0
+	can_delete = False
+	fields = (
+		"publication_number",
+		"publication_date",
+		"application_number",
+		"application_date",
+		"sources",
+	)
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+class PatentApplicantInline(admin.TabularInline):
+	model = PatentApplicant
+	extra = 0
+	can_delete = False
+	fields = ("sequence", "raw_name", "sponsor", "is_individual")
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("sponsor")
+
+
+class PatentCategoryAssignmentInline(admin.TabularInline):
+	model = PatentCategoryAssignment
+	extra = 0
+	autocomplete_fields = ["teamcategory"]
+	verbose_name = "Category assignment"
+	verbose_name_plural = "Category assignments"
+
+	def get_queryset(self, request):
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("teamcategory", "teamcategory__team")
+		)
+
+
+class PriorityYearFilter(admin.SimpleListFilter):
+	"""Filter patent families by the year of their earliest priority date."""
+
+	title = "priority year"
+	parameter_name = "priority_year"
+
+	def lookups(self, request, model_admin):
+		years = (
+			Patents.objects.exclude(earliest_priority_date__isnull=True)
+			.dates("earliest_priority_date", "year", order="DESC")
+		)
+		return [(str(d.year), str(d.year)) for d in years]
+
+	def queryset(self, request, queryset):
+		if self.value() and self.value().isdigit():
+			return queryset.filter(earliest_priority_date__year=int(self.value()))
+		return queryset
+
+
+class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+	"""Patent families. Importer-managed fields are read-only; editors curate
+	subjects, teams and category assignments."""
+
+	list_display = [
+		"patent_id",
+		"title",
+		"representative_publication",
+		"display_applicants",
+		"earliest_priority_date",
+		"has_grant",
+		"discovery_date",
+	]
+	list_filter = [
+		("teams", OrganizationRestrictedFieldListFilter),
+		("subjects", OrganizationRestrictedFieldListFilter),
+		("sources", OrganizationRestrictedFieldListFilter),
+		("team_categories", OrganizationRestrictedFieldListFilter),
+		"applicants__sponsor_type",
+		"has_grant",
+		PriorityYearFilter,
+	]
+	search_fields = [
+		"title",
+		"summary",
+		"representative_publication",
+		"family_id",
+		"publications__publication_number",
+	]
+	date_hierarchy = "earliest_priority_date"
+	readonly_fields = [
+		"family_id",
+		"title",
+		"summary",
+		"claims",
+		"representative_publication",
+		"link",
+		"links",
+		"earliest_priority_date",
+		"earliest_publication_date",
+		"has_grant",
+		"cpc_classes",
+		"ipc_classes",
+		"inventors",
+		"discovery_date",
+		"last_updated",
+		"family_next_check",
+		"family_attempts",
+	]
+	fields = readonly_fields + ["sources", "teams", "subjects"]
+	filter_horizontal = ("sources", "teams", "subjects")
+	inlines = [
+		PatentPublicationInline,
+		PatentApplicantInline,
+		PatentCategoryAssignmentInline,
+	]
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).prefetch_related("patent_applicants")
+
+	@admin.display(description="Applicants")
+	def display_applicants(self, obj):
+		names = [a.raw_name for a in obj.patent_applicants.all()]
+		text = "; ".join(names[:3])
+		return text + ("…" if len(names) > 3 else "")
+
+	def has_add_permission(self, request):
+		return False
+
+
 admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+admin.site.register(Patents, PatentAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 

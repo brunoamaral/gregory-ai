@@ -154,9 +154,15 @@ DEFAULT_TRIAL_MATCH_WEIGHTS = {
 	"secondary_outcome": 1,
 	"therapeutic_areas": 1,
 }
+DEFAULT_PATENT_MATCH_WEIGHTS = {
+	"title": 3,
+	"summary": 2,
+	"claims": 1,
+}
 MATCH_WEIGHT_DEFAULTS = {
 	"article": DEFAULT_ARTICLE_MATCH_WEIGHTS,
 	"trial": DEFAULT_TRIAL_MATCH_WEIGHTS,
+	"patent": DEFAULT_PATENT_MATCH_WEIGHTS,
 }
 
 
@@ -320,6 +326,13 @@ class TeamCategory(models.Model):
 			"intervention, primary outcome, secondary outcome, therapeutic areas)."
 		),
 	)
+	match_min_score_patents = models.PositiveSmallIntegerField(
+		default=3,
+		help_text=(
+			"Minimum score a patent must reach to be assigned to this category. "
+			"Patents are scored on up to 3 fields (title, summary, claims)."
+		),
+	)
 	match_weights = models.JSONField(
 		default=default_match_weights,
 		blank=True,
@@ -340,6 +353,16 @@ class TeamCategory(models.Model):
 			"a full re-match for this category."
 		),
 	)
+	patent_match_config_hash = models.CharField(
+		max_length=64,
+		blank=True,
+		null=True,
+		editable=False,
+		help_text=(
+			"Same as match_config_hash, for the patent pass. Kept separate so that adding patent "
+			"matching never forces a full article and trial re-match."
+		),
+	)
 	last_synced_at = models.DateTimeField(
 		blank=True,
 		null=True,
@@ -352,7 +375,7 @@ class TeamCategory(models.Model):
 	# bookkeeping, not an edit, so they are left out; rebuild_categories writes
 	# them with a queryset update, which records no history row at all.
 	history = HistoricalRecords(
-		excluded_fields=["match_config_hash", "last_synced_at"],
+		excluded_fields=["match_config_hash", "patent_match_config_hash", "last_synced_at"],
 		bases=[ApiKeyHistoryMixin, EditorHistoryMixin],
 		m2m_fields=["subjects"],
 	)
@@ -363,7 +386,7 @@ class TeamCategory(models.Model):
 		super().save(*args, **kwargs)
 
 	def get_match_weights(self, content_type):
-		"""Return the per-field weights for 'article' or 'trial'.
+		"""Return the per-field weights for 'article', 'trial' or 'patent'.
 
 		Falls back to the historical defaults for any field missing from the
 		stored configuration and ignores unknown fields, so a partial or legacy
@@ -401,6 +424,9 @@ class TeamCategory(models.Model):
 
 	def trials_count(self):
 		return self.trials.count()
+
+	def patents_count(self):
+		return self.patents.count()
 
 	class Meta:
 		constraints = [
@@ -546,6 +572,7 @@ class Sources(models.Model):
 		("science paper", "Science Paper"),
 		("trials", "Trials"),
 		("news article", "News Article"),
+		("patents", "Patents"),
 	]
 	METHODS = [
 		("rss", "RSS"),
@@ -553,6 +580,7 @@ class Sources(models.Model):
 		("manual", "Manual submission"),
 		("ctgov_api", "ClinicalTrials.gov API"),
 		("ctis_api", "CTIS Public API"),
+		("epo_ops", "EPO Open Patent Services"),
 	]
 	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
@@ -595,6 +623,16 @@ class Sources(models.Model):
 		blank=False,
 		related_name="sources",  # Helps in querying from the Team model, e.g., team.sources.all()
 	)
+	ops_cql_query = models.TextField(
+		blank=True,
+		null=True,
+		verbose_name="EPO OPS CQL query",
+		help_text=(
+			'CQL query for EPO Open Patent Services, e.g. ta="multiple sclerosis" and cpc=/low A61P25/00. '
+			"Leave out any publication date (pd) clause: the importer adds the date window itself. "
+			'Only used when method is "EPO Open Patent Services".'
+		),
+	)
 	last_successful_fetch_at = models.DateTimeField(
 		blank=True,
 		null=True,
@@ -635,13 +673,31 @@ class Sources(models.Model):
 		"""
 		return self.trials_set.count()
 
+	def get_patent_count(self):
+		"""
+		Returns the count of patent families from this source.
+		"""
+		return self.patents_set.count()
+
 	def get_health_status(self):
 		"""
 		Returns the health status of the source based on the latest article/trial date.
-		Uses the same status logic for both article and trial sources.
+		Uses the same status logic for both article and trial sources. Patent sources are
+		judged by their last successful fetch instead: a narrow patent query can
+		legitimately find nothing new for weeks.
 		"""
 		if not self.active:
 			return "inactive"
+
+		if self.source_for == "patents":
+			if not self.last_successful_fetch_at:
+				return "no_content"
+			days_since_fetch = (timezone.now() - self.last_successful_fetch_at).days
+			if days_since_fetch > 30:
+				return "error"
+			elif days_since_fetch > 14:
+				return "warning"
+			return "healthy"
 
 		# Get the latest article or trial date depending on source type
 		if self.source_for == "trials":
@@ -1917,6 +1973,16 @@ class OrganizationCredentials(models.Model):
 	orcid_client_secret = EncryptedTextField(
 		blank=True, null=True, help_text="ORCID Client Secret for this organization."
 	)
+	epo_ops_consumer_key = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="EPO Open Patent Services consumer key for this organization.",
+	)
+	epo_ops_consumer_secret = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="EPO Open Patent Services consumer secret for this organization.",
+	)
 	postmark_api_token = EncryptedTextField(
 		blank=True, null=True, help_text="Postmark API Token for this organization."
 	)
@@ -2299,3 +2365,167 @@ class PredictionRunLog(models.Model):
 			query = query.filter(run_type=run_type)
 
 		return query.order_by("-run_finished").first()
+
+
+class Patents(models.Model):
+	"""One DOCDB simple patent family. Every published document in the family is a
+	PatentPublication child row. Applicants reuse Sponsor so a patent and a trial can
+	share the sponsor entity (see PatentApplicant)."""
+
+	patent_id = models.AutoField(primary_key=True)
+	# DOCDB simple family id. Nullable only for a future Lens-only record.
+	family_id = models.CharField(max_length=20, unique=True, null=True, blank=True)
+	title = models.TextField(db_index=True)
+	# Named summary (not abstract) to match articles and trials so search, category
+	# matching and serializers stay uniform.
+	summary = models.TextField(blank=True, null=True)
+	# Full claims of the representative publication. OPS has full text only for EP, WO,
+	# CA and a few national offices, so US-, CN- or JP-only families have none.
+	claims = models.TextField(blank=True, null=True)
+	utitle = GeneratedField(
+		expression=Upper("title"), output_field=models.TextField(), db_persist=True
+	)
+	usummary = GeneratedField(
+		expression=Upper("summary"), output_field=models.TextField(), db_persist=True
+	)
+	representative_publication = models.CharField(max_length=32, blank=True, default="")
+	link = models.URLField(max_length=2000, blank=True, default="")
+	links = models.JSONField(
+		blank=True,
+		null=True,
+		help_text='URLs keyed by source slug (e.g. "espacenet"); "link" holds the canonical one',
+	)
+	earliest_priority_date = models.DateField(null=True, blank=True, db_index=True)
+	earliest_publication_date = models.DateField(null=True, blank=True, db_index=True)
+	has_grant = models.BooleanField(
+		default=False,
+		help_text="True when any member publication has a grant kind code. Heuristic until legal status is fetched.",
+	)
+	cpc_classes = ArrayField(models.CharField(max_length=40), default=list, blank=True)
+	ipc_classes = ArrayField(models.CharField(max_length=40), default=list, blank=True)
+	# Raw names as published. Deliberately never linked to Authors.
+	inventors = models.JSONField(default=list, blank=True)
+	applicants = models.ManyToManyField(
+		"Sponsor", through="PatentApplicant", related_name="patents", blank=True
+	)
+	sources = models.ManyToManyField("Sources", blank=True)
+	teams = models.ManyToManyField("Team", related_name="patents", blank=True)
+	subjects = models.ManyToManyField("Subject", related_name="patents", blank=True)
+	team_categories = models.ManyToManyField(
+		"TeamCategory", related_name="patents", through="PatentCategoryAssignment"
+	)
+	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
+	last_updated = models.DateTimeField(auto_now=True, db_index=True)
+	# Refresh backoff, same pattern as the article enrichment markers.
+	family_next_check = models.DateTimeField(null=True, blank=True)
+	family_attempts = models.PositiveSmallIntegerField(default=0)
+	history = HistoricalRecords(
+		excluded_fields=["utitle", "usummary"],
+		bases=[ApiKeyHistoryMixin, EditorHistoryMixin],
+		m2m_fields=["sources", "subjects", "teams"],
+	)
+
+	def __str__(self):
+		return self.title[:80]
+
+	class Meta:
+		db_table = "patents"
+		ordering = ["-discovery_date"]
+		verbose_name = "patent family"
+		verbose_name_plural = "patents"
+		indexes = [
+			GinIndex(
+				fields=["utitle"],
+				name="patents_utitle_gin_idx",
+				opclasses=["gin_trgm_ops"],
+			),
+			GinIndex(
+				fields=["usummary"],
+				name="patents_usummary_gin_idx",
+				opclasses=["gin_trgm_ops"],
+			),
+			GinIndex(fields=["cpc_classes"], name="patents_cpc_gin_idx"),
+		]
+
+
+class PatentPublication(models.Model):
+	"""One published document (EP4123456A1, WO2023123456A1, US...) in a patent family."""
+
+	patent = models.ForeignKey(
+		Patents, on_delete=models.CASCADE, related_name="publications"
+	)
+	# Canonical DOCDB form. The dedup key across sources.
+	publication_number = models.CharField(max_length=32, unique=True)
+	country = models.CharField(max_length=4, blank=True, default="")
+	doc_number = models.CharField(max_length=32, blank=True, default="")
+	kind = models.CharField(max_length=4, blank=True, default="")
+	publication_date = models.DateField(null=True, blank=True)
+	application_number = models.CharField(max_length=40, null=True, blank=True)
+	application_date = models.DateField(null=True, blank=True)
+	sources = models.JSONField(default=list, blank=True)  # ["epo_ops"]
+	lens_id = models.CharField(max_length=40, null=True, blank=True)
+
+	def __str__(self):
+		return self.publication_number
+
+	class Meta:
+		db_table = "patent_publications"
+		ordering = ["publication_date", "publication_number"]
+
+
+class PatentApplicant(models.Model):
+	"""Through model for Patents.applicants. ``sponsor`` is null for individual
+	applicants (the applicant is also a listed inventor), which keeps thousands of
+	inventor-applicants out of the sponsor table."""
+
+	patent = models.ForeignKey(
+		Patents, on_delete=models.CASCADE, related_name="patent_applicants"
+	)
+	# PROTECT matches Trials.primary_sponsor_normalized: sponsors are only deleted by
+	# merge_sponsors(), which repoints these rows first.
+	sponsor = models.ForeignKey(
+		"Sponsor",
+		on_delete=models.PROTECT,
+		null=True,
+		blank=True,
+		related_name="patent_applications",
+	)
+	raw_name = models.CharField(max_length=500)
+	sequence = models.PositiveSmallIntegerField(default=0)
+	is_individual = models.BooleanField(default=False)
+
+	def __str__(self):
+		return f"{self.raw_name} ({self.patent_id})"
+
+	class Meta:
+		db_table = "patent_applicants"
+		ordering = ["patent_id", "sequence"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["patent", "sequence"], name="uniq_patent_applicant_seq"
+			)
+		]
+
+
+class PatentCategoryAssignment(models.Model):
+	"""Through model for Patents.team_categories. See TrialCategoryAssignment."""
+
+	patents = models.ForeignKey(
+		Patents, on_delete=models.CASCADE, related_name="category_assignments"
+	)
+	teamcategory = models.ForeignKey(
+		"TeamCategory", on_delete=models.CASCADE, related_name="patent_assignments"
+	)
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+
+	def __str__(self):
+		return f"{self.patents_id} → {self.teamcategory} ({self.source})"
+
+	class Meta:
+		db_table = "patents_team_categories"
+		unique_together = (("patents", "teamcategory"),)
+		verbose_name = "patent category assignment"

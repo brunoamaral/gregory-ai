@@ -532,6 +532,10 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		"match_scope": "title_summary",
 		"match_min_score_articles": 3,
 		"match_min_score_trials": 3,
+		"match_min_score_patents": 3,
+		"weight_patent_title": 3,
+		"weight_patent_summary": 2,
+		"weight_patent_claims": 1,
 		"weight_article_title": 3,
 		"weight_article_summary": 1,
 		"weight_trial_title": 3,
@@ -583,6 +587,7 @@ class TeamCategoryAdminBackfillTest(TestCase):
 	def edit_category_via_admin(self, category, **overrides):
 		article_weights = category.get_match_weights("article")
 		trial_weights = category.get_match_weights("trial")
+		patent_weights = category.get_match_weights("patent")
 		data = {
 			"team": self.team.pk,
 			"subjects": [self.subject.pk],
@@ -597,6 +602,10 @@ class TeamCategoryAdminBackfillTest(TestCase):
 			"match_scope": category.match_scope,
 			"match_min_score_articles": category.match_min_score_articles,
 			"match_min_score_trials": category.match_min_score_trials,
+			"match_min_score_patents": category.match_min_score_patents,
+			"weight_patent_title": patent_weights["title"],
+			"weight_patent_summary": patent_weights["summary"],
+			"weight_patent_claims": patent_weights["claims"],
 			"weight_article_title": article_weights["title"],
 			"weight_article_summary": article_weights["summary"],
 			"weight_trial_title": trial_weights["title"],
