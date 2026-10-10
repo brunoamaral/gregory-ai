@@ -51,6 +51,86 @@ async def test_search_articles_compacts_results(mock_gregory):
 	assert request.url.params["page_size"] == "10"
 
 
+async def test_search_articles_include_authors_adds_compact_authors(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200,
+			json={
+				"count": 1,
+				"next": None,
+				"results": [
+					{
+						"article_id": 42,
+						"title": "Stem cells in MS",
+						"authors": [
+							{
+								"author_id": 7,
+								"full_name": "Jane Doe",
+								"ORCID": "0000-0002-1825-0097",
+								"given_name": "Jane",
+								"country": "PT",
+							}
+						],
+					}
+				],
+			},
+		)
+	)
+
+	result = await search_articles(search="stem cells", include_authors=True)
+
+	# Only the three compact fields come through; the rest of the author row
+	# (given_name, country, ...) must not leak into a list-sized response.
+	assert result["articles"][0]["authors"] == [
+		{"author_id": 7, "full_name": "Jane Doe", "orcid": "0000-0002-1825-0097"}
+	]
+
+
+async def test_search_articles_include_authors_is_always_a_list(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200,
+			json={
+				"count": 3,
+				"next": None,
+				"results": [
+					{"article_id": 1, "authors": []},
+					{"article_id": 2},
+					{"article_id": 3, "authors": None},
+				],
+			},
+		)
+	)
+
+	result = await search_articles(search="x", include_authors=True)
+
+	assert [a["authors"] for a in result["articles"]] == [[], [], []]
+
+
+async def test_search_articles_authors_and_full_summary_are_not_sent_to_django(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(search="x", include_authors=True, full_summary=True)
+
+	params = mock_gregory.requests[0].url.params
+	assert "include_authors" not in params
+	assert "full_summary" not in params
+
+
+async def test_search_articles_full_summary_returns_untruncated_summary(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200, json={"count": 1, "next": None, "results": [{"article_id": 42, "summary": "x" * 1000}]}
+		)
+	)
+
+	full = await search_articles(search="x", full_summary=True)
+	default = await search_articles(search="x")
+
+	assert full["articles"][0]["summary"] == "x" * 1000
+	assert len(default["articles"][0]["summary"]) <= 401
+
+
 async def test_search_articles_drops_none_filters(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
 

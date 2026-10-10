@@ -73,12 +73,12 @@ crowds context and degrades model tool selection.
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
 | `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
-| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). |
+| `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). `include_authors` and `full_summary` opt-ins add each article's authors and the untruncated summary. |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
 | `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`. Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
-| `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default. |
+| `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default: the top 10 co-authors plus `coauthors_total`. |
 | `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. |
 | `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/` | `scope` selects which. |
@@ -142,6 +142,16 @@ response, and most searches are followed by a `get_*` read of one or two records
 (`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
 team plumbing is noise to the model. `team_categories` stays — despite the name, it holds
 the record's category tags.
+
+`search_articles` can add two things on request: `include_authors=true` adds each
+article's authors (`author_id`, `full_name`, `orcid`, in no particular order), and
+`full_summary=true` returns the untruncated summary. Both are tool-only flags and are never
+sent to the API. They exist so a model can build a dossier over a whole category (every
+paper's authors and abstract) from a few `page_size=25` searches. Before, that took a
+`get_article` per paper, which ran into the 30-requests-a-minute per-tool limit. For the
+same reason `get_author` returns `coauthors_total` beside its top-10 `coauthors` list; to
+count co-authorship within one set of papers, count authors from `search_articles` results
+instead.
 
 No tool exposes `all_results=true`. Bulk export is deliberately out of scope for this
 server — see [Risks](#risks).

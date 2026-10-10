@@ -36,12 +36,20 @@ async def search_articles(
 	published_date_before: str | None = None,
 	last_days: float | None = None,
 	ordering: str | None = None,
+	include_authors: bool = False,
+	full_summary: bool = False,
 	intent: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
 ) -> dict:
 	"""Search research articles. Returns a compact projection — use
 	get_article for the full record (authors, ML predictions, linked trials).
+	`include_authors=true` adds each article's authors (author_id, full_name,
+	orcid) — enough to count or rank researchers across a result set without a
+	`get_article` per paper. Author order is not the byline order.
+	`full_summary=true` returns the untruncated summary instead of the first
+	~400 characters. Use it with a small `page_size` when you need the
+	abstracts of a whole result set.
 
 	`search` is boolean over title + summary: space-separated terms are
 	AND-ed, uppercase OR/NOT for alternatives/exclusion, "quoted phrases"
@@ -108,7 +116,11 @@ async def search_articles(
 	response = {
 		"count": count,
 		"next_page": clamped_page + 1 if data.get("next") else None,
-		"articles": [compact_article(a) for a in results],
+		# include_authors / full_summary shape this response only; they are
+		# deliberately not in `params`, so they are never sent to Django.
+		"articles": [
+			compact_article(a, include_authors=include_authors, full_summary=full_summary) for a in results
+		],
 	}
 	if count == 0:
 		response["guidance"] = guidance_for(params, "articles")

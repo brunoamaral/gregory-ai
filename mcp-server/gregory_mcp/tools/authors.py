@@ -66,8 +66,13 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 
 	Args:
 		author_id: The author's ID.
-		include_coauthors: When true, also fetches this author's co-authors
-			(a second request) — off by default since it is rarely needed.
+		include_coauthors: When true, also fetches this author's top 10
+			co-authors (a second request), ranked by `shared_articles` — the
+			number of articles they share with this author among all articles
+			you can search, not only one category. `coauthors_total` says how
+			many co-authors there are in all. To count co-authorship within
+			one set of papers, use `search_articles` with `include_authors=true`
+			instead. Off by default.
 
 	Raises:
 		ToolError: If the author can't be found.
@@ -82,5 +87,13 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 		raise
 	if include_coauthors:
 		coauthors = await get_client().get(f"/authors/{author_id}/coauthors/")
-		author["coauthors"] = coauthors.get("results", coauthors)
+		if isinstance(coauthors, dict):
+			author["coauthors"] = coauthors.get("results", coauthors)
+			# The endpoint pages its results (10 a page), so the list is only the
+			# top of the ranking; `count` is how many co-authors there are in all.
+			if "count" in coauthors:
+				author["coauthors_total"] = coauthors["count"]
+		else:
+			# A bare list: nothing to say about the total, and nothing to unwrap.
+			author["coauthors"] = coauthors
 	return author

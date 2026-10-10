@@ -5,6 +5,11 @@ and nested author/site lists blow up context fast, and most searches are
 followed by a `get_*` read of one or two records anyway. Detail tools
 (`get_article`, `get_trial`) return the full record, minus team data
 (`strip_team_data`).
+
+Nested author lists are left out by default and are opt-in on article search
+(`include_authors`), as is the untruncated summary (`full_summary`): a model
+building a dossier over a whole result set needs both for every paper, and one
+`get_article` per paper runs into the per-tool request limit.
 """
 
 from __future__ import annotations
@@ -44,18 +49,30 @@ def _truncate(text: str | None, limit: int = SUMMARY_TRUNCATE_CHARS) -> str | No
 	return text[:limit].rstrip() + "…"
 
 
-def compact_article(article: dict[str, Any]) -> dict[str, Any]:
-	return {
+def compact_article(
+	article: dict[str, Any], *, include_authors: bool = False, full_summary: bool = False
+) -> dict[str, Any]:
+	compact = {
 		"article_id": article.get("article_id"),
 		"title": article.get("title"),
 		"published_date": article.get("published_date"),
 		"journal": article.get("container_title"),
 		"doi": article.get("doi"),
 		"link": article.get("link"),
-		"summary": _truncate(article.get("summary")),
+		"summary": article.get("summary") if full_summary else _truncate(article.get("summary")),
 		"ml_score": article.get("ml_score"),
 		"access": article.get("access"),
 	}
+	if include_authors:
+		# Always a list, even when the API row has no `authors` key, so a caller
+		# counting authors across a result set never has to special-case a
+		# missing one. The API's key is `ORCID`; the compact key is `orcid`, as
+		# in compact_author.
+		compact["authors"] = [
+			{"author_id": a.get("author_id"), "full_name": a.get("full_name"), "orcid": a.get("ORCID")}
+			for a in article.get("authors") or []
+		]
+	return compact
 
 
 def compact_trial(trial: dict[str, Any]) -> dict[str, Any]:
