@@ -40,6 +40,11 @@ EDIT_DESTRUCTIVE = ToolAnnotations(
 EDIT_ADDITIVE = ToolAnnotations(
 	read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
+# Creating a category: adds rather than overwrites, but a second identical call
+# is refused (the slug is taken) rather than answered with the first result.
+EDIT_CREATE = ToolAnnotations(
+	read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
+)
 
 # All five cache hints are "private" (decision 3, MCP-MULTI-TENANCY-PHASE-3-PLAN.md):
 # every response now carries the resolved tenant's own serverInfo stamp
@@ -183,6 +188,10 @@ def build_server(editor: bool = False) -> MCPServer:
 		server.add_tool(editor_tools.set_article_relevance, annotations=EDIT_DESTRUCTIVE)
 		server.add_tool(editor_tools.link_trial_to_article, annotations=EDIT_ADDITIVE)
 		server.add_tool(editor_tools.unlink_trial_from_article, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.create_category, annotations=EDIT_CREATE)
+		server.add_tool(editor_tools.update_category, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.assign_article_category, annotations=EDIT_ADDITIVE)
+		server.add_tool(editor_tools.unassign_article_category, annotations=EDIT_DESTRUCTIVE)
 
 	_replace_handler(server, "prompts/list", types.PaginatedRequestParams, prompts.list_prompts)
 	_replace_handler(server, "prompts/get", types.GetPromptRequestParams, prompts.get_prompt)

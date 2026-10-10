@@ -8,7 +8,7 @@ anonymous one, but what a given request may do depends on who signed in
 |:---------------------------------|:---------------------------------------------|
 | Public tier (no editor grant)    | the ten read tools, exactly as on `/mcp`     |
 | Editor, read-only grant          | the ten read tools plus `get_article_history`|
-| Editor with the edit scope       | all of those plus the four write tools       |
+| Editor with the edit scope       | all of those plus the eight write tools      |
 
 `tools/list` is filtered to that set, and `tools/call` for anything outside it
 is answered exactly as a tool that doesn't exist is: a client that sends a
@@ -46,6 +46,10 @@ WRITE_TOOLS = frozenset(
 		"set_article_relevance",
 		"link_trial_to_article",
 		"unlink_trial_from_article",
+		"create_category",
+		"update_category",
+		"assign_article_category",
+		"unassign_article_category",
 	}
 )
 

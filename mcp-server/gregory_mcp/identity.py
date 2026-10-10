@@ -34,7 +34,9 @@ _PUBLIC_TIER_NOTE = "Editing needs editor access on this site; this sign-in can 
 _EDIT_TOOLS = (
 	"update_article_editorial (set an article's takeaways and plain-English summary for this site), "
 	"set_article_relevance (mark an article relevant, not relevant or not reviewed for a subject), "
-	"link_trial_to_article and unlink_trial_from_article (connect or disconnect an article and a clinical trial)"
+	"link_trial_to_article and unlink_trial_from_article (connect or disconnect an article and a clinical trial), "
+	"create_category and update_category (add a category or change its name, terms or subjects), "
+	"assign_article_category and unassign_article_category (put an article in a category by hand, or take it out)"
 )
 
 

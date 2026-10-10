@@ -168,6 +168,92 @@ def default_match_weights():
 	}
 
 
+class ApiKeyHistoryMixin(models.Model):
+	"""Abstract mixin that adds API-key attribution fields to historical models.
+
+	Attach to HistoricalRecords via bases=[ApiKeyHistoryMixin] so every
+	historical row can record which API key triggered the change.
+
+	Two complementary fields:
+	- api_access_scheme (FK, SET_NULL): live link; NULL for admin/shell saves
+	  or after key deletion.
+	- api_access_scheme_label (CharField): snapshot of the key's client_name at
+	  save time.  Preserved permanently even after the key or its organisation
+	  is deleted, keeping the audit trail readable.
+
+	Both fields are populated automatically by the
+	``stamp_api_access_scheme_on_history`` signal handler in gregory/signals.py.
+	"""
+
+	api_access_scheme = models.ForeignKey(
+		"api.APIAccessScheme",
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="+",
+	)
+	api_access_scheme_label = models.CharField(
+		max_length=200,
+		blank=True,
+		help_text="Snapshot of APIAccessScheme.client_name at the time of the change. "
+		"Preserved after key deletion.",
+	)
+
+	class Meta:
+		abstract = True
+
+
+class EditorHistoryMixin(models.Model):
+	"""Abstract mixin that adds named-person attribution to historical models.
+
+	Attach to HistoricalRecords via bases=[..., EditorHistoryMixin] so every
+	historical row records who changed it and through which door. The API-key
+	mixin above records a credential; this one records a person.
+
+	- editor_user (FK, SET_NULL): live link; NULL for changes with no signed-in
+	  person (API key, command, shell) or after the user is deleted.
+	- editor_label (CharField): name and email at save time. Preserved after
+	  the user is deleted, keeping the audit trail readable.
+	- via: ``mcp`` (an editor over the MCP server), ``api_key`` (a key on the
+	  REST API) or ``admin``. Blank for a change made outside a request.
+
+	Populated by the ``stamp_editor_on_history`` signal handler in
+	gregory/signals.py.
+	"""
+
+	VIA_MCP = "mcp"
+	VIA_API_KEY = "api_key"
+	VIA_ADMIN = "admin"
+	VIA_CHOICES = [
+		(VIA_MCP, "MCP"),
+		(VIA_API_KEY, "API key"),
+		(VIA_ADMIN, "Admin"),
+	]
+
+	editor_user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="+",
+	)
+	editor_label = models.CharField(
+		max_length=300,
+		blank=True,
+		help_text="Snapshot of the editor's name and email at the time of the "
+		"change. Preserved after the user is deleted.",
+	)
+	via = models.CharField(
+		max_length=20,
+		blank=True,
+		choices=VIA_CHOICES,
+		help_text="Which door the change came through.",
+	)
+
+	class Meta:
+		abstract = True
+
+
 class TeamCategory(models.Model):
 	team = models.ForeignKey(
 		"Team",
@@ -260,6 +346,16 @@ class TeamCategory(models.Model):
 		editable=False,
 		help_text="When rebuild_categories last synced this category.",
 	)
+	# Who created or changed a category, and through which door (admin, an MCP
+	# editor, an API key). `subjects` is tracked too, so a change of scope is
+	# its own history row. The two sync-state columns are the pipeline's
+	# bookkeeping, not an edit, so they are left out; rebuild_categories writes
+	# them with a queryset update, which records no history row at all.
+	history = HistoricalRecords(
+		excluded_fields=["match_config_hash", "last_synced_at"],
+		bases=[ApiKeyHistoryMixin, EditorHistoryMixin],
+		m2m_fields=["subjects"],
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.category_slug:
@@ -341,6 +437,10 @@ class ArticleCategoryAssignment(models.Model):
 		choices=CategoryAssignmentSource.choices,
 		default=CategoryAssignmentSource.MANUAL,
 	)
+	# Records a person's assignments (admin, an MCP editor). rebuild_categories
+	# adds its automatic rows through the related manager, which bulk-writes and
+	# records nothing; its removals are ordinary deletes, recorded with no editor.
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):
 		return f"{self.articles_id} → {self.teamcategory} ({self.source})"
@@ -572,92 +672,6 @@ class Sources(models.Model):
 		managed = True
 		verbose_name_plural = "sources"
 		db_table = "sources"
-
-
-class ApiKeyHistoryMixin(models.Model):
-	"""Abstract mixin that adds API-key attribution fields to historical models.
-
-	Attach to HistoricalRecords via bases=[ApiKeyHistoryMixin] so every
-	historical row can record which API key triggered the change.
-
-	Two complementary fields:
-	- api_access_scheme (FK, SET_NULL): live link; NULL for admin/shell saves
-	  or after key deletion.
-	- api_access_scheme_label (CharField): snapshot of the key's client_name at
-	  save time.  Preserved permanently even after the key or its organisation
-	  is deleted, keeping the audit trail readable.
-
-	Both fields are populated automatically by the
-	``stamp_api_access_scheme_on_history`` signal handler in gregory/signals.py.
-	"""
-
-	api_access_scheme = models.ForeignKey(
-		"api.APIAccessScheme",
-		null=True,
-		blank=True,
-		on_delete=models.SET_NULL,
-		related_name="+",
-	)
-	api_access_scheme_label = models.CharField(
-		max_length=200,
-		blank=True,
-		help_text="Snapshot of APIAccessScheme.client_name at the time of the change. "
-		"Preserved after key deletion.",
-	)
-
-	class Meta:
-		abstract = True
-
-
-class EditorHistoryMixin(models.Model):
-	"""Abstract mixin that adds named-person attribution to historical models.
-
-	Attach to HistoricalRecords via bases=[..., EditorHistoryMixin] so every
-	historical row records who changed it and through which door. The API-key
-	mixin above records a credential; this one records a person.
-
-	- editor_user (FK, SET_NULL): live link; NULL for changes with no signed-in
-	  person (API key, command, shell) or after the user is deleted.
-	- editor_label (CharField): name and email at save time. Preserved after
-	  the user is deleted, keeping the audit trail readable.
-	- via: ``mcp`` (an editor over the MCP server), ``api_key`` (a key on the
-	  REST API) or ``admin``. Blank for a change made outside a request.
-
-	Populated by the ``stamp_editor_on_history`` signal handler in
-	gregory/signals.py.
-	"""
-
-	VIA_MCP = "mcp"
-	VIA_API_KEY = "api_key"
-	VIA_ADMIN = "admin"
-	VIA_CHOICES = [
-		(VIA_MCP, "MCP"),
-		(VIA_API_KEY, "API key"),
-		(VIA_ADMIN, "Admin"),
-	]
-
-	editor_user = models.ForeignKey(
-		settings.AUTH_USER_MODEL,
-		null=True,
-		blank=True,
-		on_delete=models.SET_NULL,
-		related_name="+",
-	)
-	editor_label = models.CharField(
-		max_length=300,
-		blank=True,
-		help_text="Snapshot of the editor's name and email at the time of the "
-		"change. Preserved after the user is deleted.",
-	)
-	via = models.CharField(
-		max_length=20,
-		blank=True,
-		choices=VIA_CHOICES,
-		help_text="Which door the change came through.",
-	)
-
-	class Meta:
-		abstract = True
 
 
 class Articles(models.Model):

@@ -216,15 +216,23 @@ class Command(BaseCommand):
 		"""
 		now = timezone.now()
 		for cat in self.target_categories():
-			cat.match_config_hash = self.category_config_hash(cat)
-			cat.last_synced_at = now
-			cat.save(update_fields=["match_config_hash", "last_synced_at"])
+			# A queryset update, not save(): sync state is bookkeeping, and save()
+			# would add a TeamCategory history row for every category on every run.
+			TeamCategory.objects.filter(pk=cat.pk).update(
+				match_config_hash=self.category_config_hash(cat), last_synced_at=now
+			)
 
-	def sync_category(self, manager, desired_ids, automatic_ids, manual_ids):
+	def sync_category(self, manager, automatic_rows, id_field, desired_ids, automatic_ids, manual_ids):
 		"""Diff desired vs current automatic associations and apply only the changes.
 
 		Manual assignments are never touched: they are not removed when stale,
 		and a desired item that is already manually assigned is left manual.
+
+		Removals delete from ``automatic_rows`` (this category's automatic
+		assignments) rather than through ``manager.remove()``, which deletes by
+		id whatever the source. The ids were read earlier in the run; an editor
+		may have made one of them a manual assignment since, and that one must
+		survive.
 		"""
 		to_add = desired_ids - automatic_ids - manual_ids
 		to_remove = automatic_ids - desired_ids
@@ -235,7 +243,7 @@ class Command(BaseCommand):
 					through_defaults={"source": CategoryAssignmentSource.AUTOMATIC},
 				)
 			if to_remove:
-				manager.remove(*to_remove)
+				automatic_rows.filter(**{f"{id_field}__in": to_remove}).delete()
 		return len(to_add), len(to_remove)
 
 	def candidate_query(self, terms, weights, field_query):
@@ -408,7 +416,14 @@ class Command(BaseCommand):
 				)
 
 			added, removed = self.sync_category(
-				cat.articles, desired_ids, automatic_ids, manual_ids
+				cat.articles,
+				ArticleCategoryAssignment.objects.filter(
+					teamcategory=cat, source=CategoryAssignmentSource.AUTOMATIC
+				),
+				"articles_id",
+				desired_ids,
+				automatic_ids,
+				manual_ids,
 			)
 			total_added += added
 			total_removed += removed
@@ -587,7 +602,14 @@ class Command(BaseCommand):
 				)
 
 			added, removed = self.sync_category(
-				cat.trials, desired_ids, automatic_ids, manual_ids
+				cat.trials,
+				TrialCategoryAssignment.objects.filter(
+					teamcategory=cat, source=CategoryAssignmentSource.AUTOMATIC
+				),
+				"trials_id",
+				desired_ids,
+				automatic_ids,
+				manual_ids,
 			)
 			total_added += added
 			total_removed += removed

@@ -7,8 +7,11 @@ shape from a ``serializer_class`` the normal way. Declaring the shape here
 keeps /api/schema/ honest about what these endpoints actually return.
 """
 
+from django.utils.text import slugify
 from django_filters import rest_framework as filters
 from rest_framework import serializers
+
+from gregory.models import CategoryMatchScope, CategoryModality, CategoryType
 
 
 def filterset_request_schema(
@@ -217,6 +220,13 @@ class EditorErrorSerializer(serializers.Serializer):
 		required=False,
 		help_text="On 409 from the DOI lookup: the articles that share the DOI.",
 	)
+	category_id = serializers.IntegerField(
+		required=False,
+		help_text=(
+			"On 409 from creating a category: the existing category that holds the "
+			"slug, when it is inside the editor's site scope."
+		),
+	)
 
 
 class EditorResolveResponseSerializer(serializers.Serializer):
@@ -285,7 +295,7 @@ class EditorTrialUnlinkResponseSerializer(serializers.Serializer):
 
 
 class EditorHistoryEntrySerializer(serializers.Serializer):
-	kind = serializers.ChoiceField(choices=["editorial", "relevance", "trial_link"])
+	kind = serializers.ChoiceField(choices=["editorial", "relevance", "trial_link", "category"])
 	change = serializers.ChoiceField(choices=["created", "updated", "deleted"])
 	changed_at = serializers.DateTimeField()
 	changed_by = serializers.CharField(
@@ -294,7 +304,10 @@ class EditorHistoryEntrySerializer(serializers.Serializer):
 	)
 	via = serializers.ChoiceField(choices=["mcp", "api_key", "admin"], allow_null=True)
 	details = serializers.DictField(
-		help_text="The values after the change: the editorial text, the relevance, or the link's source."
+		help_text=(
+			"The values after the change: the editorial text, the relevance, the "
+			"trial link's source, or the category and how it was assigned."
+		)
 	)
 
 
@@ -302,3 +315,171 @@ class EditorHistoryResponseSerializer(serializers.Serializer):
 	article_id = serializers.IntegerField()
 	entries = EditorHistoryEntrySerializer(many=True)
 
+
+
+# --- /editor/ category routes -------------------------------------------------
+
+_TERMS_HELP = (
+	"Words or phrases matched against titles and summaries, case-insensitively. "
+	"Blank entries are dropped and repeats (ignoring case) kept once."
+)
+
+
+def clean_terms(terms):
+	"""Strip, drop blanks and keep the first of any case-insensitive repeat."""
+	seen = set()
+	out = []
+	for term in terms or []:
+		term = term.strip()
+		if term and term.lower() not in seen:
+			seen.add(term.lower())
+			out.append(term)
+	return out
+
+
+class EditorCategoryCreateSerializer(serializers.Serializer):
+	category_name = serializers.CharField(max_length=200)
+	subject_ids = serializers.ListField(
+		child=serializers.IntegerField(min_value=1),
+		min_length=1,
+		help_text=(
+			"Subjects the category applies to. Each must be in the editor's site "
+			"scope and all must belong to one team, which becomes the category's team."
+		),
+	)
+	category_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		default=list,
+		help_text=_TERMS_HELP + " At least one is required for an automatic category.",
+	)
+	category_description = serializers.CharField(required=False, allow_blank=True, default="")
+	category_slug = serializers.SlugField(
+		max_length=50,
+		required=False,
+		help_text="Defaults to the slugified name. Slugs are unique across every team.",
+	)
+	modality = serializers.ChoiceField(
+		choices=CategoryModality.choices, required=False, allow_null=True, default=None
+	)
+	category_type = serializers.ChoiceField(
+		choices=CategoryType.choices,
+		default=CategoryType.AUTOMATIC,
+		help_text=(
+			"`automatic` (default): the pipeline assigns content by the terms. "
+			"`manual`: only hand assignments."
+		),
+	)
+	match_scope = serializers.ChoiceField(
+		choices=CategoryMatchScope.choices, default=CategoryMatchScope.TITLE_SUMMARY
+	)
+
+	def validate_category_terms(self, value):
+		return clean_terms(value)
+
+	def validate_category_name(self, value):
+		value = value.strip()
+		if not value:
+			raise serializers.ValidationError("This field may not be blank.")
+		return value
+
+	def validate(self, data):
+		if data["category_type"] == CategoryType.AUTOMATIC and not data["category_terms"]:
+			raise serializers.ValidationError(
+				{"category_terms": ["An automatic category needs at least one term."]}
+			)
+		if not data.get("category_slug") and not slugify(data["category_name"]):
+			raise serializers.ValidationError(
+				{"category_slug": ["The name has no letters or digits to build a slug from; send one."]}
+			)
+		return data
+
+
+class EditorCategoryUpdateSerializer(serializers.Serializer):
+	category_name = serializers.CharField(max_length=200, required=False)
+	category_description = serializers.CharField(required=False, allow_blank=True)
+	modality = serializers.ChoiceField(choices=CategoryModality.choices, required=False, allow_null=True)
+	match_scope = serializers.ChoiceField(choices=CategoryMatchScope.choices, required=False)
+	subject_ids = serializers.ListField(
+		child=serializers.IntegerField(min_value=1),
+		min_length=1,
+		required=False,
+		help_text="Replaces the category's subjects. Each must be in scope and in the category's team.",
+	)
+	category_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text="Replaces every term. " + _TERMS_HELP + " Not with `add_terms` or `remove_terms`.",
+	)
+	add_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text="Terms to add to the current ones; a term already there (ignoring case) is skipped.",
+	)
+	remove_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text="Terms to remove, matched ignoring case. A term that isn't there is ignored.",
+	)
+
+	def validate_category_name(self, value):
+		value = value.strip()
+		if not value:
+			raise serializers.ValidationError("This field may not be blank.")
+		return value
+
+	def validate(self, data):
+		if not data:
+			raise serializers.ValidationError({"non_field_errors": ["Send at least one field to change."]})
+		if "category_terms" in data and ("add_terms" in data or "remove_terms" in data):
+			raise serializers.ValidationError(
+				{"category_terms": ["Send either category_terms, or add_terms and/or remove_terms."]}
+			)
+		for key in ("category_terms", "add_terms", "remove_terms"):
+			if key in data:
+				data[key] = clean_terms(data[key])
+		return data
+
+
+class EditorCategoryResponseSerializer(serializers.Serializer):
+	id = serializers.IntegerField()
+	category_name = serializers.CharField()
+	category_slug = serializers.CharField()
+	category_description = serializers.CharField(allow_null=True)
+	category_terms = serializers.ListField(child=serializers.CharField())
+	modality = serializers.CharField(allow_null=True)
+	category_type = serializers.ChoiceField(choices=CategoryType.choices)
+	match_scope = serializers.ChoiceField(choices=CategoryMatchScope.choices)
+	team_id = serializers.IntegerField()
+	subject_ids = serializers.ListField(child=serializers.IntegerField())
+	article_count = serializers.IntegerField()
+	trials_count = serializers.IntegerField()
+	last_synced_at = serializers.DateTimeField(
+		allow_null=True,
+		help_text=(
+			"When the pipeline last matched content to this category. Null for a "
+			"new category; after a change to terms, subjects or scope the next "
+			"pipeline run re-matches all content for it."
+		),
+	)
+	updated_by = serializers.CharField(allow_null=True, help_text="Who last changed the category.")
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorCategoryAssignmentResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	# CharField rather than a ChoiceField: CategoryAssignmentSource has the same
+	# values as CategoryType, and two enums over one choice set make
+	# drf-spectacular warn (and name them arbitrarily).
+	source = serializers.CharField(
+		help_text="Always `manual` after an editor assigns it; the pipeline never removes a manual assignment.",
+	)
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorCategoryUnassignResponseSerializer(serializers.Serializer):
+	article_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	removed = serializers.CharField(help_text="Always `manual`: only a hand assignment can be removed.")
