@@ -416,7 +416,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering) |
 | Categories | `GET /categories/{id}/` | `id` (path) | |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
-| Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | |
+| Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
 | Sponsors | `GET /sponsors/` | `sponsor_type`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below |
 | Sponsors | `GET /sponsors/{id}/` | `id` (path) | |
