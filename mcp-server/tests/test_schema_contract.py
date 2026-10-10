@@ -40,7 +40,9 @@ def schema_params() -> dict[str, set[str]]:
 TOOL_ENDPOINTS = [
 	# `intent` (MCP-TELEMETRY-PLAN.md Phase 4) is model-authored telemetry,
 	# never forwarded to Django as a query param — a tool-only dispatch flag.
-	(articles.search_articles, "/articles/", {"intent"}),
+	# `include_authors` and `full_summary` shape the MCP response (what
+	# compact_article keeps) and are likewise never sent to Django.
+	(articles.search_articles, "/articles/", {"intent", "include_authors", "full_summary"}),
 	(trials.search_trials, "/trials/", {"intent"}),
 	(authors.search_authors, "/authors/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
