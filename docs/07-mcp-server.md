@@ -666,8 +666,8 @@ answer is never served to `/mcp`.
 | `set_article_relevance` | `PUT /editor/articles/{id}/relevance/{subject_id}/` | `true`, `false` or `null` (not reviewed). Applies on every site covering the subject. |
 | `link_trial_to_article` | `POST /editor/articles/{id}/trials/` | Idempotent. |
 | `unlink_trial_from_article` | `DELETE /editor/articles/{id}/trials/{trial_id}/` | Deletes an editor link, hides an automatic one. |
-| `create_category` | `POST /editor/categories/` | Name, subjects (one team) and terms. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
-| `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit. Refused for a category shared with another site. |
+| `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
+| `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
 | `assign_article_category` | `PUT /editor/articles/{id}/categories/{category_id}/` | Hand assignment, never removed by the pipeline. Idempotent. |
 | `unassign_article_category` | `DELETE /editor/articles/{id}/categories/{category_id}/` | Hand assignments only; a pipeline match is refused with the reason. |
 | `get_article_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. |

@@ -317,6 +317,22 @@ async def test_create_category_posts_only_what_was_given(django, mock_editor_gre
 	}
 
 
+async def test_create_category_sends_exclude_terms_only_when_given(django, mock_editor_gregory):
+	result = await _call(
+		"create_category",
+		{
+			"category_name": "Apotransferrin",
+			"subject_ids": [1],
+			"category_terms": ["apotransferrin"],
+			"category_exclude_terms": ["mouse"],
+		},
+	)
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert json.loads(request.content)["category_exclude_terms"] == ["mouse"]
+
+
 async def test_a_taken_slug_names_the_existing_category(django):
 	result = await _call(
 		"create_category",
@@ -335,6 +351,17 @@ async def test_update_category_patches_only_what_was_given(django, mock_editor_g
 	(request,) = _writes(mock_editor_gregory)
 	assert (request.method, request.url.path) == ("PATCH", "/editor/categories/140/")
 	assert json.loads(request.content) == {"remove_terms": ["3'-deoxyadenosine"]}
+
+
+async def test_update_category_sends_exclude_term_edits(django, mock_editor_gregory):
+	result = await _call(
+		"update_category",
+		{"category_id": 140, "add_exclude_terms": ["mouse"], "remove_exclude_terms": ["rat"]},
+	)
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert json.loads(request.content) == {"add_exclude_terms": ["mouse"], "remove_exclude_terms": ["rat"]}
 
 
 async def test_update_category_with_nothing_to_change_sends_nothing(django, mock_editor_gregory):

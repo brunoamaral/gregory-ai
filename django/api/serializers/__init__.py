@@ -78,6 +78,7 @@ class TeamCategorySerializer(serializers.ModelSerializer):
 			"category_description",
 			"category_slug",
 			"category_terms",
+			"category_exclude_terms",
 			"category_type",
 			"modality",
 		]
@@ -156,6 +157,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			"category_name",
 			"category_slug",
 			"category_terms",
+			"category_exclude_terms",
 			"modality",
 			"article_count_total",
 			"trials_count_total",

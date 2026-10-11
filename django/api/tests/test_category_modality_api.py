@@ -264,3 +264,21 @@ class CategoryModalityFacetTests(CategoryModalityAPITestCase):
 		resp = self.client.get("/trials/stats/", {"subject_id": self.subject.pk})
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(resp.data["by_modality"]["biologic_antibody"], 1)
+
+
+class CategoryExcludeTermsAPITests(CategoryModalityAPITestCase):
+	def test_exclude_terms_on_list_and_detail(self):
+		category = self._make_category("Exclusion Category", "exclusion-category")
+		category.category_exclude_terms = ["mouse", "rat"]
+		category.save()
+		self._make_category("Plain Category", "plain-category")
+
+		listing = self.client.get("/categories/")
+		self.assertEqual(listing.status_code, 200)
+		rows = {row["category_slug"]: row for row in listing.json()["results"]}
+		self.assertEqual(rows["exclusion-category"]["category_exclude_terms"], ["mouse", "rat"])
+		self.assertEqual(rows["plain-category"]["category_exclude_terms"], [])
+
+		detail = self.client.get(f"/categories/{category.pk}/")
+		self.assertEqual(detail.status_code, 200)
+		self.assertEqual(detail.json()["category_exclude_terms"], ["mouse", "rat"])

@@ -325,6 +325,7 @@ CATEGORY_COLUMNS = [
 	"Description",
 	"Search terms",
 	"Terms (count)",
+	"Excluded terms",
 	"Category type",
 	"Modality",
 	"Match scope",
@@ -340,7 +341,8 @@ CATEGORY_MATCH_PROSE = (
 	"whole word against the fields listed in \"Field weights (trials)\" (only those fields "
 	"are searched, per the category's match scope); every matching field adds its weight, "
 	"plus a flat 2 points per unique matched term, and a trial is assigned once the total "
-	"reaches the \"Min score (trials)\" threshold. Manual categories are curated by hand and "
+	"reaches the \"Min score (trials)\" threshold. A trial containing any \"Excluded terms\" "
+	"entry in one of those fields is never assigned, whatever its score. Manual categories are curated by hand and "
 	"ignore the term list."
 )
 
@@ -689,6 +691,7 @@ def _category_rows(subjects):
 					cat.category_description or "",
 					"; ".join(cat.category_terms or []),
 					len(cat.category_terms or []),
+					"; ".join(cat.category_exclude_terms or []),
 					cat.get_category_type_display(),
 					cat.get_modality_display() if cat.modality else "",
 					cat.get_match_scope_display(),
@@ -722,18 +725,19 @@ def _build_categories_sheet(wb, subjects):
 	rows = _category_rows(subjects)
 	desc_col = CATEGORY_COLUMNS.index("Description") + 1
 	terms_col = CATEGORY_COLUMNS.index("Search terms") + 1
+	exclude_col = CATEGORY_COLUMNS.index("Excluded terms") + 1
 
 	if not rows:
 		ws.cell(row=5, column=1, value="No categories found.")
 	else:
 		for row_idx, row_data in enumerate(rows, 5):
 			for col_idx, value in enumerate(row_data, 1):
-				if col_idx in (desc_col, terms_col):
+				if col_idx in (desc_col, terms_col, exclude_col):
 					_write_safe_text_cell(ws, row_idx, col_idx, value, wrap=True)
 				else:
 					ws.cell(row=row_idx, column=col_idx, value=value)
 
-	wide_widths = {"Description": 65, "Search terms": 65, "Field weights (trials)": 40}
+	wide_widths = {"Description": 65, "Search terms": 65, "Excluded terms": 40, "Field weights (trials)": 40}
 	for col_idx, name in enumerate(CATEGORY_COLUMNS, 1):
 		letter = get_column_letter(col_idx)
 		ws.column_dimensions[letter].width = wide_widths.get(
