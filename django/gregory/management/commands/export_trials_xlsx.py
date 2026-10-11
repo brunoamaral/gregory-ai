@@ -725,18 +725,19 @@ def _build_categories_sheet(wb, subjects):
 	rows = _category_rows(subjects)
 	desc_col = CATEGORY_COLUMNS.index("Description") + 1
 	terms_col = CATEGORY_COLUMNS.index("Search terms") + 1
+	exclude_col = CATEGORY_COLUMNS.index("Excluded terms") + 1
 
 	if not rows:
 		ws.cell(row=5, column=1, value="No categories found.")
 	else:
 		for row_idx, row_data in enumerate(rows, 5):
 			for col_idx, value in enumerate(row_data, 1):
-				if col_idx in (desc_col, terms_col):
+				if col_idx in (desc_col, terms_col, exclude_col):
 					_write_safe_text_cell(ws, row_idx, col_idx, value, wrap=True)
 				else:
 					ws.cell(row=row_idx, column=col_idx, value=value)
 
-	wide_widths = {"Description": 65, "Search terms": 65, "Field weights (trials)": 40}
+	wide_widths = {"Description": 65, "Search terms": 65, "Excluded terms": 40, "Field weights (trials)": 40}
 	for col_idx, name in enumerate(CATEGORY_COLUMNS, 1):
 		letter = get_column_letter(col_idx)
 		ws.column_dimensions[letter].width = wide_widths.get(

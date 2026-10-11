@@ -852,6 +852,7 @@ class ExportTrialsXlsxTests(TestCase):
 			category_name="Formula-like description",
 			category_description="=SUM(A1:A10)",
 			category_terms=["+1(555)", "-benchmark", "@mention"],
+			category_exclude_terms=["=HYPERLINK(\"http://x\")"],
 		)
 		cat_formula.subjects.add(self.subject_ms)
 		path, wb = self._export(subjects=str(self.subject_ms.pk))
@@ -867,6 +868,9 @@ class ExportTrialsXlsxTests(TestCase):
 					cell = ws.cell(row=r, column=desc_col)
 					self.assertNotEqual(cell.data_type, "f")
 					self.assertEqual(cell.value, "'=SUM(A1:A10)")
+					excl = ws.cell(row=r, column=headers.index("Excluded terms") + 1)
+					self.assertNotEqual(excl.data_type, "f")
+					self.assertEqual(excl.value, "'=HYPERLINK(\"http://x\")")
 					break
 			else:
 				self.fail("Row for Formula-like description not found")
