@@ -75,23 +75,14 @@ class AnnouncementAdminForm(ModelForm):
 				self.fields["organization"].disabled = True
 
 		if "lists" in self.fields:
-			# Scope list choices to the currently selected (or saved) org.
-			# Priority: (1) POSTed org value, (2) saved instance org on edit,
-			# (3) default org for new announcements.
-			current_org = (
-				self.data.get("organization")
-				or (self.instance.organization_id if self.instance.pk else None)
-				or (default_org.pk if default_org else None)
-			)
-			if current_org:
-				self.fields["lists"].queryset = Lists.objects.filter(
-					team__organization_id=current_org
-				)
-			elif user_org_ids is not None:
-				# Non-superuser with no org yet picked: limit to their orgs.
-				self.fields["lists"].queryset = Lists.objects.filter(
-					team__organization__id__in=user_org_ids
-				)
+			# Offer lists from every org the user may pick, not just the
+			# default one: the org dropdown doesn't re-filter the lists
+			# client-side, so scoping to the default org left the picker empty
+			# whenever that org had no lists. clean() enforces that the chosen
+			# lists belong to the chosen org.
+			self.fields["lists"].queryset = Lists.objects.filter(
+				team__organization__in=org_qs
+			).select_related("team")
 
 	def clean(self):
 		cleaned = super().clean()

@@ -197,12 +197,13 @@ class TestFormDefaultSuperuserNoMembership(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 6. Lists scoped to selected org
+# 6. Lists scoped to the user's selectable orgs
 # ---------------------------------------------------------------------------
 
 
-class TestFormListsScopedToSelectedOrg(TestCase):
-	"""Multi-org user: when org=A is posted, only lists of org A are in choices."""
+class TestFormListsScopedToSelectableOrgs(TestCase):
+	"""Multi-org user: lists from every org they can pick are offered, and
+	nothing from orgs they can't pick."""
 
 	@classmethod
 	def setUpTestData(cls):
@@ -231,15 +232,33 @@ class TestFormListsScopedToSelectedOrg(TestCase):
 		OrganizationUser.objects.create(organization=cls.org_a, user=cls.user)
 		OrganizationUser.objects.create(organization=cls.org_b, user=cls.user)
 
-	def test_lists_scoped_to_selected_org(self):
+	def test_lists_from_all_member_orgs_offered(self):
+		org_c = Organization.objects.create(name="Scope C")
+		team_c = Team.objects.create(organization=org_c, name="SC", slug="sc-scope")
+		list_c = Lists.objects.create(list_name="List C", team=team_c)
 		req = MagicMock()
 		req.user = self.user
-		# Simulate POST data selecting org_a.
-		req.data = {"organization": str(self.org_a.pk)}
 		form = AnnouncementAdminForm(request=req)
 		list_qs = form.fields["lists"].queryset
 		self.assertIn(self.list_a, list_qs)
-		self.assertNotIn(self.list_b, list_qs)
+		self.assertIn(self.list_b, list_qs)
+		self.assertNotIn(list_c, list_qs)
+
+	def test_lists_offered_when_default_org_has_no_lists(self):
+		"""Regression: a superuser whose default (membership) org has no lists
+		got an empty picker on the add page and could only create a new list."""
+		empty_org = Organization.objects.create(name="Empty Org")
+		superuser = User.objects.create_superuser(
+			username="scope_su", password="pass", email="scope_su@example.com"
+		)
+		OrganizationUser.objects.create(organization=empty_org, user=superuser)
+		req = MagicMock()
+		req.user = superuser
+		form = AnnouncementAdminForm(request=req)
+		self.assertEqual(form.fields["organization"].initial, empty_org)
+		list_qs = form.fields["lists"].queryset
+		self.assertIn(self.list_a, list_qs)
+		self.assertIn(self.list_b, list_qs)
 
 
 # ---------------------------------------------------------------------------
@@ -282,12 +301,10 @@ class TestFormRejectsCrossOrgList(TestCase):
 			request=req,
 		)
 		self.assertFalse(form.is_valid())
-		# The form rejects the cross-org list. Django's field validation fires
-		# first (the list is not in the org-scoped queryset) and raises a
-		# "Select a valid choice" error on the 'lists' field — which is the
-		# correct rejection. Our clean() would add a more specific message if
-		# the list somehow passed field validation.
+		# Both lists are selectable (superuser), so clean() is what rejects
+		# the mismatch, naming the offending list.
 		self.assertIn("lists", form.errors)
+		self.assertIn("Bad List", str(form.errors["lists"]))
 
 
 # ---------------------------------------------------------------------------
