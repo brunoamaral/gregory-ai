@@ -226,8 +226,8 @@ CKEDITOR_5_CONFIGS = {
 			'heading', '|',
 			'bold', 'italic', 'underline', 'strikethrough', '|',
 			'bulletedList', 'numberedList', '|',
-			'link', 'blockQuote', '|',
-			'horizontalLine', '|',
+			'link', 'blockQuote', 'code', 'codeBlock', '|',
+			'insertTable', 'horizontalLine', '|',
 			'imageUpload', 'insertImage', '|',
 			'undo', 'redo',
 		],
@@ -237,6 +237,12 @@ CKEDITOR_5_CONFIGS = {
 				'imageTextAlternative', '|',
 				'imageStyle:full', 'imageStyle:side',
 			],
+		},
+		'table': {
+			'contentToolbar': ['tableColumn', 'tableRow', 'mergeTableCells'],
+		},
+		'codeBlock': {
+			'languages': [{'language': 'plaintext', 'label': 'Plain text'}],
 		},
 		# General HTML Support — allow <a class="btn-cta"> to be preserved
 		# in the CKEditor model and output so the button plugin can insert it.
