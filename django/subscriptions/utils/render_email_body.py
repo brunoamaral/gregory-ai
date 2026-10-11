@@ -11,8 +11,9 @@ Four public functions are exposed:
   before either render below, so the HTML and text parts carry the same
   tagged URLs.
 - ``render_announcement_html(html, api_domain, site_domain)`` – wrap
-  ``<a class="btn-cta">`` in a bulletproof email table and rewrite
-  ``/media/…`` image sources to absolute URLs.
+  ``<a class="btn-cta">`` in a bulletproof email table, inline-style
+  code blocks, inline code and content tables, and rewrite ``/media/…``
+  image sources to absolute URLs.
 - ``render_announcement_text(html)`` – produce a plain-text fallback from
   the sanitized HTML; buttons become ``Label: URL``, images become
   ``[Image: alt]``.
@@ -43,6 +44,35 @@ logger = logging.getLogger(__name__)
 # changes, update this constant to match.
 BUTTON_BRAND_HEX = "#1e3a8a"
 
+# Inline styles for code and content tables. Email clients ignore most
+# <style> rules, so these are written onto each tag at render time; the
+# ``ann-*`` classes added alongside them carry the dark-mode overrides in
+# ``templates/emails/base_email.html``.
+_MONO_FONT = "Menlo, Consolas, 'Courier New', monospace"
+PRE_STYLE = (
+	"margin: 0 0 20px 0; padding: 12px 16px; background-color: #f3f4f6;"
+	" border: 1px solid #e5e7eb; border-radius: 6px; color: #111827;"
+	f" font-family: {_MONO_FONT}; font-size: 14px; line-height: 1.5;"
+	" white-space: pre-wrap; word-break: break-all;"
+)
+PRE_CODE_STYLE = "font-family: inherit; font-size: inherit; color: inherit;"
+INLINE_CODE_STYLE = (
+	"padding: 2px 5px; background-color: #f3f4f6; border-radius: 4px;"
+	f" color: #111827; font-family: {_MONO_FONT}; font-size: 14px;"
+)
+TABLE_STYLE = (
+	"width: 100%; margin: 0 0 20px 0; border-collapse: collapse;"
+	" font-size: 14px; line-height: 1.5;"
+)
+TH_STYLE = (
+	"padding: 8px 10px; background-color: #f3f4f6; border: 1px solid #e5e7eb;"
+	" color: #111827; font-weight: 600; text-align: left; vertical-align: top;"
+)
+TD_STYLE = (
+	"padding: 8px 10px; border: 1px solid #e5e7eb; color: #374151;"
+	" text-align: left; vertical-align: top;"
+)
+
 # ---------------------------------------------------------------------------
 # Bleach allowlists
 # ---------------------------------------------------------------------------
@@ -63,11 +93,16 @@ ALLOWED_TAGS = [
 	"blockquote",
 	"br",
 	"hr",
+	# code: inline <code> and CKEditor code blocks (<pre><code>)
+	"pre",
+	"code",
 	# added for images and server-rendered button tables
 	"img",
 	"table",
+	"thead",
 	"tbody",
 	"tr",
+	"th",
 	"td",
 	"span",
 ]
@@ -76,8 +111,10 @@ ALLOWED_ATTRS = {
 	"a": ["href", "target", "rel", "class", "style"],
 	"img": ["src", "alt", "width", "height", "style"],
 	"table": ["role", "cellpadding", "cellspacing", "border", "style", "align"],
-	"td": ["align", "valign", "style"],
+	"th": ["align", "valign", "colspan", "rowspan"],
+	"td": ["align", "valign", "style", "colspan", "rowspan"],
 	"tr": ["style"],
+	"thead": [],
 	"tbody": [],
 	"span": ["style"],
 }
@@ -203,6 +240,10 @@ def render_announcement_html(
 	"""
 	soup = BeautifulSoup(html, "html.parser")
 
+	# 0. Style code and content tables. Runs before the button step so the
+	#    generated button tables are never touched.
+	_style_code_and_tables(soup)
+
 	# 1. Wrap btn-cta anchors in bulletproof tables
 	for a_tag in list(soup.find_all("a", class_="btn-cta")):
 		href = a_tag.get("href", "")
@@ -288,6 +329,13 @@ def render_announcement_text(html: str) -> str:
 		alt = img.get("alt", "").strip() or "image"
 		img.replace_with(NavigableString(f"[Image: {alt}]"))
 
+	# Flatten table rows to "cell | cell" so columns stay readable
+	for tr in list(soup.find_all("tr")):
+		cells = [
+			cell.get_text(" ", strip=True) for cell in tr.find_all(["th", "td"])
+		]
+		tr.replace_with(NavigableString(f"\n{' | '.join(cells)}\n"))
+
 	text = soup.get_text("\n")
 	# Collapse runs of 3 or more newlines to 2
 	text = re.sub(r"\n{3,}", "\n\n", text)
@@ -332,6 +380,35 @@ def strip_scheme(domain: str | None) -> str:
 
 # Private alias kept for internal callers — use strip_scheme in new code.
 _strip_scheme = strip_scheme
+
+
+def _style_code_and_tables(soup) -> None:
+	"""Write email-safe inline styles onto <pre>, <code> and <table> tags."""
+	for pre in soup.find_all("pre"):
+		pre["style"] = PRE_STYLE
+		pre["class"] = "ann-pre"
+		# CKEditor ends code blocks with a newline, which <pre> renders
+		# as an empty last line.
+		last = pre.find_all(string=True)
+		if last:
+			last[-1].replace_with(last[-1].rstrip("\n"))
+	for code in soup.find_all("code"):
+		if code.find_parent("pre"):
+			code["style"] = PRE_CODE_STYLE
+		else:
+			code["style"] = INLINE_CODE_STYLE
+			code["class"] = "ann-code"
+	for table in soup.find_all("table"):
+		if table.get("role") == "presentation":
+			continue
+		table["style"] = TABLE_STYLE
+		table["class"] = "ann-table"
+		table["cellpadding"] = "0"
+		table["cellspacing"] = "0"
+		for th in table.find_all("th"):
+			th["style"] = TH_STYLE
+		for td in table.find_all("td"):
+			td["style"] = TD_STYLE
 
 
 def _build_button_table(href: str, label: str) -> str:
