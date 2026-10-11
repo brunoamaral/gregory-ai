@@ -2884,6 +2884,7 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 			{
 				"fields": (
 					"category_terms",
+					"category_exclude_terms",
 					"match_scope",
 					"match_min_score_articles",
 					"match_min_score_trials",
@@ -2894,7 +2895,9 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 					"unique matched term is added on top of the field weights below. In "
 					"'Title only' scope every field except the title is ignored. "
 					"Articles are scored on up to 2 fields; trials on up to 7, so separate "
-					"thresholds let you tune both independently."
+					"thresholds let you tune both independently. Content containing any "
+					"excluded term in a searched field is never assigned automatically, "
+					"whatever its score."
 				),
 			},
 		),
@@ -2922,6 +2925,7 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 	# Form fields that affect which articles/trials match the category
 	MATCHING_CONFIG_FIELDS = {
 		"category_terms",
+		"category_exclude_terms",
 		"subjects",
 		"category_type",
 		"match_scope",

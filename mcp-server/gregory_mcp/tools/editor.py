@@ -264,6 +264,7 @@ async def create_category(
 	category_name: str,
 	subject_ids: list[int],
 	category_terms: list[str] | None = None,
+	category_exclude_terms: list[str] | None = None,
 	category_description: str | None = None,
 	modality: str | None = None,
 	category_slug: str | None = None,
@@ -274,7 +275,8 @@ async def create_category(
 
 	An automatic category (the default) is filled by matching its terms
 	against titles and summaries, case-insensitively, so choose terms that
-	name the topic and nothing broader. It starts empty: the next pipeline run
+	name the topic and nothing broader. Content containing any excluded term in
+	a searched field is never assigned automatically, whatever its score. It starts empty: the next pipeline run
 	(every 12 hours) matches all content against it. The subjects must be ones
 	this site covers and belong to one team. The slug defaults to the
 	slugified name and is unique across every team; a taken slug is an error
@@ -286,6 +288,7 @@ async def create_category(
 		category_name: The name shown on the site.
 		subject_ids: Subjects it applies to (see list_subjects), from one team.
 		category_terms: Words or phrases to match. At least one for an automatic category.
+		category_exclude_terms: Words or phrases that keep content out of the category. Optional.
 		category_description: Shown on the category's page. Markdown is allowed.
 		modality: small_molecule, biologic_antibody, cell_gene_therapy, rehabilitation,
 			device_neuromodulation, natural_product, research_topic or other.
@@ -301,6 +304,7 @@ async def create_category(
 		"match_scope": match_scope,
 	}
 	for key, value in (
+		("category_exclude_terms", category_exclude_terms),
 		("category_description", category_description),
 		("modality", modality),
 		("category_slug", category_slug),
@@ -326,14 +330,20 @@ async def update_category(
 	category_terms: list[str] | None = None,
 	add_terms: list[str] | None = None,
 	remove_terms: list[str] | None = None,
+	category_exclude_terms: list[str] | None = None,
+	add_exclude_terms: list[str] | None = None,
+	remove_exclude_terms: list[str] | None = None,
 ) -> dict:
 	"""Change a category. Send only the fields to change.
 
 	`category_terms` replaces every term; `add_terms` and `remove_terms` edit
 	the current list instead (ignoring case), and can't be combined with it.
+	`category_exclude_terms`, `add_exclude_terms` and `remove_exclude_terms` work
+	the same way for the terms that keep content out of the category: content
+	containing any of them in a searched field is never assigned automatically.
 	`subject_ids` replaces the subjects, which must be in the category's team.
 	The slug and team never change. Only categories whose subjects are all on
-	this site can be changed here. After a change to terms, subjects or match
+	this site can be changed here. After a change to terms, excluded terms, subjects or match
 	scope, the next pipeline run re-matches all content. Live immediately and
 	recorded under the signed-in person's name. Show the proposed change and
 	get confirmation before calling.
@@ -348,6 +358,9 @@ async def update_category(
 		category_terms: Replaces every term.
 		add_terms: Terms to add.
 		remove_terms: Terms to remove.
+		category_exclude_terms: Replaces every excluded term.
+		add_exclude_terms: Excluded terms to add.
+		remove_exclude_terms: Excluded terms to remove.
 	"""
 	body = {
 		key: value
@@ -360,6 +373,9 @@ async def update_category(
 			("category_terms", category_terms),
 			("add_terms", add_terms),
 			("remove_terms", remove_terms),
+			("category_exclude_terms", category_exclude_terms),
+			("add_exclude_terms", add_exclude_terms),
+			("remove_exclude_terms", remove_exclude_terms),
 		)
 		if value is not None
 	}
