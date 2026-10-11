@@ -126,13 +126,16 @@ class PatentHashIsolationTests(TestCase):
 		return TeamCategory.objects.get(pk=self.category.pk)
 
 	def test_article_trial_hash_payload_is_unchanged(self):
-		"""The existing hash must keep its exact payload, or every category would be
-		fully re-matched against all articles and trials on the next run."""
+		"""The article/trial hash payload must not change as a side effect of patent
+		work, or every category would be fully re-matched against all articles and
+		trials on the next run. (exclude_terms was added deliberately with
+		category_exclude_terms.)"""
 		command = Command()
 		category = TeamCategory.objects.prefetch_related("subjects").get(pk=self.category.pk)
 		expected_payload = json.dumps(
 			{
 				"terms": ["ocrelizumab"],
+				"exclude_terms": [],
 				"subjects": [self.subject.id],
 				"min_score_articles": 3,
 				"min_score_trials": 3,
