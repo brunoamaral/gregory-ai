@@ -606,6 +606,21 @@ class Sources(models.Model):
 		verbose_name="ClinicalTrials.gov Search condition/Disease",
 		help_text='Search condition/Disease for ClinicalTrials.gov API. Enter conditions/diseases to search (e.g., "multiple sclerosis"). Only used when method is "ClinicalTrials.gov API".',
 	)
+	# The ClinicalTrials.gov search used to read these two from `description`
+	# ("INTERVENTION:…" / "TERM:…" prefixes); migration 0111 moved them here.
+	# `description` is notes for people only and never builds a search.
+	ctgov_search_intervention = models.TextField(
+		blank=True,
+		null=True,
+		verbose_name="ClinicalTrials.gov intervention",
+		help_text='Intervention or treatment searched on ClinicalTrials.gov (query.intr), e.g. "dihydroartemisinin". Only used when method is "ClinicalTrials.gov API".',
+	)
+	ctgov_search_term = models.TextField(
+		blank=True,
+		null=True,
+		verbose_name="ClinicalTrials.gov other terms",
+		help_text='Terms searched anywhere in a ClinicalTrials.gov record (query.term), e.g. "cell reprogramming". Only used when method is "ClinicalTrials.gov API".',
+	)
 	ctis_search_criteria = models.JSONField(
 		blank=True,
 		null=True,

@@ -34,10 +34,10 @@ trials in scope.
    and secret in the Django admin under the organisation's *Credentials*
    (`epo_ops_consumer_key`, `epo_ops_consumer_secret`). One account serves every source
    of the organisation. Never put them in the repository or an `.env` file.
-2. **Source.** In the admin create a Source with *Source for* `Patents`, *Method*
-   `EPO Open Patent Services`, a team and a subject, and a CQL query in *EPO OPS CQL
-   query*. Leave out any publication-date clause; the importer adds its own window. For
-   example:
+2. **Source.** In the admin create a Source with *Source type* "EPO patent search", a
+   team and a subject, and a CQL query in *EPO search query (CQL)*. Leave out any
+   publication-date clause; the importer adds its own window, and the form rejects a
+   query that has one. For example:
 
    ```
    ta="multiple sclerosis" and cpc=/low A61P25/00

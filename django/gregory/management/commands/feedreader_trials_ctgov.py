@@ -7,10 +7,12 @@ clinical trials using the ClinicalTrials.gov REST API v2.
 Source Configuration:
 - method: 'ctgov_api'
 - source_for: 'trials'
-- ctgov_search_condition: The condition/disease search query (e.g., "multiple sclerosis")
-- description: Optional additional search parameters:
-    - "INTERVENTION:rituximab, ocrelizumab" - search by intervention/treatment
-    - "TERM:some general search" - general search terms
+- ctgov_search_condition: condition/disease searched (query.cond), e.g. "multiple sclerosis"
+- ctgov_search_intervention: intervention/treatment searched (query.intr)
+- ctgov_search_term: terms searched anywhere in the record (query.term)
+At least one of the three must be set; a source with none is skipped, because an
+empty search would return every trial in the registry. The source's description
+is notes for people and is never read here.
 
 Usage:
 	python manage.py feedreader_trials_ctgov
@@ -138,6 +140,16 @@ class Command(GregoryBaseCommand):
 			self.log(
 				f"Processing ClinicalTrials.gov API source: {source.name}", level=1
 			)
+			if not self._search_query_params(source):
+				self.log(
+					f"  Skipping source '{source.name}': no condition, intervention or "
+					"other terms set. An empty search would fetch every trial in "
+					"ClinicalTrials.gov, so this source is never fetched until one of "
+					"them is configured.",
+					level=1,
+					style_func=self.style.ERROR,
+				)
+				continue
 			created_count = 0
 			updated_count = 0
 			error_count = 0
@@ -273,35 +285,33 @@ class Command(GregoryBaseCommand):
 				style_func=self.style.SUCCESS,
 			)
 
-	def _build_search_params(self, source):
-		"""Build API search parameters from source configuration.
+	# Source field -> ClinicalTrials.gov API query parameter. ClinicalTrials.gov
+	# combines the parameters with AND, so a trial must match every one that is set.
+	SEARCH_FIELDS = (
+		("ctgov_search_condition", "query_cond"),
+		("ctgov_search_intervention", "query_intr"),
+		("ctgov_search_term", "query_term"),
+	)
 
-		Source configuration:
-		- ctgov_search_condition: The condition/disease search query (e.g., "multiple sclerosis")
-		- description: Optional additional search parameters:
-		    - "INTERVENTION:rituximab, ocrelizumab" - search by intervention/treatment
-		    - "TERM:some general search" - general search terms
+	def _search_query_params(self, source):
+		"""The query parameters a source sets; empty when it sets none."""
+		params = {}
+		for field, param in self.SEARCH_FIELDS:
+			value = (getattr(source, field) or "").strip()
+			if value:
+				params[param] = value
+		return params
+
+	def _build_search_params(self, source):
+		"""Build API search parameters from the source's three search fields.
+
+		The source's description is notes for people and is never read here.
 		"""
 		params = {
 			"page_size": 100,
 			"sort": ["LastUpdatePostDate:desc"],  # Get newest updates first
+			**self._search_query_params(source),
 		}
-
-		# Use ctgov_search_condition for the condition search query
-		if source.ctgov_search_condition:
-			params["query_cond"] = source.ctgov_search_condition
-
-		# Use description field for additional search parameters (optional)
-		# Format: "INTERVENTION:term1, term2" or just general terms
-		if source.description:
-			if source.description.upper().startswith("INTERVENTION:"):
-				intervention_terms = source.description[
-					13:
-				].strip()  # Remove "INTERVENTION:" prefix
-				params["query_intr"] = intervention_terms
-			elif source.description.upper().startswith("TERM:"):
-				general_terms = source.description[5:].strip()  # Remove "TERM:" prefix
-				params["query_term"] = general_terms
 
 		# Incremental window: only ask CTGov for studies updated since the last
 		# fully successful fetch (minus a 2-day overlap for clock skew and CTGov
