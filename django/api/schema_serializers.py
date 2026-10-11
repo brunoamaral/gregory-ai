@@ -325,6 +325,13 @@ _TERMS_HELP = (
 )
 
 
+_EXCLUDE_TERMS_HELP = (
+	"Words or phrases that keep content out of the category: content containing "
+	"any of them in a searched field is never assigned automatically, whatever its "
+	"score. Matched like `category_terms`. Manual assignments are not affected."
+)
+
+
 def clean_terms(terms):
 	"""Strip, drop blanks and keep the first of any case-insensitive repeat."""
 	seen = set()
@@ -353,6 +360,12 @@ class EditorCategoryCreateSerializer(serializers.Serializer):
 		default=list,
 		help_text=_TERMS_HELP + " At least one is required for an automatic category.",
 	)
+	category_exclude_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		default=list,
+		help_text=_EXCLUDE_TERMS_HELP + " Optional, also for an automatic category.",
+	)
 	category_description = serializers.CharField(required=False, allow_blank=True, default="")
 	category_slug = serializers.SlugField(
 		max_length=50,
@@ -375,6 +388,9 @@ class EditorCategoryCreateSerializer(serializers.Serializer):
 	)
 
 	def validate_category_terms(self, value):
+		return clean_terms(value)
+
+	def validate_category_exclude_terms(self, value):
 		return clean_terms(value)
 
 	def validate_category_name(self, value):
@@ -421,6 +437,24 @@ class EditorCategoryUpdateSerializer(serializers.Serializer):
 		required=False,
 		help_text="Terms to remove, matched ignoring case. A term that isn't there is ignored.",
 	)
+	category_exclude_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text=(
+			"Replaces every excluded term. " + _EXCLUDE_TERMS_HELP
+			+ " Not with `add_exclude_terms` or `remove_exclude_terms`."
+		),
+	)
+	add_exclude_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text="Excluded terms to add; one already there (ignoring case) is skipped.",
+	)
+	remove_exclude_terms = serializers.ListField(
+		child=serializers.CharField(max_length=100, allow_blank=True, trim_whitespace=False),
+		required=False,
+		help_text="Excluded terms to remove, matched ignoring case. One that isn't there is ignored.",
+	)
 
 	def validate_category_name(self, value):
 		value = value.strip()
@@ -435,7 +469,24 @@ class EditorCategoryUpdateSerializer(serializers.Serializer):
 			raise serializers.ValidationError(
 				{"category_terms": ["Send either category_terms, or add_terms and/or remove_terms."]}
 			)
-		for key in ("category_terms", "add_terms", "remove_terms"):
+		if "category_exclude_terms" in data and (
+			"add_exclude_terms" in data or "remove_exclude_terms" in data
+		):
+			raise serializers.ValidationError(
+				{
+					"category_exclude_terms": [
+						"Send either category_exclude_terms, or add_exclude_terms and/or remove_exclude_terms."
+					]
+				}
+			)
+		for key in (
+			"category_terms",
+			"add_terms",
+			"remove_terms",
+			"category_exclude_terms",
+			"add_exclude_terms",
+			"remove_exclude_terms",
+		):
 			if key in data:
 				data[key] = clean_terms(data[key])
 		return data
@@ -447,6 +498,7 @@ class EditorCategoryResponseSerializer(serializers.Serializer):
 	category_slug = serializers.CharField()
 	category_description = serializers.CharField(allow_null=True)
 	category_terms = serializers.ListField(child=serializers.CharField())
+	category_exclude_terms = serializers.ListField(child=serializers.CharField())
 	modality = serializers.CharField(allow_null=True)
 	category_type = serializers.ChoiceField(choices=CategoryType.choices)
 	match_scope = serializers.ChoiceField(choices=CategoryMatchScope.choices)

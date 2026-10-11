@@ -3136,10 +3136,12 @@ paths:
       operationId: editor_categories_partial_update
       description: 'Editor-only. Changes the fields sent. `category_terms` replaces
         every term; `add_terms` and `remove_terms` edit the current list instead (case-insensitive).
-        `subject_ids` replaces the subjects, which must be in scope and in the category''s
-        team. The slug and team never change. Every subject of the category must be
-        in the editor''s site scope, since the change shows wherever the category
-        does: 404 when none is, 403 when only some are. A change to terms, subjects
+        `category_exclude_terms` (or `add_exclude_terms` / `remove_exclude_terms`)
+        does the same for the terms that keep content out of the category. `subject_ids`
+        replaces the subjects, which must be in scope and in the category''s team.
+        The slug and team never change. Every subject of the category must be in the
+        editor''s site scope, since the change shows wherever the category does: 404
+        when none is, 403 when only some are. A change to terms, excluded terms, subjects
         or `match_scope` makes the next pipeline run re-match all content for the
         category. Recorded under the editor''s name.'
       summary: Change a category (editor)
@@ -6984,6 +6986,15 @@ components:
             maxLength: 100
           title: Terms to include in category (comma separated)
           description: Add terms separated by commas.
+        category_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          title: Terms to exclude from category (comma separated)
+          description: Content containing any of these terms in a searched field is
+            never assigned automatically, whatever its score. Manual assignments are
+            not affected.
         modality:
           nullable: true
           description: |-
@@ -7102,6 +7113,15 @@ components:
           description: Words or phrases matched against titles and summaries, case-insensitively.
             Blank entries are dropped and repeats (ignoring case) kept once. At least
             one is required for an automatic category.
+        category_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: 'Words or phrases that keep content out of the category: content
+            containing any of them in a searched field is never assigned automatically,
+            whatever its score. Matched like `category_terms`. Manual assignments
+            are not affected. Optional, also for an automatic category.'
         category_description:
           type: string
           default: ''
@@ -7148,6 +7168,10 @@ components:
           type: array
           items:
             type: string
+        category_exclude_terms:
+          type: array
+          items:
+            type: string
         modality:
           type: string
           nullable: true
@@ -7183,6 +7207,7 @@ components:
       required:
       - article_count
       - category_description
+      - category_exclude_terms
       - category_name
       - category_slug
       - category_terms
@@ -8012,6 +8037,29 @@ components:
             maxLength: 100
           description: Terms to remove, matched ignoring case. A term that isn't there
             is ignored.
+        category_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: 'Replaces every excluded term. Words or phrases that keep content
+            out of the category: content containing any of them in a searched field
+            is never assigned automatically, whatever its score. Matched like `category_terms`.
+            Manual assignments are not affected. Not with `add_exclude_terms` or `remove_exclude_terms`.'
+        add_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Excluded terms to add; one already there (ignoring case) is
+            skipped.
+        remove_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          description: Excluded terms to remove, matched ignoring case. One that isn't
+            there is ignored.
     PatchedEditorialUpdateRequest:
       type: object
       properties:
@@ -8287,6 +8335,15 @@ components:
             maxLength: 100
           title: Terms to include in category (comma separated)
           description: Add terms separated by commas.
+        category_exclude_terms:
+          type: array
+          items:
+            type: string
+            maxLength: 100
+          title: Terms to exclude from category (comma separated)
+          description: Content containing any of these terms in a searched field is
+            never assigned automatically, whatever its score. Manual assignments are
+            not affected.
         category_type:
           allOf:
           - $ref: '#/components/schemas/CategoryTypeEnum'

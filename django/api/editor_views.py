@@ -563,6 +563,7 @@ def _category_payload(category):
 		"category_slug": category.category_slug,
 		"category_description": category.category_description,
 		"category_terms": list(category.category_terms or []),
+		"category_exclude_terms": list(category.category_exclude_terms or []),
 		"modality": category.modality,
 		"category_type": category.category_type,
 		"match_scope": category.match_scope,
@@ -623,11 +624,13 @@ _CATEGORY_WRITE_ERRORS = {
 		description=(
 			"Editor-only. Changes the fields sent. `category_terms` replaces every "
 			"term; `add_terms` and `remove_terms` edit the current list instead "
-			"(case-insensitive). `subject_ids` replaces the subjects, which must be "
+			"(case-insensitive). `category_exclude_terms` (or `add_exclude_terms` / "
+			"`remove_exclude_terms`) does the same for the terms that keep content out "
+			"of the category. `subject_ids` replaces the subjects, which must be "
 			"in scope and in the category's team. The slug and team never change. "
 			"Every subject of the category must be in the editor's site scope, "
 			"since the change shows wherever the category does: 404 when none is, "
-			"403 when only some are. A change to terms, subjects or `match_scope` "
+			"403 when only some are. A change to terms, excluded terms, subjects or `match_scope` "
 			"makes the next pipeline run re-match all content for the category. "
 			"Recorded under the editor's name."
 		),
@@ -663,6 +666,7 @@ class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
 					category_slug=slug,
 					category_description=data["category_description"] or None,
 					category_terms=data["category_terms"],
+					category_exclude_terms=data["category_exclude_terms"],
 					category_type=data["category_type"],
 					modality=data["modality"],
 					match_scope=data["match_scope"],
@@ -703,6 +707,14 @@ class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
 			if category.category_type == CategoryType.AUTOMATIC and not terms:
 				raise ValidationError({"category_terms": ["An automatic category needs at least one term."]})
 
+			exclude_terms = list(category.category_exclude_terms or [])
+			if "category_exclude_terms" in data:
+				exclude_terms = data["category_exclude_terms"]
+			elif "add_exclude_terms" in data or "remove_exclude_terms" in data:
+				exclude_terms = _merge_terms(
+					exclude_terms, data.get("add_exclude_terms", ()), data.get("remove_exclude_terms", ())
+				)
+
 			changed = []
 			for field in ("category_name", "modality", "match_scope"):
 				if field in data and getattr(category, field) != data[field]:
@@ -716,6 +728,9 @@ class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
 			if terms != list(category.category_terms or []):
 				category.category_terms = terms
 				changed.append("category_terms")
+			if exclude_terms != list(category.category_exclude_terms or []):
+				category.category_exclude_terms = exclude_terms
+				changed.append("category_exclude_terms")
 			if changed:
 				category.save(update_fields=changed)
 			if subjects is not None and {s.id for s in subjects} != {s.id for s in category.subjects.all()}:

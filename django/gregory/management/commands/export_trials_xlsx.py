@@ -325,6 +325,7 @@ CATEGORY_COLUMNS = [
 	"Description",
 	"Search terms",
 	"Terms (count)",
+	"Excluded terms",
 	"Category type",
 	"Modality",
 	"Match scope",
@@ -340,7 +341,8 @@ CATEGORY_MATCH_PROSE = (
 	"whole word against the fields listed in \"Field weights (trials)\" (only those fields "
 	"are searched, per the category's match scope); every matching field adds its weight, "
 	"plus a flat 2 points per unique matched term, and a trial is assigned once the total "
-	"reaches the \"Min score (trials)\" threshold. Manual categories are curated by hand and "
+	"reaches the \"Min score (trials)\" threshold. A trial containing any \"Excluded terms\" "
+	"entry in one of those fields is never assigned, whatever its score. Manual categories are curated by hand and "
 	"ignore the term list."
 )
 
@@ -689,6 +691,7 @@ def _category_rows(subjects):
 					cat.category_description or "",
 					"; ".join(cat.category_terms or []),
 					len(cat.category_terms or []),
+					"; ".join(cat.category_exclude_terms or []),
 					cat.get_category_type_display(),
 					cat.get_modality_display() if cat.modality else "",
 					cat.get_match_scope_display(),

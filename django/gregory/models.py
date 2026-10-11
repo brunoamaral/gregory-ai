@@ -274,6 +274,16 @@ class TeamCategory(models.Model):
 		verbose_name="Terms to include in category (comma separated)",
 		help_text="Add terms separated by commas.",
 	)
+	category_exclude_terms = ArrayField(
+		models.CharField(max_length=100),
+		default=list,
+		blank=True,
+		verbose_name="Terms to exclude from category (comma separated)",
+		help_text=(
+			"Content containing any of these terms in a searched field is never assigned "
+			"automatically, whatever its score. Manual assignments are not affected."
+		),
+	)
 	category_type = models.CharField(
 		max_length=10,
 		choices=CategoryType.choices,
@@ -335,7 +345,7 @@ class TeamCategory(models.Model):
 		null=True,
 		editable=False,
 		help_text=(
-			"Fingerprint of the matching configuration (terms, subjects, score threshold) at the last "
+			"Fingerprint of the matching configuration (terms, excluded terms, subjects, score threshold) at the last "
 			"rebuild_categories sync. When the configuration changes, the next incremental run performs "
 			"a full re-match for this category."
 		),

@@ -70,6 +70,16 @@ class CreateCategoryTest(CategoryFixture):
 		self.assertIsNone(body["last_synced_at"])
 		self.assertIn("ana", body["updated_by"])
 
+	def test_exclude_terms_are_stored_and_returned(self):
+		body = self.create(category_exclude_terms=[" mouse ", "Mouse", "rat"]).json()
+		self.assertEqual(body["category_exclude_terms"], ["mouse", "rat"])
+		category = TeamCategory.objects.get(pk=body["id"])
+		self.assertEqual(category.category_exclude_terms, ["mouse", "rat"])
+
+	def test_exclude_terms_default_to_empty(self):
+		body = self.create().json()
+		self.assertEqual(body["category_exclude_terms"], [])
+
 	def test_history_names_the_editor_and_the_mcp_door(self):
 		category_id = self.create().json()["id"]
 		rows = TeamCategory.history.filter(id=category_id)
@@ -172,6 +182,34 @@ class UpdateCategoryTest(CategoryFixture):
 	def test_replace_terms(self):
 		body = self.patch(self.cat_a, {"category_terms": ["cordycepin"]}).json()
 		self.assertEqual(body["category_terms"], ["cordycepin"])
+
+	def test_replace_exclude_terms(self):
+		body = self.patch(self.cat_a, {"category_exclude_terms": ["mouse"]}).json()
+		self.assertEqual(body["category_exclude_terms"], ["mouse"])
+		self.cat_a.refresh_from_db()
+		self.assertEqual(self.cat_a.category_exclude_terms, ["mouse"])
+
+	def test_add_and_remove_exclude_terms_ignoring_case(self):
+		self.patch(self.cat_a, {"category_exclude_terms": ["mouse", "rat"]})
+		response = self.patch(self.cat_a, {"remove_exclude_terms": ["RAT"], "add_exclude_terms": ["Mouse", "zebrafish"]})
+		self.assertEqual(response.status_code, 200, response.content)
+		self.assertEqual(response.json()["category_exclude_terms"], ["mouse", "zebrafish"])
+
+	def test_replace_and_edit_exclude_terms_together_is_400(self):
+		response = self.patch(self.cat_a, {"category_exclude_terms": ["a"], "add_exclude_terms": ["b"]})
+		self.assertEqual(response.status_code, 400)
+		self.assertIn("category_exclude_terms", response.json())
+
+	def test_exclude_terms_change_is_recorded_under_the_editor(self):
+		self.patch(self.cat_a, {"add_exclude_terms": ["mouse"]})
+		row = TeamCategory.history.filter(id=self.cat_a.pk).order_by("-history_date").first()
+		self.assertEqual(row.history_type, "~")
+		self.assertEqual(row.editor_user, self.ana)
+		self.assertEqual(row.category_exclude_terms, ["mouse"])
+
+	def test_an_automatic_category_stays_valid_with_no_exclude_terms(self):
+		response = self.patch(self.cat_a, {"category_exclude_terms": []})
+		self.assertEqual(response.status_code, 200, response.content)
 
 	def test_replace_and_edit_terms_together_is_400(self):
 		response = self.patch(self.cat_a, {"category_terms": ["a"], "add_terms": ["b"]})

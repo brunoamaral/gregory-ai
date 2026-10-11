@@ -177,6 +177,9 @@ class Command(BaseCommand):
 		payload = json.dumps(
 			{
 				"terms": sorted(term.lower() for term in cat.category_terms or []),
+				"exclude_terms": sorted(
+					term.lower() for term in cat.category_exclude_terms or []
+				),
 				# Iterate the (prefetched) relation instead of values_list, which
 				# would bypass prefetch_related and re-query per category
 				"subjects": sorted(subject.id for subject in cat.subjects.all()),
@@ -275,6 +278,18 @@ class Command(BaseCommand):
 		score += len(matched_terms) * MULTI_TERM_BONUS
 		return score, matched_terms
 
+	def excluded_by(self, item, exclude_terms, exclude_patterns, weights, field_attr):
+		"""Return the first excluded term found in an in-scope field, or None."""
+		for field in weights:
+			text = getattr(item, field_attr[field], None) or ""
+			if not text:
+				continue
+			text = text.lower()
+			for i, pattern in enumerate(exclude_patterns):
+				if pattern.search(text):
+					return exclude_terms[i]
+		return None
+
 	def rebuild_cats_articles(self, days=None, batch_size=1000):
 		self.stdout.write("Processing articles categorization...")
 
@@ -313,6 +328,11 @@ class Command(BaseCommand):
 			term_patterns = [
 				re.compile(r"\b" + re.escape(term.lower()) + r"\b") for term in terms
 			]
+			exclude_terms = cat.category_exclude_terms or []
+			exclude_patterns = [
+				re.compile(r"\b" + re.escape(term.lower()) + r"\b")
+				for term in exclude_terms
+			]
 
 			# Desired set of article ids for this category; with no terms or no
 			# scored fields nothing qualifies and stale automatic links are removed
@@ -333,6 +353,7 @@ class Command(BaseCommand):
 				self.log_message(f"  - Processing subject: {subject.subject_name}")
 
 				matched_for_subject = 0
+				excluded_for_subject = 0
 
 				# Base query for this subject
 				base_query = Articles.objects.filter(subjects__id=subject.id)
@@ -360,6 +381,17 @@ class Command(BaseCommand):
 					articles_with_scores = []
 
 					for article in batch:
+						excluded_term = self.excluded_by(
+							article, exclude_terms, exclude_patterns, weights, ARTICLE_FIELD_ATTR
+						)
+						if excluded_term:
+							excluded_for_subject += 1
+							if self.verbose:
+								self.log_message(
+									f"      Article {article.article_id}: excluded by '{excluded_term}'"
+								)
+							continue
+
 						score, matched_terms = self.score_item(
 							article, terms, term_patterns, weights, ARTICLE_FIELD_ATTR
 						)
@@ -389,8 +421,11 @@ class Command(BaseCommand):
 						f"    Processed {processed} of {total_candidates} articles"
 					)
 
+				excluded_note = (
+					f" ({excluded_for_subject} excluded)" if excluded_for_subject else ""
+				)
 				self.stdout.write(
-					f"    Matched {matched_for_subject} articles for subject '{subject.subject_name}'"
+					f"    Matched {matched_for_subject} articles for subject '{subject.subject_name}'{excluded_note}"
 				)
 
 			# Current associations, scoped to the same window as the desired set
@@ -482,6 +517,11 @@ class Command(BaseCommand):
 			term_patterns = [
 				re.compile(r"\b" + re.escape(term.lower()) + r"\b") for term in terms
 			]
+			exclude_terms = cat.category_exclude_terms or []
+			exclude_patterns = [
+				re.compile(r"\b" + re.escape(term.lower()) + r"\b")
+				for term in exclude_terms
+			]
 
 			# Desired set of trial ids for this category; with no terms or no
 			# scored fields nothing qualifies and stale automatic links are removed
@@ -502,6 +542,7 @@ class Command(BaseCommand):
 				self.log_message(f"  - Processing subject: {subject.subject_name}")
 
 				matched_for_subject = 0
+				excluded_for_subject = 0
 
 				# Base query for this subject
 				base_query = Trials.objects.filter(subjects__id=subject.id)
@@ -529,6 +570,17 @@ class Command(BaseCommand):
 					trials_with_scores = []
 
 					for trial in batch:
+						excluded_term = self.excluded_by(
+							trial, exclude_terms, exclude_patterns, weights, TRIAL_FIELD_ATTR
+						)
+						if excluded_term:
+							excluded_for_subject += 1
+							if self.verbose:
+								self.log_message(
+									f"      Trial {trial.trial_id}: excluded by '{excluded_term}'"
+								)
+							continue
+
 						score, matched_terms = self.score_item(
 							trial, terms, term_patterns, weights, TRIAL_FIELD_ATTR
 						)
@@ -575,8 +627,11 @@ class Command(BaseCommand):
 						f"    Processed {processed} of {total_candidates} trials"
 					)
 
+				excluded_note = (
+					f" ({excluded_for_subject} excluded)" if excluded_for_subject else ""
+				)
 				self.stdout.write(
-					f"    Matched {matched_for_subject} trials for subject '{subject.subject_name}'"
+					f"    Matched {matched_for_subject} trials for subject '{subject.subject_name}'{excluded_note}"
 				)
 
 			# Current associations, scoped to the same window as the desired set
