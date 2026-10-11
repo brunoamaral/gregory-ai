@@ -244,6 +244,14 @@ class TestFormListsScopedToSelectableOrgs(TestCase):
 		self.assertIn(self.list_b, list_qs)
 		self.assertNotIn(list_c, list_qs)
 
+	def test_list_choice_labels_include_org(self):
+		req = MagicMock()
+		req.user = self.user
+		form = AnnouncementAdminForm(request=req)
+		labels = {label for _, label in form.fields["lists"].choices}
+		self.assertIn("List A (Scope A / SA)", labels)
+		self.assertIn("List B (Scope B / SB)", labels)
+
 	def test_lists_offered_when_default_org_has_no_lists(self):
 		"""Regression: a superuser whose default (membership) org has no lists
 		got an empty picker on the add page and could only create a new list."""

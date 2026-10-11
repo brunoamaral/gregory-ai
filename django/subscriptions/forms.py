@@ -82,7 +82,12 @@ class AnnouncementAdminForm(ModelForm):
 			# lists belong to the chosen org.
 			self.fields["lists"].queryset = Lists.objects.filter(
 				team__organization__in=org_qs
-			).select_related("team")
+			).select_related("team__organization")
+			# Names are only unique within an org, so label each choice with
+			# its org to keep options from different orgs distinguishable.
+			self.fields["lists"].label_from_instance = lambda lst: (
+				f"{lst.list_name} ({lst.team.organization.name} / {lst.team.name})"
+			)
 
 	def clean(self):
 		cleaned = super().clean()
