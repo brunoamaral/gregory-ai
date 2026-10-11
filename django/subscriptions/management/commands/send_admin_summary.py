@@ -22,6 +22,7 @@ from subscriptions.models import (
 	Lists,
 	Subscribers,
 	SentArticleNotification,
+	SentPatentLinkNotification,
 	SentTrialNotification,
 	FailedNotification,
 	SuppressionEvent,
@@ -33,7 +34,7 @@ from subscriptions.utils.postmark import (
 )
 from subscriptions.utils.suppression import deactivate_subscribers
 from subscriptions.utils.utm import build_utm_params
-from django.db.models import Max, Prefetch
+from django.db.models import Prefetch
 from django.utils.timezone import now
 from datetime import timedelta
 from templates.emails.components.content_organizer import get_optimized_email_context
@@ -179,24 +180,10 @@ class Command(BaseCommand):
 				)
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
 
-				# Patent-trial links found since the previous summary this subscriber
-				# received (the latest sent article/trial notification), else within
-				# the list's look-back window.
-				last_sent = [
-					value
-					for value in (
-						SentArticleNotification.objects.filter(
-							list=admin_list, subscriber=subscriber
-						).aggregate(m=Max("sent_at"))["m"],
-						SentTrialNotification.objects.filter(
-							list=admin_list, subscriber=subscriber
-						).aggregate(m=Max("sent_at"))["m"],
-					)
-					if value
-				]
+				# Patent-trial links not yet sent to this subscriber for this list,
+				# found within the look-back window.
 				patent_links, patent_links_extra = get_patent_links_for_list(
-					admin_list,
-					max(last_sent) if last_sent else now() - timedelta(days=admin_list.lookback_days),
+					admin_list, subscriber, admin_list.lookback_days
 				)
 
 				_context_holder = {}
@@ -352,6 +339,10 @@ class Command(BaseCommand):
 					for trial in trials_to_be_sent:
 						SentTrialNotification.objects.get_or_create(
 							trial=trial, list=admin_list, subscriber=subscriber
+						)
+					for link in patent_links:
+						SentPatentLinkNotification.objects.get_or_create(
+							link=link, list=admin_list, subscriber=subscriber
 						)
 				elif error_code == POSTMARK_INACTIVE_RECIPIENT:
 					logger.error(

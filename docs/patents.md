@@ -2,8 +2,8 @@
 
 Gregory tracks patent families for the subjects a team follows, so an editor can see the
 IP picture next to the trials and papers already collected. Patents are staff-only for
-now: they appear in the Django admin and are not exposed through the API, RSS feeds, MCP
-server or emails.
+now: they appear in the Django admin and in the staff-only admin summary email, and are
+not exposed through the API, RSS feeds, MCP server or public newsletters.
 
 ## What a record is
 
@@ -129,8 +129,10 @@ trial can take that long to show up; and a later PCT or regional filing does not
 family's priority date.
 
 The admin summary email gains a "Sponsors filing patents around their trials" section
-listing the links discovered since the previous summary the subscriber received (category
-basis first, at most 15, then a count of the rest).
+listing links not yet sent to that subscriber for that list, discovered within the list's
+look-back window (category basis first, at most 15, then a count of the rest). A link
+counts for a list only when a subject shared by the patent and the trial is one of the
+list's subjects.
 
 ## Administration
 

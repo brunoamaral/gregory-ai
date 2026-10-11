@@ -13,6 +13,7 @@ from django.db import transaction
 
 from gregory.models import (
 	PatentApplicant,
+	PatentTrialLink,
 	Sponsor,
 	SponsorAlias,
 	_SPONSOR_TYPE_SOURCE_PRIORITY,
@@ -36,7 +37,7 @@ def _best_sponsor_type(sponsors: list[Sponsor]) -> tuple[str | None, str | None]
 
 
 def merge_sponsors(target: Sponsor, others: list[Sponsor]) -> tuple[int, int]:
-	"""Merge `others` into `target`: repoint their trials, patent applicants and aliases
+	"""Merge `others` into `target`: repoint their trials, patent applicants, patent-trial links and aliases
 	onto `target`,
 	carry `sponsor_type`/`sponsor_type_source` over to `target` only when it doesn't
 	already have one — picking deterministically among `others` via
@@ -59,6 +60,9 @@ def merge_sponsors(target: Sponsor, others: list[Sponsor]) -> tuple[int, int]:
 			patents_repointed = PatentApplicant.objects.filter(sponsor=source).update(
 				sponsor=target
 			)
+			# Links cascade-delete with their sponsor; keep them (suppressed ones
+			# included) by repointing first.
+			PatentTrialLink.objects.filter(sponsor=source).update(sponsor=target)
 			if patents_repointed:
 				logger.info(
 					"merge_sponsors: repointed %d patent applicant row(s) from %r to %r",

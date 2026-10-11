@@ -3199,7 +3199,7 @@ class SourceViewSet(SubjectVisibilityMixin, viewsets.ReadOnlyModelViewSet):
 	- **team_id** - filter by team ID
 	- **subject_id** - filter by subject ID
 	- **active** - filter by active status (true/false)
-	- **source_for** - filter by what the source feeds; one of: `science paper`, `trials`, `news article`
+	- **source_for** - filter by what the source feeds; one of: `science paper`, `trials`, `news article`, `patents`
 	- **link** - filter by source link (case-insensitive substring)
 	- **search** - search in source name and description
 	- **ordering** - sort field, prefix with `-` for descending. Allowed values: `name`, `source_id`

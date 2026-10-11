@@ -351,59 +351,122 @@ class LinkAdminTests(LinkTestCase):
 class AdminSummaryLinksTests(LinkTestCase):
 	def setUp(self):
 		super().setUp()
-		from subscriptions.models import Lists
+		from subscriptions.models import Lists, Subscribers
 
 		self.list = Lists.objects.create(
 			list_name="Admins", team=self.team, admin_summary=True, lookback_days=7
 		)
 		self.list.subjects.add(self.subject)
+		self.subscriber = Subscribers.objects.create(email="admin@example.com", first_name="A", last_name="B")
 		self.patent = self.make_patent()
 		self.strong = self.make_trial()
 		self.weak = self.make_trial()
 		PatentCategoryAssignment.objects.create(patents=self.patent, teamcategory=self.category)
 		TrialCategoryAssignment.objects.create(trials=self.strong, teamcategory=self.category)
 		self.detect()
-		self.past = timezone.now() - datetime.timedelta(days=1)
 
-	def test_category_links_come_first(self):
+	def links(self, **kwargs):
 		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
 
-		links, extra = get_patent_links_for_list(self.list, self.past)
+		return get_patent_links_for_list(self.list, self.subscriber, kwargs.pop("days", 7), **kwargs)
+
+	def test_category_links_come_first(self):
+		links, extra = self.links()
 		self.assertEqual([l.basis for l in links], ["category", "subject"])
 		self.assertEqual(extra, 0)
 
-	def test_only_links_found_since_the_previous_summary(self):
-		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
+	def test_links_outside_the_window_are_excluded(self):
+		PatentTrialLink.objects.update(discovered_date=timezone.now() - datetime.timedelta(days=30))
+		self.assertEqual(self.links()[0], [])
 
-		links, _ = get_patent_links_for_list(self.list, timezone.now() + datetime.timedelta(minutes=1))
-		self.assertEqual(links, [])
+	def test_already_sent_links_are_excluded(self):
+		from subscriptions.models import SentPatentLinkNotification
+
+		first = self.links()[0][0]
+		SentPatentLinkNotification.objects.create(link=first, list=self.list, subscriber=self.subscriber)
+		self.assertEqual(len(self.links()[0]), 1)
 
 	def test_suppressed_links_are_excluded(self):
-		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
-
 		PatentTrialLink.objects.update(suppressed=True)
-		self.assertEqual(get_patent_links_for_list(self.list, self.past)[0], [])
+		self.assertEqual(self.links()[0], [])
 
 	def test_other_subjects_are_excluded(self):
-		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
-
 		self.list.subjects.set([self.other_subject])
-		self.assertEqual(get_patent_links_for_list(self.list, self.past)[0], [])
+		self.assertEqual(self.links()[0], [])
 
-	def test_limit_reports_the_overflow(self):
-		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
+	def test_link_needs_a_list_subject_shared_by_patent_and_trial(self):
+		# Patent in MS + PD, trial in PD only: the link qualified on PD, so an MS-only
+		# list must not get it even though the patent itself is in MS.
+		patent = self.make_patent()
+		patent.subjects.add(self.other_subject)
+		trial = self.make_trial(subject=self.other_subject)
+		PatentTrialLink.objects.all().delete()
+		PatentTrialLink.objects.create(
+			patent=patent, trial=trial, sponsor=self.sponsor, timing="during", basis="subject"
+		)
+		self.assertEqual(self.links()[0], [])
+		self.list.subjects.set([self.other_subject])
+		self.assertEqual(len(self.links()[0]), 1)
 
-		links, extra = get_patent_links_for_list(self.list, self.past, limit=1)
-		self.assertEqual((len(links), extra), (1, 1))
+	def test_limit_reports_the_true_overflow(self):
+		for _ in range(4):
+			self.make_trial()
+		self.detect()
+		links, extra = self.links(limit=2)
+		self.assertEqual((len(links), extra), (2, 4))
 
 	def test_text_template_renders_the_section(self):
 		from django.template.loader import get_template
-		from subscriptions.management.commands.utils.subscription import get_patent_links_for_list
 
-		links, extra = get_patent_links_for_list(self.list, self.past)
+		links, extra = self.links()
 		text = get_template("emails/admin_summary.txt").render(
 			{"patent_links": links, "patent_links_extra": extra, "content_stats": {}, "title": "Gregory"}
 		)
 		self.assertIn("SPONSORS FILING PATENTS AROUND THEIR TRIALS", text)
 		self.assertIn("Acme Neuro filed during", text)
 		self.assertIn("shared category", text)
+
+
+class ReviewFixTests(LinkTestCase):
+	def test_dry_run_reset_matches_a_real_reset(self):
+		self.make_patent(), self.make_trial()
+		self.detect()
+		out = self.detect(reset=True, dry_run=True)
+		self.assertIn("Would delete 1", out)
+		self.assertIn("create 1", out)
+		self.assertEqual(PatentTrialLink.objects.count(), 1)  # nothing written
+
+	def test_sponsor_merge_keeps_links_including_suppressed(self):
+		from gregory.utils.sponsor_merge import merge_sponsors
+
+		patent, trial = self.make_patent(), self.make_trial()
+		self.detect()
+		PatentTrialLink.objects.update(suppressed=True)
+		target = Sponsor.objects.create(name="Target", slug="target")
+
+		merge_sponsors(target, [self.sponsor])
+
+		link = PatentTrialLink.objects.get(patent=patent, trial=trial)
+		self.assertEqual(link.sponsor, target)
+		self.assertTrue(link.suppressed)
+
+	def test_patent_admin_form_limits_relations_to_the_users_organisations(self):
+		from django.test import RequestFactory
+
+		from gregory.admin import PatentAdminForm
+
+		other_org = Organization.objects.create(name="Other", slug="form-other")
+		other_team = Team.objects.create(organization=other_org, name="OT", slug="form-ot")
+		other_subject = Subject.objects.create(subject_name="X", subject_slug="x-f", team=other_team)
+		other_source = Sources.objects.create(name="OS", source_for="patents", method="epo_ops", team=other_team)
+		own_source = Sources.objects.create(name="S", source_for="patents", method="epo_ops", team=self.team)
+		staff = User.objects.create_user(username="form-staff", password="pw", is_staff=True)
+		OrganizationUser.objects.create(organization=self.org, user=staff)
+		request = RequestFactory().get("/")
+		request.user = staff
+
+		form = PatentAdminForm(request=request)
+		self.assertEqual(list(form.fields["sources"].queryset), [own_source])
+		self.assertNotIn(other_source, form.fields["sources"].queryset)
+		self.assertNotIn(other_team, form.fields["teams"].queryset)
+		self.assertNotIn(other_subject, form.fields["subjects"].queryset)

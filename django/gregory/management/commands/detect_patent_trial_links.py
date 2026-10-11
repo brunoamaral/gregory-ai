@@ -118,12 +118,15 @@ class Command(BaseCommand):
 			)
 		patents = patents.prefetch_related("subjects", "team_categories", "patent_applicants")
 
+		reset_pks = set()
 		if options["reset"]:
 			resettable = PatentTrialLink.objects.filter(
 				suppressed=False, patent__in=patents
 			)
 			count = resettable.count()
 			if dry_run:
+				# Remember them so the scan below sees them as already deleted
+				reset_pks = set(resettable.values_list("pk", flat=True))
 				self.stdout.write(f"Would delete {count} existing links (dry run)")
 			else:
 				resettable.delete()
@@ -168,7 +171,10 @@ class Command(BaseCommand):
 						"basis": PatentTrialLink.BASIS_CATEGORY if shared_category else PatentTrialLink.BASIS_SUBJECT,
 					}
 
-			existing = {link.trial_id: link for link in PatentTrialLink.objects.filter(patent=patent)}
+			existing = {
+				link.trial_id: link
+				for link in PatentTrialLink.objects.filter(patent=patent).exclude(pk__in=reset_pks)
+			}
 
 			for trial_id, values in wanted.items():
 				link = existing.get(trial_id)

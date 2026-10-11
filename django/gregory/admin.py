@@ -4077,6 +4077,31 @@ class PriorityYearFilter(admin.SimpleListFilter):
 		return queryset
 
 
+class PatentAdminForm(forms.ModelForm):
+	"""Limits the editable relations to the caller's organisations, so a staff member
+	cannot attach a patent to (or forge ids of) another organisation's sources, teams or
+	subjects. OrganizationFilterMixin only scopes the patent queryset itself."""
+
+	class Meta:
+		model = Patents
+		fields = ["sources", "teams", "subjects"]
+
+	def __init__(self, *args, **kwargs):
+		self.request = kwargs.pop("request", None)
+		super().__init__(*args, **kwargs)
+		if self.request and not self.request.user.is_superuser:
+			user_orgs = get_user_organizations(self.request.user)
+			self.fields["sources"].queryset = Sources.objects.filter(
+				team__organization__id__in=user_orgs
+			)
+			self.fields["teams"].queryset = Team.objects.filter(
+				organization__id__in=user_orgs
+			)
+			self.fields["subjects"].queryset = Subject.objects.filter(
+				team__organization__id__in=user_orgs
+			)
+
+
 class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 	"""Patent families. Importer-managed fields are read-only; editors curate
 	subjects, teams and category assignments."""
@@ -4106,6 +4131,7 @@ class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		"family_id",
 		"publications__publication_number",
 	]
+	form = PatentAdminForm
 	date_hierarchy = "earliest_priority_date"
 	readonly_fields = [
 		"family_id",
@@ -4134,6 +4160,16 @@ class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		PatentTrialLinkInline,
 		PatentCategoryAssignmentInline,
 	]
+
+	def get_form(self, request, obj=None, **kwargs):
+		form_class = super().get_form(request, obj, **kwargs)
+
+		class FormWithRequest(form_class):
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs["request"] = request
+				super().__init__(*args, **form_kwargs)
+
+		return FormWithRequest
 
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
