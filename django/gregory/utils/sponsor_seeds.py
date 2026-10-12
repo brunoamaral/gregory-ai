@@ -56,6 +56,7 @@ SPONSOR_SEEDS: dict[str, tuple[str | None, list[str]]] = {
 			"NOVARTIS BIOSCIENSES PERU S.A.,",
 			"Novartis Pharmaceuticals Australia Pty Limited",
 			"Novartis Pharmaceuticals Ltd (UK)",
+			"NOVARTIS AG",  # patent applicant form
 		],
 	),
 	"F. Hoffmann-La Roche": (
@@ -66,6 +67,7 @@ SPONSOR_SEEDS: dict[str, tuple[str | None, list[str]]] = {
 			"F. Hoffmann-La Roche Ltd",
 			"F. Hoffmann-La Roche Ltd.",
 			"F. Hoffman-La Roche Ltd",
+			"F. HOFFMAN LA-ROCHE AG",  # patent applicant form (sic)
 			"F.Hoffmann-La Roche",
 			"F. HOFFMANN - LA ROCHE LTD.",
 			"F. HOFFMANN-LA ROCHE LTD",
@@ -93,6 +95,7 @@ SPONSOR_SEEDS: dict[str, tuple[str | None, list[str]]] = {
 		[
 			"Merck KGaA",
 			"Merck KGaA, Darmstadt, Germany",
+			"MERCK PATENT GMBH",  # Merck KGaA's patent-holding company
 			"Merck Healthcare KGaA",
 			"Merck Healthcare Germany GmbH",
 			"Merck Healthcare KGaA, Darmstadt Germany, an affiliate of Merck KGaA, Darmstadt, Germany",
@@ -180,5 +183,102 @@ SPONSOR_SEEDS: dict[str, tuple[str | None, list[str]]] = {
 			"Genzyme Corporation",
 			"Genzyme GmbH",
 		],
+	),
+	# --- Patent applicant names ------------------------------------------------------
+	# How EPO lists applicants that already sponsor trials here: the name as filed, or
+	# EPO's abbreviated "epodoc" form (e.g. "UNIV ZHEJIANG"; the importer drops the
+	# trailing "[CN]"). Only the same organisation under its legal name, an
+	# abbreviation or a rename. Related but separate legal entities (a university's
+	# research foundation, a company's subsidiary) are left out, and so are
+	# ambiguous names: "WASHINGTON UNIVERSITY" (St. Louis) is not the University of
+	# Washington, and "THE REGENTS OF THE UNIVERSITY OF CALIFORNIA" or "THE RESEARCH
+	# FOUNDATION FOR THE STATE UNIVERSITY OF NEW YORK" could be any campus. Canonical
+	# names match the existing Sponsor names exactly.
+	"H. Lundbeck A/S": ("industry", ["H. Lundbeck A/S", "H LUNDBECK AS"]),
+	"Bristol-Myers Squibb": (
+		"industry",
+		["Bristol-Myers Squibb", "BRISTOL-MYERS SQUIBB COMPANY"],
+	),
+	"Janssen Pharmaceutica N.V., Belgium": (
+		"industry",
+		["Janssen Pharmaceutica N.V., Belgium", "JANSSEN PHARMACEUTICA NV"],
+	),
+	# Isis Pharmaceuticals renamed itself Ionis in 2015; older patent families keep the
+	# old name.
+	"Ionis Pharmaceuticals, Inc.": (
+		"industry",
+		["Ionis Pharmaceuticals, Inc.", "ISIS PHARMACEUTICALS, INC."],
+	),
+	"Johns Hopkins University": (
+		"academic_medical",
+		["Johns Hopkins University", "THE JOHNS HOPKINS UNIVERSITY"],
+	),
+	"George Washington University": (
+		"academic_medical",
+		["George Washington University", "THE GEORGE WASHINGTON UNIVERSITY"],
+	),
+	"University of Aberdeen": (
+		"academic_medical",
+		[
+			"University of Aberdeen",
+			"THE UNIVERSITY COURT OF THE UNIVERSITY OF ABERDEEN",
+			"THE UNIV COURT OF THE UNIV OF ABERDEEN",
+		],
+	),
+	# McGill's corporate name.
+	"McGill University": (
+		"academic_medical",
+		[
+			"McGill University",
+			"THE ROYAL INSTITUTION FOR THE ADVANCEMENT OF LEARNING / MCGILL UNIVERSITY",
+		],
+	),
+	# The Board of Regents also files for Arizona State and Northern Arizona, so only the
+	# full "on behalf of the University of Arizona" form belongs here.
+	"University of Arizona": (
+		"academic_medical",
+		["University of Arizona", "ARIZONA BOARD OF REGENTS ON BEHALF OF THE UNIVERSITY OF ARIZONA"],
+	),
+	"University of Michigan": (
+		"academic_medical",
+		["University of Michigan", "THE REGENTS OF THE UNIVERSITY OF MICHIGAN", "UNIV MICHIGAN REGENTS"],
+	),
+	"University of Athens": (
+		"academic_medical",
+		[
+			"University of Athens",
+			"National and Kapodistrian University of Athens",
+			"NATIONAL AND KAPODISTRIAN UNIV OF ATHENS",
+		],
+	),
+	"Kyushu University": (
+		"academic_medical",
+		[
+			"Kyushu University",
+			"Kyushu University, National University Corporation",
+			"UNIV KYUSHU NAT UNIV CORP",
+		],
+	),
+	"Centre National de la Recherche Scientifique, France": (
+		"government",
+		[
+			"Centre National de la Recherche Scientifique, France",
+			"CENTRE NATIONAL DE LA RECHERCHE SCIENTIFIQUE",
+		],
+	),
+	"Zhejiang University": ("academic_medical", ["Zhejiang University", "UNIV ZHEJIANG"]),
+	"Sun Yat-sen University": ("academic_medical", ["Sun Yat-sen University", "UNIV SUN YAT SEN"]),
+	"EAST CHINA NORMAL UNIVERSITY": (
+		"academic_medical",
+		["EAST CHINA NORMAL UNIVERSITY", "UNIV EAST CHINA NORMAL"],
+	),
+	"Nankai University": ("academic_medical", ["Nankai University", "UNIV NANKAI"]),
+	"Jining Medical University": (
+		"academic_medical",
+		["Jining Medical University", "UNIV JINING MEDICAL"],
+	),
+	"Fujian Medical University": (
+		"academic_medical",
+		["Fujian Medical University", "UNIV FUJIAN MEDICAL"],
 	),
 }

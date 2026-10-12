@@ -401,6 +401,20 @@ class SponsorSeedGuardTests(TestCase):
 		roche_variants = {v.casefold() for v in SPONSOR_SEEDS["F. Hoffmann-La Roche"][1]}
 		self.assertNotIn("university of rochester", roche_variants)
 
+	def test_ambiguous_patent_applicant_names_are_not_seeded(self):
+		"""Washington University (St. Louis) is not the University of Washington; the UC
+		Regents and the SUNY Research Foundation file for many campuses."""
+		seeded = {
+			normalize_sponsor_key(v) for _type, variants in SPONSOR_SEEDS.values() for v in variants
+		}
+		for name in (
+			"WASHINGTON UNIVERSITY",
+			"THE REGENTS OF THE UNIVERSITY OF CALIFORNIA",
+			"THE RESEARCH FOUNDATION FOR THE STATE UNIVERSITY OF NEW YORK",
+			"ARIZONA BOARD OF REGENTS",
+		):
+			self.assertNotIn(normalize_sponsor_key(name), seeded, name)
+
 
 # --- Admin "Recompute normalized fields" action, sponsor resolution ---------------------
 
