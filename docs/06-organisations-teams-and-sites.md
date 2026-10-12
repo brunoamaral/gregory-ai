@@ -95,6 +95,12 @@ The Articles and Trials admin changelists each carry two filters built on this r
 
 `/organizations/`- and `/teams/`-style admin pages are already organisation-keyed directly and carry neither filter.
 
+### Category assignments
+
+The **Category assignments** inline on an article or trial page is scoped by the category's team, not by the content. A staff user sees and can assign only the categories of their own organisations' teams. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another organisation's category.
+
+The same article or trial can be visible to more than one organisation, so it can also carry another organisation's categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
+
 ---
 
 ## Setting Up Sites
