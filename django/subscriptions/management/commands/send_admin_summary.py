@@ -158,10 +158,17 @@ class Command(BaseCommand):
 
 				new_trials = list_trials.exclude(pk__in=already_sent_trial_ids)
 
-				if not new_articles.exists() and not new_trials.exists():
+				# Patent-trial links not yet sent to this subscriber for this list,
+				# found within the look-back window. Fetched before the empty check:
+				# new links alone are enough to send a summary.
+				patent_links, patent_links_extra = get_patent_links_for_list(
+					admin_list, subscriber, admin_list.lookback_days
+				)
+
+				if not new_articles.exists() and not new_trials.exists() and not patent_links:
 					self.stdout.write(
 						self.style.WARNING(
-							f"No new articles or trials to send to {subscriber.email}."
+							f"No new articles, trials or patent links to send to {subscriber.email}."
 						)
 					)
 					continue
@@ -179,12 +186,6 @@ class Command(BaseCommand):
 					new_articles.order_by("-discovery_date")[:article_limit]
 				)
 				new_trials = list(new_trials.order_by("-discovery_date")[:trial_limit])
-
-				# Patent-trial links not yet sent to this subscriber for this list,
-				# found within the look-back window.
-				patent_links, patent_links_extra = get_patent_links_for_list(
-					admin_list, subscriber, admin_list.lookback_days
-				)
 
 				_context_holder = {}
 				utm_params = build_utm_params("admin_summary", admin_list, "article_card")
@@ -262,10 +263,10 @@ class Command(BaseCommand):
 					)
 					continue
 
-				if not articles_to_be_sent and not trials_to_be_sent:
+				if not articles_to_be_sent and not trials_to_be_sent and not patent_links:
 					reason = (
 						f"Admin summary for list '{admin_list.list_name}' organized to "
-						f"zero articles and zero trials for {subscriber.email}; "
+						f"zero articles, trials and patent links for {subscriber.email}; "
 						f"skipping rather than sending an empty digest."
 					)
 					logger.error(reason)

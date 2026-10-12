@@ -93,6 +93,21 @@ class PatentCategoryTests(TestCase):
 		self.category.refresh_from_db()
 		self.assertIsNone(self.category.patent_match_config_hash)
 
+	def test_exclude_terms_veto_patents(self):
+		self.category.category_exclude_terms = ["veterinary"]
+		self.category.save()
+		blocked = self.make_patent("Ocrelizumab dosing", summary="A veterinary formulation")
+		allowed = self.make_patent("Ocrelizumab dosing for adults")
+		self.run_rebuild(patents_only=True)
+		self.assertIsNone(self.assignment(blocked))
+		self.assertIsNotNone(self.assignment(allowed))
+
+	def test_changing_exclude_terms_changes_the_patent_hash(self):
+		before = Command().patent_category_config_hash(self.category)
+		self.category.category_exclude_terms = ["veterinary"]
+		self.category.save()
+		self.assertNotEqual(Command().patent_category_config_hash(self.category), before)
+
 	def test_full_run_includes_patents(self):
 		patent = self.make_patent("Ocrelizumab dosing")
 		self.run_rebuild()

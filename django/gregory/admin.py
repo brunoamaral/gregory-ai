@@ -1924,8 +1924,8 @@ class SourceAdminForm(forms.ModelForm):
 			"Gregory never reads it."
 		),
 		"active": (
-			"Untick to pause this source without deleting it. Gregory reads active sources "
-			"of the fetched types on every pipeline run."
+			"Untick to pause this source without deleting it. Active sources are read "
+			"whenever their importer runs."
 		),
 	}
 
@@ -4167,6 +4167,16 @@ class PatentCategoryAssignmentInline(admin.TabularInline):
 	autocomplete_fields = ["teamcategory"]
 	verbose_name = "Category assignment"
 	verbose_name_plural = "Category assignments"
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		"""Limit categories to the user's organisations. The autocomplete endpoint is
+		already scoped, but the field validates against its own queryset, so without
+		this a staff member could post another organisation's category id."""
+		if db_field.name == "teamcategory" and not request.user.is_superuser:
+			kwargs["queryset"] = TeamCategory.objects.filter(
+				team__organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 	def get_queryset(self, request):
 		return (

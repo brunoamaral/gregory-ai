@@ -63,8 +63,9 @@ SOURCE_TYPES = (
 	SourceType(
 		"epo_ops", "EPO patent search", "patents", "epo_ops", True,
 		("ops_cql_query",), ("ops_cql_query",),
-		"Gregory runs this search on EPO Open Patent Services on every pipeline run, "
-		"using the EPO credentials of the team's organisation.",
+		"Gregory runs this search on EPO Open Patent Services, with the EPO credentials "
+		"of the team's organisation, when the patent importer (feedreader_patents_ops) "
+		"runs. It is not part of the scheduled pipeline yet.",
 	),
 	SourceType(
 		"scrape_papers", "Science papers sent by an external scraper", "science paper",

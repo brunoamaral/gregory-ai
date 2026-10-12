@@ -415,6 +415,38 @@ class AdminSummaryLinksTests(LinkTestCase):
 		links, extra = self.links(limit=2)
 		self.assertEqual((len(links), extra), (2, 4))
 
+	def test_patent_links_alone_send_the_summary(self):
+		"""A cycle with no new articles or trials still sends when there are new links."""
+		from unittest.mock import MagicMock, patch
+
+		from django.contrib.sites.models import Site
+		from sitesettings.models import CustomSetting
+		from subscriptions.models import SentPatentLinkNotification, Subscribers
+
+		site = Site.objects.get_or_create(id=1, defaults={"domain": "testserver", "name": "Test"})[0]
+		CustomSetting.objects.get_or_create(
+			site=site,
+			defaults={
+				"title": "Test",
+				"postmark_api_token": "test-token",
+				"postmark_api_url": "https://api.postmarkapp.com/email",
+			},
+		)
+		Subscribers.objects.filter(pk=self.subscriber.pk).update(active=True)
+		self.subscriber.subscriptions.add(self.list)
+		ok = MagicMock(status_code=200)
+		ok.json.return_value = {"ErrorCode": 0, "Message": "OK"}
+
+		with patch(
+			"subscriptions.management.commands.send_admin_summary.send_email", return_value=ok
+		) as send:
+			call_command("send_admin_summary", stdout=StringIO())
+
+		send.assert_called_once()
+		self.assertEqual(
+			SentPatentLinkNotification.objects.filter(list=self.list, subscriber=self.subscriber).count(), 2
+		)
+
 	def test_text_template_renders_the_section(self):
 		from django.template.loader import get_template
 
@@ -449,6 +481,27 @@ class ReviewFixTests(LinkTestCase):
 		link = PatentTrialLink.objects.get(patent=patent, trial=trial)
 		self.assertEqual(link.sponsor, target)
 		self.assertTrue(link.suppressed)
+
+	def test_patent_category_inline_limits_categories_to_the_users_organisations(self):
+		from django.contrib import admin as django_admin
+		from django.test import RequestFactory
+
+		from gregory.admin import PatentCategoryAssignmentInline
+
+		other_org = Organization.objects.create(name="Other", slug="inline-other")
+		other_team = Team.objects.create(organization=other_org, name="OT", slug="inline-ot")
+		other_category = TeamCategory.objects.create(team=other_team, category_name="Other", category_terms=["y"])
+		staff = User.objects.create_user(username="inline-staff", password="pw", is_staff=True)
+		OrganizationUser.objects.create(organization=self.org, user=staff)
+		request = RequestFactory().get("/")
+		request.user = staff
+
+		inline = PatentCategoryAssignmentInline(Patents, django_admin.site)
+		field = inline.formfield_for_foreignkey(
+			PatentCategoryAssignment._meta.get_field("teamcategory"), request
+		)
+		self.assertIn(self.category, field.queryset)
+		self.assertNotIn(other_category, field.queryset)
 
 	def test_patent_admin_form_limits_relations_to_the_users_organisations(self):
 		from django.test import RequestFactory

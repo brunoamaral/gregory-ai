@@ -230,6 +230,9 @@ class Command(BaseCommand):
 		payload = json.dumps(
 			{
 				"terms": sorted(term.lower() for term in cat.category_terms or []),
+				"exclude_terms": sorted(
+					term.lower() for term in cat.category_exclude_terms or []
+				),
 				"subjects": sorted(subject.id for subject in cat.subjects.all()),
 				"min_score_patents": cat.match_min_score_patents,
 				"scope": cat.match_scope,
@@ -771,6 +774,11 @@ class Command(BaseCommand):
 			term_patterns = [
 				re.compile(r"\b" + re.escape(term.lower()) + r"\b") for term in terms
 			]
+			exclude_terms = cat.category_exclude_terms or []
+			exclude_patterns = [
+				re.compile(r"\b" + re.escape(term.lower()) + r"\b")
+				for term in exclude_terms
+			]
 
 			# With no terms or no scored fields nothing qualifies and stale automatic
 			# links are removed.
@@ -780,6 +788,7 @@ class Command(BaseCommand):
 			for subject in cat.subjects.all() if should_match else []:
 				self.log_message(f"  - Processing subject: {subject.subject_name}")
 				matched_for_subject = 0
+				excluded_for_subject = 0
 
 				base_query = Patents.objects.filter(subjects__id=subject.id)
 				if cat_cutoff:
@@ -793,6 +802,16 @@ class Command(BaseCommand):
 
 				for batch in self.iter_batches(candidates, "patent_id", batch_size):
 					for patent in batch:
+						excluded_term = self.excluded_by(
+							patent, exclude_terms, exclude_patterns, weights, PATENT_FIELD_ATTR
+						)
+						if excluded_term:
+							excluded_for_subject += 1
+							if self.verbose:
+								self.log_message(
+									f"      Patent {patent.patent_id}: excluded by '{excluded_term}'"
+								)
+							continue
 						score, _matched = self.score_item(
 							patent, terms, term_patterns, weights, PATENT_FIELD_ATTR
 						)
@@ -800,8 +819,11 @@ class Command(BaseCommand):
 							desired_ids.add(patent.patent_id)
 							matched_for_subject += 1
 
+				excluded_note = (
+					f" ({excluded_for_subject} excluded)" if excluded_for_subject else ""
+				)
 				self.stdout.write(
-					f"    Matched {matched_for_subject} patents for subject '{subject.subject_name}'"
+					f"    Matched {matched_for_subject} patents for subject '{subject.subject_name}'{excluded_note}"
 				)
 
 			assignment_qs = PatentCategoryAssignment.objects.filter(teamcategory=cat)
