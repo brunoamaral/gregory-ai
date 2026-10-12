@@ -61,7 +61,11 @@ docker exec gregory python manage.py feedreader_patents_ops
 | `--max-families N` | Stop after creating N new families. The anchor does not advance. |
 | `--dry-run` | Search and count; fetch no family data and write nothing. |
 
-The command is not part of `pipeline` yet.
+`pipeline` runs it on every run with `--max-families 500`, a safety ceiling for a new or
+unusually broad source; a capped run keeps its anchor and carries on next time. Backfills
+(`--since`) are run by hand. After category matching, `pipeline` also runs
+`detect_patent_trial_links` over all patents, so links follow trials that finish or gain a
+category.
 
 **Window.** From `last_successful_fetch_at` minus 14 days up to today, split into monthly
 slices (`pd within "YYYYMMDD YYYYMMDD"`). With no anchor and no `--since` it looks back 90
