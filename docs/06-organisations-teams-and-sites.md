@@ -97,15 +97,15 @@ The Articles and Trials admin changelists each carry two filters built on this r
 
 ### Sources, teams and subjects
 
-On an article or trial page, a staff user can only pick their own organisations' **sources**, **teams** and **subjects**. The fields check this when the form is saved, so a hand-edited form can't link another organisation's rows either. This matters because publishing is subject-scoped: adding another organisation's subject would put the content on that organisation's site.
+On an article, trial or patent page, a staff user can only pick their own organisations' **sources**, **teams** and **subjects**. The fields check this when the form is saved, so a hand-edited form can't link another organisation's rows either. This matters because publishing is subject-scoped: adding another organisation's subject would put the content on that organisation's site.
 
-Links the content already has to another organisation's rows are hidden from staff and kept when they save. They also count towards the required **teams** and **subjects** fields, so staff don't have to add one of their own just to save. Superusers see and can change every link.
+Links the content already has to another organisation's rows are hidden from staff and kept when they save. On articles and trials, where **teams** and **subjects** are required, those links count towards them, so staff don't have to add one of their own just to save. Superusers see and can change every link.
 
 ### Category assignments
 
-The **Category assignments** inline on an article or trial page is scoped by the category's team, not by the content. A staff user sees and can assign only the categories of their own organisations' teams. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another organisation's category.
+The **Category assignments** inline on an article, trial or patent page is scoped by the category's team, not by the content. A staff user sees and can assign only the categories of their own organisations' teams. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another organisation's category.
 
-The same article or trial can be visible to more than one organisation, so it can also carry another organisation's categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
+The same article, trial or patent can be visible to more than one organisation, so it can also carry another organisation's categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
 
 ---
 

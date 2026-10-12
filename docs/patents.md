@@ -143,7 +143,9 @@ list's subjects.
 Patents are listed under *Gregory > Patents*, scoped to the organisations of the signed-in
 staff member through their sources. Filters cover team, subject, source, category,
 applicant type, grant and priority year. Importer-managed fields are read-only; editors
-curate sources, teams and subjects and can assign categories.
+curate sources, teams and subjects and can assign categories. Staff can only pick their own
+organisations' sources, teams, subjects and categories, and links to other organisations' rows
+are hidden and kept on save; see [Admin visibility](06-organisations-teams-and-sites.md#sources-teams-and-subjects).
 
 *Gregory > Patent-trial links* lists the detected signals grouped by patent. It defaults
 to the category basis (a *basis* filter switches to subject-only or all), and the

@@ -1,7 +1,6 @@
 """
-Tests for the category-assignment inlines on the Articles and Trials admin
-pages (gregory.admin.ArticleCategoryAssignmentInline and
-TrialCategoryAssignmentInline).
+Tests for the category-assignment inlines on the Articles, Trials and Patents
+admin pages (gregory.admin._BaseCategoryAssignmentInline and its subclasses).
 
 The TeamCategory autocomplete endpoint is scoped to the user's organisations,
 but the inline's form field validates against its own queryset. These pin down
@@ -19,10 +18,16 @@ from django.contrib.auth.models import Permission
 from django.test import RequestFactory, TestCase
 from organizations.models import Organization, OrganizationUser
 
-from gregory.admin import ArticleCategoryAssignmentInline, TrialCategoryAssignmentInline
+from gregory.admin import (
+	ArticleCategoryAssignmentInline,
+	PatentCategoryAssignmentInline,
+	TrialCategoryAssignmentInline,
+)
 from gregory.models import (
 	ArticleCategoryAssignment,
 	Articles,
+	PatentCategoryAssignment,
+	Patents,
 	Sources,
 	Team,
 	TeamCategory,
@@ -34,7 +39,7 @@ User = get_user_model()
 
 
 class _CategoryInlineScopeTests:
-	"""Cases shared by both inlines. Subclasses set the inline, the content
+	"""Cases shared by the inlines. Subclasses set the inline, the content
 	model, the assignment model and the assignment's FK to the content row, and
 	create the content row in make_content()."""
 
@@ -230,3 +235,23 @@ class TrialCategoryInlineScopeTests(_CategoryInlineScopeTests, TestCase):
 				)
 			)
 		return trial
+
+
+class PatentCategoryInlineScopeTests(_CategoryInlineScopeTests, TestCase):
+	inline_class = PatentCategoryAssignmentInline
+	content_model = Patents
+	assignment_model = PatentCategoryAssignment
+	parent_field = "patents"
+
+	def make_content(self):
+		patent = Patents.objects.create(family_id="catinline-1", title="Shared patent")
+		for team in (self.team_a, self.team_b):
+			patent.sources.add(
+				Sources.objects.create(
+					name=f"Patent source {team.name}",
+					source_for="patents",
+					method="epo_ops",
+					team=team,
+				)
+			)
+		return patent

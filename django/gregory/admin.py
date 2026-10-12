@@ -779,70 +779,52 @@ class TrialOrgContentInline(_BaseOrgContentInline):
 	verbose_name_plural = "Editorial content (per organisation)"
 
 
-class ArticleCategoryAssignmentInline(admin.TabularInline):
+class _BaseCategoryAssignmentInline(admin.TabularInline):
+	"""Category assignments on a content page (article, trial or patent).
+
+	Scoped to the user's organisations: staff can only pick their own
+	organisations' categories, and other organisations' assignments, which
+	shared content can carry, are hidden and left as they are on save.
+	Subclasses set `model`.
+	"""
+
+	extra = 0
+	autocomplete_fields = ["teamcategory"]
+	verbose_name = "Category assignment"
+	verbose_name_plural = "Category assignments"
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		"""Limit categories to the user's organisations. The autocomplete endpoint is
+		already scoped, but the field validates against its own queryset, so without
+		this a staff member could post another organisation's category id."""
+		if db_field.name == "teamcategory" and not request.user.is_superuser:
+			kwargs["queryset"] = TeamCategory.objects.filter(
+				team__organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+	def get_queryset(self, request):
+		"""Hide other organisations' assignments. Shared content can carry them,
+		and the scoped category field above would reject such a row, blocking
+		every save of the page."""
+		qs = (
+			super()
+			.get_queryset(request)
+			.select_related("teamcategory", "teamcategory__team")
+		)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			teamcategory__team__organization__id__in=get_user_organizations(request.user)
+		)
+
+
+class ArticleCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = ArticleCategoryAssignment
-	extra = 0
-	autocomplete_fields = ["teamcategory"]
-	verbose_name = "Category assignment"
-	verbose_name_plural = "Category assignments"
-
-	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
-		if db_field.name == "teamcategory" and not request.user.is_superuser:
-			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
-			)
-		return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-	def get_queryset(self, request):
-		"""Hide other organisations' assignments. Shared content can carry them,
-		and the scoped category field above would reject such a row, blocking
-		every save of the page."""
-		qs = (
-			super()
-			.get_queryset(request)
-			.select_related("teamcategory", "teamcategory__team")
-		)
-		if request.user.is_superuser:
-			return qs
-		return qs.filter(
-			teamcategory__team__organization__id__in=get_user_organizations(request.user)
-		)
 
 
-class TrialCategoryAssignmentInline(admin.TabularInline):
+class TrialCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = TrialCategoryAssignment
-	extra = 0
-	autocomplete_fields = ["teamcategory"]
-	verbose_name = "Category assignment"
-	verbose_name_plural = "Category assignments"
-
-	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
-		if db_field.name == "teamcategory" and not request.user.is_superuser:
-			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
-			)
-		return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-	def get_queryset(self, request):
-		"""Hide other organisations' assignments. Shared content can carry them,
-		and the scoped category field above would reject such a row, blocking
-		every save of the page."""
-		qs = (
-			super()
-			.get_queryset(request)
-			.select_related("teamcategory", "teamcategory__team")
-		)
-		if request.user.is_superuser:
-			return qs
-		return qs.filter(
-			teamcategory__team__organization__id__in=get_user_organizations(request.user)
-		)
 
 
 class SourceActionForm(forms.Form):
@@ -4250,29 +4232,8 @@ class PatentApplicantInline(admin.TabularInline):
 		return super().get_queryset(request).select_related("sponsor")
 
 
-class PatentCategoryAssignmentInline(admin.TabularInline):
+class PatentCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = PatentCategoryAssignment
-	extra = 0
-	autocomplete_fields = ["teamcategory"]
-	verbose_name = "Category assignment"
-	verbose_name_plural = "Category assignments"
-
-	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
-		if db_field.name == "teamcategory" and not request.user.is_superuser:
-			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
-			)
-		return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-	def get_queryset(self, request):
-		return (
-			super()
-			.get_queryset(request)
-			.select_related("teamcategory", "teamcategory__team")
-		)
 
 
 class PatentTrialLinkInline(admin.TabularInline):
@@ -4392,32 +4353,17 @@ class PriorityYearFilter(admin.SimpleListFilter):
 		return queryset
 
 
-class PatentAdminForm(forms.ModelForm):
-	"""Limits the editable relations to the caller's organisations, so a staff member
-	cannot attach a patent to (or forge ids of) another organisation's sources, teams or
-	subjects. OrganizationFilterMixin only scopes the patent queryset itself."""
+class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+	"""Limits the editable relations to the caller's organisations (see
+	OrganizationScopedRelationsFormMixin). OrganizationFilterMixin only scopes the
+	patent queryset itself."""
 
 	class Meta:
 		model = Patents
 		fields = ["sources", "teams", "subjects"]
 
-	def __init__(self, *args, **kwargs):
-		self.request = kwargs.pop("request", None)
-		super().__init__(*args, **kwargs)
-		if self.request and not self.request.user.is_superuser:
-			user_orgs = get_user_organizations(self.request.user)
-			self.fields["sources"].queryset = Sources.objects.filter(
-				team__organization__id__in=user_orgs
-			)
-			self.fields["teams"].queryset = Team.objects.filter(
-				organization__id__in=user_orgs
-			)
-			self.fields["subjects"].queryset = Subject.objects.filter(
-				team__organization__id__in=user_orgs
-			)
 
-
-class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin):
 	"""Patent families. Importer-managed fields are read-only; editors curate
 	subjects, teams and category assignments."""
 
@@ -4475,16 +4421,6 @@ class PatentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
 		PatentTrialLinkInline,
 		PatentCategoryAssignmentInline,
 	]
-
-	def get_form(self, request, obj=None, **kwargs):
-		form_class = super().get_form(request, obj, **kwargs)
-
-		class FormWithRequest(form_class):
-			def __init__(self, *args, **form_kwargs):
-				form_kwargs["request"] = request
-				super().__init__(*args, **form_kwargs)
-
-		return FormWithRequest
 
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
