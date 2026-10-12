@@ -3,7 +3,7 @@ Tests for announcement email rendering helpers.
 
 Covers:
 - SanitizeAnnouncementHtmlTests  — bleach + post-pass behaviour
-- RenderAnnouncementHtmlTests    — button wrap, image URL rewrite
+- RenderAnnouncementHtmlTests    — button wrap, image URL rewrite, code/table styles
 - RenderAnnouncementTextTests    — plain-text fallback shape
 - AnnouncementAdminFormTests     — alt-text form validation
 - CKEditorUploadViewTests        — size, type, resize, auth
@@ -23,6 +23,21 @@ from subscriptions.utils.render_email_body import (
 	render_announcement_html,
 	render_announcement_text,
 	BUTTON_BRAND_HEX,
+	INLINE_CODE_STYLE,
+	PRE_STYLE,
+	TABLE_STYLE,
+	TH_STYLE,
+	TD_STYLE,
+)
+
+# What CKEditor 5 emits for a code block and a table
+CKEDITOR_CODE_BLOCK = (
+	'<pre><code class="language-plaintext">https://example.com/mcp\n</code></pre>'
+)
+CKEDITOR_TABLE = (
+	'<figure class="table"><table><thead><tr><th>Tool</th><th>What it does</th>'
+	"</tr></thead><tbody><tr><td><code>get_article</code></td>"
+	"<td>Fetches one paper</td></tr></tbody></table></figure>"
 )
 
 User = get_user_model()
@@ -156,6 +171,23 @@ class SanitizeAnnouncementHtmlTests(TestCase):
 		self.assertIn("<strong>", result)
 		self.assertIn("<em>", result)
 
+	def test_keeps_code_block_and_drops_language_class(self):
+		result = sanitize_announcement_html(CKEDITOR_CODE_BLOCK)
+		soup = BeautifulSoup(result, "html.parser")
+		code = soup.select_one("pre > code")
+		self.assertIsNotNone(code)
+		self.assertNotIn("class", code.attrs)
+
+	def test_keeps_table_header_and_unwraps_figure(self):
+		result = sanitize_announcement_html(CKEDITOR_TABLE)
+		soup = BeautifulSoup(result, "html.parser")
+		self.assertIsNone(soup.find("figure"))
+		self.assertEqual(
+			[th.get_text() for th in soup.select("table > thead > tr > th")],
+			["Tool", "What it does"],
+		)
+		self.assertIsNotNone(soup.select_one("td > code"))
+
 
 # ---------------------------------------------------------------------------
 # render_announcement_html
@@ -179,6 +211,53 @@ class RenderAnnouncementHtmlTests(TestCase):
 		self.assertEqual(a["href"], "https://example.com")
 		self.assertIn(BUTTON_BRAND_HEX, result)
 		self.assertIn("Join Now", a.get_text())
+
+	def test_styles_code_block_and_trims_trailing_newline(self):
+		sanitized = sanitize_announcement_html(CKEDITOR_CODE_BLOCK)
+		soup = BeautifulSoup(
+			render_announcement_html(sanitized, "api.example.com", None),
+			"html.parser",
+		)
+		pre = soup.find("pre")
+		self.assertEqual(pre["style"], PRE_STYLE)
+		self.assertEqual(pre["class"], ["ann-pre"])
+		self.assertEqual(pre.get_text(), "https://example.com/mcp")
+		# The <code> inside a block inherits; it must not get the inline pill
+		self.assertNotEqual(pre.find("code")["style"], INLINE_CODE_STYLE)
+
+	def test_styles_inline_code(self):
+		sanitized = sanitize_announcement_html("<p>Use <code>get_trial</code></p>")
+		soup = BeautifulSoup(
+			render_announcement_html(sanitized, "api.example.com", None),
+			"html.parser",
+		)
+		code = soup.find("code")
+		self.assertEqual(code["style"], INLINE_CODE_STYLE)
+		self.assertEqual(code["class"], ["ann-code"])
+
+	def test_styles_content_table(self):
+		sanitized = sanitize_announcement_html(CKEDITOR_TABLE)
+		soup = BeautifulSoup(
+			render_announcement_html(sanitized, "api.example.com", None),
+			"html.parser",
+		)
+		table = soup.find("table")
+		self.assertEqual(table["style"], TABLE_STYLE)
+		self.assertEqual(table["class"], ["ann-table"])
+		self.assertTrue(all(th["style"] == TH_STYLE for th in table.find_all("th")))
+		self.assertTrue(all(td["style"] == TD_STYLE for td in table.find_all("td")))
+
+	def test_button_table_is_not_restyled_as_content_table(self):
+		sanitized = sanitize_announcement_html(
+			CKEDITOR_TABLE + '<a class="btn-cta" href="https://example.com">Go</a>'
+		)
+		soup = BeautifulSoup(
+			render_announcement_html(sanitized, "api.example.com", None),
+			"html.parser",
+		)
+		button = soup.find("table", role="presentation")
+		self.assertNotIn("class", button.attrs)
+		self.assertIn(BUTTON_BRAND_HEX, button.find("td")["style"])
 
 	def test_rewrites_media_src_to_absolute_with_api_domain(self):
 		html = '<img src="/media/uploads/photo.jpg" alt="photo">'
@@ -296,6 +375,12 @@ class RenderAnnouncementTextTests(TestCase):
 		sanitized = sanitize_announcement_html(html)
 		text = render_announcement_text(sanitized)
 		self.assertIn("full paper (https://example.com/paper)", text)
+
+	def test_table_rows_become_pipe_separated_lines(self):
+		sanitized = sanitize_announcement_html(CKEDITOR_TABLE)
+		text = render_announcement_text(sanitized)
+		self.assertIn("Tool | What it does", text)
+		self.assertIn("get_article | Fetches one paper", text)
 
 
 # ---------------------------------------------------------------------------

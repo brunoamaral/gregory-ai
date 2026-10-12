@@ -786,11 +786,29 @@ class ArticleCategoryAssignmentInline(admin.TabularInline):
 	verbose_name = "Category assignment"
 	verbose_name_plural = "Category assignments"
 
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		"""Limit categories to the user's organisations. The autocomplete endpoint is
+		already scoped, but the field validates against its own queryset, so without
+		this a staff member could post another organisation's category id."""
+		if db_field.name == "teamcategory" and not request.user.is_superuser:
+			kwargs["queryset"] = TeamCategory.objects.filter(
+				team__organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 	def get_queryset(self, request):
-		return (
+		"""Hide other organisations' assignments. Shared content can carry them,
+		and the scoped category field above would reject such a row, blocking
+		every save of the page."""
+		qs = (
 			super()
 			.get_queryset(request)
 			.select_related("teamcategory", "teamcategory__team")
+		)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			teamcategory__team__organization__id__in=get_user_organizations(request.user)
 		)
 
 
@@ -801,11 +819,29 @@ class TrialCategoryAssignmentInline(admin.TabularInline):
 	verbose_name = "Category assignment"
 	verbose_name_plural = "Category assignments"
 
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		"""Limit categories to the user's organisations. The autocomplete endpoint is
+		already scoped, but the field validates against its own queryset, so without
+		this a staff member could post another organisation's category id."""
+		if db_field.name == "teamcategory" and not request.user.is_superuser:
+			kwargs["queryset"] = TeamCategory.objects.filter(
+				team__organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 	def get_queryset(self, request):
-		return (
+		"""Hide other organisations' assignments. Shared content can carry them,
+		and the scoped category field above would reject such a row, blocking
+		every save of the page."""
+		qs = (
 			super()
 			.get_queryset(request)
 			.select_related("teamcategory", "teamcategory__team")
+		)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			teamcategory__team__organization__id__in=get_user_organizations(request.user)
 		)
 
 
@@ -916,7 +952,82 @@ class SourceBulkActionMixin:
 		)
 
 
-class ArticleAdminForm(forms.ModelForm):
+class RequestFormMixin:
+	"""Pass the request to the admin form, so it can scope its field choices."""
+
+	def get_form(self, request, obj=None, **kwargs):
+		form_class = super().get_form(request, obj, **kwargs)
+
+		class FormWithRequest(form_class):
+			def __init__(self, *args, **form_kwargs):
+				form_kwargs["request"] = request
+				super().__init__(*args, **form_kwargs)
+
+		return FormWithRequest
+
+
+class OrganizationScopedRelationsFormMixin:
+	"""Limit a content form's sources, teams and subjects to the user's organisations.
+
+	The field validates against its own queryset, so without this a staff member
+	could pick, or post the id of, another organisation's row and attach the
+	content to it. Adding another organisation's subject, for instance, publishes
+	the content on that organisation's site.
+
+	Content can be shared between organisations, so it may already link another
+	organisation's rows. Those links are hidden from the field and kept on save,
+	so saving the page never drops them. Superusers see and can change everything.
+	"""
+
+	# Form field -> lookup from the related model to its organisation's id.
+	org_scoped_relations = {
+		"sources": "team__organization__id",
+		"teams": "organization__id",
+		"subjects": "team__organization__id",
+	}
+
+	def __init__(self, *args, **kwargs):
+		self.request = kwargs.pop("request", None)
+		super().__init__(*args, **kwargs)
+		self._kept_relation_pks = {}
+		if self.request is None or self.request.user.is_superuser:
+			return
+		user_orgs = list(get_user_organizations(self.request.user))
+		for name, org_lookup in self.org_scoped_relations.items():
+			field = self.fields.get(name)
+			if field is None:
+				continue
+			in_scope = {f"{org_lookup}__in": user_orgs}
+			field.queryset = field.queryset.filter(**in_scope)
+			if not self.instance.pk:
+				continue
+			kept = set(
+				getattr(self.instance, name).exclude(**in_scope).values_list("pk", flat=True)
+			)
+			self._kept_relation_pks[name] = kept
+			# A required field (teams, subjects) is already satisfied by the kept
+			# rows, so the user needn't pick one of their own just to save.
+			if kept:
+				field.required = False
+			# Leave the kept rows out of the initial value too, so an untouched
+			# field doesn't show up as changed.
+			if name in self.initial:
+				self.initial[name] = [
+					obj for obj in self.initial[name] if getattr(obj, "pk", obj) not in kept
+				]
+
+	def clean(self):
+		cleaned_data = super().clean()
+		for name, kept in self._kept_relation_pks.items():
+			if kept and cleaned_data.get(name) is not None:
+				chosen = set(cleaned_data[name].values_list("pk", flat=True))
+				cleaned_data[name] = self.fields[name].queryset.model.objects.filter(
+					pk__in=chosen | kept
+				)
+		return cleaned_data
+
+
+class ArticleAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
 	class Meta:
@@ -943,27 +1054,12 @@ class ArticleAdminForm(forms.ModelForm):
 		}
 
 	def __init__(self, *args, **kwargs):
-		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
 
 		if self.instance and self.instance.pk:
 			self.fields[
 				"ml_predictions_display"
 			].initial = self.instance.ml_predictions_detail.all()
-
-		# Filter team and subject choices based on user's organization
-		if self.request:
-			if self.request.user.is_superuser:
-				self.fields["teams"].queryset = Team.objects.all()
-				self.fields["subjects"].queryset = Subject.objects.all()
-			else:
-				user_orgs = get_user_organizations(self.request.user)
-				self.fields["teams"].queryset = Team.objects.filter(
-					organization__id__in=user_orgs
-				)
-				self.fields["subjects"].queryset = Subject.objects.filter(
-					team__organization__id__in=user_orgs
-				)
 
 
 class DoiAssignedFilter(admin.SimpleListFilter):
@@ -986,7 +1082,9 @@ class DoiAssignedFilter(admin.SimpleListFilter):
 		return queryset
 
 
-class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
+class ArticleAdmin(
+	OrganizationFilterMixin, SourceBulkActionMixin, RequestFormMixin, SimpleHistoryAdmin
+):
 	form = ArticleAdminForm
 	source_for_values = ["science paper", "news article"]
 	actions = ["add_source_action", "remove_source_action"]
@@ -1072,17 +1170,6 @@ class ArticleAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistory
 		DoiAssignedFilter,
 	]
 	raw_id_fields = ("authors",)
-
-	def get_form(self, request, obj=None, **kwargs):
-		"""Pass the request to the form so it can filter field choices."""
-		form_class = super().get_form(request, obj, **kwargs)
-
-		class FormWithRequest(form_class):
-			def __init__(self, *args, **form_kwargs):
-				form_kwargs["request"] = request
-				super().__init__(*args, **form_kwargs)
-
-		return FormWithRequest
 
 	def get_urls(self):
 		from django.urls import path
@@ -1407,7 +1494,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 
 
-class TrialAdminForm(forms.ModelForm):
+class TrialAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
 
 	class Meta:
@@ -1564,7 +1651,9 @@ class TrialAdminForm(forms.ModelForm):
 		}
 
 
-class TrialAdmin(OrganizationFilterMixin, SourceBulkActionMixin, SimpleHistoryAdmin):
+class TrialAdmin(
+	OrganizationFilterMixin, SourceBulkActionMixin, RequestFormMixin, SimpleHistoryAdmin
+):
 	form = TrialAdminForm
 	source_for_values = ["trials"]
 	actions = ["add_source_action", "remove_source_action", "recompute_normalized_fields"]
