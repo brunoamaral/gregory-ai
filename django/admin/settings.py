@@ -219,6 +219,12 @@ STATIC_ROOT = '/code/static'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = '/code/media'
 
+# EPO Open Patent Services throttle history, shared by every OPS client on this host
+# (OPS throttles per IP, and every organisation's requests leave from the same one).
+EPO_OPS_THROTTLE_DB = os.environ.get(
+	'EPO_OPS_THROTTLE_DB', '/var/tmp/python-epo-ops-client/throttle_history.db'
+)
+
 # CKEditor 5 configuration
 CKEDITOR_5_CONFIGS = {
 	'default': {

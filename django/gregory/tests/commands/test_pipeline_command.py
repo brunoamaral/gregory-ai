@@ -56,6 +56,20 @@ class PipelineCommandTest(TestCase):
 
 	@patch("gregory.management.commands.pipeline.call_command")
 	@patch("django.apps.apps.get_model")
+	def test_patent_steps_run_in_order(self, mock_get_model, mock_call):
+		mock_get_model.return_value.objects.all.return_value.order_by.return_value = []
+		call_command("pipeline", stdout=StringIO())
+
+		calls = [(c[0][0], c[1]) for c in mock_call.call_args_list if c[0]]
+		names = [name for name, _ in calls]
+		self.assertLess(names.index("feedreader_trials_ctis"), names.index("feedreader_patents_ops"))
+		self.assertLess(names.index("rebuild_categories"), names.index("detect_patent_trial_links"))
+		self.assertEqual(dict(calls)["feedreader_patents_ops"], {"max_families": 500})
+		# A full detection pass, not --recent: links must follow trials that change.
+		self.assertEqual(dict(calls)["detect_patent_trial_links"], {})
+
+	@patch("gregory.management.commands.pipeline.call_command")
+	@patch("django.apps.apps.get_model")
 	def test_pipeline_skips_org_without_orcid_credentials(
 		self, mock_get_model, mock_call
 	):

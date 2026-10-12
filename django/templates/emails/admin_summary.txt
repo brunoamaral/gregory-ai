@@ -30,6 +30,12 @@ No new articles or clinical trials were discovered in the last 48 hours.
 {% endif %}
 
 Admin Actions: Review the articles above and mark them as relevant in the admin dashboard. This helps improve our machine learning accuracy for future recommendations.
+{% if patent_links %}
+SPONSORS FILING PATENTS AROUND THEIR TRIALS
+========================================
+{% for link in patent_links %}- {{ link.sponsor.name }} {% if link.timing == "during" %}filed during{% else %}filed {{ link.days_after_completion }} day{{ link.days_after_completion|pluralize }} after{% endif %} "{{ link.trial.title|truncatechars:90 }}" ({{ link.trial.link }}): {{ link.patent.title|truncatechars:90 }} ({{ link.patent.link }}) [{% if link.basis == "category" %}shared category{% else %}shared subject only{% endif %}]
+{% endfor %}{% if patent_links_extra %}+{{ patent_links_extra }} more in the admin.
+{% endif %}{% endif %}
 {% if ml_drift %}{% with ml_drift_total=ml_drift.stale_ml_score|add:ml_drift.missing_relevant|add:ml_drift.unexpected_relevant %}
 ML field health: {{ ml_drift_total }} drifted ({{ ml_drift.stale_ml_score }} stale ml_score, {{ ml_drift.missing_relevant }} missing relevant, {{ ml_drift.unexpected_relevant }} unexpected relevant).
 {% endwith %}{% endif %}

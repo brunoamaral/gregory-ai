@@ -14,20 +14,44 @@ A **Category** is a group of articles whose title matches at least one keyword i
 
 ## Sources
 
-You can add sources through the Django admin at `/admin/`. The screenshot below shows how to add PubMed as an RSS source.
+Add and edit sources in the Django admin at `/admin/gregory/sources/`. The form asks four
+things in order: what kind of source it is, which team and subject its content goes to,
+the settings that kind needs, and a name and notes. Only the chosen kind's settings are
+shown, and the form refuses to save a source that couldn't work: a feed without a URL,
+a search with no query, or a subject from another team.
 
-![Adding a PubMed RSS source in the Django admin](images/image-20220619195841565.png)
+The kind is one *Source type* choice. Each stores a `source_for`/`method` pair (see
+`gregory/source_types.py`):
 
-| Field | Description |
-|:------|:------------|
-| `source_id` | Primary key |
-| `name` | Human-readable source name |
-| `link` | URL of the RSS feed |
-| `language` | Language of the source content |
-| `subject` | The subject this source belongs to |
-| `method` | How content is fetched — `rss`, `scrape`, `manual`, `ctgov_api`, or `ctis_api` |
-| `source_for` | Content type produced: `science paper`, `news`, or `trials` |
-| `ignore_ssl` | Whether to bypass SSL certificate verification |
+| Source type | `source_for` / `method` | How content arrives |
+|:------------|:------------------------|:--------------------|
+| RSS feed of science papers | `science paper` / `rss` | `feedreader_articles` reads the feed on every pipeline run |
+| RSS feed of clinical trials | `trials` / `rss` | `feedreader_trials` reads the feed |
+| ClinicalTrials.gov search | `trials` / `ctgov_api` | `feedreader_trials_ctgov` runs the search |
+| EU CTIS search | `trials` / `ctis_api` | `feedreader_trials_ctis` runs the search |
+| EPO patent search | `patents` / `epo_ops` | `feedreader_patents_ops` runs the search on every pipeline run; see [patents.md](patents.md) |
+| Science papers, clinical trials or news articles sent by an external scraper | `…` / `scrape` | Never fetched. Content arrives through `POST /articles/post/` with this source's ID |
+| Science papers, clinical trials or news articles added by hand or through the API | `…` / `manual` | Never fetched. Added in the admin or through `POST /articles/post/` |
+
+Any other pair is never fetched by anything. Existing sources with such a pair keep it
+when edited, and the source list shows them in red as "never fetched", until someone picks
+a real type.
+
+Every source needs a name, a team and a subject: sites only show content that has a
+subject. The *Notes* field (`description`) is for people and is never read by an importer.
+
+The *Keyword filter* is meant for broad RSS paper feeds that cover many topics, such as
+bioRxiv, medRxiv or PNAS: only entries whose title or summary mentions one of the keywords
+are kept. Separate keywords with commas and quote phrases: `"multiple sclerosis", alzheimer`.
+
+### ClinicalTrials.gov sources (`method="ctgov_api"`)
+
+Three fields build the search: *Condition or disease* (`ctgov_search_condition`, the
+API's `query.cond`), *Intervention or treatment* (`ctgov_search_intervention`,
+`query.intr`) and *Other search terms* (`ctgov_search_term`, `query.term`). ClinicalTrials.gov
+returns trials that match every field you fill in. At least one is required: with none,
+the search would return the whole registry, so the importer skips such a source. Run via
+`python manage.py feedreader_trials_ctgov` (also part of the `pipeline` command).
 
 ### CTIS public API sources (`method="ctis_api"`)
 

@@ -1,6 +1,6 @@
 """
-Tests for the sources, teams and subjects fields on the Articles and Trials
-admin forms (gregory.admin.OrganizationScopedRelationsFormMixin).
+Tests for the sources, teams and subjects fields on the Articles, Trials and
+Patents admin forms (gregory.admin.OrganizationScopedRelationsFormMixin).
 
 A staff member may only pick, or post the id of, their own organisations'
 sources, teams and subjects. Content can be shared between organisations, so it
@@ -20,8 +20,8 @@ from django.contrib.auth.models import Permission
 from django.test import RequestFactory, TestCase
 from organizations.models import Organization, OrganizationUser
 
-from gregory.admin import ArticleAdmin, TrialAdmin
-from gregory.models import Articles, Sources, Subject, Team, Trials
+from gregory.admin import ArticleAdmin, PatentAdmin, TrialAdmin
+from gregory.models import Articles, Patents, Sources, Subject, Team, Trials
 
 User = get_user_model()
 
@@ -29,7 +29,7 @@ RELATIONS = ("sources", "teams", "subjects")
 
 
 class _RelationScopeTests:
-	"""Cases shared by both admins. Subclasses set the admin, the content model
+	"""Cases shared by the admins. Subclasses set the admin, the content model
 	and the `source_for` of its sources, and create the content row in
 	make_content()."""
 
@@ -153,10 +153,17 @@ class _RelationScopeTests:
 		self.assertTrue(form.is_valid(), form.errors)
 
 	def test_staff_still_need_a_team_and_subject_on_content_without_any(self):
+		required = [
+			name
+			for name in ("teams", "subjects")
+			if not self.content_model._meta.get_field(name).blank
+		]
+		if not required:
+			self.skipTest(f"{self.content_model.__name__} has no required team or subject")
 		form = self._form(self.staff, self._post())
 		self.assertFalse(form.is_valid())
-		self.assertIn("teams", form.errors)
-		self.assertIn("subjects", form.errors)
+		for name in required:
+			self.assertIn(name, form.errors)
 
 	def test_hidden_links_do_not_count_as_a_change(self):
 		self._link(self.own, self.foreign)
@@ -194,3 +201,12 @@ class TrialRelationScopeTests(_RelationScopeTests, TestCase):
 		return Trials.objects.create(
 			title="Relscope trial", link="https://example.com/relscope-trial"
 		)
+
+
+class PatentRelationScopeTests(_RelationScopeTests, TestCase):
+	admin_class = PatentAdmin
+	content_model = Patents
+	source_for = "patents"
+
+	def make_content(self):
+		return Patents.objects.create(family_id="relscope-1", title="Relscope patent")

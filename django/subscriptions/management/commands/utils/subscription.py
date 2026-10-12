@@ -4,7 +4,15 @@ from datetime import timedelta
 from django.db.models import Exists, OuterRef, Q, F, prefetch_related_objects
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils.timezone import now
-from gregory.models import Articles, ArticleSubjectRelevance, Subject, Trials
+from django.db.models import Case, IntegerField, Value, When
+from subscriptions.models import SentPatentLinkNotification
+from gregory.models import (
+	Articles,
+	ArticleSubjectRelevance,
+	PatentTrialLink,
+	Subject,
+	Trials,
+)
 
 
 def get_trials_for_list(lst, days=30):
@@ -32,6 +40,47 @@ def get_trials_for_list(lst, days=30):
 		).filter(Q(effective_date__gte=cutoff) | Q(effective_date__isnull=True))
 
 	return qs.distinct()
+
+
+def get_patent_links_for_list(lst, subscriber, days, limit=15):
+	"""
+	Patent-trial links (a trial sponsor filing a patent during or just after a trial)
+	for the list's subjects that were discovered in the last `days` days and have not
+	yet been sent to this subscriber in this list. Strongest signal first (shared
+	category before shared subject, then newest). Dismissed (suppressed) links are
+	excluded, and a link only counts when the subject that qualified it (shared by the
+	patent and the trial) belongs to the list. Returns (links, extra) where `extra` is
+	how many more matched beyond `limit`.
+	"""
+	list_subjects = lst.subjects.all()
+	shared_list_subject = Subject.objects.filter(
+		pk__in=list_subjects,
+		patents=OuterRef("patent_id"),
+		trials=OuterRef("trial_id"),
+	)
+	qs = (
+		PatentTrialLink.objects.filter(
+			suppressed=False, discovered_date__gte=now() - timedelta(days=days)
+		)
+		.filter(Exists(shared_list_subject))
+		.exclude(
+			pk__in=SentPatentLinkNotification.objects.filter(
+				list=lst, subscriber=subscriber
+			).values("link_id")
+		)
+		.select_related("patent", "trial", "sponsor")
+		.annotate(
+			basis_rank=Case(
+				When(basis=PatentTrialLink.BASIS_CATEGORY, then=Value(0)),
+				default=Value(1),
+				output_field=IntegerField(),
+			)
+		)
+		.order_by("basis_rank", "-discovered_date")
+	)
+	total = qs.count()
+	links = list(qs[:limit])
+	return links, max(total - limit, 0)
 
 
 def apply_article_max_age_filter(qs, lst):

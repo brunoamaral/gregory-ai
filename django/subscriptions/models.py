@@ -268,6 +268,23 @@ class SentTrialNotification(models.Model):
 		return f"Trial {self.trial_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
 
 
+class SentPatentLinkNotification(models.Model):
+	"""A patent-trial link already included in an admin summary for this subscriber and
+	list, so the next summary only lists new ones."""
+
+	link = models.ForeignKey("gregory.PatentTrialLink", on_delete=models.CASCADE)
+	list = models.ForeignKey(Lists, on_delete=models.CASCADE)
+	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
+	sent_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		unique_together = ("link", "list", "subscriber")
+		verbose_name_plural = "sent patent link notifications"
+
+	def __str__(self):
+		return f"Patent link {self.link_id} sent to {self.list_id}, subscriber {self.subscriber_id}"
+
+
 class FailedNotification(models.Model):
 	subscriber = models.ForeignKey(Subscribers, on_delete=models.CASCADE)
 	list = models.ForeignKey(Lists, on_delete=models.CASCADE)

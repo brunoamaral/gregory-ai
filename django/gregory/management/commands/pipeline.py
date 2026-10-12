@@ -44,13 +44,21 @@ class Command(BaseCommand):
 				"feedreader_trials_ctis",
 				{"limit": 2000},
 			),  # 3b. CTIS public API trials (full result set per source; RSS stays active as fallback)
+			(
+				"feedreader_patents_ops",
+				{"max_families": 500},
+			),  # 3c. EPO OPS patents (incremental window; the cap is a safety ceiling for a new or broad source)
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors
 			(
 				"rebuild_categories",
 				rebuild_kwargs,
-			),  # 7. Assign categories (incremental by default)
+			),  # 7. Assign categories (incremental by default; covers patents too)
+			(
+				"detect_patent_trial_links",
+				{},
+			),  # 7b. Sponsor-timing signal over all patents: links follow trials that finish or gain a category
 			(
 				"get_takeaways",
 				{"limit": 50},

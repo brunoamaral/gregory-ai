@@ -16,11 +16,13 @@ from subscriptions.management.commands.utils.send_email import (
 from subscriptions.management.commands.utils.subscription import (
 	get_trials_for_list,
 	get_articles_for_list,
+	get_patent_links_for_list,
 )
 from subscriptions.models import (
 	Lists,
 	Subscribers,
 	SentArticleNotification,
+	SentPatentLinkNotification,
 	SentTrialNotification,
 	FailedNotification,
 	SuppressionEvent,
@@ -156,10 +158,17 @@ class Command(BaseCommand):
 
 				new_trials = list_trials.exclude(pk__in=already_sent_trial_ids)
 
-				if not new_articles.exists() and not new_trials.exists():
+				# Patent-trial links not yet sent to this subscriber for this list,
+				# found within the look-back window. Fetched before the empty check:
+				# new links alone are enough to send a summary.
+				patent_links, patent_links_extra = get_patent_links_for_list(
+					admin_list, subscriber, admin_list.lookback_days
+				)
+
+				if not new_articles.exists() and not new_trials.exists() and not patent_links:
 					self.stdout.write(
 						self.style.WARNING(
-							f"No new articles or trials to send to {subscriber.email}."
+							f"No new articles, trials or patent links to send to {subscriber.email}."
 						)
 					)
 					continue
@@ -186,6 +195,8 @@ class Command(BaseCommand):
 					trials,
 					_admin_list=admin_list,
 					_subscriber=subscriber,
+					_patent_links=patent_links,
+					_patent_links_extra=patent_links_extra,
 				):
 					summary_context = get_optimized_email_context(
 						email_type="admin_summary",
@@ -210,6 +221,8 @@ class Command(BaseCommand):
 						_admin_list.show_header_tagline
 					)
 					summary_context["ml_drift"] = ml_drift
+					summary_context["patent_links"] = _patent_links
+					summary_context["patent_links_extra"] = _patent_links_extra
 
 					html = get_template("emails/admin_summary.html").render(
 						summary_context
@@ -250,10 +263,10 @@ class Command(BaseCommand):
 					)
 					continue
 
-				if not articles_to_be_sent and not trials_to_be_sent:
+				if not articles_to_be_sent and not trials_to_be_sent and not patent_links:
 					reason = (
 						f"Admin summary for list '{admin_list.list_name}' organized to "
-						f"zero articles and zero trials for {subscriber.email}; "
+						f"zero articles, trials and patent links for {subscriber.email}; "
 						f"skipping rather than sending an empty digest."
 					)
 					logger.error(reason)
@@ -327,6 +340,10 @@ class Command(BaseCommand):
 					for trial in trials_to_be_sent:
 						SentTrialNotification.objects.get_or_create(
 							trial=trial, list=admin_list, subscriber=subscriber
+						)
+					for link in patent_links:
+						SentPatentLinkNotification.objects.get_or_create(
+							link=link, list=admin_list, subscriber=subscriber
 						)
 				elif error_code == POSTMARK_INACTIVE_RECIPIENT:
 					logger.error(

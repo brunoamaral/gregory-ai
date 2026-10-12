@@ -58,6 +58,23 @@ def get_orcid_credentials(organization):
 	return (None, None)
 
 
+def get_epo_ops_credentials(organization):
+	"""
+	Resolve EPO Open Patent Services credentials for the given organisation.
+
+	All-or-nothing, like get_orcid_credentials: returns (consumer_key,
+	consumer_secret) only when both fields are populated, otherwise (None, None).
+	"""
+	try:
+		org_creds = organization.credentials
+		if org_creds.epo_ops_consumer_key and org_creds.epo_ops_consumer_secret:
+			return (org_creds.epo_ops_consumer_key, org_creds.epo_ops_consumer_secret)
+	except OrganizationCredentials.DoesNotExist:
+		pass
+
+	return (None, None)
+
+
 def get_postmark_credentials(custom_settings=None, organization=None):
 	"""
 	Resolve Postmark credentials using the fallback chain:

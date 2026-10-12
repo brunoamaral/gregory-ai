@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shape of the 429 fault in the patent-dev/epo-ops (MIT) samples. -->
+<fault xmlns="http://ops.epo.org">
+	<code>429</code>
+	<message>Fair use limit exceeded</message>
+	<description>The request cannot be processed because the fair use limit has been reached</description>
+</fault>

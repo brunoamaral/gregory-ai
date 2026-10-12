@@ -11,9 +11,11 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
+import json
 import logging
 import re
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
+from . import source_types
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
@@ -37,6 +39,11 @@ from .models import (
 	Team,
 	ArticleTrialReference,
 	OrganizationCredentials,
+	PatentApplicant,
+	PatentCategoryAssignment,
+	PatentPublication,
+	PatentTrialLink,
+	Patents,
 	OrganizationSite,
 	OrganizationApiSettings,
 	ArticleOrgContent,
@@ -772,70 +779,52 @@ class TrialOrgContentInline(_BaseOrgContentInline):
 	verbose_name_plural = "Editorial content (per organisation)"
 
 
-class ArticleCategoryAssignmentInline(admin.TabularInline):
+class _BaseCategoryAssignmentInline(admin.TabularInline):
+	"""Category assignments on a content page (article, trial or patent).
+
+	Scoped to the user's organisations: staff can only pick their own
+	organisations' categories, and other organisations' assignments, which
+	shared content can carry, are hidden and left as they are on save.
+	Subclasses set `model`.
+	"""
+
+	extra = 0
+	autocomplete_fields = ["teamcategory"]
+	verbose_name = "Category assignment"
+	verbose_name_plural = "Category assignments"
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		"""Limit categories to the user's organisations. The autocomplete endpoint is
+		already scoped, but the field validates against its own queryset, so without
+		this a staff member could post another organisation's category id."""
+		if db_field.name == "teamcategory" and not request.user.is_superuser:
+			kwargs["queryset"] = TeamCategory.objects.filter(
+				team__organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+	def get_queryset(self, request):
+		"""Hide other organisations' assignments. Shared content can carry them,
+		and the scoped category field above would reject such a row, blocking
+		every save of the page."""
+		qs = (
+			super()
+			.get_queryset(request)
+			.select_related("teamcategory", "teamcategory__team")
+		)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			teamcategory__team__organization__id__in=get_user_organizations(request.user)
+		)
+
+
+class ArticleCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = ArticleCategoryAssignment
-	extra = 0
-	autocomplete_fields = ["teamcategory"]
-	verbose_name = "Category assignment"
-	verbose_name_plural = "Category assignments"
-
-	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
-		if db_field.name == "teamcategory" and not request.user.is_superuser:
-			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
-			)
-		return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-	def get_queryset(self, request):
-		"""Hide other organisations' assignments. Shared content can carry them,
-		and the scoped category field above would reject such a row, blocking
-		every save of the page."""
-		qs = (
-			super()
-			.get_queryset(request)
-			.select_related("teamcategory", "teamcategory__team")
-		)
-		if request.user.is_superuser:
-			return qs
-		return qs.filter(
-			teamcategory__team__organization__id__in=get_user_organizations(request.user)
-		)
 
 
-class TrialCategoryAssignmentInline(admin.TabularInline):
+class TrialCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = TrialCategoryAssignment
-	extra = 0
-	autocomplete_fields = ["teamcategory"]
-	verbose_name = "Category assignment"
-	verbose_name_plural = "Category assignments"
-
-	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
-		if db_field.name == "teamcategory" and not request.user.is_superuser:
-			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
-			)
-		return super().formfield_for_foreignkey(db_field, request, **kwargs)
-
-	def get_queryset(self, request):
-		"""Hide other organisations' assignments. Shared content can carry them,
-		and the scoped category field above would reject such a row, blocking
-		every save of the page."""
-		qs = (
-			super()
-			.get_queryset(request)
-			.select_related("teamcategory", "teamcategory__team")
-		)
-		if request.user.is_superuser:
-			return qs
-		return qs.filter(
-			teamcategory__team__organization__id__in=get_user_organizations(request.user)
-		)
 
 
 class SourceActionForm(forms.Form):
@@ -1934,18 +1923,107 @@ class SourceInline(admin.StackedInline):
 
 
 class SourceAdminForm(forms.ModelForm):
-	"""Custom form for Source admin with organization-based field access"""
+	"""Add/change form for Sources.
+
+	Offers one "Source type" choice (gregory/source_types.py) in place of the raw
+	`source_for` + `method` pair, so only pairs an importer actually fetches can be
+	picked, then checks the settings that type needs before saving. Team and subject
+	are limited to the user's organisation, and the subject must belong to the team.
+	source_type_toggle.js shows only the chosen type's settings and narrows the
+	subject list to the chosen team; these checks hold without it.
+	"""
+
+	source_type = forms.ChoiceField(
+		label="Source type",
+		help_text=(
+			"Decides how Gregory gets this source's content. "
+			"Only the settings this type needs are shown below."
+		),
+	)
+
+	LABELS = {
+		"link": "Link",
+		"ignore_ssl": "Ignore SSL certificate errors",
+		"keyword_filter": "Keyword filter",
+		"ctgov_search_condition": "Condition or disease",
+		"ctgov_search_intervention": "Intervention or treatment",
+		"ctgov_search_term": "Other search terms",
+		"ctis_search_criteria": "CTIS search criteria",
+		"ops_cql_query": "EPO search query (CQL)",
+		"description": "Notes",
+	}
+	HELP = {
+		"team": "The team that owns this source and everything it brings in.",
+		"subject": (
+			"Everything this source brings in is tagged with this subject. Sites only show "
+			"content that has a subject. The list shows the chosen team's subjects."
+		),
+		"link": (
+			"RSS feeds: the feed's URL (required). Sources that receive content through the "
+			"API: the website's address, optional and for reference only. Searches don't use it."
+		),
+		"ignore_ssl": (
+			"Only for a feed whose website has a broken security certificate. "
+			"Leave unticked otherwise."
+		),
+		"keyword_filter": (
+			"Meant for broad feeds that cover many topics, such as bioRxiv, medRxiv or PNAS. "
+			"Only papers whose title or summary contains one of these keywords are kept; leave "
+			"empty to keep everything. Separate keywords with commas and put phrases in quotes: "
+			'"multiple sclerosis", alzheimer, parkinson.'
+		),
+		"ctgov_search_condition": "Searched in each trial's conditions, e.g. \"multiple sclerosis\".",
+		"ctgov_search_intervention": "Searched in each trial's interventions, e.g. \"dihydroartemisinin\".",
+		"ctgov_search_term": (
+			"Searched anywhere in a trial's record, e.g. \"cell reprogramming\". Fill in at least "
+			"one of these three; a trial must match every one you fill in."
+		),
+		"ctis_search_criteria": (
+			'A JSON object, e.g. {"medicalCondition": "Multiple Sclerosis"}. Allowed keys, '
+			"case-sensitive: " + ", ".join(source_types.CTIS_SEARCH_KEYS) + "."
+		),
+		"ops_cql_query": (
+			'For example ta="multiple sclerosis" and cpc=/low A61P25/00. Don\'t add a '
+			"publication-date (pd) clause: Gregory adds the date window itself on every run."
+		),
+		"name": (
+			"Shown in lists, logs and digests. The convention is where it comes from, then the "
+			'subject, e.g. "CTGov | Multiple Sclerosis".'
+		),
+		"description": (
+			"Notes for people: what this source covers and why its settings were chosen. "
+			"Gregory never reads it."
+		),
+		"active": (
+			"Untick to pause this source without deleting it. Active sources are read "
+			"whenever their importer runs."
+		),
+	}
 
 	class Meta:
 		model = Sources
-		fields = "__all__"
+		fields = [
+			"team",
+			"subject",
+			"link",
+			"ignore_ssl",
+			"keyword_filter",
+			"ctgov_search_condition",
+			"ctgov_search_intervention",
+			"ctgov_search_term",
+			"ctis_search_criteria",
+			"ops_cql_query",
+			"name",
+			"description",
+			"active",
+		]
 
 	def __init__(self, *args, **kwargs):
 		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
 
 		# Filter team and subject choices based on user's organization
-		if self.request:
+		if self.request and "team" in self.fields and "subject" in self.fields:
 			if self.request.user.is_superuser:
 				self.fields["team"].queryset = Team.objects.all()
 				self.fields["subject"].queryset = Subject.objects.all()
@@ -1956,6 +2034,126 @@ class SourceAdminForm(forms.ModelForm):
 				)
 				self.fields["subject"].queryset = Subject.objects.filter(
 					team__organization__id__in=user_orgs
+				)
+
+		choices = [("", "---------"), *source_types.grouped_choices()]
+		if self.instance.pk:
+			current = source_types.type_for(self.instance.source_for, self.instance.method)
+			if current is None:
+				choices.append((
+					source_types.LEGACY_KEY,
+					f"Keep the current setting: {self.instance.get_source_for_display()} "
+					f"via {self.instance.get_method_display()} (never fetched)",
+				))
+			self.fields["source_type"].initial = current.key if current else source_types.LEGACY_KEY
+		self.fields["source_type"].choices = choices
+		self.fields["source_type"].widget.attrs.update({
+			"data-rows": json.dumps(
+				{t.key: list(t.fields) for t in source_types.SOURCE_TYPES}
+			),
+			"data-help": json.dumps({
+				**{t.key: t.help for t in source_types.SOURCE_TYPES},
+				source_types.LEGACY_KEY: (
+					"No importer fetches this combination, so this source never gets new "
+					"content. Pick the type it should be."
+				),
+			}),
+			"data-connection-fields": json.dumps(list(source_types.CONNECTION_FIELDS)),
+		})
+
+		for name, label in self.LABELS.items():
+			if name in self.fields:
+				self.fields[name].label = label
+		for name, text in self.HELP.items():
+			if name in self.fields:
+				self.fields[name].help_text = text
+		for name in ("name", "subject"):
+			if name in self.fields:
+				self.fields[name].required = True
+
+		if "subject" in self.fields:
+			# The admin wraps the select in RelatedFieldWidgetWrapper; the data
+			# attribute belongs on the select itself.
+			widget = self.fields["subject"].widget
+			select = getattr(widget, "widget", widget)
+			select.attrs["data-subject-teams"] = json.dumps({
+				str(pk): team_id
+				for pk, team_id in self.fields["subject"].queryset.values_list("pk", "team_id")
+			})
+
+	def clean(self):
+		cleaned = super().clean()
+		key = cleaned.get("source_type")
+		team, subject = cleaned.get("team"), cleaned.get("subject")
+		if team and subject and subject.team_id != team.pk:
+			self.add_error(
+				"subject",
+				f"{subject.subject_name} belongs to {subject.team}. Pick one of "
+				f"{team.name}'s subjects, or change the team.",
+			)
+
+		if key == source_types.LEGACY_KEY:
+			if not self.instance.pk or source_types.type_for(
+				self.instance.source_for, self.instance.method
+			):
+				self.add_error("source_type", "Choose a source type.")
+			return cleaned  # keeps the stored pair untouched
+		source_type = source_types.BY_KEY.get(key)
+		if source_type is None:
+			return cleaned  # the field's own required/choice error already applies
+
+		self.instance.source_for = source_type.source_for
+		self.instance.method = source_type.method
+
+		def filled(field):
+			value = cleaned.get(field)
+			return bool(value.strip()) if isinstance(value, str) else bool(value)
+
+		if "link" in source_type.required and not filled("link"):
+			self.add_error("link", "Enter the feed's URL.")
+		if source_type.key == "ctgov" and not any(filled(f) for f in source_type.fields):
+			self.add_error(
+				"ctgov_search_condition",
+				"Fill in at least one of condition, intervention or other terms. With all "
+				"three empty, ClinicalTrials.gov would return every trial in its registry.",
+			)
+		if source_type.key == "ctis":
+			self._check_ctis_criteria(cleaned.get("ctis_search_criteria"))
+		if source_type.key == "epo_ops":
+			query = (cleaned.get("ops_cql_query") or "").strip()
+			if not query:
+				self.add_error(
+					"ops_cql_query",
+					'Enter the EPO search, e.g. ta="multiple sclerosis" and cpc=/low A61P25/00.',
+				)
+			elif source_types.CQL_DATE_CLAUSE.search(query):
+				self.add_error(
+					"ops_cql_query",
+					"Remove the publication-date clause (pd …). Gregory adds the date "
+					"window itself on every run.",
+				)
+		return cleaned
+
+	def _check_ctis_criteria(self, criteria):
+		if not criteria:
+			self.add_error(
+				"ctis_search_criteria",
+				'Enter the search criteria, e.g. {"medicalCondition": "Multiple Sclerosis"}. '
+				"Without them this source is never fetched.",
+			)
+		elif not isinstance(criteria, dict):
+			self.add_error(
+				"ctis_search_criteria",
+				'Enter a JSON object such as {"medicalCondition": "Multiple Sclerosis"}, '
+				"not a list or a single value.",
+			)
+		else:
+			unknown = sorted(set(criteria) - set(source_types.CTIS_SEARCH_KEYS))
+			if unknown:
+				self.add_error(
+					"ctis_search_criteria",
+					f"Unknown key(s): {', '.join(unknown)}. CTIS accepts "
+					f"{', '.join(source_types.CTIS_SEARCH_KEYS)} (case-sensitive).",
 				)
 
 
@@ -2043,7 +2241,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	list_display = [
 		"name",
 		"active",
-		"source_for",
+		"source_type_label",
 		"subject",
 		"last_article_date",
 		"article_count",
@@ -2060,55 +2258,48 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 	]
 	search_fields = ["name", "link", "description", "keyword_filter"]
 	actions = ["activate_sources", "deactivate_sources", "reassign_to_team_action"]
+	readonly_fields = ["api_submission_note"]
 	fieldsets = (
+		("1. What kind of source is this?", {"fields": ("source_type",)}),
+		("2. Where should its content go?", {"fields": ("team", "subject")}),
 		(
-			"Basic Information",
+			"3. How Gregory gets the content",
 			{
-				"fields": (
-					"name",
-					"source_for",
-					"method",
-					"active",
-					"link",
-					"ignore_ssl",
-					"description",
-				)
+				"fields": source_types.CONNECTION_FIELDS,
+				"description": "Only the settings the chosen source type needs are shown.",
 			},
 		),
-		("Organization", {"fields": ("team", "subject")}),
-		(
-			"Filtering (bioRxiv and medRxiv)",
-			{
-				"fields": ("keyword_filter",),
-				"classes": ("keyword-filter-settings",),
-				"description": 'For bioRxiv and medRxiv sources, specify keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson).',
-			},
-		),
-		(
-			"ClinicalTrials.gov API Settings",
-			{
-				"fields": ("ctgov_search_condition",),
-				"classes": ("ctgov-settings",),
-				"description": "Settings for ClinicalTrials.gov API sources. Enter the condition/disease to search for clinical trials.",
-			},
-		),
-		(
-			"CTIS Public API Settings",
-			{
-				"fields": ("ctis_search_criteria",),
-				"classes": ("ctis-settings",),
-				"description": (
-					"Settings for CTIS Public API sources. Enter the verbatim searchCriteria "
-					'dict to POST, e.g. {"medicalCondition": "Multiple Sclerosis"}. Supported '
-					"keys: medicalCondition, sponsor, number, containAll, status. Leave "
-					'"link" empty for these sources - search criteria drive the fetch.'
-				),
-			},
-		),
+		("4. Name and notes", {"fields": ("name", "description", "active")}),
 	)
 
 	class Media:
-		js = ("admin/js/source_for_toggle.js",)
+		js = ("admin/js/source_type_toggle.js",)
+
+	@admin.display(description="Type")
+	def source_type_label(self, obj):
+		source_type = source_types.type_for(obj.source_for, obj.method)
+		if source_type:
+			return source_type.label
+		return format_html(
+			'<span style="color: #ba2121;">{} via {} (never fetched)</span>',
+			obj.get_source_for_display(),
+			obj.get_method_display(),
+		)
+
+	@admin.display(description="How to send content")
+	def api_submission_note(self, obj):
+		if obj and obj.pk:
+			return format_html(
+				"Send content to <code>POST /articles/post/</code> with "
+				'<code>"source_id": {}</code> and <code>"kind": "{}"</code>, using an API key '
+				"of this team's organisation.",
+				obj.pk,
+				obj.source_for,
+			)
+		return (
+			"Send content to POST /articles/post/ with this source's ID, "
+			"which appears here once you save."
+		)
 
 	def get_form(self, request, obj=None, **kwargs):
 		"""Pass the request to the form so it can filter field choices."""
@@ -2122,13 +2313,33 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		return FormWithRequest
 
 	def save_model(self, request, obj, form, change):
-		"""Warn admin if source has no team assigned."""
+		"""Point out what the saved source still needs before it can work."""
 		super().save_model(request, obj, form, change)
 		if not obj.team:
 			messages.warning(
 				request,
 				f"Source '{obj.name}' has no team assigned. "
 				f"Feedreaders will skip team association for content from this source.",
+			)
+			return
+		if obj.method == "epo_ops":
+			from subscriptions.management.commands.utils.get_credentials import (
+				get_epo_ops_credentials,
+			)
+
+			key, _secret = get_epo_ops_credentials(obj.team.organization)
+			if not key:
+				messages.warning(
+					request,
+					f"{obj.team.organization} has no EPO credentials yet, so '{obj.name}' is "
+					"skipped until they're added under Organization credentials.",
+				)
+		source_type = source_types.type_for(obj.source_for, obj.method)
+		if source_type and not source_type.fetched:
+			messages.info(
+				request,
+				f"'{obj.name}' is source ID {obj.pk}: quote it as \"source_id\" when "
+				"sending content through the API.",
 			)
 
 	def last_article_date(self, obj):
@@ -2153,6 +2364,8 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		"""Display the count of articles or trials from this source."""
 		if obj.source_for == "trials":
 			return obj.get_trial_count()
+		elif obj.source_for == "patents":
+			return obj.get_patent_count()
 		else:
 			return obj.get_article_count()
 
@@ -2871,6 +3084,11 @@ TEAMCATEGORY_WEIGHT_FIELDS = {
 		"secondary_outcome": "weight_trial_secondary_outcome",
 		"therapeutic_areas": "weight_trial_therapeutic_areas",
 	},
+	"patent": {
+		"title": "weight_patent_title",
+		"summary": "weight_patent_summary",
+		"claims": "weight_patent_claims",
+	},
 }
 
 
@@ -2895,6 +3113,9 @@ class TeamCategoryAdminForm(forms.ModelForm):
 	weight_trial_therapeutic_areas = forms.IntegerField(
 		min_value=0, label="Therapeutic areas"
 	)
+	weight_patent_title = forms.IntegerField(min_value=0, label="Title")
+	weight_patent_summary = forms.IntegerField(min_value=0, label="Abstract")
+	weight_patent_claims = forms.IntegerField(min_value=0, label="Claims")
 
 	class Meta:
 		model = TeamCategory
@@ -2939,6 +3160,8 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"modality",
 		"display_match_scope",
 		"article_count",
+		"trial_count",
+		"patent_count",
 		"display_subjects",
 	)
 	list_editable = ("modality",)
@@ -2977,6 +3200,7 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 					"match_scope",
 					"match_min_score_articles",
 					"match_min_score_trials",
+					"match_min_score_patents",
 				),
 				"description": (
 					"Automatic categories match content whose in-scope fields contain these "
@@ -3009,6 +3233,17 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 				),
 			},
 		),
+		(
+			"Patent score weights",
+			{
+				"classes": ("collapse",),
+				"fields": (
+					"weight_patent_title",
+					"weight_patent_summary",
+					"weight_patent_claims",
+				),
+			},
+		),
 	)
 
 	# Form fields that affect which articles/trials match the category
@@ -3020,6 +3255,10 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 		"match_scope",
 		"match_min_score_articles",
 		"match_min_score_trials",
+		"match_min_score_patents",
+		"weight_patent_title",
+		"weight_patent_summary",
+		"weight_patent_claims",
 		"weight_article_title",
 		"weight_article_summary",
 		"weight_trial_title",
@@ -3072,6 +3311,14 @@ class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.Mode
 
 	article_count.short_description = "Articles"
 
+	@admin.display(description="Trials")
+	def trial_count(self, obj):
+		return obj.trials.count()
+
+	@admin.display(description="Patents")
+	def patent_count(self, obj):
+		return obj.patents.count()
+
 	@admin.display(description="Match scope", ordering="match_scope")
 	def display_match_scope(self, obj):
 		"""Human-readable label for the category's match scope."""
@@ -3121,7 +3368,7 @@ class OrganizationSiteInline(admin.TabularInline):
 
 
 class OrganizationCredentialsInline(admin.StackedInline):
-	"""Inline to manage Postmark/ORCID credentials for an organization."""
+	"""Inline to manage Postmark/ORCID/EPO OPS credentials for an organization."""
 
 	model = OrganizationCredentials
 	extra = 0
@@ -3131,6 +3378,8 @@ class OrganizationCredentialsInline(admin.StackedInline):
 		"postmark_api_url",
 		"orcid_client_id",
 		"orcid_client_secret",
+		"epo_ops_consumer_key",
+		"epo_ops_consumer_secret",
 	)
 	verbose_name = "Credentials"
 	verbose_name_plural = "Credentials"
@@ -3951,11 +4200,248 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		)
 
 
+
+class PatentPublicationInline(admin.TabularInline):
+	model = PatentPublication
+	extra = 0
+	can_delete = False
+	fields = (
+		"publication_number",
+		"publication_date",
+		"application_number",
+		"application_date",
+		"sources",
+	)
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+
+class PatentApplicantInline(admin.TabularInline):
+	model = PatentApplicant
+	extra = 0
+	can_delete = False
+	fields = ("sequence", "raw_name", "sponsor", "is_individual")
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("sponsor")
+
+
+class PatentCategoryAssignmentInline(_BaseCategoryAssignmentInline):
+	model = PatentCategoryAssignment
+
+
+class PatentTrialLinkInline(admin.TabularInline):
+	"""Read-only list of the trials a patent is linked to."""
+
+	model = PatentTrialLink
+	extra = 0
+	can_delete = False
+	fields = ("trial", "sponsor", "timing", "days_after_completion", "basis", "suppressed")
+	readonly_fields = fields
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("trial", "sponsor")
+
+
+class LinkBasisFilter(admin.SimpleListFilter):
+	"""Defaults to the strong signal (a shared team category); 'all' shows both."""
+
+	title = "basis"
+	parameter_name = "basis"
+
+	def lookups(self, request, model_admin):
+		return (
+			("category", "Shared category (strong)"),
+			("subject", "Shared subject only"),
+			("all", "All"),
+		)
+
+	def value(self):
+		return super().value() or "category"
+
+	def choices(self, changelist):
+		for lookup, title in self.lookup_choices:
+			yield {
+				"selected": self.value() == lookup,
+				"query_string": changelist.get_query_string({self.parameter_name: lookup}),
+				"display": title,
+			}
+
+	def queryset(self, request, queryset):
+		if self.value() in ("category", "subject"):
+			return queryset.filter(basis=self.value())
+		return queryset
+
+
+class PatentTrialLinkAdmin(admin.ModelAdmin):
+	"""Sponsor-timing signals, grouped by patent. Scoped to the caller's organisations
+	through the patent's sources (OrganizationFilterMixin cannot do this: the model has
+	no sources of its own)."""
+
+	list_display = [
+		"patent",
+		"trial",
+		"sponsor",
+		"timing",
+		"days_after_completion",
+		"basis",
+		"suppressed",
+		"discovered_date",
+	]
+	list_filter = [LinkBasisFilter, "timing", "suppressed"]
+	list_select_related = ["patent", "trial", "sponsor"]
+	ordering = ["patent_id", "trial_id"]
+	search_fields = ["patent__title", "trial__title", "sponsor__name"]
+	readonly_fields = [
+		"patent",
+		"trial",
+		"sponsor",
+		"timing",
+		"days_after_completion",
+		"basis",
+		"discovered_date",
+	]
+	fields = readonly_fields + ["suppressed"]
+	actions = ["suppress_links", "restore_links"]
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(patent__sources__team__organization__id__in=user_orgs).distinct()
+
+	def has_add_permission(self, request):
+		return False
+
+	@admin.action(description="Suppress selected links (dismiss)")
+	def suppress_links(self, request, queryset):
+		updated = queryset.update(suppressed=True)
+		self.message_user(request, f"Suppressed {updated} link(s).")
+
+	@admin.action(description="Restore selected suppressed links")
+	def restore_links(self, request, queryset):
+		updated = queryset.update(suppressed=False)
+		self.message_user(request, f"Restored {updated} link(s).")
+
+
+class PriorityYearFilter(admin.SimpleListFilter):
+	"""Filter patent families by the year of their earliest priority date."""
+
+	title = "priority year"
+	parameter_name = "priority_year"
+
+	def lookups(self, request, model_admin):
+		years = (
+			Patents.objects.exclude(earliest_priority_date__isnull=True)
+			.dates("earliest_priority_date", "year", order="DESC")
+		)
+		return [(str(d.year), str(d.year)) for d in years]
+
+	def queryset(self, request, queryset):
+		if self.value() and self.value().isdigit():
+			return queryset.filter(earliest_priority_date__year=int(self.value()))
+		return queryset
+
+
+class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+	"""Limits the editable relations to the caller's organisations (see
+	OrganizationScopedRelationsFormMixin). OrganizationFilterMixin only scopes the
+	patent queryset itself."""
+
+	class Meta:
+		model = Patents
+		fields = ["sources", "teams", "subjects"]
+
+
+class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin):
+	"""Patent families. Importer-managed fields are read-only; editors curate
+	subjects, teams and category assignments."""
+
+	list_display = [
+		"patent_id",
+		"title",
+		"representative_publication",
+		"display_applicants",
+		"earliest_priority_date",
+		"has_grant",
+		"discovery_date",
+	]
+	list_filter = [
+		("teams", OrganizationRestrictedFieldListFilter),
+		("subjects", OrganizationRestrictedFieldListFilter),
+		("sources", OrganizationRestrictedFieldListFilter),
+		("team_categories", OrganizationRestrictedFieldListFilter),
+		"applicants__sponsor_type",
+		"has_grant",
+		PriorityYearFilter,
+	]
+	search_fields = [
+		"title",
+		"summary",
+		"representative_publication",
+		"family_id",
+		"publications__publication_number",
+	]
+	form = PatentAdminForm
+	date_hierarchy = "earliest_priority_date"
+	readonly_fields = [
+		"family_id",
+		"title",
+		"summary",
+		"claims",
+		"representative_publication",
+		"link",
+		"links",
+		"earliest_priority_date",
+		"earliest_publication_date",
+		"has_grant",
+		"cpc_classes",
+		"ipc_classes",
+		"inventors",
+		"discovery_date",
+		"last_updated",
+		"family_next_check",
+		"family_attempts",
+	]
+	fields = readonly_fields + ["sources", "teams", "subjects"]
+	filter_horizontal = ("sources", "teams", "subjects")
+	inlines = [
+		PatentPublicationInline,
+		PatentApplicantInline,
+		PatentTrialLinkInline,
+		PatentCategoryAssignmentInline,
+	]
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).prefetch_related("patent_applicants")
+
+	@admin.display(description="Applicants")
+	def display_applicants(self, obj):
+		names = [a.raw_name for a in obj.patent_applicants.all()]
+		text = "; ".join(names[:3])
+		return text + ("…" if len(names) > 3 else "")
+
+	def has_add_permission(self, request):
+		return False
+
+
 admin.site.register(Articles, ArticleAdmin)
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
+admin.site.register(Patents, PatentAdmin)
+admin.site.register(PatentTrialLink, PatentTrialLinkAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 

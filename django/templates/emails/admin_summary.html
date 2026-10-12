@@ -98,6 +98,25 @@
         </p>
     </div>
 
+    <!-- Patent-trial links -->
+    {% if patent_links %}
+    <div class="patent-links-box" style="margin-top: 20px; padding: 16px 20px; background-color: #eff6ff; border: 1px solid #93c5fd; border-radius: 8px;">
+        <h3 class="patent-links-title" style="color: #1e3a8a; font-size: 14px; margin: 0 0 8px 0;">
+            Sponsors filing patents around their trials
+        </h3>
+        {% for link in patent_links %}
+        <p class="patent-links-text" style="color: #1e3a8a; font-size: 13px; margin: 0 0 8px 0;">
+            <strong>{{ link.sponsor.name }}</strong>
+            {% if link.timing == "during" %}filed during{% else %}filed {{ link.days_after_completion }} day{{ link.days_after_completion|pluralize }} after{% endif %}
+            <a href="{{ link.trial.link }}" style="color: #1d4ed8;">{{ link.trial.title|truncatechars:90 }}</a>:
+            <a href="{{ link.patent.link }}" style="color: #1d4ed8;">{{ link.patent.title|truncatechars:90 }}</a>
+            {% if link.basis == "category" %}(shared category){% else %}(shared subject only){% endif %}
+        </p>
+        {% endfor %}
+        {% if patent_links_extra %}<p style="color: #1e3a8a; font-size: 12px; margin: 0;">+{{ patent_links_extra }} more in the admin.</p>{% endif %}
+    </div>
+    {% endif %}
+
     <!-- ML Field Health Check -->
     {% if ml_drift %}
     {% with ml_drift_total=ml_drift.stale_ml_score|add:ml_drift.missing_relevant|add:ml_drift.unexpected_relevant %}

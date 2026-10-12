@@ -591,6 +591,22 @@ class ClinicalTrialsGovAPI:
 		}
 
 	@staticmethod
+	def extract_completion_dates(status_module: dict) -> tuple:
+		"""statusModule -> (primary_completion_date, completion_date, completion_date_type).
+		Dates may be partial (YYYY, YYYY-MM). The type applies to the dates as reported;
+		when the primary and overall structs disagree, the overall one decides."""
+		primary_struct = status_module.get("primaryCompletionDateStruct") or {}
+		completion_struct = status_module.get("completionDateStruct") or {}
+		primary = ClinicalTrialsGovAPI._parse_date(primary_struct.get("date"))
+		completion = ClinicalTrialsGovAPI._parse_date(completion_struct.get("date"))
+		date_type = None
+		for struct, parsed in ((completion_struct, completion), (primary_struct, primary)):
+			if parsed and str(struct.get("type") or "").upper() in ("ACTUAL", "ESTIMATED"):
+				date_type = str(struct["type"]).lower()
+				break
+		return primary, completion, date_type
+
+	@staticmethod
 	def extract_secondary_ids(identification_module: dict) -> tuple:
 		"""Extract (secondary_id_text, ctg_secondary_ids) from a CTGov study's
 		``identificationModule.secondaryIdInfos``.
@@ -844,6 +860,10 @@ class ClinicalTrialsGovAPI:
 		# date_enrollement — same start date already used for published_date
 		date_enrollement = self._parse_date(start_date_struct.get("date"))
 
+		primary_completion_date, completion_date, completion_date_type = (
+			self.extract_completion_dates(status_module)
+		)
+
 		# contact_affiliation — first overall official's affiliation
 		overall_officials = contacts_module.get("overallOfficials", [])
 		_raw_affiliation = (
@@ -900,6 +920,9 @@ class ClinicalTrialsGovAPI:
 			"secondary_sponsor": secondary_sponsor,
 			"last_refreshed_on": last_refreshed_on,
 			"date_enrollement": date_enrollement,
+			"primary_completion_date": primary_completion_date,
+			"completion_date": completion_date,
+			"completion_date_type": completion_date_type,
 			"contact_affiliation": contact_affiliation,
 		}
 
@@ -912,7 +935,8 @@ class ClinicalTrialsGovAPI:
 			extra_fields=extra_fields,
 		)
 
-	def _parse_date(self, date_str: str):
+	@staticmethod
+	def _parse_date(date_str: str):
 		"""Parse a date string from the API into a date object."""
 		from datetime import datetime
 
@@ -1392,6 +1416,12 @@ class CTISPublicAPI:
 				last_pub_update.year, last_pub_update.month, last_pub_update.day, tzinfo=pytz.UTC
 			)
 
+		# endDate is the end-of-trial date in the member state(s); endDateEU the EU-wide
+		# one. Either means the trial has actually ended.
+		completion_date = _day_first(record.get("endDate")) or _day_first(
+			record.get("endDateEU")
+		)
+
 		extra_fields = {
 			"source_register": self.SOURCE_REGISTER,
 			"condition": _or_none(record.get("conditions")),
@@ -1414,6 +1444,11 @@ class CTISPublicAPI:
 			"target_size": _or_none(record.get("totalNumberEnrolled")),
 			"last_refreshed_on": last_refreshed_on,
 		}
+		# Search-only: the RSS channel carries no end date, so these keys exist only
+		# when the API record has one (keeps the two channels' key sets in parity).
+		if completion_date:
+			extra_fields["completion_date"] = completion_date
+			extra_fields["completion_date_type"] = "actual"
 
 		# summary is composed only as a fill-once fallback for trials that have none —
 		# the command must never overwrite an existing summary with this. Mirrors the

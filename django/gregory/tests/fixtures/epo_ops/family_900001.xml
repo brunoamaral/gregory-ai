@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- INPADOC extended family: holds members of two simple families (900001 and 800001).
+     Hand-made, in the shape of the patent-dev/epo-ops (MIT) samples. -->
+<ops:world-patent-data xmlns="http://www.epo.org/exchange" xmlns:ops="http://ops.epo.org" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<ops:patent-family legal="false" total-result-count="4">
+		<ops:publication-reference>
+			<document-id document-id-type="docdb">
+				<country>EP</country>
+				<doc-number>4100001</doc-number>
+				<kind>A1</kind>
+			</document-id>
+		</ops:publication-reference>
+		<ops:family-member family-id="900001">
+			<publication-reference>
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>4100001</doc-number>
+					<kind>A1</kind>
+					<date>20221207</date>
+				</document-id>
+			</publication-reference>
+			<application-reference doc-id="1" is-representative="YES">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>21177001</doc-number>
+					<kind>A</kind>
+					<date>20210601</date>
+				</document-id>
+			</application-reference>
+			<priority-claim sequence="1" kind="regional">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>21177001</doc-number>
+					<kind>A</kind>
+					<date>20210601</date>
+				</document-id>
+			</priority-claim>
+		</ops:family-member>
+		<ops:family-member family-id="900001">
+			<publication-reference>
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>4100001</doc-number>
+					<kind>B1</kind>
+					<date>20240320</date>
+				</document-id>
+			</publication-reference>
+			<application-reference doc-id="1" is-representative="YES">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>21177001</doc-number>
+					<kind>A</kind>
+					<date>20210601</date>
+				</document-id>
+			</application-reference>
+			<priority-claim sequence="1" kind="regional">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>21177001</doc-number>
+					<kind>A</kind>
+					<date>20210601</date>
+				</document-id>
+			</priority-claim>
+		</ops:family-member>
+		<ops:family-member family-id="900001">
+			<publication-reference>
+				<document-id document-id-type="docdb">
+					<country>WO</country>
+					<doc-number>2022200001</doc-number>
+					<kind>A1</kind>
+					<date>20221208</date>
+				</document-id>
+			</publication-reference>
+			<application-reference doc-id="2">
+				<document-id document-id-type="docdb">
+					<country>WO</country>
+					<doc-number>2022EP64001</doc-number>
+					<kind>W</kind>
+					<date>20220530</date>
+				</document-id>
+			</application-reference>
+			<priority-claim sequence="1" kind="regional">
+				<document-id document-id-type="docdb">
+					<country>EP</country>
+					<doc-number>21177001</doc-number>
+					<kind>A</kind>
+					<date>20210601</date>
+				</document-id>
+			</priority-claim>
+		</ops:family-member>
+		<ops:family-member family-id="800001">
+			<publication-reference>
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>2020100999</doc-number>
+					<kind>A1</kind>
+					<date>20200416</date>
+				</document-id>
+			</publication-reference>
+			<application-reference doc-id="3">
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>201816999999</doc-number>
+					<kind>A</kind>
+					<date>20181010</date>
+				</document-id>
+			</application-reference>
+			<priority-claim sequence="1" kind="national">
+				<document-id document-id-type="docdb">
+					<country>US</country>
+					<doc-number>201816999999</doc-number>
+					<kind>A</kind>
+					<date>20181010</date>
+				</document-id>
+			</priority-claim>
+		</ops:family-member>
+	</ops:patent-family>
+</ops:world-patent-data>
