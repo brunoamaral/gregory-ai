@@ -6,7 +6,8 @@ differences from trials:
 
 - OPS gives two name formats. ``original`` is the name as filed and is the closest to
   how sponsors write their names in trial registries, so it is used when present;
-  ``epodoc`` (uppercase, abbreviated, country suffix like ``[GB]``) is the fallback.
+  ``epodoc`` (uppercase, abbreviated, country suffix like ``[GB]``) is the fallback,
+  and also replaces ``original`` when an as-filed name is in a non-Latin script.
 - An applicant that is also a listed inventor is an individual: the raw name is stored
   and no Sponsor is created, which keeps thousands of inventor-applicants (common in US
   filings) out of the sponsor table.
@@ -42,14 +43,24 @@ def strip_epodoc_suffix(name: str) -> str:
 
 def applicant_names(biblio) -> list:
 	"""The applicant names of a Biblio, original format first, deduplicated by
-	normalized key (OPS repeats one applicant with different casing)."""
-	names = list(biblio.applicants_original)
-	if not names:
-		names = [strip_epodoc_suffix(n) for n in biblio.applicants_epodoc]
+	normalized key (OPS repeats one applicant with different casing).
+
+	An as-filed name in a non-Latin script (e.g. a Chinese company) normalizes to
+	an empty key, so it can't be matched to a sponsor. OPS's epodoc names are
+	romanised, so the whole epodoc list is used instead. The two lists can't be
+	paired name by name: ``original`` repeats an applicant in different casings
+	under different sequence numbers. A name that still has no key is kept as a
+	raw, unresolved applicant rather than dropped."""
+	originals = list(biblio.applicants_original)
+	epodoc = [strip_epodoc_suffix(n) for n in biblio.applicants_epodoc]
+	if not originals or (epodoc and any(not normalize_sponsor_key(n) for n in originals)):
+		names = epodoc or originals
+	else:
+		names = originals
 	seen = set()
 	unique = []
 	for name in names:
-		key = normalize_sponsor_key(name)
+		key = normalize_sponsor_key(name) or name.strip()
 		if key and key not in seen:
 			seen.add(key)
 			unique.append(name)
@@ -83,6 +94,10 @@ def resolve_applicant(name: str, inventor_keys: set) -> ResolvedApplicant:
 	if _token_key(name) in inventor_keys:
 		return ResolvedApplicant(raw_name=name[:500], sponsor=None, is_individual=True)
 	key = normalize_sponsor_key(name)
+	if key is None:
+		# Nothing to match on (non-Latin script with no romanised form): keep the
+		# applicant on the patent without inventing a sponsor for it.
+		return ResolvedApplicant(raw_name=name[:500], sponsor=None, is_individual=False)
 	alias = SponsorAlias.objects.select_related("sponsor").filter(key=key).first()
 	if alias is None:
 		alias = _create_sponsor_for_key(key, name[:500])

@@ -39,8 +39,27 @@ class ApplicantNamesTests(SimpleTestCase):
 	def test_epodoc_fallback_strips_country_suffix(self):
 		self.assertEqual(applicant_names(biblio(epodoc=["DOPAMINE LABS LTD [GB]"])), ["DOPAMINE LABS LTD"])
 
+	def test_non_latin_original_switches_to_the_romanised_epodoc_names(self):
+		names = applicant_names(
+			biblio(
+				original=["武汉生物制品研究所有限责任公司", "Peking University"],
+				epodoc=["WUHAN INST BIOLOGICAL PRODUCTS CO LTD [CN]", "UNIV PEKING [CN]"],
+			)
+		)
+		self.assertEqual(names, ["WUHAN INST BIOLOGICAL PRODUCTS CO LTD", "UNIV PEKING"])
+
+	def test_non_latin_name_without_epodoc_is_kept_not_dropped(self):
+		self.assertEqual(applicant_names(biblio(original=["武汉生物制品研究所"])), ["武汉生物制品研究所"])
+
 
 class ResolveApplicantsTests(TestCase):
+	def test_name_without_a_key_is_stored_without_a_sponsor(self):
+		resolved = resolve_applicants(biblio(original=["武汉生物制品研究所"]))
+		self.assertEqual(len(resolved), 1)
+		self.assertIsNone(resolved[0].sponsor)
+		self.assertFalse(resolved[0].is_individual)
+		self.assertEqual(Sponsor.objects.count(), 0)
+
 	def test_exact_alias_hit_links_existing_sponsor(self):
 		sponsor = Sponsor.objects.create(name="Biogen", slug="biogen", sponsor_type="industry", sponsor_type_source="ctgov")
 		SponsorAlias.objects.create(sponsor=sponsor, key=normalize_sponsor_key("Biogen"), raw_sample="Biogen")

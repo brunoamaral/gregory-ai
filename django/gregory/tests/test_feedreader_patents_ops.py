@@ -23,6 +23,7 @@ from gregory.models import (
 	Team,
 )
 from gregory.utils.epo_ops import (
+	OpsError,
 	OpsQuotaExceeded,
 	SearchHit,
 	SearchPage,
@@ -301,6 +302,51 @@ class AnchorTests(PatentImporterTestCase):
 		self.assertEqual(Patents.objects.count(), 0)
 		self.source.refresh_from_db()
 		self.assertIsNone(self.source.last_successful_fetch_at)
+
+
+class ItemErrorTests(PatentImporterTestCase):
+	"""A publication or family OPS can't serve costs only itself, not the run."""
+
+	def test_failed_bulk_request_falls_back_to_one_at_a_time(self):
+		serve = self.ops.biblio_bulk
+
+		def flaky(publications):
+			publications = list(publications)
+			if len(publications) > 1 or publications[0][0] == "US":
+				self.ops.biblio_calls.append(publications)
+				raise OpsError("OPS request failed (500)")
+			return serve(publications)
+
+		self.ops.biblio_bulk = flaky
+		out = self.run_command(since="2024-01-01")
+		self.assertIn("fetching them one at a time", out)
+		self.assertEqual(list(Patents.objects.values_list("family_id", flat=True)), ["900001"])
+		self.source.refresh_from_db()
+		self.assertIsNone(self.source.last_successful_fetch_at)
+
+	def test_family_error_skips_only_that_family(self):
+		serve = self.ops.family
+
+		def flaky(country, doc_number, kind, family_id=None):
+			if country == "US":
+				raise OpsError("OPS request failed (500)")
+			return serve(country, doc_number, kind, family_id=family_id)
+
+		self.ops.family = flaky
+		out = self.run_command(since="2024-01-01")
+		self.assertIn("OPS could not return the family", out)
+		self.assertEqual(list(Patents.objects.values_list("family_id", flat=True)), ["900001"])
+		self.source.refresh_from_db()
+		self.assertIsNone(self.source.last_successful_fetch_at)
+
+	def test_quota_during_bulk_still_stops_the_run(self):
+		def exhausted(publications):
+			raise OpsQuotaExceeded("weekly")
+
+		self.ops.biblio_bulk = exhausted
+		out = self.run_command(since="2024-01-01")
+		self.assertIn("quota exhausted", out)
+		self.assertEqual(Patents.objects.count(), 0)
 
 
 class SkippedSourceTests(PatentImporterTestCase):

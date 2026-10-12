@@ -347,7 +347,14 @@ class Command(GregoryBaseCommand):
 			self.stats["families_would_create"] += 1
 			return
 
-		members = self.ops.family(hit.country, hit.doc_number, hit.kind, family_id=hit.family_id)
+		try:
+			members = self.ops.family(hit.country, hit.doc_number, hit.kind, family_id=hit.family_id)
+		except OpsQuotaExceeded:
+			raise
+		except OpsError as exc:
+			# One family OPS can't serve must not cost the rest of the run.
+			self.record_item_error(f"family of {hit.publication_number}", exc)
+			return
 		if not members:
 			members = [
 				FamilyMember(
@@ -380,7 +387,7 @@ class Command(GregoryBaseCommand):
 		for start in range(0, len(pending), BULK_BIBLIO_SIZE):
 			chunk = pending[start : start + BULK_BIBLIO_SIZE]
 			request = [(p.representative.country, p.representative.doc_number, p.representative.kind) for p in chunk]
-			for biblio in self.ops.biblio_bulk(request):
+			for biblio in self.fetch_biblios(request):
 				biblios[biblio.publication_number] = biblio
 
 		for item in pending:
@@ -397,6 +404,39 @@ class Command(GregoryBaseCommand):
 				continue
 			self.create_family(item, biblio)
 
+	def fetch_biblios(self, request):
+		"""Biblio for up to 100 publications in one bulk request. When OPS rejects the
+		bulk request for any reason but quota, ask for each publication on its own, so
+		a publication OPS can't serve costs only its own family, not the other 99. The
+		families left without a biblio keep the anchor back (see flush_pending)."""
+		try:
+			return self.ops.biblio_bulk(request)
+		except OpsQuotaExceeded:
+			raise
+		except OpsError as exc:
+			if len(request) == 1:
+				self.record_item_error(f"biblio of {''.join(request[0])}", exc)
+				return []
+			self.log(
+				f"  Bulk biblio request for {len(request)} publications failed ({exc}); "
+				"fetching them one at a time.",
+				level=1,
+				style_func=self.style.WARNING,
+			)
+		biblios = []
+		for publication in request:
+			biblios.extend(self.fetch_biblios([publication]))
+		return biblios
+
+	def record_item_error(self, what, exc):
+		self.source_complete = False
+		self.stats["errors"] += 1
+		self.log(
+			f"  OPS could not return the {what} ({exc}); skipped, retried on the next run.",
+			level=1,
+			style_func=self.style.WARNING,
+		)
+
 	def _fallback_abstract(self, item, biblio):
 		"""Look for an English abstract on other members when the representative has none."""
 		others = [m for m in item.members if m is not item.representative]
@@ -407,7 +447,13 @@ class Command(GregoryBaseCommand):
 			)
 		)
 		for member in others[:ABSTRACT_FALLBACK_ATTEMPTS]:
-			for alternative in self.ops.biblio_bulk([(member.country, member.doc_number, member.kind)]):
+			try:
+				alternatives = self.ops.biblio_bulk([(member.country, member.doc_number, member.kind)])
+			except OpsQuotaExceeded:
+				raise
+			except OpsError:
+				continue  # only looking for a better abstract; the family is fine without one
+			for alternative in alternatives:
 				if alternative.abstract:
 					return alternative
 		return None
@@ -493,7 +539,13 @@ class Command(GregoryBaseCommand):
 	def sync_family(self, patent, hit) -> int:
 		"""Fetch the family and add any member publications not stored yet. Returns the
 		number added and updates the derived family fields."""
-		members = self.ops.family(hit.country, hit.doc_number, hit.kind, family_id=hit.family_id)
+		try:
+			members = self.ops.family(hit.country, hit.doc_number, hit.kind, family_id=hit.family_id)
+		except OpsQuotaExceeded:
+			raise
+		except OpsError as exc:
+			self.record_item_error(f"family of {hit.publication_number}", exc)
+			return 0
 		if not members:
 			members = [
 				FamilyMember(

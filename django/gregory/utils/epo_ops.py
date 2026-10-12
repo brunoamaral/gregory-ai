@@ -421,7 +421,9 @@ class OpsClient:
 	states seen, so a run can report its quota use.
 	"""
 
-	RETRY_STATUSES = (408, 503)
+	# 500 is OPS's SERVER.DomainAccess, which its reference guide (p.31) answers with
+	# "please try again later"; 502/504 are gateway hiccups.
+	RETRY_STATUSES = (408, 500, 502, 503, 504)
 
 	def __init__(self, client, sleep=time.sleep, max_attempts=3):
 		self.client = client

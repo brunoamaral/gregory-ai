@@ -261,6 +261,12 @@ class OpsClientErrorMappingTests(SimpleTestCase):
 		self.assertEqual(ops.search("ta=x").total, 3)
 		self.assertEqual(library.published_data_search.call_count, 2)
 
+	def test_500_is_retried(self):
+		"""OPS's guide answers its 500 (SERVER.DomainAccess) with "try again later"."""
+		ops, library = self.client_raising(http_error(500), ok_response(fixture("search_page.xml")))
+		self.assertEqual(ops.search("ta=x").total, 3)
+		self.assertEqual(library.published_data_search.call_count, 2)
+
 	def test_503_gives_up_after_max_attempts(self):
 		ops, _ = self.client_raising(http_error(503), http_error(503), http_error(503))
 		with self.assertRaises(OpsError):
