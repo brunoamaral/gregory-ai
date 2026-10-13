@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<p>
+    Export <strong>{{ count }} patent famil{{ count|pluralize:"y,ies" }}</strong> to an XLSX workbook.
+</p>
+
+<form method="post" action="{{ form_action }}">
+    {% csrf_token %}
+
+    {% if select_across %}
+        {# Django's changelist only runs an action when something is posted as selected; with select_across the value is ignored. #}
+        <input type="hidden" name="select_across" value="1">
+        <input type="hidden" name="index" value="0">
+        <input type="hidden" name="{{ action_checkbox_name }}" value="0">
+    {% else %}
+        {% for pk in selected %}
+            <input type="hidden" name="{{ action_checkbox_name }}" value="{{ pk }}">
+        {% endfor %}
+    {% endif %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    <input type="hidden" name="apply" value="1">
+
+    <fieldset class="module aligned">
+        {% for field in form %}
+        <div class="form-row">
+            {{ field.errors }}
+            {{ field.label_tag }}
+            {{ field }}
+            {% if field.help_text %}
+                <p class="help">{{ field.help_text }}</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </fieldset>
+
+    <div class="submit-row">
+        <input type="submit" value="Download XLSX" class="default">
+        <a href="{{ form_action }}" class="button cancel-link">Cancel</a>
+    </div>
+</form>
+{% endblock %}
