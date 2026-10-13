@@ -424,17 +424,24 @@ class OpsClient:
 	# 500 is OPS's SERVER.DomainAccess, which its reference guide (p.31) answers with
 	# "please try again later"; 502/504 are gateway hiccups.
 	RETRY_STATUSES = (408, 500, 502, 503, 504)
+	# Seconds to wait before each retry. While OPS reports itself overloaded it answers
+	# a share of requests with 500, and the first live backfill (2026-10-13) failed on
+	# the old 2 s + 4 s backoff while the same search succeeded minutes later.
+	RETRY_BACKOFF = (10, 30, 60, 120)
 
-	def __init__(self, client, sleep=time.sleep, max_attempts=3):
+	def __init__(self, client, sleep=time.sleep, max_attempts=None):
 		self.client = client
 		self._sleep = sleep
-		self.max_attempts = max_attempts
+		self.max_attempts = max_attempts or len(self.RETRY_BACKOFF) + 1
 		self.bytes_received = 0
 		self.request_count = 0
 		self.throttle_states = set()
 		self.last_quota_headers = {}
 
 	# -- plumbing ----------------------------------------------------------
+
+	def _backoff(self, attempt):
+		return self.RETRY_BACKOFF[min(attempt, len(self.RETRY_BACKOFF)) - 1]
 
 	def _call(self, fn, *args, **kwargs):
 		from epo_ops import exceptions as ops_exceptions
@@ -461,13 +468,17 @@ class OpsClient:
 				if status == 400:
 					raise OpsQueryError(_error_message(exc.response)) from exc
 				if status in self.RETRY_STATUSES and attempt < self.max_attempts:
-					logger.warning("OPS %s, retrying (attempt %d)", status, attempt)
-					self._sleep(2**attempt)
+					wait = self._backoff(attempt)
+					logger.warning(
+						"OPS %s, retrying in %ds (attempt %d of %d)",
+						status, wait, attempt, self.max_attempts,
+					)
+					self._sleep(wait)
 					continue
 				raise OpsError(f"OPS request failed ({status})") from exc
 			except (requests.ConnectionError, requests.Timeout) as exc:
 				if attempt < self.max_attempts:
-					self._sleep(2**attempt)
+					self._sleep(self._backoff(attempt))
 					continue
 				raise OpsError(f"OPS connection failed: {exc}") from exc
 			self._record(response)

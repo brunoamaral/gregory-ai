@@ -268,9 +268,21 @@ class OpsClientErrorMappingTests(SimpleTestCase):
 		self.assertEqual(library.published_data_search.call_count, 2)
 
 	def test_503_gives_up_after_max_attempts(self):
-		ops, _ = self.client_raising(http_error(503), http_error(503), http_error(503))
+		ops, library = self.client_raising(*[http_error(503) for _ in range(5)])
 		with self.assertRaises(OpsError):
 			ops.search("ta=x")
+		self.assertEqual(library.published_data_search.call_count, 5)
+
+	def test_retries_wait_longer_each_time(self):
+		"""OPS under load needs minutes, not seconds: 10, 30, 60, 120 s between attempts."""
+		library = MagicMock()
+		library.published_data_search.side_effect = [http_error(500)] * 4 + [
+			ok_response(fixture("search_page.xml"))
+		]
+		waits = []
+		ops = OpsClient(library, sleep=waits.append)
+		self.assertEqual(ops.search("ta=x").total, 3)
+		self.assertEqual(waits, [10, 30, 60, 120])
 
 	def test_usage_accounting(self):
 		headers = {
