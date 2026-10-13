@@ -77,6 +77,18 @@ capped, no quota error occurred, every new family's bibliographic data arrived, 
 `--max-families` ceiling was not reached. A partial run is simply repeated; known
 publications are skipped, so repeating is cheap.
 
+**When OPS fails.** OPS answers part of its traffic with HTTP 500 when it reports itself
+overloaded. Every request that gets a 500, 502, 503, 504 or 408, or loses its connection,
+is retried after 10, 30, 60 and 120 seconds. A monthly search that still fails is skipped
+and the run carries on with the next month; a family or publication that fails is skipped
+the same way. Either keeps the anchor back, so the next run retries it. Three failed
+monthly searches in a row stop the run: OPS is down, so try again later. A quota error
+always stops the run.
+
+A backfill is finished when a run ends without the line "was not complete; not advancing
+the incremental anchor". "Created 0" alone does not mean that: a run that failed early
+also creates nothing.
+
 **Per result.** A publication already stored is skipped (and its family re-synced when
 the `family_next_check` back-off is due). A new publication of a known family is added to
 it. An unknown family is fetched from the OPS family service (members are filtered to the

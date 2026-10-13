@@ -339,6 +339,29 @@ class ItemErrorTests(PatentImporterTestCase):
 		self.source.refresh_from_db()
 		self.assertIsNone(self.source.last_successful_fetch_at)
 
+	def test_failed_month_is_skipped_and_the_rest_continue(self):
+		serve = self.ops.search_handler
+
+		def flaky(cql, begin, end):
+			if 'pd within "20240101' in cql:
+				raise OpsError("OPS request failed (500)")
+			return serve(cql, begin, end)
+
+		self.ops.search_handler = flaky
+		out = self.run_command(since="2024-01-01")
+		self.assertIn("OPS could not return the search for 2024-01-01..2024-01-31", out)
+		self.assertEqual(Patents.objects.count(), 2)  # later months still imported
+		self.source.refresh_from_db()
+		self.assertIsNone(self.source.last_successful_fetch_at)
+
+	def test_repeated_search_failures_stop_the_run(self):
+		self.ops.fail_search_with = OpsError("OPS request failed (500)")
+		out = self.run_command(since="2024-01-01")
+		self.assertIn("3 monthly searches in a row", out)
+		self.assertEqual(len(self.ops.search_calls), 3)
+		self.source.refresh_from_db()
+		self.assertIsNone(self.source.last_successful_fetch_at)
+
 	def test_quota_during_bulk_still_stops_the_run(self):
 		def exhausted(publications):
 			raise OpsQuotaExceeded("weekly")

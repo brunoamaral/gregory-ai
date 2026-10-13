@@ -43,6 +43,9 @@ from gregory.utils.patent_applicants import save_applicants
 from subscriptions.management.commands.utils.get_credentials import get_epo_ops_credentials
 
 OVERLAP_DAYS = 14
+# A month whose search keeps failing is skipped and searched again next run; this many
+# in a row means OPS itself is down, so the run stops instead of crawling on.
+MAX_CONSECUTIVE_SEARCH_FAILURES = 3
 DEFAULT_LOOKBACK_DAYS = 90
 REFRESH_WINDOW_DAYS = 6 * 365
 ABSTRACT_FALLBACK_ATTEMPTS = 3
@@ -218,13 +221,32 @@ class Command(GregoryBaseCommand):
 			)
 		self.log(f"  Window: {start} to {today}", level=1)
 
+		consecutive_search_failures = 0
 		try:
 			for slice_start, slice_end in month_slices(start, today):
 				if self.max_families_reached():
 					self.source_complete = False
 					break
 				self.stats["slices"] += 1
-				hits, capped = self.search_slice(base_query, slice_start, slice_end)
+				try:
+					hits, capped = self.search_slice(base_query, slice_start, slice_end)
+				except OpsQuotaExceeded:
+					raise
+				except OpsError as exc:
+					# One month OPS can't search must not end a backfill. The anchor stays
+					# back, so the next run searches it again.
+					self.record_item_error(f"search for {slice_start}..{slice_end}", exc)
+					consecutive_search_failures += 1
+					if consecutive_search_failures >= MAX_CONSECUTIVE_SEARCH_FAILURES:
+						self.log(
+							f"  OPS failed {consecutive_search_failures} monthly searches in a row; "
+							"stopping this run. Try again later.",
+							level=1,
+							style_func=self.style.ERROR,
+						)
+						break
+					continue
+				consecutive_search_failures = 0
 				if capped:
 					self.source_complete = False
 					self.log(
