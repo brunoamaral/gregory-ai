@@ -154,11 +154,36 @@ list's subjects.
 ## Administration
 
 Patents are listed under *Gregory > Patents*, scoped to the organisations of the signed-in
-staff member through their sources. Filters cover team, subject, source, category,
-applicant type, grant and priority year. Importer-managed fields are read-only; editors
+staff member through their sources. Filters cover what the patent covers, category
+modality, team, subject, source, category, applicant type, grant and priority year.
+Importer-managed fields are read-only; editors
 curate sources, teams and subjects and can assign categories. Staff can only pick their own
 organisations' sources, teams, subjects and categories, and links to other organisations' rows
 are hidden and kept on save; see [Admin visibility](06-organisations-teams-and-sites.md#sources-teams-and-subjects).
+
+### Finding patents on new treatments
+
+The *what it covers* filter, and the matching column, sort each family into one bucket
+from its CPC classes (`gregory/utils/patent_coverage.py`). It is a heuristic: CPC
+codes describe the invention, not whether it is new to the world.
+
+| Bucket | Rule (tried in this order) | Typically |
+|:-------|:---------------------------|:----------|
+| New substance | A therapy class (A61P, or a medicinal group of A61K) and a compound, biologic, cell or gene class (C07C/D/F/H/J/K, C12N 5 or 15, A61K 35 or 48) | A new active substance |
+| New use, dose or formulation | A therapy class without such a class | A known substance in a new use, dose, combination or formulation |
+| Therapy device | No therapy class; A61N, A61H or A61M | Neuromodulation, physical therapy and delivery devices |
+| Diagnostic, test or monitoring | None of the above; G01N, C12Q, A61B, G16H or G16B | Biomarkers, imaging, assays, health data |
+| Other / no classification | Anything else, including families without CPC classes | Chemistry without a medical use, food, unclassified families |
+
+The A61K groups that count as therapy are 9, 31, 33, 35, 36, 38, 39, 40, 41, 45, 47 and
+48, because recent filings often carry them before an A61P code is assigned. Cosmetics
+(A61K 8) and in-vivo diagnostic agents (A61K 49, 51) are left out.
+
+The *category modality* filter keeps families with a category of that modality (small
+molecule, antibody, cell or gene therapy and so on). Staff only match their own
+organisations' categories. Categories only name known drugs, so a compound filed before
+it has a name will not match; combine both filters, and for drugs a sponsor is testing
+look at category-basis links under *Patent-trial links*.
 
 *Gregory > Patent-trial links* lists the detected signals grouped by patent. It defaults
 to the category basis (a *basis* filter switches to subject-only or all), and the
