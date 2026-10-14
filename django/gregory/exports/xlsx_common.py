@@ -9,6 +9,7 @@ from django.contrib.sites.models import Site
 from django.core.management.base import CommandError
 from django.db.models import Count
 from django.db.models.functions import Lower
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -66,10 +67,11 @@ def _apply_header(ws, columns, row=1):
 
 
 def _excel_text(value, limit=32767):
-	"""Truncate a string to Excel's per-cell character limit."""
+	"""Truncate a string to Excel's per-cell character limit and drop the control
+	characters openpyxl refuses to write (it raises IllegalCharacterError on them)."""
 	if not value:
 		return value
-	text = str(value)
+	text = ILLEGAL_CHARACTERS_RE.sub("", str(value))
 	if len(text) > limit:
 		text = text[: limit - 1] + "…"
 	return text
@@ -89,9 +91,12 @@ def _write_safe_text_cell(ws, row, col, value, wrap=False):
 	would stay "s" regardless, while spreadsheet applications still treat a leading
 	=, +, -, or @ as a formula cue on their own.
 	"""
-	text = _excel_text(value)
+	text = value
 	if isinstance(text, str) and text.startswith(_FORMULA_TRIGGER_CHARS):
 		text = "'" + text
+	# Truncate after prefixing, or a long value starting with "-" ends up one character
+	# over Excel's limit and the file opens with a repair prompt.
+	text = _excel_text(text)
 	cell = ws.cell(row=row, column=col, value=text)
 	cell.data_type = "s"
 	if wrap:

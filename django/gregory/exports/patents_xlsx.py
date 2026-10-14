@@ -14,6 +14,7 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 from gregory.exports.xlsx_common import (
+	_FORMULA_TRIGGER_CHARS,
 	_apply_header,
 	_build_about_sheet,
 	_build_categories_sheet,
@@ -840,7 +841,9 @@ def _patent_row(patent, columns, scalar_set, context):
 		"links_json": json.dumps(patent.links, ensure_ascii=False) if patent.links else "",
 		"claims": claims,
 		"claims_length": len(claims),
-		"claims_truncated": len(claims) > CLAIMS_CELL_LIMIT,
+		# the formula-defusing apostrophe counts towards the cell limit
+		"claims_truncated": len(claims) + claims.startswith(_FORMULA_TRIGGER_CHARS)
+		> CLAIMS_CELL_LIMIT,
 		"cpc_count": len(patent.cpc_classes or []),
 		"inventors": _join(inventors),
 		"inventor_count": len(inventors),

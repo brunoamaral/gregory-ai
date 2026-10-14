@@ -319,6 +319,28 @@ class SubjectSheetTests(PatentExportTestCase):
 		self.assertEqual(row["claims_length"], 40000)
 		self.assertTrue(row["claims_truncated"])
 
+	def test_long_claims_starting_with_a_trigger_stay_within_the_cell_limit(self):
+		# WO claims often open with a page number such as "- 27 -"
+		Patents.objects.filter(pk=self.p1.pk).update(claims="- 27 -" + "x" * 40000)
+		row = self.ms_rows()[self.p1.pk]
+		self.assertEqual(len(row["claims"]), 32767)
+		self.assertTrue(row["claims"].startswith("'- 27 -"))
+		self.assertTrue(row["claims_truncated"])
+
+	def test_claims_one_short_of_the_limit_with_a_trigger_are_flagged(self):
+		Patents.objects.filter(pk=self.p1.pk).update(claims="-" + "x" * 32766)
+		row = self.ms_rows()[self.p1.pk]
+		self.assertEqual(len(row["claims"]), 32767)
+		self.assertTrue(row["claims_truncated"])
+
+	def test_control_characters_are_dropped(self):
+		Patents.objects.filter(pk=self.p1.pk).update(
+			title="Anti\x0bbody", claims="1. An\x01 antibody."
+		)
+		row = self.ms_rows()[self.p1.pk]
+		self.assertEqual(row["title"], "Antibody")
+		self.assertEqual(row["claims"], "1. An antibody.")
+
 	def test_short_claims_are_whole(self):
 		row = self.ms_rows()[self.p1.pk]
 		self.assertEqual(row["claims"], "1. An antibody.")
