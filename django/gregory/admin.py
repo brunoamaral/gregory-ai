@@ -19,7 +19,7 @@ from . import source_types
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
@@ -28,6 +28,7 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
 	Articles,
+	CategoryModality,
 	Trials,
 	Sources,
 	Entities,
@@ -60,6 +61,7 @@ from .models import (
 	SponsorMergeCandidateStatus,
 	default_match_weights,
 )
+from .utils import patent_coverage
 from .utils.sponsor_merge import merge_sponsors
 from .widgets import MLPredictionsWidget
 from .fields import MLPredictionsField
@@ -4353,6 +4355,47 @@ class PriorityYearFilter(admin.SimpleListFilter):
 		return queryset
 
 
+class PatentCoverageFilter(admin.SimpleListFilter):
+	"""What a patent family covers (new substance, new use, device, diagnostic), read
+	from its CPC classes. A heuristic; see gregory/utils/patent_coverage.py."""
+
+	title = "what it covers"
+	parameter_name = "covers"
+
+	def lookups(self, request, model_admin):
+		return patent_coverage.COVERAGE_CHOICES
+
+	def queryset(self, request, queryset):
+		if self.value() in patent_coverage.COVERAGE_LABELS:
+			return patent_coverage.with_cpc_text(queryset).filter(
+				patent_coverage.coverage_q(self.value())
+			)
+		return queryset
+
+
+class PatentCategoryModalityFilter(admin.SimpleListFilter):
+	"""Patent families with a category of the given modality. Staff only match their
+	own organisations' categories, so another organisation's tagging never shows."""
+
+	title = "category modality"
+	parameter_name = "modality"
+
+	def lookups(self, request, model_admin):
+		return CategoryModality.choices
+
+	def queryset(self, request, queryset):
+		if self.value() not in CategoryModality.values:
+			return queryset
+		assignments = PatentCategoryAssignment.objects.filter(
+			patents=OuterRef("pk"), teamcategory__modality=self.value()
+		)
+		if not request.user.is_superuser:
+			assignments = assignments.filter(
+				teamcategory__team__organization__id__in=get_user_organizations(request.user)
+			)
+		return queryset.filter(Exists(assignments))
+
+
 class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 	"""Limits the editable relations to the caller's organisations (see
 	OrganizationScopedRelationsFormMixin). OrganizationFilterMixin only scopes the
@@ -4372,11 +4415,14 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 		"title",
 		"representative_publication",
 		"display_applicants",
+		"display_coverage",
 		"earliest_priority_date",
 		"has_grant",
 		"discovery_date",
 	]
 	list_filter = [
+		PatentCoverageFilter,
+		PatentCategoryModalityFilter,
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
@@ -4424,6 +4470,10 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
+
+	@admin.display(description="What it covers")
+	def display_coverage(self, obj):
+		return patent_coverage.COVERAGE_SHORT_LABELS[patent_coverage.classify(obj.cpc_classes)]
 
 	@admin.display(description="Applicants")
 	def display_applicants(self, obj):
