@@ -1,8 +1,12 @@
 """Tests for the patent coverage heuristic and the patent admin's coverage and
 category-modality filters."""
 
+from io import BytesIO
+
+import openpyxl
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.contrib.sites.models import Site
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 from organizations.models import Organization, OrganizationUser
@@ -170,3 +174,29 @@ class PatentAdminFilterTests(TestCase):
 		self.assertContains(response, "What it covers")
 		self.assertContains(response, "New substance")
 		self.assertContains(response, "Diagnostic")
+
+	def export_ids(self, query):
+		"""Export with "select all" on a filtered changelist; return the exported ids."""
+		client = Client()
+		client.force_login(self.superuser)
+		data = {
+			"action": "export_xlsx_action",
+			"select_across": "1",
+			"index": "0",
+			"_selected_action": "0",
+			"apply": "1",
+			"site": Site.objects.get_current().pk,
+		}
+		response = client.post(self.url + query, data)
+		self.assertEqual(response.status_code, 200)
+		wb = openpyxl.load_workbook(BytesIO(response.content), read_only=True)
+		rows = list(wb["No subject"].iter_rows(values_only=True))
+		col = rows[0].index("patent_id")
+		return {r[col] for r in rows[1:]}
+
+	def test_export_select_all_respects_coverage_filter(self):
+		self.assertEqual(self.export_ids("?covers=new_substance"), {self.drug.pk})
+		self.assertEqual(self.export_ids("?covers=diagnostic"), {self.test_kit.pk})
+
+	def test_export_select_all_respects_modality_filter(self):
+		self.assertEqual(self.export_ids("?modality=biologic_antibody"), {self.test_kit.pk})

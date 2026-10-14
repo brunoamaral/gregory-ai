@@ -1,4 +1,4 @@
-from io import StringIO
+from io import BytesIO, StringIO
 
 from django.contrib import admin, messages
 from django.apps import apps
@@ -4284,6 +4284,105 @@ class LinkBasisFilter(admin.SimpleListFilter):
 		return queryset
 
 
+class PatentExportForm(forms.Form):
+	"""Asks which site an XLSX patent export is attributed to."""
+
+	site = forms.ModelChoiceField(
+		queryset=Site.objects.none(),
+		label="Attribute this export to site",
+		help_text="Sets the publisher, licence and citation on the workbook's About sheet.",
+	)
+
+
+def _patent_export_response(modeladmin, request, patent_qs, action_name):
+	"""Shared flow of the two "Export to XLSX" admin actions.
+
+	First POST: ask for the site. Second POST (``apply``): build the workbook and return
+	it. Staff only get their organisations' sites, and relations, categories and trial
+	links in the file are limited to their organisations (ExportScope).
+	"""
+	from gregory.exports.patents_xlsx import ExportScope, build_patents_workbook
+	from gregory.exports.xlsx_common import attribution_for_site
+
+	user = request.user
+	user_orgs = None if user.is_superuser else list(get_user_organizations(user))
+	if user_orgs is None:
+		sites = Site.objects.order_by("domain")
+	else:
+		sites = Site.objects.filter(
+			organization_sites__organization__id__in=user_orgs
+		).distinct().order_by("domain")
+	if not sites.exists():
+		modeladmin.message_user(
+			request,
+			"No site is available to attribute the export to.",
+			level=messages.ERROR,
+		)
+		return None
+
+	patent_qs = patent_qs.order_by().distinct()
+	if "apply" not in request.POST:
+		form = PatentExportForm()
+		form.fields["site"].queryset = sites
+		if sites.count() == 1:
+			form.fields["site"].initial = sites.first()
+		select_across = request.POST.get("select_across") == "1"
+		return render(
+			request,
+			"admin/gregory/patent_export_intermediate.html",
+			{
+				"title": "Export to XLSX",
+				"form": form,
+				"count": patent_qs.count(),
+				"form_action": request.get_full_path(),
+				"action_name": action_name,
+				"action_checkbox_name": admin.helpers.ACTION_CHECKBOX_NAME,
+				# "Select all" posts back as a flag, not as thousands of hidden fields.
+				"select_across": select_across,
+				"selected": [] if select_across else request.POST.getlist(
+					admin.helpers.ACTION_CHECKBOX_NAME
+				),
+				"opts": modeladmin.model._meta,
+			},
+		)
+
+	form = PatentExportForm(request.POST)
+	form.fields["site"].queryset = sites
+	if not form.is_valid():
+		modeladmin.message_user(
+			request, "Invalid form — please try again.", level=messages.ERROR
+		)
+		return None
+	site = form.cleaned_data["site"]
+
+	subject_qs = Subject.objects.filter(patents__in=patent_qs.values("pk"))
+	if user_orgs is not None:
+		subject_qs = subject_qs.filter(team__organization__id__in=user_orgs)
+	subjects = list(subject_qs.distinct().order_by("subject_name"))
+
+	summary = (
+		f"admin export by {user.get_username()}: {patent_qs.count()} patent families; "
+		f"site: {site.domain}"
+	)
+	wb = build_patents_workbook(
+		subjects,
+		attribution_for_site(site),
+		patent_qs=patent_qs,
+		scope=None if user_orgs is None else ExportScope(org_ids=user_orgs),
+		include_unassigned=True,
+		options_summary=summary,
+	)
+	buffer = BytesIO()
+	wb.save(buffer)
+	filename = f"patents_export_{timezone.now().strftime('%Y%m%d')}.xlsx"
+	response = HttpResponse(
+		buffer.getvalue(),
+		content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	)
+	response["Content-Disposition"] = f'attachment; filename="{filename}"'
+	return response
+
+
 class PatentTrialLinkAdmin(admin.ModelAdmin):
 	"""Sponsor-timing signals, grouped by patent. Scoped to the caller's organisations
 	through the patent's sources (OrganizationFilterMixin cannot do this: the model has
@@ -4313,7 +4412,7 @@ class PatentTrialLinkAdmin(admin.ModelAdmin):
 		"discovered_date",
 	]
 	fields = readonly_fields + ["suppressed"]
-	actions = ["suppress_links", "restore_links"]
+	actions = ["suppress_links", "restore_links", "export_patents_xlsx_action"]
 
 	def get_queryset(self, request):
 		qs = super().get_queryset(request)
@@ -4321,6 +4420,17 @@ class PatentTrialLinkAdmin(admin.ModelAdmin):
 			return qs
 		user_orgs = get_user_organizations(request.user)
 		return qs.filter(patent__sources__team__organization__id__in=user_orgs).distinct()
+
+	@admin.action(description="Export patents of selected links to XLSX…")
+	def export_patents_xlsx_action(self, request, queryset):
+		patent_qs = Patents.objects.filter(pk__in=queryset.values("patent_id"))
+		if not request.user.is_superuser:
+			patent_qs = patent_qs.filter(
+				sources__team__organization__id__in=get_user_organizations(request.user)
+			)
+		return _patent_export_response(
+			self, request, patent_qs, "export_patents_xlsx_action"
+		)
 
 	def has_add_permission(self, request):
 		return False
@@ -4468,8 +4578,14 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 		PatentCategoryAssignmentInline,
 	]
 
+	actions = ["export_xlsx_action"]
+
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
+
+	@admin.action(description="Export selected to XLSX…")
+	def export_xlsx_action(self, request, queryset):
+		return _patent_export_response(self, request, queryset, "export_xlsx_action")
 
 	@admin.display(description="What it covers")
 	def display_coverage(self, obj):

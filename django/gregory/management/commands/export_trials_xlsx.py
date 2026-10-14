@@ -1,18 +1,29 @@
 import json
 import re
-from dataclasses import dataclass
-from datetime import datetime, date, timezone as dt_timezone
+from datetime import datetime
 
-from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Count, GeneratedField
-from django.db.models.functions import Lower
+from django.db.models import GeneratedField
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-from gregory.models import OrganizationSite, Trials, Subject, TeamCategory
-from sitesettings.models import CustomSetting
+from gregory.exports.xlsx_common import (  # noqa: F401 -- re-exported for existing importers
+	GENERATED_BY_PROSE,
+	SiteAttribution,
+	_apply_header,
+	_build_about_sheet as _build_about_sheet_common,
+	_build_categories_sheet as _build_categories_sheet_common,
+	_category_rows,
+	_cell_value,
+	_excel_text,
+	_FORMULA_TRIGGER_CHARS,
+	_resolve_explicit_site,
+	_resolve_site_attribution,
+	_sanitise_sheet_name,
+	_write_safe_text_cell,
+)
+from gregory.models import Trials, Subject
 
 
 EXCLUDED_SCALARS = frozenset({"utitle", "usummary", "ctg_secondary_ids"})
@@ -346,6 +357,39 @@ CATEGORY_MATCH_PROSE = (
 	"ignore the term list."
 )
 
+WHATS_INSIDE_FIXED_ROWS = [
+	("Categories", "How trials are tagged, with each category's search terms."),
+	("Glossary", "What every column in the subject sheets means."),
+	(
+		"Registries",
+		"Which clinical-trial registries the data came from, and how records from "
+		"several registries are merged.",
+	),
+]
+
+
+def _build_categories_sheet(wb, subjects):
+	_build_categories_sheet_common(
+		wb,
+		subjects,
+		content_type="trial",
+		columns=CATEGORY_COLUMNS,
+		prose=CATEGORY_MATCH_PROSE,
+	)
+
+
+def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
+	_build_about_sheet_common(
+		ws,
+		attribution,
+		sheet_entries,
+		options_summary,
+		item_noun=lambda n: f"{n} clinical trial(s)",
+		citation_label="Clinical trials export",
+		fixed_rows=WHATS_INSIDE_FIXED_ROWS,
+	)
+
+
 # Column widths for data sheets
 _WIDE_COLS = {
 	"title",
@@ -367,42 +411,6 @@ _WIDE_COLS = {
 	"articles",
 }
 _URL_COLS = {"link", "results_url_link", "identifiers_json"}
-
-
-def _sanitise_sheet_name(name, used):
-	"""Return a valid, unique Excel sheet name (≤31 chars, no illegal characters)."""
-	name = re.sub(r"[\\/*?\[\]:]", "_", name)[:31]
-	base, suffix = name, 1
-	while name in used:
-		suffix += 1
-		name = base[:28] + f"_{suffix}"
-	used.add(name)
-	return name
-
-
-def _cell_value(value):
-	"""Convert a Python value to an Excel-safe type (None → empty string)."""
-	if value is None:
-		return ""
-	if isinstance(value, datetime):
-		if value.tzinfo is not None:
-			value = value.astimezone(dt_timezone.utc).replace(tzinfo=None)
-		return value
-	if isinstance(value, date):
-		return value
-	if isinstance(value, dict):
-		return json.dumps(value, ensure_ascii=False)
-	if isinstance(value, list):
-		# Lists of scalars (e.g. regions_normalized) render as a "; "-joined string;
-		# lists containing dicts/lists fall back to JSON for fidelity.
-		if all(not isinstance(v, (dict, list)) for v in value):
-			return "; ".join("" if v is None else str(v) for v in value)
-		return json.dumps(value, ensure_ascii=False)
-	if isinstance(value, bool):
-		return value
-	if isinstance(value, (int, float)):
-		return value
-	return str(value)
 
 
 def _format_trial_countries(trial):
@@ -430,51 +438,15 @@ def _format_trial_countries(trial):
 	return "; ".join(parts)
 
 
-def _apply_header(ws, columns, row=1):
-	"""Write a bold, coloured header row and return the cell count."""
-	hdr_font = Font(bold=True, color="FFFFFF")
-	hdr_fill = PatternFill(fill_type="solid", fgColor="2F4F8F")
-	hdr_align = Alignment(vertical="center")
-	for col_idx, name in enumerate(columns, 1):
-		cell = ws.cell(row=row, column=col_idx, value=name)
-		cell.font = hdr_font
-		cell.fill = hdr_fill
-		cell.alignment = hdr_align
-	return len(columns)
+def _write_data_cell(ws, row, col, value):
+	"""Write one trial data value: strings defused and truncated, everything else typed.
 
-
-def _excel_text(value, limit=32767):
-	"""Truncate a string to Excel's per-cell character limit."""
-	if not value:
-		return value
-	text = str(value)
-	if len(text) > limit:
-		text = text[: limit - 1] + "…"
-	return text
-
-
-_FORMULA_TRIGGER_CHARS = ("=", "+", "-", "@")
-
-
-def _write_safe_text_cell(ws, row, col, value, wrap=False):
-	"""Write a long/user-authored text value, truncated and defused against formula injection.
-
-	A leading apostrophe is the standard mitigation (OWASP CSV injection guidance):
-	it forces the cell to render as literal text in Excel/LibreOffice/Sheets even
-	when the value starts with =, +, -, or @. Relying on openpyxl's data_type alone
-	is not enough — several of those trigger characters (+, -, @) are never
-	auto-detected as formulas by openpyxl in the first place, so its cell.data_type
-	would stay "s" regardless, while spreadsheet applications still treat a leading
-	=, +, -, or @ as a formula cue on their own.
+	Dates, datetimes, bools, ints and floats stay native cells so they still sort and
+	filter as dates and numbers; only strings go through _write_safe_text_cell.
 	"""
-	text = _excel_text(value)
-	if isinstance(text, str) and text.startswith(_FORMULA_TRIGGER_CHARS):
-		text = "'" + text
-	cell = ws.cell(row=row, column=col, value=text)
-	cell.data_type = "s"
-	if wrap:
-		cell.alignment = Alignment(wrap_text=True)
-	return cell
+	if isinstance(value, str):
+		return _write_safe_text_cell(ws, row, col, value)
+	return ws.cell(row=row, column=col, value=value)
 
 
 def _set_column_widths(ws, columns):
@@ -570,11 +542,10 @@ def _build_glossary_sheet(wb, all_data_cols):
 		label, desc, sources = _sources_for(
 			col_name, admin_labels, admin_help, model_help
 		)
-		ws.cell(row=row_idx, column=1, value=col_name)
-		ws.cell(row=row_idx, column=2, value=label)
-		cell_desc = ws.cell(row=row_idx, column=3, value=desc)
-		cell_desc.alignment = Alignment(wrap_text=True)
-		ws.cell(row=row_idx, column=4, value=sources)
+		_write_safe_text_cell(ws, row_idx, 1, col_name)
+		_write_safe_text_cell(ws, row_idx, 2, label)
+		_write_safe_text_cell(ws, row_idx, 3, desc, wrap=True)
+		_write_safe_text_cell(ws, row_idx, 4, sources)
 
 
 def _build_registries_sheet(wb, all_data_cols):
@@ -597,8 +568,7 @@ def _build_registries_sheet(wb, all_data_cols):
 
 	# --- Part A: prose overview ---
 	ws.cell(row=1, column=1, value="Registry overview").font = section_font
-	prose_cell = ws.cell(row=2, column=1, value=MERGE_PROSE)
-	prose_cell.alignment = Alignment(wrap_text=True)
+	_write_safe_text_cell(ws, 2, 1, MERGE_PROSE, wrap=True)
 	ws.merge_cells("A2:D2")
 	ws.row_dimensions[2].height = 90
 
@@ -614,12 +584,10 @@ def _build_registries_sheet(wb, all_data_cols):
 	for row_offset, (reg_name, id_keys_str, what, notes) in enumerate(
 		REGISTRIES_OVERVIEW, 5
 	):
-		ws.cell(row=row_offset, column=1, value=reg_name)
-		ws.cell(row=row_offset, column=2, value=id_keys_str)
-		ws.cell(row=row_offset, column=3, value=what)
-		ws.cell(row=row_offset, column=4, value=notes).alignment = Alignment(
-			wrap_text=True
-		)
+		_write_safe_text_cell(ws, row_offset, 1, reg_name)
+		_write_safe_text_cell(ws, row_offset, 2, id_keys_str)
+		_write_safe_text_cell(ws, row_offset, 3, what)
+		_write_safe_text_cell(ws, row_offset, 4, notes, wrap=True)
 
 	# --- Part B: field-by-registry matrix ---
 	matrix_start = 10
@@ -637,8 +605,8 @@ def _build_registries_sheet(wb, all_data_cols):
 		label, _, sources_str = _sources_for(
 			col_name, admin_labels, admin_help, model_help
 		)
-		ws.cell(row=row_offset, column=1, value=col_name)
-		ws.cell(row=row_offset, column=2, value=label)
+		_write_safe_text_cell(ws, row_offset, 1, col_name)
+		_write_safe_text_cell(ws, row_offset, 2, label)
 		for reg_col, reg_name in enumerate(REGISTRY_NAMES, 3):
 			# Normalise for matching: "EU CTIS" matches "EU CTIS" or "EU Clinical"
 			src_lower = sources_str.lower()
@@ -653,258 +621,6 @@ def _build_registries_sheet(wb, all_data_cols):
 	for letter, width in zip("ABCDE", [32, 32, 22, 22, 22]):
 		ws.column_dimensions[letter].width = width
 
-
-def _category_rows(subjects):
-	"""Return one row per (subject, category) pair, ordered by subject then category name.
-
-	Categories with no subject never appear here: filtering by `subjects=subject`
-	only matches categories reachable from an exported subject.
-	"""
-	rows = []
-	for subject in subjects:
-		cats = list(
-			TeamCategory.objects.filter(subjects=subject)
-			.select_related("team")
-			.order_by(Lower("category_name"))
-		)
-		if not cats:
-			continue
-		counts = {
-			r["team_categories"]: r["n"]
-			for r in (
-				Trials.objects.filter(
-					subjects=subject, team_categories__in=[c.pk for c in cats]
-				)
-				.values("team_categories")
-				.annotate(n=Count("pk", distinct=True))
-			)
-		}
-		for cat in cats:
-			weights = cat.get_scored_fields("trial")
-			weights_str = "; ".join(f"{f}:{w}" for f, w in weights.items() if w)
-			rows.append(
-				(
-					subject.subject_name,
-					cat.team.name,
-					cat.category_name,
-					cat.category_slug or "",
-					cat.category_description or "",
-					"; ".join(cat.category_terms or []),
-					len(cat.category_terms or []),
-					"; ".join(cat.category_exclude_terms or []),
-					cat.get_category_type_display(),
-					cat.get_modality_display() if cat.modality else "",
-					cat.get_match_scope_display(),
-					cat.match_min_score_trials,
-					weights_str,
-					counts.get(cat.pk, 0),
-					_cell_value(cat.last_synced_at),
-				)
-			)
-	return rows
-
-
-def _build_categories_sheet(wb, subjects):
-	"""Add a Categories sheet — one row per (subject, category) pair."""
-	ws = wb.create_sheet(title="Categories")
-	section_font = Font(bold=True, size=13)
-
-	ws.cell(
-		row=1, column=1, value="Categories and their search terms"
-	).font = section_font
-	prose_cell = ws.cell(row=2, column=1, value=CATEGORY_MATCH_PROSE)
-	prose_cell.alignment = Alignment(wrap_text=True)
-	last_col_letter = get_column_letter(len(CATEGORY_COLUMNS))
-	ws.merge_cells(f"A2:{last_col_letter}2")
-	ws.row_dimensions[2].height = 90
-
-	_apply_header(ws, CATEGORY_COLUMNS, row=4)
-	ws.freeze_panes = "A5"
-	ws.auto_filter.ref = f"A4:{last_col_letter}4"
-
-	rows = _category_rows(subjects)
-	desc_col = CATEGORY_COLUMNS.index("Description") + 1
-	terms_col = CATEGORY_COLUMNS.index("Search terms") + 1
-	exclude_col = CATEGORY_COLUMNS.index("Excluded terms") + 1
-
-	if not rows:
-		ws.cell(row=5, column=1, value="No categories found.")
-	else:
-		for row_idx, row_data in enumerate(rows, 5):
-			for col_idx, value in enumerate(row_data, 1):
-				if col_idx in (desc_col, terms_col, exclude_col):
-					_write_safe_text_cell(ws, row_idx, col_idx, value, wrap=True)
-				else:
-					ws.cell(row=row_idx, column=col_idx, value=value)
-
-	wide_widths = {"Description": 65, "Search terms": 65, "Excluded terms": 40, "Field weights (trials)": 40}
-	for col_idx, name in enumerate(CATEGORY_COLUMNS, 1):
-		letter = get_column_letter(col_idx)
-		ws.column_dimensions[letter].width = wide_widths.get(
-			name, max(12, min(32, len(name) + 4))
-		)
-
-
-GENERATED_BY_PROSE = "GregoryAI — https://github.com/brunoamaral/gregory-ai"
-
-WHATS_INSIDE_FIXED_ROWS = [
-	("Categories", "How trials are tagged, with each category's search terms."),
-	("Glossary", "What every column in the subject sheets means."),
-	(
-		"Registries",
-		"Which clinical-trial registries the data came from, and how records from "
-		"several registries are merged.",
-	),
-]
-
-
-@dataclass
-class SiteAttribution:
-	"""Which Site (and its CustomSetting) an export is attributed to."""
-
-	site: object
-	custom_setting: object = None
-
-
-def _resolve_explicit_site(value):
-	"""Resolve --site by numeric ID or domain (case-insensitive). Raises CommandError if not found."""
-	value = value.strip()
-	if value.isdigit():
-		site = Site.objects.filter(pk=int(value)).first()
-	else:
-		site = Site.objects.filter(domain__iexact=value).first()
-	if site is None:
-		listing = ", ".join(f"{s.pk} ({s.domain})" for s in Site.objects.order_by("pk"))
-		raise CommandError(f"Site not found: {value!r}. Valid sites: {listing}")
-	return site
-
-
-def _resolve_site_attribution(explicit_site_value):
-	"""Resolve the SiteAttribution for an export from the required --site value.
-
-	The export used to infer a site per subject from Team.site, falling back to
-	the subject's organisation's default site -- removed along with Team.site
-	(SITE-API-VISIBILITY-SPEC.md, "Removing Team.site"). --site is now the only
-	source, which also removes the case where one export mixed rows resolved
-	against different sites.
-	"""
-	site = _resolve_explicit_site(explicit_site_value)
-	custom_setting = (
-		CustomSetting.objects.filter(site=site).order_by("setting_id").first()
-	)
-	return SiteAttribution(site=site, custom_setting=custom_setting)
-
-
-def _build_about_sheet(ws, attribution, sheet_entries, options_summary):
-	"""Populate the 'About this file' sheet: Source, This file, What's in this workbook."""
-	section_fill = PatternFill(fill_type="solid", fgColor="2F4F8F")
-	section_font = Font(bold=True, size=13, color="FFFFFF")
-	label_font = Font(bold=True)
-
-	ws.column_dimensions["A"].width = 28
-	ws.column_dimensions["B"].width = 90
-
-	row = 1
-
-	def write_section_header(text):
-		nonlocal row
-		cell = ws.cell(row=row, column=1, value=text)
-		cell.font = section_font
-		cell.fill = section_fill
-		ws.cell(row=row, column=2).fill = section_fill
-		ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-		row += 1
-
-	def write_row(label, value, wrap=True):
-		nonlocal row
-		if not value:
-			return
-		# Most labels are our own fixed strings, but Section 3's are subject
-		# names, so route every label through the same defusing as the value.
-		_write_safe_text_cell(ws, row, 1, label, wrap=False)
-		ws.cell(row=row, column=1).font = label_font
-		_write_safe_text_cell(ws, row, 2, value, wrap=wrap)
-		row += 1
-
-	def write_note(text):
-		nonlocal row
-		_write_safe_text_cell(ws, row, 1, text, wrap=True)
-		ws.cell(row=row, column=1).font = Font(italic=True)
-		ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=2)
-		row += 1
-
-	site = attribution.site
-	cs = attribution.custom_setting
-
-	write_section_header("Source")
-	title = (cs.title if cs and cs.title else None) or site.name or site.domain
-	write_row("Published by", title)
-
-	org_site = (
-		OrganizationSite.objects.filter(site=site)
-		.select_related("organization")
-		.first()
-	)
-	org_name = org_site.organization.name if org_site else ""
-	if org_name and org_name != title:
-		write_row("Organisation", org_name)
-
-	if cs:
-		write_row("About this project", cs.description)
-		write_row("Website", cs.website_url or f"https://{site.domain}")
-		write_row("About page", cs.about_url)
-		write_row("Contact", cs.contact_url)
-		write_row("Contact email", cs.contact_email or cs.admin_email)
-		if cs.api_domain:
-			write_row("API", f"https://{cs.api_domain}")
-		write_row("Source code", cs.github_url)
-		social = "; ".join(
-			filter(
-				None,
-				[
-					f"Mastodon: {cs.mastodon_url}" if cs.mastodon_url else "",
-					f"Bluesky: {cs.bluesky_url}" if cs.bluesky_url else "",
-				],
-			)
-		)
-		write_row("Mastodon / Bluesky", social)
-		write_row("Privacy policy", cs.privacy_policy_url)
-	else:
-		write_row("Website", f"https://{site.domain}")
-
-	write_section_header("This file")
-	generated = datetime.now(dt_timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-	write_row("Generated", generated)
-	write_row("Generated by", GENERATED_BY_PROSE)
-	write_row("Export options", options_summary)
-
-	data_license = cs.data_license if cs else ""
-	data_license_url = cs.data_license_url if cs else ""
-	write_row("Data licence", data_license)
-	write_row("Licence URL", data_license_url)
-
-	citation = cs.citation if cs else ""
-	if not citation:
-		title_for_citation = (
-			(cs.title if cs and cs.title else None)
-			or site.name
-			or site.domain
-		)
-		website_for_citation = (cs.website_url if cs else "") or f"https://{site.domain}"
-		date_str = date.today().strftime("%Y-%m-%d")
-		citation = f"{title_for_citation}. Clinical trials export, {date_str}."
-		if website_for_citation:
-			citation += f" {website_for_citation}"
-	write_row("How to cite", citation)
-
-	write_section_header("What's in this workbook")
-	for sheet_name, subject, count in sheet_entries:
-		value = f'{count} clinical trial(s) for the research subject "{subject.subject_name}"'
-		if subject.description:
-			value += f" — {subject.description}"
-		write_row(sheet_name, value)
-	for label, value in WHATS_INSIDE_FIXED_ROWS:
-		write_row(label, value)
 
 
 class Command(BaseCommand):
@@ -1120,7 +836,7 @@ class Command(BaseCommand):
 							row_data.append("")
 
 					for col_idx, value in enumerate(row_data, 1):
-						ws.cell(row=row_idx, column=col_idx, value=value)
+						_write_data_cell(ws, row_idx, col_idx, value)
 
 			_set_column_widths(ws, all_data_cols)
 			sheet_entries.append((sheet_name, subject, count))
