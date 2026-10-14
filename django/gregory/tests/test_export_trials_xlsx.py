@@ -6,6 +6,8 @@ Run in the gregory Docker container:
 
 import os
 import tempfile
+from datetime import date, datetime, timezone as dt_timezone
+from unittest import mock
 
 from django.contrib.sites.models import Site
 from django.core.management import call_command
@@ -982,6 +984,127 @@ class ExportTrialsXlsxTests(TestCase):
 			"ethics_review_status",
 		]:
 			self.assertIn(col, scalar_cols, f'Expected column "{col}" in scalar list')
+
+	# ------------------------------------------------------------------
+	# Formula injection and cell typing on the trial data sheets
+	# ------------------------------------------------------------------
+
+	def _data_row_by_link(self, ws, link):
+		"""Return {header: cell} for the data row whose link matches `link`."""
+		headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+		link_col = headers.index("link") + 1
+		for r in range(2, ws.max_row + 1):
+			if ws.cell(row=r, column=link_col).value == link:
+				return {h: ws.cell(row=r, column=i) for i, h in enumerate(headers, 1)}
+		self.fail(f"Row with link {link!r} not found")
+
+	def test_trial_text_formula_injection_defused(self):
+		"""Registry text starting with =, +, - or @ is exported as literal text."""
+		link = "https://example.org/trial/formula"
+		trial = Trials.objects.create(
+			title='=HYPERLINK("http://evil.example","click")',
+			summary="+1+cmd|' /C calc'!A0",
+			primary_sponsor="-2+3",
+			condition="@SUM(1,1)",
+			link=link,
+		)
+		trial.subjects.add(self.subject_ms)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			row = self._data_row_by_link(wb["Multiple Sclerosis"], link)
+			expected = {
+				"title": '\'=HYPERLINK("http://evil.example","click")',
+				"summary": "\'+1+cmd|' /C calc'!A0",
+				"primary_sponsor": "\'-2+3",
+				"condition": "\'@SUM(1,1)",
+			}
+			for col, value in expected.items():
+				cell = row[col]
+				self.assertEqual(cell.data_type, "s", col)
+				self.assertEqual(cell.value, value, col)
+		finally:
+			os.unlink(path)
+
+	def test_overlong_trial_text_truncated_to_excel_limit(self):
+		"""A scalar string over 32,767 characters is truncated so the workbook stays valid."""
+		link = "https://example.org/trial/long"
+		trial = Trials.objects.create(
+			title="Long summary trial",
+			summary="x" * 40000,
+			link=link,
+		)
+		trial.subjects.add(self.subject_ms)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			cell = self._data_row_by_link(wb["Multiple Sclerosis"], link)["summary"]
+			self.assertEqual(len(cell.value), 32767)
+			self.assertTrue(cell.value.endswith("…"))
+		finally:
+			os.unlink(path)
+
+	def test_dates_numbers_and_bools_stay_typed(self):
+		"""Non-string values are written as native cells, not text."""
+		link = "https://example.org/trial/typed"
+		trial = Trials.objects.create(
+			title="Typed values trial",
+			link=link,
+			published_date=datetime(2024, 3, 1, 12, 30, tzinfo=dt_timezone.utc),
+			date_registration=date(2023, 5, 17),
+			# save() derives inclusion_age_min_years (a float) from this raw text.
+			inclusion_agemin="6 Months",
+			results_posted=True,
+		)
+		trial.subjects.add(self.subject_ms)
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			row = self._data_row_by_link(wb["Multiple Sclerosis"], link)
+			published = row["published_date"]
+			self.assertEqual(published.data_type, "d")
+			self.assertEqual(published.value, datetime(2024, 3, 1, 12, 30))
+			registered = row["date_registration"]
+			self.assertEqual(registered.data_type, "d")
+			self.assertEqual(registered.value.date(), date(2023, 5, 17))
+			self.assertEqual(row["inclusion_age_min_years"].data_type, "n")
+			self.assertEqual(row["inclusion_age_min_years"].value, 0.5)
+			self.assertEqual(row["results_posted"].data_type, "b")
+			self.assertIs(row["results_posted"].value, True)
+		finally:
+			os.unlink(path)
+
+	def test_identifier_columns_written_as_text(self):
+		"""Identifier columns expanded from the identifiers JSON are text cells."""
+		path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			row = self._data_row_by_link(wb["Multiple Sclerosis"], self.trial_ms.link)
+			self.assertEqual(row["id_nct"].data_type, "s")
+			self.assertEqual(row["id_nct"].value, "NCT00111111")
+		finally:
+			os.unlink(path)
+
+	def test_glossary_and_registries_help_text_defused(self):
+		"""Help text on the Glossary and Registries sheets is written as literal text.
+
+		It is internal today (admin labels and model help_text), but it could change,
+		so a value starting with = must still come out defused.
+		"""
+		with mock.patch(
+			"gregory.management.commands.export_trials_xlsx._sources_for",
+			return_value=("=label", "=description", "=sources"),
+		):
+			path, wb = self._export(subjects=str(self.subject_ms.pk))
+		try:
+			glossary = wb["Glossary"]
+			for col, value in ((2, "'=label"), (3, "'=description"), (4, "'=sources")):
+				cell = glossary.cell(row=2, column=col)
+				self.assertEqual(cell.data_type, "s")
+				self.assertEqual(cell.value, value)
+			registries = wb["Registries"]
+			# Field matrix data starts two rows below its section title (row 10).
+			label_cell = registries.cell(row=12, column=2)
+			self.assertEqual(label_cell.data_type, "s")
+			self.assertEqual(label_cell.value, "'=label")
+		finally:
+			os.unlink(path)
 
 
 class AboutSheetTests(TestCase):

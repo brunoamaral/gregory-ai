@@ -286,6 +286,8 @@ The workbook opens on an **About this file** sheet, then has one sheet per expor
 - **Glossary** — one row per exported trial column, with its label, description, and source registries.
 - **Registries** — prose on how trial data from multiple registries (WHO ICTRP, ClinicalTrials.gov, EU CTIS) is merged, plus a field-by-registry coverage matrix.
 
+Every text cell is written as literal text, so registry data can't run as a spreadsheet formula. A value that starts with `=`, `+`, `-` or `@` gets a leading apostrophe (`'=SUM(...)`). Text longer than Excel's 32,767-character cell limit is cut short and ends with `…`. Dates, numbers and booleans stay as typed cells, so they still sort and filter normally.
+
 ---
 
 ## How do I export patents to Excel?

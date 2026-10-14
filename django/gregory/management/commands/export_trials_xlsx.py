@@ -438,6 +438,17 @@ def _format_trial_countries(trial):
 	return "; ".join(parts)
 
 
+def _write_data_cell(ws, row, col, value):
+	"""Write one trial data value: strings defused and truncated, everything else typed.
+
+	Dates, datetimes, bools, ints and floats stay native cells so they still sort and
+	filter as dates and numbers; only strings go through _write_safe_text_cell.
+	"""
+	if isinstance(value, str):
+		return _write_safe_text_cell(ws, row, col, value)
+	return ws.cell(row=row, column=col, value=value)
+
+
 def _set_column_widths(ws, columns):
 	for col_idx, name in enumerate(columns, 1):
 		letter = get_column_letter(col_idx)
@@ -531,11 +542,10 @@ def _build_glossary_sheet(wb, all_data_cols):
 		label, desc, sources = _sources_for(
 			col_name, admin_labels, admin_help, model_help
 		)
-		ws.cell(row=row_idx, column=1, value=col_name)
-		ws.cell(row=row_idx, column=2, value=label)
-		cell_desc = ws.cell(row=row_idx, column=3, value=desc)
-		cell_desc.alignment = Alignment(wrap_text=True)
-		ws.cell(row=row_idx, column=4, value=sources)
+		_write_safe_text_cell(ws, row_idx, 1, col_name)
+		_write_safe_text_cell(ws, row_idx, 2, label)
+		_write_safe_text_cell(ws, row_idx, 3, desc, wrap=True)
+		_write_safe_text_cell(ws, row_idx, 4, sources)
 
 
 def _build_registries_sheet(wb, all_data_cols):
@@ -558,8 +568,7 @@ def _build_registries_sheet(wb, all_data_cols):
 
 	# --- Part A: prose overview ---
 	ws.cell(row=1, column=1, value="Registry overview").font = section_font
-	prose_cell = ws.cell(row=2, column=1, value=MERGE_PROSE)
-	prose_cell.alignment = Alignment(wrap_text=True)
+	_write_safe_text_cell(ws, 2, 1, MERGE_PROSE, wrap=True)
 	ws.merge_cells("A2:D2")
 	ws.row_dimensions[2].height = 90
 
@@ -575,12 +584,10 @@ def _build_registries_sheet(wb, all_data_cols):
 	for row_offset, (reg_name, id_keys_str, what, notes) in enumerate(
 		REGISTRIES_OVERVIEW, 5
 	):
-		ws.cell(row=row_offset, column=1, value=reg_name)
-		ws.cell(row=row_offset, column=2, value=id_keys_str)
-		ws.cell(row=row_offset, column=3, value=what)
-		ws.cell(row=row_offset, column=4, value=notes).alignment = Alignment(
-			wrap_text=True
-		)
+		_write_safe_text_cell(ws, row_offset, 1, reg_name)
+		_write_safe_text_cell(ws, row_offset, 2, id_keys_str)
+		_write_safe_text_cell(ws, row_offset, 3, what)
+		_write_safe_text_cell(ws, row_offset, 4, notes, wrap=True)
 
 	# --- Part B: field-by-registry matrix ---
 	matrix_start = 10
@@ -598,8 +605,8 @@ def _build_registries_sheet(wb, all_data_cols):
 		label, _, sources_str = _sources_for(
 			col_name, admin_labels, admin_help, model_help
 		)
-		ws.cell(row=row_offset, column=1, value=col_name)
-		ws.cell(row=row_offset, column=2, value=label)
+		_write_safe_text_cell(ws, row_offset, 1, col_name)
+		_write_safe_text_cell(ws, row_offset, 2, label)
 		for reg_col, reg_name in enumerate(REGISTRY_NAMES, 3):
 			# Normalise for matching: "EU CTIS" matches "EU CTIS" or "EU Clinical"
 			src_lower = sources_str.lower()
@@ -829,7 +836,7 @@ class Command(BaseCommand):
 							row_data.append("")
 
 					for col_idx, value in enumerate(row_data, 1):
-						ws.cell(row=row_idx, column=col_idx, value=value)
+						_write_data_cell(ws, row_idx, col_idx, value)
 
 			_set_column_widths(ws, all_data_cols)
 			sheet_entries.append((sheet_name, subject, count))
