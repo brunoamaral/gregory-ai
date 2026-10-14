@@ -1,9 +1,10 @@
 # Patents
 
 Gregory tracks patent families for the subjects a team follows, so an editor can see the
-IP picture next to the trials and papers already collected. Patents are staff-only for
-now: they appear in the Django admin and in the staff-only admin summary email, and are
-not exposed through the API, RSS feeds, MCP server or public newsletters.
+IP picture next to the trials and papers already collected. Patents appear in the Django
+admin and in the staff-only admin summary email, and leave the system through [XLSX
+exports](#exporting) for staff and partners. They are not exposed through the API, RSS
+feeds, MCP server or public newsletters.
 
 ## What a record is
 
@@ -163,6 +164,53 @@ are hidden and kept on save; see [Admin visibility](06-organisations-teams-and-s
 to the category basis (a *basis* filter switches to subject-only or all), and the
 *Suppress* action dismisses links. Staff only see links of patents from their own
 organisations' sources.
+
+## Exporting
+
+`export_patents_xlsx` builds a workbook of patent families, one sheet per subject, for
+people who want to work with the data outside the admin. It is meant for us and named
+partners, not for publication: the EPO's OPS terms allow processed records in our own
+products but not republishing "the data as such", so the About sheet credits the EPO and
+says "For research use; do not republish the patent text".
+
+```bash
+docker exec gregory python manage.py export_patents_xlsx --subjects 1 --site brain-regeneration.com --output /tmp/patents.xlsx
+```
+
+| Option | Meaning |
+|:-------|:--------|
+| `--subjects 1,2` | Subject ids to export (or `--all-subjects`). |
+| `--all-subjects` | Every subject, one sheet each. |
+| `--team N` | Only subjects of this team. |
+| `--site ID-OR-DOMAIN` | Required. The site the export is attributed to (publisher, licence and citation on the About sheet). |
+| `--output PATH` | Default `patents_export_YYYYMMDD.xlsx`. |
+
+**Admin actions.** *Export selected to XLSX…* on the patents list and *Export patents of
+selected links to XLSX…* on the patent-trial links list (distinct patents of the selected
+links). Both ask which site to attribute the file to: staff see the sites of their own
+organisations, superusers every site. "Select all" on a filtered list exports the whole
+filtered set. For staff the file only contains what the admin shows them: their
+organisations' subjects, teams, sources, categories and trial links. Selected families with
+no visible subject go on a "No subject" sheet, so none disappears silently.
+
+**Sheets**, in order:
+
+| Sheet | Content |
+|:------|:--------|
+| About this file | Source, licence, citation, the EPO attribution and terms of use, and a summary of every sheet. |
+| One per subject | One row per family, newest priority date first: identity, abstract, claims (cut off at Excel's 32,767-character cell limit; `claims_length` and `claims_truncated` show it), classification, inventors, applicants (raw name and matched sponsor), publication summary, subjects, teams, sources, categories and trial-link summary. A family in two subjects appears on both sheets. |
+| No subject | Admin export only: selected families with no visible subject. |
+| Trial links | One row per [sponsor-timing link](#sponsor-timing-signal), dismissed ones included and flagged, with the trial's details and its window (`trial_window_start`/`end`, computed by the detector's own function). |
+| Publications | One row per published document of every exported family. |
+| Categories | Each category's search terms and the patent matching settings. |
+| Glossary | A description of every column. |
+| Data source | A plain-language introduction to patents, kind codes, families, priority dates and the caveats of this data, for readers with no patent background. |
+
+`utitle`, `usummary` and the refresh back-off fields are left out. A new field on `Patents`
+is appended to the subject sheets automatically; the export tests fail until it has a
+glossary entry. The code is `gregory/exports/patents_xlsx.py` (shared helpers with the
+trials export are in `gregory/exports/xlsx_common.py`). Exports run synchronously; the dev
+database (101 families) builds in under a second.
 
 ## Categories
 

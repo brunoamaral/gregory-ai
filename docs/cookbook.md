@@ -285,3 +285,17 @@ The workbook opens on an **About this file** sheet, then has one sheet per expor
 - **Categories** — one row per (subject, category) pair, with each category's description, search terms, matching configuration (scope, score threshold, field weights), and trial count scoped to that subject. Categories with no subject assigned are never exported.
 - **Glossary** — one row per exported trial column, with its label, description, and source registries.
 - **Registries** — prose on how trial data from multiple registries (WHO ICTRP, ClinicalTrials.gov, EU CTIS) is merged, plus a field-by-registry coverage matrix.
+
+---
+
+## How do I export patents to Excel?
+
+```bash
+# One or more subjects by ID (--site is required, as for trials)
+docker exec gregory python manage.py export_patents_xlsx --subjects 1 --site brain-regeneration.com --output /tmp/patents.xlsx
+
+# Every subject of a team
+docker exec gregory python manage.py export_patents_xlsx --all-subjects --team 1 --site brain-regeneration.com --output /tmp/patents.xlsx
+```
+
+The flags are the same as for `export_trials_xlsx`. In the admin, select patents (or patent-trial links) and choose *Export selected to XLSX…*. See [Exporting](patents.md#exporting) for the sheets and the scoping rules.
