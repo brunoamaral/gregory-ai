@@ -3,8 +3,9 @@
 Gregory tracks patent families for the subjects a team follows, so an editor can see the
 IP picture next to the trials and papers already collected. Patents appear in the Django
 admin and in the staff-only admin summary email, and leave the system through [XLSX
-exports](#exporting) for staff and partners. They are not exposed through the API, RSS
-feeds, MCP server or public newsletters.
+exports](#exporting) for staff and partners. Sites that turn on `patents_enabled` also
+serve them through the [`/patents/` API](03-api-and-rss-feeds.md#patents); the switch is off
+by default. They are not in RSS feeds or public newsletters.
 
 ## What a record is
 
@@ -189,6 +190,24 @@ look at category-basis links under *Patent-trial links*.
 to the category basis (a *basis* filter switches to subject-only or all), and the
 *Suppress* action dismisses links. Staff only see links of patents from their own
 organisations' sources.
+
+## Licence and the API
+
+Patent records come from the EPO's Open Patent Services (OPS), fetched with Brain
+Regeneration's account. The EPO's OPS terms allow processed records in our own products but
+not republishing "the data as such". That is why patents are off for every site until
+someone turns them on:
+
+- **`patents_enabled`** (Site admin, off by default) is the switch. Turn it on only for a
+  site that is part of the product the OPS account covers. A site with it off shows no
+  patents on the API, the MCP server or the editor address, even when its subjects are in
+  scope.
+- **No bulk export.** `/patents/` has no CSV and ignores `all_results`; claims, the bulkiest
+  text, come only one family at a time with `?include=claims`.
+- **Keep the Espacenet link.** Every record's `link` points to its Espacenet page; show it
+  wherever a patent is displayed.
+
+The API itself is described in [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#patents).
 
 ## Exporting
 

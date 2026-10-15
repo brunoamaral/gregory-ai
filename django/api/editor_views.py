@@ -53,6 +53,7 @@ from api.views import (
 	AuthorsViewSet,
 	CategoryViewSet,
 	McpTenantsView,
+	PatentViewSet,
 	SponsorViewSet,
 	StatsView,
 	SubjectsViewSet,
@@ -1001,6 +1002,7 @@ EditorTrialViewSet = _editor_read_view(TrialViewSet)
 EditorAuthorsViewSet = _editor_read_view(AuthorsViewSet)
 EditorSubjectsViewSet = _editor_read_view(SubjectsViewSet)
 EditorSponsorViewSet = _editor_read_view(SponsorViewSet)
+EditorPatentViewSet = _editor_read_view(PatentViewSet)
 class EditorStatsView(_editor_read_view(StatsView)):
 	"""``/editor/stats/``: counts over the editor's site scope.
 
@@ -1023,4 +1025,5 @@ EDITOR_READ_ROUTES = [
 	("categories", EditorCategoryViewSet, "editor-categories"),
 	("subjects", EditorSubjectsViewSet, "editor-subjects"),
 	("sponsors", EditorSponsorViewSet, "editor-sponsors"),
+	("patents", EditorPatentViewSet, "editor-patents"),
 ]

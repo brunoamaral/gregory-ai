@@ -1,8 +1,8 @@
 """
 gregory/middleware/visibility.py
 
-Attaches ``request.visible_org_ids`` and ``request.visible_subject_ids``
-(each a ``set[int]``) to every incoming request so that viewsets and
+Attaches ``request.visible_org_ids``, ``request.visible_subject_ids`` and
+``request.visible_patent_subject_ids`` (each a ``set[int]``) to every incoming request so that viewsets and
 serializers can read them without recomputing.
 
 Both sets are computed **lazily** (on first access) by
@@ -41,11 +41,18 @@ class VisibleOrgMiddleware:
 		self.get_response = get_response
 
 	def __call__(self, request):
-		from gregory.visibility import visible_org_ids, visible_subject_ids
+		from gregory.visibility import (
+			visible_org_ids,
+			visible_patent_subject_ids,
+			visible_subject_ids,
+		)
 
 		request.visible_org_ids = SimpleLazyObject(lambda: visible_org_ids(request))
 		request.visible_subject_ids = SimpleLazyObject(
 			lambda: visible_subject_ids(request)
+		)
+		request.visible_patent_subject_ids = SimpleLazyObject(
+			lambda: visible_patent_subject_ids(request)
 		)
 		response = self.get_response(request)
 		if getattr(request, "_site_resolution_varies_by_origin", False):

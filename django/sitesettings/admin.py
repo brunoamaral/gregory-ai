@@ -90,6 +90,7 @@ class CustomSettingInline(admin.StackedInline):
 					"api_public",
 					"scope_subjects",
 					"rss_enabled",
+					"patents_enabled",
 				],
 				"description": (
 					"What this site owns and whether it is served anonymously. "

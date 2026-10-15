@@ -109,6 +109,36 @@ class TrialsBySponsorSerializer(serializers.Serializer):
 	count = serializers.IntegerField()
 
 
+class PatentsByPriorityYearSerializer(serializers.Serializer):
+	"""One entry of ``GET /patents/stats/`` ``by_priority_year``."""
+
+	year = serializers.IntegerField(allow_null=True)
+	count = serializers.IntegerField()
+
+
+class PatentsStatsSerializer(serializers.Serializer):
+	"""Response of ``GET /patents/stats/`` — see PatentViewSet.build_stats_payload."""
+
+	total = serializers.IntegerField()
+	with_grant = serializers.IntegerField(
+		help_text="Families with a granted publication (has_grant), a heuristic on kind codes."
+	)
+	with_trial_link = serializers.IntegerField(
+		help_text=(
+			"Families with at least one visible, unsuppressed trial link. "
+			"Category-basis links only unless include_subject_links=true."
+		)
+	)
+	by_priority_year = PatentsByPriorityYearSerializer(
+		many=True,
+		help_text=(
+			"Ascending by year of the earliest priority date; zero-count years "
+			"omitted, a trailing {year: null} entry for families with no "
+			"priority date (omitted when 0). Sums to total."
+		),
+	)
+
+
 class TrialsStatsSerializer(serializers.Serializer):
 	"""Response of ``GET /trials/stats/`` — see TrialViewSet.build_stats_payload.
 

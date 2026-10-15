@@ -17,6 +17,10 @@ from gregory.models import (
 	TrialCountry,
 	TrialSite,
 	Sponsor,
+	Patents,
+	PatentPublication,
+	PatentApplicant,
+	PatentTrialLink,
 )
 from organizations.models import Organization
 from sitesettings.models import CustomSetting
@@ -27,6 +31,7 @@ from django.db.models import Count, Q
 
 from api.editorial import (
 	article_site_contents,
+	claims_requested,
 	editorial_org_ids,
 	editorial_org_names,
 	editorial_requested,
@@ -35,6 +40,7 @@ from api.editorial import (
 	is_editor_request,
 )
 from api.serializers.mixins import ScopedSerializerMixin
+from api.patent_links import visible_patent_trial_links_queryset
 
 
 def get_custom_settings():
@@ -145,6 +151,7 @@ class CategoryTopAuthorSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
 	article_count_total = serializers.SerializerMethodField()
 	trials_count_total = serializers.SerializerMethodField()
+	patents_count_total = serializers.SerializerMethodField()
 	authors_count = serializers.SerializerMethodField()
 	top_authors = serializers.SerializerMethodField()
 	monthly_counts = serializers.SerializerMethodField()
@@ -161,6 +168,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			"modality",
 			"article_count_total",
 			"trials_count_total",
+			"patents_count_total",
 			"authors_count",
 			"top_authors",
 			"monthly_counts",
@@ -186,6 +194,15 @@ class CategorySerializer(serializers.ModelSerializer):
 
 		# Fallback to simple count query
 		return obj.trials.count()
+
+	def get_patents_count_total(self, obj) -> int:
+		"""Patent families in the category within the caller's patent scope
+		(only sites with patents enabled count)."""
+		# From the queryset's annotation only. An instance without it reports
+		# 0 rather than a live obj.patents.count(): the scope belongs to the
+		# request, and a live count would hand a caller whose sites don't show
+		# patents the global count.
+		return getattr(obj, "patents_count_annotated", None) or 0
 
 	def get_authors_count(self, obj) -> int:
 		"""Optimized authors count avoiding complex JOINs"""
@@ -594,6 +611,162 @@ class ArticleSerializer(
 		return TrialReferenceSerializer(trials, many=True).data
 
 
+class TrialPatentLinkSerializer(serializers.ModelSerializer):
+	"""A patent family linked to a trial, as nested on the trial detail
+	(``patent_links``). The mirror of ``PatentTrialLinkSerializer``."""
+
+	title = serializers.CharField(source="patent.title", read_only=True)
+	representative_publication = serializers.CharField(
+		source="patent.representative_publication", read_only=True
+	)
+
+	class Meta:
+		model = PatentTrialLink
+		fields = [
+			"patent_id",
+			"title",
+			"representative_publication",
+			"timing",
+			"days_after_completion",
+			"basis",
+		]
+
+
+class PatentTrialLinkSerializer(serializers.ModelSerializer):
+	"""A trial linked to a patent family, as nested on the patent detail
+	(``trial_links``). The mirror of ``TrialPatentLinkSerializer``."""
+
+	trial_title = serializers.CharField(source="trial.title", read_only=True)
+
+	class Meta:
+		model = PatentTrialLink
+		fields = [
+			"trial_id",
+			"trial_title",
+			"sponsor_id",
+			"timing",
+			"days_after_completion",
+			"basis",
+		]
+
+
+class PatentPublicationSerializer(serializers.ModelSerializer):
+	class Meta:
+		model = PatentPublication
+		fields = [
+			"publication_number",
+			"country",
+			"kind",
+			"publication_date",
+			"application_number",
+			"application_date",
+		]
+
+
+class PatentApplicantSerializer(serializers.ModelSerializer):
+	"""An applicant as published. ``sponsor_*`` is null for applicants not
+	linked to a canonical sponsor, individuals among them."""
+
+	sponsor_name = serializers.CharField(
+		source="sponsor.name", read_only=True, default=None
+	)
+	sponsor_slug = serializers.CharField(
+		source="sponsor.slug", read_only=True, default=None
+	)
+
+	class Meta:
+		model = PatentApplicant
+		fields = ["raw_name", "sponsor_id", "sponsor_name", "sponsor_slug", "is_individual"]
+
+
+class PatentListSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
+	"""One patent family (``/patents/``). Relies on PatentViewSet.get_queryset()
+	prefetching ``patent_applicants``, ``team_categories`` and ``subjects`` and
+	annotating the two counts, so a page costs a constant number of queries.
+
+	``link`` is the Espacenet page for the family's representative publication
+	and is always present: showing where a record came from is a condition of
+	the EPO OPS licence this data is fetched under.
+	"""
+
+	applicants = PatentApplicantSerializer(
+		source="patent_applicants", many=True, read_only=True
+	)
+	team_categories = TeamCategorySerializer(many=True, read_only=True)
+	subjects = SubjectsSerializer(many=True, read_only=True)
+	publications_count = serializers.IntegerField(read_only=True)
+	trial_links_count = serializers.IntegerField(read_only=True)
+
+	class Meta:
+		model = Patents
+		fields = [
+			"patent_id",
+			"family_id",
+			"title",
+			"summary",
+			"representative_publication",
+			"link",
+			"earliest_priority_date",
+			"earliest_publication_date",
+			"has_grant",
+			"cpc_classes",
+			"applicants",
+			"team_categories",
+			"subjects",
+			"publications_count",
+			"trial_links_count",
+		]
+
+
+class PatentDetailSerializer(PatentListSerializer):
+	"""``PatentListSerializer`` plus the member publications, inventors, IPC
+	classes, source links and linked trials. ``claims`` is left out of the
+	response unless the caller asks for ``?include=claims``: it averages
+	~12k characters and runs past 200k."""
+
+	publications = PatentPublicationSerializer(many=True, read_only=True)
+	trial_links = serializers.SerializerMethodField()
+	claims = serializers.CharField(read_only=True, allow_null=True)
+
+	class Meta(PatentListSerializer.Meta):
+		fields = PatentListSerializer.Meta.fields + [
+			"publications",
+			"inventors",
+			"ipc_classes",
+			"links",
+			"trial_links",
+			"claims",
+		]
+
+	@extend_schema_field(PatentTrialLinkSerializer(many=True))
+	def get_trial_links(self, obj) -> list:
+		"""Trials linked to this family that the caller may see; see
+		``visible_patent_trial_links_queryset``. PatentViewSet attaches the
+		rows as ``_visible_trial_links`` (a scoped Prefetch); without it the
+		same queryset runs for this patent."""
+		links = getattr(obj, "_visible_trial_links", None)
+		if links is None:
+			request = self.context.get("request")
+			links = (
+				visible_patent_trial_links_queryset(request)
+				.filter(patent=obj)
+				.select_related("trial")
+			)
+		return PatentTrialLinkSerializer(links, many=True).data
+
+	@property
+	def _readable_fields(self):
+		"""Leave ``claims`` out unless asked for. Skipped here, rather than
+		popped from the output afterwards, so a row whose claims were deferred
+		(PatentViewSet does that) is never read and never triggers a query.
+		The field stays declared, so the OpenAPI schema still documents it."""
+		wanted = claims_requested(self.context.get("request"))
+		for field in super()._readable_fields:
+			if field.field_name == "claims" and not wanted:
+				continue
+			yield field
+
+
 class TrialCountrySerializer(serializers.ModelSerializer):
 	"""The normalized per-country rows (see docs/trials-field-normalization.md).
 	``country`` is rendered as its ISO 3166-1 alpha-2 code."""
@@ -625,14 +798,16 @@ class TrialSponsorSerializer(serializers.ModelSerializer):
 
 
 class SponsorSerializer(serializers.ModelSerializer):
-	"""Used by SponsorViewSet (``/sponsors/``). ``trials_count`` is populated by an
-	annotation on the viewset's queryset, not a model field."""
+	"""Used by SponsorViewSet (``/sponsors/``). ``trials_count`` and
+	``patents_count`` are populated by annotations on the viewset's queryset,
+	not model fields."""
 
 	trials_count = serializers.IntegerField(read_only=True)
+	patents_count = serializers.IntegerField(read_only=True)
 
 	class Meta:
 		model = Sponsor
-		fields = ["id", "slug", "name", "sponsor_type", "trials_count"]
+		fields = ["id", "slug", "name", "sponsor_type", "trials_count", "patents_count"]
 
 
 class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
@@ -791,9 +966,31 @@ class TrialDetailSerializer(TrialSerializer):
 	action to back this field without an N+1."""
 
 	trial_sites = TrialSiteSerializer(many=True, read_only=True)
+	patent_links = serializers.SerializerMethodField()
 
 	class Meta(TrialSerializer.Meta):
-		fields = TrialSerializer.Meta.fields + ["trial_sites"]
+		fields = TrialSerializer.Meta.fields + ["trial_sites", "patent_links"]
+
+	@extend_schema_field(TrialPatentLinkSerializer(many=True))
+	def get_patent_links(self, obj) -> list:
+		"""Patent families linked to this trial that the caller may see.
+
+		Visibility, suppression and ``include_subject_links`` are decided by
+		``visible_patent_trial_links_queryset``. TrialViewSet attaches that
+		queryset as ``_visible_patent_links`` through a scoped Prefetch, so a
+		list costs no query per trial; a trial on a site without the patents
+		switch gets ``[]``. Without the attribute (single-object use) it
+		runs the same queryset for this trial.
+		"""
+		links = getattr(obj, "_visible_patent_links", None)
+		if links is None:
+			request = self.context.get("request")
+			links = (
+				visible_patent_trial_links_queryset(request)
+				.filter(trial=obj)
+				.select_related("patent")
+			)
+		return TrialPatentLinkSerializer(links, many=True).data
 
 
 class SourceSerializer(serializers.HyperlinkedModelSerializer):
@@ -1031,6 +1228,7 @@ class McpTenantSerializer(serializers.Serializer):
 	title = serializers.CharField(read_only=True)
 	api_public = serializers.BooleanField(read_only=True)
 	mcp_description = serializers.CharField(read_only=True, allow_blank=True)
+	patents_enabled = serializers.BooleanField(read_only=True)
 	subjects = McpTenantSubjectSerializer(many=True, read_only=True)
 	prompts = McpTenantPromptSerializer(many=True, read_only=True)
 	documents = McpTenantDocumentSerializer(many=True, read_only=True)
