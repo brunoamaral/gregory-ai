@@ -197,13 +197,12 @@ class CategorySerializer(serializers.ModelSerializer):
 
 	def get_patents_count_total(self, obj) -> int:
 		"""Patent families in the category within the caller's patent scope
-		(only sites with patents enabled count). Prefer the queryset's
-		annotation; fall back to a live count for an un-annotated instance."""
-		annotated = getattr(obj, "patents_count_annotated", None)
-		if annotated is not None:
-			return annotated
-
-		return obj.patents.count()
+		(only sites with patents enabled count)."""
+		# From the queryset's annotation only. An instance without it reports
+		# 0 rather than a live obj.patents.count(): the scope belongs to the
+		# request, and a live count would hand a caller whose sites don't show
+		# patents the global count.
+		return getattr(obj, "patents_count_annotated", None) or 0
 
 	def get_authors_count(self, obj) -> int:
 		"""Optimized authors count avoiding complex JOINs"""
@@ -755,11 +754,17 @@ class PatentDetailSerializer(PatentListSerializer):
 			)
 		return PatentTrialLinkSerializer(links, many=True).data
 
-	def to_representation(self, instance):
-		ret = super().to_representation(instance)
-		if not claims_requested(self.context.get("request")):
-			ret.pop("claims", None)
-		return ret
+	@property
+	def _readable_fields(self):
+		"""Leave ``claims`` out unless asked for. Skipped here, rather than
+		popped from the output afterwards, so a row whose claims were deferred
+		(PatentViewSet does that) is never read and never triggers a query.
+		The field stays declared, so the OpenAPI schema still documents it."""
+		wanted = claims_requested(self.context.get("request"))
+		for field in super()._readable_fields:
+			if field.field_name == "claims" and not wanted:
+				continue
+			yield field
 
 
 class TrialCountrySerializer(serializers.ModelSerializer):

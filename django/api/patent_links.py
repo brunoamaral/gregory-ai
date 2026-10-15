@@ -24,8 +24,11 @@ links at all. Same shape as ``visible_article_references_queryset`` (PR #863
 review finding 2): filtered in the queryset, with Exists(), so a prefetch of
 it costs no query per row and a join cannot fan a link out once per subject.
 
-Either attribute being absent on the request means "no middleware / no
-scoping", the same fallback as ``SubjectVisibilityMixin``.
+Either attribute being absent on a request means "no middleware / no
+scoping", the same fallback as ``SubjectVisibilityMixin``. No request at all
+(a serializer used outside a view: an export, a digest, a command) is not
+that fallback: it fails closed and returns no links, since nothing says who
+is asking.
 """
 
 from django.db.models import Exists, OuterRef
@@ -33,15 +36,22 @@ from django.db.models import Exists, OuterRef
 from gregory.models import PatentTrialLink, Patents, Trials
 
 
-def include_subject_links_requested(request) -> bool:
-	"""True for ``?include_subject_links=true`` (or ``1``/``yes``)."""
+def flag_requested(request, name) -> bool:
+	"""True when ``?<name>=`` is ``true`` or ``1`` (any case).
+
+	The same values django-filter's ``BooleanWidget`` reads, so a parameter
+	that is also declared as a ``BooleanFilter`` (for validation and the
+	schema) means the same thing wherever it is read by hand: ``yes`` is not
+	true in either place.
+	"""
 	if request is None:
 		return False
-	return request.GET.get("include_subject_links", "").strip().lower() in (
-		"true",
-		"1",
-		"yes",
-	)
+	return request.GET.get(name, "").strip().lower() in ("true", "1")
+
+
+def include_subject_links_requested(request) -> bool:
+	"""True for ``?include_subject_links=true`` (or ``1``)."""
+	return flag_requested(request, "include_subject_links")
 
 
 def visible_patent_trial_links_queryset(request, include_subject_links=None):
@@ -49,6 +59,8 @@ def visible_patent_trial_links_queryset(request, include_subject_links=None):
 
 	``include_subject_links=None`` reads the request's own query parameter.
 	"""
+	if request is None:
+		return PatentTrialLink.objects.none()
 	if include_subject_links is None:
 		include_subject_links = include_subject_links_requested(request)
 

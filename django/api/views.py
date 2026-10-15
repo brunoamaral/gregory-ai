@@ -150,6 +150,7 @@ from django.utils.timezone import now as tz_now
 
 from api.editorial import (
 	article_site_contents,
+	claims_requested,
 	editorial_org_ids,
 	editorial_requested,
 	editorial_site_ids,
@@ -163,7 +164,7 @@ from api.utils.utils import (
 from gregory.utils.registry_utils import merge_links
 from gregory.site_resolution import public_sites
 from gregory.visibility import patent_scope_cache_part, site_id_for_api_scheme
-from api.patent_links import visible_patent_trial_links_queryset
+from api.patent_links import flag_requested, visible_patent_trial_links_queryset
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,
@@ -3214,28 +3215,35 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 		qs = super().get_queryset()
 		visible = getattr(self.request, "visible_subject_ids", None)
 		visible_patents = getattr(self.request, "visible_patent_subject_ids", None)
-		# A correlated count, not a second Count() join next to trials_count's:
-		# two multi-valued joins in one query is the cross product that
-		# _category_through_count_subquery warns about.
-		patents_applied = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
-		if visible_patents is not None:
-			patents_applied = patents_applied.filter(
-				Exists(
-					Patents.objects.filter(
-						pk=OuterRef("patent_id"), subjects__in=visible_patents
+		if visible_patents is not None and not visible_patents:
+			# No site this caller reaches shows patents: the count is 0 for
+			# every row, so don't pay for a subquery per sponsor to learn
+			# that. Costs the one query that resolves the patent scope.
+			patents_count = Value(0, output_field=IntegerField())
+			visible_patents = frozenset()
+		else:
+			# A correlated count, not a second Count() join next to
+			# trials_count's: two multi-valued joins in one query is the cross
+			# product that _category_through_count_subquery warns about.
+			patents_applied = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
+			if visible_patents is not None:
+				patents_applied = patents_applied.filter(
+					Exists(
+						Patents.objects.filter(
+							pk=OuterRef("patent_id"), subjects__in=visible_patents
+						)
 					)
 				)
+			patents_count = Coalesce(
+				Subquery(
+					patents_applied.order_by()
+					.values("sponsor")
+					.annotate(c=Count("patent", distinct=True))
+					.values("c"),
+					output_field=IntegerField(),
+				),
+				0,
 			)
-		patents_count = Coalesce(
-			Subquery(
-				patents_applied.order_by()
-				.values("sponsor")
-				.annotate(c=Count("patent", distinct=True))
-				.values("c"),
-				output_field=IntegerField(),
-			),
-			0,
-		)
 		if visible is None:
 			# No middleware (management command, some tests) -- no scoping,
 			# matching every other viewset's fallback.
@@ -3255,23 +3263,21 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 		# cannot read, and it is an orderable field (?ordering=-trials_count),
 		# so the ranking itself would leak the same information.
 		in_scope = Exists(has_a_trial_in_scope)
-		if self.request.GET.get("include_patent_applicants", "").lower() in (
-			"true",
-			"1",
-			"yes",
-		):
+		if flag_requested(self.request, "include_patent_applicants"):
 			# Also sponsors that only ever applied for patents in scope. Same
 			# Exists() shape, OR-ed in, so a sponsor still appears once.
-			applied_in_scope = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
-			if visible_patents is not None:
-				applied_in_scope = applied_in_scope.filter(
-					Exists(
-						Patents.objects.filter(
-							pk=OuterRef("patent_id"), subjects__in=visible_patents
+			# With an empty patent scope there is nothing to add.
+			if visible_patents is None or visible_patents:
+				applied_in_scope = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
+				if visible_patents is not None:
+					applied_in_scope = applied_in_scope.filter(
+						Exists(
+							Patents.objects.filter(
+								pk=OuterRef("patent_id"), subjects__in=visible_patents
+							)
 						)
 					)
-				)
-			in_scope = in_scope | Exists(applied_in_scope)
+				in_scope = in_scope | Exists(applied_in_scope)
 		return qs.filter(in_scope).annotate(
 			trials_count=Count(
 				"trials",
@@ -3452,6 +3458,15 @@ class PatentViewSet(
 			# build_stats_payload aggregates; nothing below is read.
 			return qs
 		links = visible_patent_trial_links_queryset(self.request)
+		# Claims average ~12.5k characters and run past 200k, and only a detail
+		# response with ?include=claims ever serializes them: a page of 100
+		# would otherwise pull over 1 MB of text to throw it away. The other
+		# detail-only columns are not read by the list either.
+		if self.action == "retrieve":
+			if not claims_requested(self.request):
+				qs = qs.defer("claims")
+		else:
+			qs = qs.defer("claims", "inventors", "links", "ipc_classes")
 		qs = qs.annotate(
 			publications_count=Coalesce(
 				Subquery(

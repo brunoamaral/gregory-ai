@@ -1108,3 +1108,200 @@ class ExistingVisibilityUnchangedTest(PatentFixture):
 		request.user = type("Anon", (), {"is_authenticated": False})()
 		self.assertEqual(visible_subject_ids(request), {self.s_off.pk})
 		self.assertEqual(visible_patent_subject_ids(request), set())
+
+
+class ReviewFixesTest(PatentFixture):
+	"""Regression tests for the PR #919 review notes."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.cat = TeamCategory.objects.create(
+			team=cls.s_on.team, category_name="Fix", category_slug="fix", category_terms=["fix"]
+		)
+		cls.cat.subjects.add(cls.s_on)
+		PatentCategoryAssignment.objects.create(
+			patents=cls.p_on, teamcategory=cls.cat, source="automatic"
+		)
+		cls.p_on.claims = "1. A claim."
+		cls.p_on.inventors = ["DOE, J"]
+		cls.p_on.cpc_classes = ["A61K31/435"]
+		cls.p_on.save()
+		PatentPublication.objects.create(
+			patent=cls.p_on,
+			publication_number="EP4123456B1",
+			country="EP",
+			doc_number="4123456",
+			kind="B1",
+		)
+		PatentPublication.objects.create(
+			patent=cls.p_both,
+			publication_number="EP7777777B2",
+			country="EP",
+			doc_number="7777777",
+			kind="B2",
+		)
+		PatentPublication.objects.create(
+			patent=cls.p_off,
+			publication_number="EP5555555A1",
+			country="EP",
+			doc_number="5555555",
+			kind="A1",
+		)
+
+	def captured(self, path):
+		cache.clear()
+		self.client.get(path)  # warm one-off caches
+		cache.clear()
+		with CaptureQueriesContext(connection) as ctx:
+			response = self.client.get(path)
+		return response, [q["sql"] for q in ctx.captured_queries]
+
+	# 1. the category fallback fails closed
+	def test_category_count_without_the_annotation_is_zero(self):
+		from api.serializers import CategorySerializer
+
+		self.assertEqual(CategorySerializer().get_patents_count_total(self.cat), 0)
+
+	# 2. no request, no links
+	def test_link_queryset_without_a_request_is_empty(self):
+		from api.patent_links import visible_patent_trial_links_queryset
+
+		trial = _trial("Orphan trial", self.s_on)
+		_link(self.p_on, trial, self.sponsor)
+		self.assertEqual(list(visible_patent_trial_links_queryset(None)), [])
+		self.assertEqual(list(visible_patent_trial_links_queryset(None, True)), [])
+
+	def test_detail_serializers_without_a_request_show_no_links(self):
+		from api.serializers import PatentDetailSerializer, TrialDetailSerializer
+
+		trial = _trial("Orphan trial two", self.s_on)
+		_link(self.p_on, trial, self.sponsor)
+		self.assertEqual(PatentDetailSerializer().get_trial_links(self.p_on), [])
+		self.assertEqual(TrialDetailSerializer().get_patent_links(trial), [])
+
+	# 3. a letter-only kind code
+	def test_kind_letter_alone_matches_the_stored_kind_with_digit(self):
+		response = self.client.get(
+			f"/patents/?site_id={self.site_a.pk}&publication_number=EP4123456B"
+		)
+		self.assertEqual(_titles(response), ["Patent on"])
+		response = self.client.get(
+			f"/patents/?site_id={self.site_a.pk}&publication_number=EP7777777B"
+		)
+		self.assertEqual(_titles(response), ["Patent both"])
+
+	def test_kind_letter_does_not_match_a_different_letter(self):
+		response = self.client.get(
+			f"/patents/?site_id={self.site_a.pk}&publication_number=EP4123456A"
+		)
+		self.assertEqual(response.data["results"], [])
+
+	def test_full_kind_stays_exact(self):
+		response = self.client.get(
+			f"/patents/?site_id={self.site_a.pk}&publication_number=EP4123456B2"
+		)
+		self.assertEqual(response.data["results"], [])
+
+	# 4. heavy columns are not loaded unless used
+	def test_list_does_not_select_claims_or_other_detail_columns(self):
+		response, queries = self.captured(f"/patents/?site_id={self.site_a.pk}")
+		self.assertEqual(response.status_code, 200)
+		listing = next(q for q in queries if 'FROM "patents"' in q and "LIMIT" in q)
+		for column in ('"patents"."claims"', '"patents"."inventors"', '"patents"."ipc_classes"'):
+			self.assertNotIn(column, listing)
+
+	def test_detail_without_include_claims_does_not_select_claims(self):
+		response, queries = self.captured(
+			f"/patents/{self.p_on.pk}/?site_id={self.site_a.pk}"
+		)
+		self.assertNotIn("claims", response.data)
+		row = next(q for q in queries if 'FROM "patents"' in q and "LIMIT" in q)
+		self.assertNotIn('"patents"."claims"', row)
+		self.assertIn('"patents"."inventors"', row)
+		# Not read, so not re-fetched either: no query touches claims.
+		self.assertFalse([q for q in queries if '"claims"' in q])
+
+	def test_detail_with_include_claims_selects_and_returns_them(self):
+		response, queries = self.captured(
+			f"/patents/{self.p_on.pk}/?site_id={self.site_a.pk}&include=claims"
+		)
+		self.assertEqual(response.data["claims"], "1. A claim.")
+		self.assertTrue([q for q in queries if '"patents"."claims"' in q])
+
+	def test_detail_cost_is_the_same_with_and_without_claims(self):
+		_, without = self.captured(f"/patents/{self.p_on.pk}/?site_id={self.site_a.pk}")
+		_, with_claims = self.captured(
+			f"/patents/{self.p_on.pk}/?site_id={self.site_a.pk}&include=claims"
+		)
+		self.assertEqual(len(without), len(with_claims))
+
+	# 5. sponsors skip the patent work when nothing shows patents
+	def test_sponsors_on_a_site_without_patents_run_no_patent_query(self):
+		trial = _trial("Off sponsor trial", self.s_off)
+		Trials.objects.filter(pk=trial.pk).update(primary_sponsor_normalized=self.sponsor)
+		response, queries = self.captured(f"/sponsors/?site_id={self.site_b.pk}")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["results"][0]["patents_count"], 0)
+		self.assertFalse([q for q in queries if "patent_applicants" in q])
+
+	def test_sponsors_on_a_site_without_patents_ignore_the_applicant_flag(self):
+		response, queries = self.captured(
+			f"/sponsors/?site_id={self.site_b.pk}&include_patent_applicants=true"
+		)
+		self.assertEqual(response.status_code, 200)
+		self.assertFalse([q for q in queries if "patent_applicants" in q])
+
+	def test_sponsors_on_a_site_with_patents_still_count_them(self):
+		trial = _trial("On sponsor trial", self.s_on)
+		Trials.objects.filter(pk=trial.pk).update(primary_sponsor_normalized=self.sponsor)
+		PatentApplicant.objects.create(
+			patent=self.p_on, sponsor=self.sponsor, raw_name="Acme", sequence=0
+		)
+		response, queries = self.captured(f"/sponsors/?site_id={self.site_a.pk}")
+		self.assertEqual(response.data["results"][0]["patents_count"], 1)
+		self.assertTrue([q for q in queries if "patent_applicants" in q])
+
+	# 6. one parser for the boolean flags
+	def test_yes_is_not_a_true_value_for_the_flags(self):
+		trial = _trial("Flag trial", self.s_on)
+		_link(self.p_on, trial, self.sponsor, basis="subject")
+		for value, expected in (("true", 1), ("TRUE", 1), ("1", 1), ("yes", 0), ("0", 0)):
+			with self.subTest(value=value):
+				response = self.client.get(
+					f"/patents/{self.p_on.pk}/?site_id={self.site_a.pk}"
+					f"&include_subject_links={value}"
+				)
+				self.assertEqual(len(response.data["trial_links"]), expected)
+
+	def test_applicant_flag_uses_the_same_values(self):
+		applicant = Sponsor.objects.create(name="Only Applicant", slug="only-applicant")
+		PatentApplicant.objects.create(
+			patent=self.p_on, sponsor=applicant, raw_name="OA", sequence=0
+		)
+		for value, expected in (("true", 1), ("1", 1), ("yes", 0)):
+			with self.subTest(value=value):
+				response = self.client.get(
+					f"/sponsors/?site_id={self.site_a.pk}&include_patent_applicants={value}"
+				)
+				self.assertEqual(response.data["count"], expected)
+
+	# 7. the CPC filter survives being a subquery
+	def test_cpc_filter_inside_a_subquery_binds_to_the_inner_table(self):
+		from api.filters import PatentFilter
+
+		filtered = PatentFilter(
+			data={"cpc": "A61K31"}, queryset=Patents.objects.all()
+		).qs
+		self.assertEqual([p.pk for p in filtered], [self.p_on.pk])
+		via_in = Patents.objects.filter(pk__in=filtered.values("pk"))
+		self.assertEqual([p.pk for p in via_in], [self.p_on.pk])
+		# Uncorrelated Exists() over the filter, evaluated for an outer row that
+		# has no matching CPC class. True because p_on matches somewhere; a
+		# filter bound to the OUTER table (a hard-coded table name once the
+		# inner one is re-aliased) would look at p_both's own empty classes
+		# and wrongly say no.
+		from django.db.models import Exists
+
+		via_exists = Patents.objects.filter(Exists(filtered), pk=self.p_both.pk)
+		self.assertEqual([p.pk for p in via_exists], [self.p_both.pk])

@@ -1,6 +1,6 @@
 from django_filters import rest_framework as filters
 from django.db import models
-from django.db.models import Exists, OuterRef, Q
+from django.db.models import Exists, F, Func, OuterRef, Q, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Upper
 from django.utils import timezone
@@ -51,6 +51,30 @@ def _site_scope_subject_ids(site_id):
 	return CustomSetting.objects.filter(site_id=site_id).values_list(
 		"scope_subjects__id", flat=True
 	)
+
+
+class CpcPrefixMatch(Func):
+	"""True when any element of an array column starts with any of the given
+	LIKE patterns: ``EXISTS (SELECT 1 FROM unnest(col) c WHERE c LIKE ANY(...))``.
+
+	Built over ``F("cpc_classes")`` rather than a hand-written table name, so
+	Django supplies the column's alias. That is what keeps it correct if a
+	filtered queryset is ever used as a subquery (``pk__in=``, ``Exists``),
+	where the inner table is re-aliased and a literal ``"patents"`` would
+	silently bind to the outer one. The patterns are bound parameters.
+	"""
+
+	output_field = models.BooleanField()
+
+	def as_sql(self, compiler, connection, **extra_context):
+		column, patterns = self.source_expressions
+		column_sql, column_params = compiler.compile(column)
+		patterns_sql, patterns_params = compiler.compile(patterns)
+		sql = (
+			f"EXISTS (SELECT 1 FROM unnest({column_sql}) AS cpc(c) "
+			f"WHERE cpc.c LIKE ANY({patterns_sql}))"
+		)
+		return sql, [*column_params, *patterns_params]
 
 
 def _like_prefix(prefix):
@@ -2106,29 +2130,21 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		(thousands of families); the GIN index on it answers overlap, not
 		prefix, so there is nothing to gain from an index here.
 		"""
-		from django.db.models import BooleanField
-		from django.db.models.expressions import RawSQL
-
 		prefixes = sorted({"".join(v.split()).upper() for v in (value or []) if v})
 		prefixes = [p for p in prefixes if p]
 		if not prefixes:
 			return queryset
 		patterns = [_like_prefix(p) for p in prefixes]
-		return queryset.filter(
-			RawSQL(
-				'EXISTS (SELECT 1 FROM unnest("patents"."cpc_classes") AS cpc(c) '
-				"WHERE cpc.c LIKE ANY(%s))",
-				[patterns],
-				output_field=BooleanField(),
-			)
-		)
+		return queryset.filter(CpcPrefixMatch(F("cpc_classes"), Value(patterns)))
 
 	def filter_publication_number(self, queryset, name, value: list[str]):
 		"""Match any member publication of the family, in any common format.
 
 		Matches on the stored parts (country, doc_number, kind), never
 		``startswith`` on the string: ``EP123`` must not find ``EP1234567``.
-		A number given without a kind code matches every kind. Numbers that do
+		A number given without a kind code matches every kind, and a letter
+		alone (``B``) matches that letter with or without a digit (``B``,
+		``B1``, ``B2``). Numbers that do
 		not split into country + digits + kind (``MXPA02011163A``, with letters
 		inside the number) match the cleaned string exactly instead.
 		"""
@@ -2145,7 +2161,11 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 			if parts is not None:
 				country, doc_number, kind = parts
 				parts_q = Q(country=country, doc_number=doc_number)
-				if kind:
+				if kind and len(kind) == 1:
+					# "EP4123456B" is how people type "EP4123456B1": the stored
+					# kind is the letter plus a digit, so match the letter.
+					parts_q &= Q(kind__startswith=kind)
+				elif kind:
 					parts_q &= Q(kind=kind)
 				token_q |= parts_q
 			condition |= token_q

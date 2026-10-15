@@ -7551,8 +7551,7 @@ components:
           type: integer
           description: |-
             Patent families in the category within the caller's patent scope
-            (only sites with patents enabled count). Prefer the queryset's
-            annotation; fall back to a live count for an un-annotated instance.
+            (only sites with patents enabled count).
           readOnly: true
         authors_count:
           type: integer

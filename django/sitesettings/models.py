@@ -346,8 +346,8 @@ class CustomSetting(models.Model):
 			"Show patent families for this site's subjects: on the API "
 			"(/patents/), the MCP server and the editor address. Patents are "
 			"fetched with Brain Regeneration's EPO OPS account; only enable "
-			"this on sites covered by that licence decision (see the patent "
-			"spec)."
+			"this on sites covered by that licence (see \"Licence and the "
+			"API\" in docs/patents.md)."
 		),
 	)
 
