@@ -45,7 +45,14 @@ def _next_domain(prefix):
 	return f"{prefix}-{_counter}.test.example.com"
 
 
-def _make_site(*subjects, api_public, organization=None, domain=None, name=None):
+def _make_site(
+	*subjects,
+	api_public,
+	organization=None,
+	domain=None,
+	name=None,
+	patents_enabled=False,
+):
 	site = Site.objects.create(
 		domain=domain or _next_domain("public" if api_public else "private"),
 		name=name or ("Public test site" if api_public else "Private test site"),
@@ -54,6 +61,7 @@ def _make_site(*subjects, api_public, organization=None, domain=None, name=None)
 		site=site,
 		title=name or f"{site.domain} settings",
 		api_public=api_public,
+		patents_enabled=patents_enabled,
 	)
 	for subject in subjects:
 		settings_row.scope_subjects.add(subject)
@@ -79,13 +87,18 @@ def _make_site(*subjects, api_public, organization=None, domain=None, name=None)
 	return site
 
 
-def publish_subjects(*subjects, organization=None, domain=None, name=None):
+def publish_subjects(
+	*subjects, organization=None, domain=None, name=None, patents_enabled=False
+):
 	"""Make ``subjects`` readable by an anonymous caller.
 
 	Creates a Site with ``api_public=True`` whose scope is exactly those
 	subjects. Pass ``organization`` to also link the site to an organisation,
 	which is what an authenticated member or a site-bound API key resolves
 	through.
+
+	``patents_enabled`` turns on the site's patent switch (off by default, as
+	in production); patents are visible only through sites that have it on.
 
 	Returns the Site, so a test that needs the id (``?site_id=``, an API key
 	binding) can use it.
@@ -96,10 +109,13 @@ def publish_subjects(*subjects, organization=None, domain=None, name=None):
 		organization=organization,
 		domain=domain,
 		name=name,
+		patents_enabled=patents_enabled,
 	)
 
 
-def private_site_publishing(*subjects, organization=None, domain=None, name=None):
+def private_site_publishing(
+	*subjects, organization=None, domain=None, name=None, patents_enabled=False
+):
 	"""The counterpart: a site whose scope an anonymous caller cannot see.
 
 	``api_public=False``, so these subjects are reachable only through a key
@@ -112,4 +128,5 @@ def private_site_publishing(*subjects, organization=None, domain=None, name=None
 		organization=organization,
 		domain=domain,
 		name=name,
+		patents_enabled=patents_enabled,
 	)

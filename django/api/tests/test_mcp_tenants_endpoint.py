@@ -68,6 +68,7 @@ class McpTenantsAnonymousTests(TestCase):
 				"title",
 				"api_public",
 				"mcp_description",
+				"patents_enabled",
 				"subjects",
 				"prompts",
 				"documents",

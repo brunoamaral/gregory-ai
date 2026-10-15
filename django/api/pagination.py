@@ -9,6 +9,8 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from django.utils.functional import cached_property
 
+from gregory.visibility import patent_scope_cache_part
+
 
 def request_bypasses_pagination(request):
 	"""
@@ -125,7 +127,7 @@ class CachedCountMixin:
 		{"page", "page_size", "all_results", "ordering", "format", "sort_by", "order"}
 	)
 
-	def _count_cache_key(self, request):
+	def _count_cache_key(self, request, view=None):
 		"""Tenant-safe cache key: path + visible scope + normalised params.
 
 		Mirrors CachedStatsActionMixin._stats_cache_key's security shape
@@ -157,6 +159,13 @@ class CachedCountMixin:
 			"subjects": subjects,
 			"params": params,
 		}
+		patent_scope = patent_scope_cache_part(
+			request, always=getattr(view, "patent_scoped", False)
+		)
+		if patent_scope is not None:
+			# Patent visibility is a second scope: two callers with the same
+			# subjects can differ in which of their sites show patents.
+			key_parts["patent_subjects"] = patent_scope
 		if "has_takeaways" in request.query_params:
 			# has_takeaways counts rows with text written for the caller's own
 			# site (articles) or organisation (trials), which two callers with
@@ -182,7 +191,7 @@ class CachedCountMixin:
 
 		paginator = self.django_paginator_class(queryset, page_size)
 
-		cache_key = self._count_cache_key(request)
+		cache_key = self._count_cache_key(request, view)
 		cached_count = cache.get(cache_key)
 		if cached_count is not None:
 			paginator.count = cached_count
@@ -327,3 +336,19 @@ class TrialSitePagination(PageNumberPagination):
 	page_size = 100
 	page_size_query_param = "page_size"
 	max_page_size = 500
+
+
+class PatentPagination(FlexiblePagination):
+	"""Pagination for ``/patents/``: FlexiblePagination without ``all_results``.
+
+	The licence decision behind the patent data rules out bulk export of
+	records, and ``all_results=true`` has been a failure mode on the other
+	endpoints anyway (it is how ``/articles/`` reached a 504). The parameter
+	is accepted and ignored, so a stray ``?all_results=true`` gets an
+	ordinary page rather than an error. Offset cap and page_size limit are
+	FlexiblePagination's.
+	"""
+
+	@property
+	def should_bypass_pagination(self):
+		return False

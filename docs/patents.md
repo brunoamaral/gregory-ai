@@ -3,8 +3,9 @@
 Gregory tracks patent families for the subjects a team follows, so an editor can see the
 IP picture next to the trials and papers already collected. Patents appear in the Django
 admin and in the staff-only admin summary email, and leave the system through [XLSX
-exports](#exporting) for staff and partners. They are not exposed through the API, RSS
-feeds, MCP server or public newsletters.
+exports](#exporting) for staff and partners. Sites that turn on `patents_enabled` also
+serve them through the [`/patents/` API](03-api-and-rss-feeds.md#patents); the switch is off
+by default. They are not in RSS feeds or public newsletters.
 
 ## What a record is
 

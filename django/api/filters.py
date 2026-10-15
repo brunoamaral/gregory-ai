@@ -19,6 +19,14 @@ from gregory.models import (
 	ArticleSiteContent,
 	ArticleTrialReference,
 	TrialOrgContent,
+	Patents,
+	PatentApplicant,
+	PatentPublication,
+)
+from api.patent_links import visible_patent_trial_links_queryset
+from gregory.utils.patent_numbers import (
+	clean_publication_number,
+	normalise_publication_number,
 )
 from api.editorial import editorial_org_ids, editorial_site_ids
 from gregory.utils.trial_field_normalizers import (
@@ -43,6 +51,13 @@ def _site_scope_subject_ids(site_id):
 	return CustomSetting.objects.filter(site_id=site_id).values_list(
 		"scope_subjects__id", flat=True
 	)
+
+
+def _like_prefix(prefix):
+	"""``prefix`` as a LIKE pattern that matches anything starting with it.
+	Escapes LIKE's own wildcards so a typed ``_`` or ``%`` is literal."""
+	escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+	return escaped + "%"
 
 
 class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
@@ -1189,6 +1204,27 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		),
 	)
 
+	has_patent_link = filters.BooleanFilter(
+		method="filter_has_patent_link",
+		label="Has a linked patent family",
+		help_text=(
+			"true: trials with at least one visible, unsuppressed link to a "
+			"patent family; false: without. Counts category-basis links only "
+			"unless include_subject_links=true. Only sites with patents "
+			"enabled count: for any other caller this matches nothing."
+		),
+	)
+	include_subject_links = filters.BooleanFilter(
+		method="filter_include_subject_links",
+		label="Include subject-basis patent links",
+		help_text=(
+			"Count and show patent links that rest on a shared subject only "
+			"(has_patent_link, patent_links on a single trial). They are "
+			"noisy for large sponsors, so by default only links on a shared "
+			"category are used."
+		),
+	)
+
 	class Meta:
 		model = Trials
 		fields = [
@@ -1235,7 +1271,25 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"date_registration_after",
 			"date_registration_before",
 			"has_takeaways",
+			"has_patent_link",
+			"include_subject_links",
 		]
+
+	def filter_has_patent_link(self, queryset, name, value):
+		if value is None:
+			return queryset
+		has_link = Exists(
+			visible_patent_trial_links_queryset(self.request).filter(
+				trial=OuterRef("pk")
+			)
+		)
+		return queryset.filter(has_link) if value else queryset.exclude(has_link)
+
+	def filter_include_subject_links(self, queryset, name, value):
+		"""No-op on the rows: read by visible_patent_trial_links_queryset()
+		wherever links are counted or shown. Declared so it is validated and
+		documented like any other parameter."""
+		return queryset
 
 	def filter_has_takeaways(self, queryset, name, value):
 		return _filter_has_takeaways(
@@ -1628,9 +1682,27 @@ class SponsorFilter(filters.FilterSet):
 		),
 	)
 
+	include_patent_applicants = filters.BooleanFilter(
+		method="filter_include_patent_applicants",
+		label="Include sponsors that only appear as patent applicants",
+		help_text=(
+			"true: also list sponsors that are applicants on patent families "
+			"in the caller's patent scope but have no trial in scope. Off by "
+			"default, so the list is exactly the sponsors with a trial. Only "
+			"sites with patents enabled contribute patent applicants."
+		),
+	)
+
 	class Meta:
 		model = Sponsor
-		fields = ["sponsor_type"]
+		fields = ["sponsor_type", "include_patent_applicants"]
+
+	def filter_include_patent_applicants(self, queryset, name, value):
+		"""No-op on the rows: SponsorViewSet.get_queryset() reads the flag
+		because it widens the visibility scope (an OR with the trial scope),
+		which a filter on the already-scoped queryset cannot do. Declared so
+		it is validated and documented like any other parameter."""
+		return queryset
 
 	def filter_subject_id(self, queryset, name, value):
 		"""
@@ -1756,3 +1828,345 @@ class CategoryFilter(filters.FilterSet):
 	def filter_category_terms(self, queryset, name, value):
 		"""Filter by category terms using array overlap"""
 		return queryset.filter(category_terms__icontains=value)
+
+
+class PatentFilter(SubjectFilterMixin, filters.FilterSet):
+	"""
+	Filter class for Patents (patent families, see /patents/).
+
+	Every filter that reaches through a multi-valued relation (applicants,
+	member publications, trial links) uses Exists(), so a family never appears
+	twice and the paginator's COUNT(*) needs no DISTINCT.
+	"""
+
+	title = filters.CharFilter(
+		method="filter_title",
+		label="Title",
+		help_text="Case-insensitive substring match against the title only.",
+	)
+	summary = filters.CharFilter(
+		method="filter_summary",
+		label="Summary",
+		help_text="Case-insensitive substring match against the summary only.",
+	)
+	search = filters.CharFilter(
+		method="filter_search",
+		label="Search",
+		help_text=(
+			"Boolean search across title and summary. Bare terms are AND-ed; "
+			'uppercase OR/NOT and "quoted phrases" are supported. Claims are '
+			"not searched."
+		),
+	)
+	subject_id = filters.NumberFilter(
+		field_name="subjects__id",
+		lookup_expr="exact",
+		label="Subject ID",
+		help_text="Filter by subject ID (see /subjects/).",
+	)
+	site_id = filters.NumberFilter(
+		method="filter_site",
+		label="Site ID",
+		help_text=(
+			"Filter by Django Site ID; returns patents carrying a subject in "
+			"that site's scope (see CustomSetting.scope_subjects). A site that "
+			"does not show patents (patents_enabled off) returns nothing."
+		),
+	)
+	category_id = filters.NumberFilter(
+		field_name="team_categories__id",
+		lookup_expr="exact",
+		label="Category ID",
+		help_text="Filter by category ID (see /categories/).",
+	)
+	category_slug = filters.CharFilter(
+		field_name="team_categories__category_slug",
+		lookup_expr="exact",
+		label="Category Slug",
+		help_text="Filter by category slug (see /categories/).",
+	)
+	category_modality = filters.ChoiceFilter(
+		method="filter_category_modality",
+		choices=CategoryModality.choices,
+		label="Intervention modality of the patent's categories",
+		help_text=(
+			"Filter by the intervention modality of the patent's categories; "
+			"one of the CategoryModality values."
+		),
+	)
+	applicant_sponsor_id = filters.NumberFilter(
+		method="filter_applicant_sponsor_id",
+		label="Applicant sponsor ID",
+		help_text=(
+			"Patents with an applicant linked to this canonical sponsor "
+			"(see /sponsors/)."
+		),
+	)
+	applicant_sponsor_slug = filters.CharFilter(
+		method="filter_applicant_sponsor_slug",
+		label="Applicant sponsor slug",
+		help_text=(
+			"Patents with an applicant linked to the sponsor with this slug "
+			"(see /sponsors/)."
+		),
+	)
+	applicant = filters.CharFilter(
+		method="filter_applicant",
+		label="Applicant name",
+		help_text=(
+			"Case-insensitive substring of an applicant's name as published. "
+			"Use it for applicants that are not linked to a sponsor "
+			"(individuals, small companies); linked ones are better found "
+			"with applicant_sponsor_id."
+		),
+	)
+	priority_date_after = filters.DateFilter(
+		field_name="earliest_priority_date",
+		lookup_expr="gte",
+		label="Earliest priority date on or after",
+		help_text=(
+			"Families whose earliest priority date is on or after this date "
+			"(YYYY-MM-DD, inclusive). Invalid dates return 400."
+		),
+	)
+	priority_date_before = filters.DateFilter(
+		field_name="earliest_priority_date",
+		lookup_expr="lte",
+		label="Earliest priority date on or before",
+		help_text=(
+			"Families whose earliest priority date is on or before this date "
+			"(YYYY-MM-DD, inclusive). Invalid dates return 400."
+		),
+	)
+	publication_date_after = filters.DateFilter(
+		field_name="earliest_publication_date",
+		lookup_expr="gte",
+		label="Earliest publication date on or after",
+		help_text=(
+			"Families whose earliest publication date is on or after this "
+			"date (YYYY-MM-DD, inclusive). Invalid dates return 400."
+		),
+	)
+	publication_date_before = filters.DateFilter(
+		field_name="earliest_publication_date",
+		lookup_expr="lte",
+		label="Earliest publication date on or before",
+		help_text=(
+			"Families whose earliest publication date is on or before this "
+			"date (YYYY-MM-DD, inclusive). Invalid dates return 400."
+		),
+	)
+	has_grant = filters.BooleanFilter(
+		field_name="has_grant",
+		label="Has a grant",
+		help_text=(
+			"true: families with a granted publication; false: without. "
+			"A heuristic on the kind codes, not legal status."
+		),
+	)
+	cpc = filters.BaseInFilter(
+		method="filter_cpc",
+		label="CPC class prefix(es), comma-separated; matches any",
+		help_text=(
+			"Prefix match against any of the family's CPC classes, "
+			"comma-separated, OR semantics, e.g. ?cpc=A61K31,A61P25/28. "
+			"Spaces are ignored; case-insensitive."
+		),
+	)
+	publication_number = filters.BaseInFilter(
+		method="filter_publication_number",
+		label="Publication number(s), comma-separated; matches any member",
+		help_text=(
+			"Matches any publication in the family, in any common format: "
+			"EP4123456A1, EP 4123456 A1, EP-4123456-A1. Without a kind code "
+			"(EP4123456) it matches every kind. Comma-separated, OR semantics."
+		),
+	)
+	family_id = filters.CharFilter(
+		field_name="family_id",
+		lookup_expr="exact",
+		label="DOCDB family ID",
+		help_text="Exact match against the DOCDB simple family id.",
+	)
+	has_trial_link = filters.BooleanFilter(
+		method="filter_has_trial_link",
+		label="Has a linked clinical trial",
+		help_text=(
+			"true: families with at least one visible, unsuppressed link to a "
+			"trial; false: without. Counts category-basis links only unless "
+			"include_subject_links=true."
+		),
+	)
+	include_subject_links = filters.BooleanFilter(
+		method="filter_include_subject_links",
+		label="Include subject-basis trial links",
+		help_text=(
+			"Count and show links that rest on a shared subject only. They are "
+			"noisy for large sponsors, so by default only links on a shared "
+			"category are used (has_trial_link, trial_links, trial_links_count)."
+		),
+	)
+
+	class Meta:
+		model = Patents
+		fields = [
+			"title",
+			"summary",
+			"search",
+			"subject_id",
+			"site_id",
+			"category_id",
+			"category_slug",
+			"category_modality",
+			"applicant_sponsor_id",
+			"applicant_sponsor_slug",
+			"applicant",
+			"priority_date_after",
+			"priority_date_before",
+			"publication_date_after",
+			"publication_date_before",
+			"has_grant",
+			"cpc",
+			"publication_number",
+			"family_id",
+			"has_trial_link",
+			"include_subject_links",
+		]
+
+	def filter_title(self, queryset, name, value):
+		return queryset.filter(utitle__contains=value.upper())
+
+	def filter_summary(self, queryset, name, value):
+		return queryset.filter(usummary__contains=value.upper())
+
+	def filter_search(self, queryset, name, value):
+		from api.utils.search import PATENT_SEARCH_LOOKUPS, build_search_q
+
+		q = build_search_q(value, PATENT_SEARCH_LOOKUPS)
+		if q is None:
+			return queryset
+		return queryset.filter(q)
+
+	def filter_site(self, queryset, name, value):
+		"""Patents carrying a subject in the given Site's scope, counting only
+		settings rows with patents_enabled on -- so naming a site that does not
+		show patents returns nothing, not the patents of some other site."""
+		from gregory.visibility import site_scope_subject_ids
+
+		subject_ids = site_scope_subject_ids(value, public_only=False, patents=True)
+		subquery = Patents.objects.filter(
+			pk=models.OuterRef("pk"), subjects__id__in=subject_ids
+		)
+		return queryset.filter(models.Exists(subquery))
+
+	def filter_category_modality(self, queryset, name, value):
+		if not value:
+			return queryset
+		return queryset.filter(
+			Exists(
+				Patents.team_categories.through.objects.filter(
+					patents=OuterRef("pk"), teamcategory__modality=value
+				)
+			)
+		)
+
+	def filter_applicant_sponsor_id(self, queryset, name, value):
+		return queryset.filter(
+			Exists(
+				PatentApplicant.objects.filter(patent=OuterRef("pk"), sponsor_id=value)
+			)
+		)
+
+	def filter_applicant_sponsor_slug(self, queryset, name, value):
+		return queryset.filter(
+			Exists(
+				PatentApplicant.objects.filter(
+					patent=OuterRef("pk"), sponsor__slug=value
+				)
+			)
+		)
+
+	def filter_applicant(self, queryset, name, value):
+		value = value.strip()
+		if not value:
+			return queryset
+		return queryset.filter(
+			Exists(
+				PatentApplicant.objects.filter(
+					patent=OuterRef("pk"), raw_name__icontains=value
+				)
+			)
+		)
+
+	def filter_cpc(self, queryset, name, value: list[str]):
+		"""Prefix match against any element of ``cpc_classes``.
+
+		The patterns travel as a query parameter, never interpolated into the
+		SQL. A seq scan over the array column is fine at this table size
+		(thousands of families); the GIN index on it answers overlap, not
+		prefix, so there is nothing to gain from an index here.
+		"""
+		from django.db.models import BooleanField
+		from django.db.models.expressions import RawSQL
+
+		prefixes = sorted({"".join(v.split()).upper() for v in (value or []) if v})
+		prefixes = [p for p in prefixes if p]
+		if not prefixes:
+			return queryset
+		patterns = [_like_prefix(p) for p in prefixes]
+		return queryset.filter(
+			RawSQL(
+				'EXISTS (SELECT 1 FROM unnest("patents"."cpc_classes") AS cpc(c) '
+				"WHERE cpc.c LIKE ANY(%s))",
+				[patterns],
+				output_field=BooleanField(),
+			)
+		)
+
+	def filter_publication_number(self, queryset, name, value: list[str]):
+		"""Match any member publication of the family, in any common format.
+
+		Matches on the stored parts (country, doc_number, kind), never
+		``startswith`` on the string: ``EP123`` must not find ``EP1234567``.
+		A number given without a kind code matches every kind. Numbers that do
+		not split into country + digits + kind (``MXPA02011163A``, with letters
+		inside the number) match the cleaned string exactly instead.
+		"""
+		tokens = [v for v in (value or []) if v and v.strip()]
+		if not tokens:
+			return queryset
+		condition = Q()
+		for raw in tokens:
+			cleaned = clean_publication_number(raw)
+			if not cleaned:
+				continue
+			token_q = Q(publication_number=cleaned)
+			parts = normalise_publication_number(raw)
+			if parts is not None:
+				country, doc_number, kind = parts
+				parts_q = Q(country=country, doc_number=doc_number)
+				if kind:
+					parts_q &= Q(kind=kind)
+				token_q |= parts_q
+			condition |= token_q
+		if not condition:
+			return queryset.none()
+		return queryset.filter(
+			Exists(PatentPublication.objects.filter(condition, patent=OuterRef("pk")))
+		)
+
+	def filter_has_trial_link(self, queryset, name, value):
+		if value is None:
+			return queryset
+		has_link = Exists(
+			visible_patent_trial_links_queryset(self.request).filter(
+				patent=OuterRef("pk")
+			)
+		)
+		return queryset.filter(has_link) if value else queryset.exclude(has_link)
+
+	def filter_include_subject_links(self, queryset, name, value):
+		"""No-op on the rows: read by visible_patent_trial_links_queryset()
+		wherever links are counted or shown. Declared so it is validated and
+		documented like any other parameter."""
+		return queryset

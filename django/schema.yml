@@ -207,11 +207,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -517,11 +517,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
       tags:
       - articles
       security:
@@ -872,11 +872,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
       - in: query
         name: journal_slug
         schema:
@@ -1238,12 +1238,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: 'Opt in to extra content. Comma-separated; the only
-                    accepted value is `editorial`, which adds an `editorial` list
-                    of the caller''s own `takeaways` and `summary_plain_english`:
-                    one entry per site on articles, one per organisation on trials
-                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.'
+                  description: 'Opt in to extra content. Comma-separated; `editorial`
+                    is the value for this endpoint (`claims` is accepted but only
+                    patents use it), and it adds an `editorial` list of the caller''s
+                    own `takeaways` and `summary_plain_english`: one entry per site
+                    on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+                    Unknown values return 400. Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -3276,6 +3276,439 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /patents/:
+    get:
+      operationId: patents_list
+      description: |-
+        List patent families (one DOCDB simple family per record), newest discovery first.
+
+        Patents are only visible through sites that have **patents_enabled** on
+        (`CustomSetting.patents_enabled`, off by default). A caller whose sites do
+        not show patents gets an empty list, and a 404 on a single record.
+
+        Every record's `link` points to its Espacenet page. Showing where the data
+        comes from is a condition of the EPO OPS licence it is fetched under, so
+        keep the link wherever you display a patent.
+
+        There is no CSV export and no `all_results`: the licence rules out bulk
+        export of records. `?format=csv` is not a supported format here, and
+        `?all_results=true` is ignored (you get an ordinary page). Page with
+        `page` / `page_size` (max 100).
+
+        # Query Parameters:
+        - **search** - boolean search over title and summary (bare terms AND-ed; uppercase `OR`/`NOT`; `"quoted phrases"`). Claims are not searched
+        - **title** - case-insensitive substring of the title only
+        - **summary** - case-insensitive substring of the summary only
+        - **subject_id** - filter by subject ID
+        - **site_id** - filter by Django Site ID; patents carrying a subject in that site's scope. A site with `patents_enabled` off returns nothing
+        - **category_id** / **category_slug** - filter by category
+        - **category_modality** - filter by the intervention modality of the patent's categories; one of the `CategoryModality` values
+        - **applicant_sponsor_id** / **applicant_sponsor_slug** - patents with an applicant linked to that sponsor (see `/sponsors/`)
+        - **applicant** - case-insensitive substring of an applicant's published name; for applicants not linked to a sponsor
+        - **priority_date_after** / **priority_date_before** - earliest priority date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **publication_date_after** / **publication_date_before** - earliest publication date, inclusive
+        - **has_grant** - `true`/`false`; a heuristic on kind codes, not legal status
+        - **cpc** - CPC class prefix match against any of the family's classes; comma-separated, OR (`?cpc=A61K31,A61P25/28`)
+        - **publication_number** - any member publication, in any common format (`EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`); without a kind code (`EP4123456`) it matches every kind. Comma-separated, OR
+        - **family_id** - exact DOCDB family id
+        - **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
+        - **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
+        - **include** - on the detail only: `claims` adds the full claims text
+        - **page**, **page_size**, **ordering**
+
+        # Ordering:
+        `?ordering=<field>` (prefix with `-` to reverse): `earliest_priority_date`,
+        `earliest_publication_date`, `discovery_date` (default `-discovery_date`),
+        `last_updated`. Families without the date sort last in both directions; ties
+        break on `-patent_id`. Unrecognised values are silently ignored.
+
+        # Fields:
+        The list returns `patent_id`, `family_id`, `title`, `summary`,
+        `representative_publication`, `link`, `earliest_priority_date`,
+        `earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
+        (`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
+        `team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+
+        `GET /patents/{id}/` adds `publications` (every member publication),
+        `inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
+        `claims` only with `?include=claims`.
+
+        # Trial links:
+        `trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
+        not suppressed, its trial is visible to the caller, and its basis is
+        `category`, meaning the patent and the trial share a team category,
+        typically the molecule. Links that rest on a shared subject only (`basis`
+        = `subject`) are 82% of all links and noisy for large sponsors; they appear
+        only with `?include_subject_links=true`. The mirror is `patent_links` on
+        `GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
+
+        # Stats Endpoint:
+        `GET /patents/stats/` returns `total`, `with_grant`, `with_trial_link` and
+        `by_priority_year` (`[{year, count}]`, ascending; a trailing `{year: null}`
+        for families with no priority date) over the filtered queryset. It accepts
+        the same query parameters as the list. Cached server-side.
+
+        # Examples:
+        - Granted EP patents on a molecule: `/patents/?category_slug=ocrelizumab&has_grant=true&publication_number=EP`
+        - By CPC class: `/patents/?cpc=A61K31/70`
+        - A publication number: `/patents/?publication_number=EP4123456`
+        - Filed since 2020 with a trial: `/patents/?priority_date_after=2020-01-01&has_trial_link=true`
+        - With claims: `/patents/123/?include=claims`
+      parameters:
+      - in: query
+        name: applicant
+        schema:
+          type: string
+        description: Case-insensitive substring of an applicant's name as published.
+          Use it for applicants that are not linked to a sponsor (individuals, small
+          companies); linked ones are better found with applicant_sponsor_id.
+      - in: query
+        name: applicant_sponsor_id
+        schema:
+          type: number
+        description: Patents with an applicant linked to this canonical sponsor (see
+          /sponsors/).
+      - in: query
+        name: applicant_sponsor_slug
+        schema:
+          type: string
+        description: Patents with an applicant linked to the sponsor with this slug
+          (see /sponsors/).
+      - in: query
+        name: category_id
+        schema:
+          type: integer
+        description: Filter by category ID (see /categories/).
+      - in: query
+        name: category_modality
+        schema:
+          type: string
+          enum:
+          - biologic_antibody
+          - cell_gene_therapy
+          - device_neuromodulation
+          - natural_product
+          - other
+          - rehabilitation
+          - research_topic
+          - small_molecule
+        description: |-
+          Filter by the intervention modality of the patent's categories; one of the CategoryModality values.
+
+          * `small_molecule` - Small-molecule drug
+          * `biologic_antibody` - Antibody / biologic
+          * `cell_gene_therapy` - Cell / gene therapy
+          * `rehabilitation` - Rehabilitation / physical
+          * `device_neuromodulation` - Device / neuromodulation
+          * `natural_product` - Natural product / supplement
+          * `research_topic` - Research topic (not an intervention)
+          * `other` - Other
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Filter by category slug (see /categories/).
+      - in: query
+        name: cpc
+        schema:
+          type: array
+          items:
+            type: string
+        description: Prefix match against any of the family's CPC classes, comma-separated,
+          OR semantics, e.g. ?cpc=A61K31,A61P25/28. Spaces are ignored; case-insensitive.
+        explode: false
+        style: form
+      - in: query
+        name: family_id
+        schema:
+          type: string
+        description: Exact match against the DOCDB simple family id.
+      - in: query
+        name: has_grant
+        schema:
+          type: boolean
+        description: 'true: families with a granted publication; false: without. A
+          heuristic on the kind codes, not legal status.'
+      - in: query
+        name: has_trial_link
+        schema:
+          type: boolean
+        description: 'true: families with at least one visible, unsuppressed link
+          to a trial; false: without. Counts category-basis links only unless include_subject_links=true.'
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
+        name: include_subject_links
+        schema:
+          type: boolean
+        description: Count and show links that rest on a shared subject only. They
+          are noisy for large sponsors, so by default only links on a shared category
+          are used (has_trial_link, trial_links, trial_links_count).
+      - in: query
+        name: ordering
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - earliest_priority_date
+            - -earliest_priority_date
+            - earliest_publication_date
+            - -earliest_publication_date
+            - discovery_date
+            - -discovery_date
+            - last_updated
+            - -last_updated
+        description: Sort field, prefix with `-` for descending (default `-discovery_date`).
+          Families without the date always sort last, in both directions. Ties break
+          on `-patent_id`. Accepts a comma-separated combination of the values above
+          to break ties on a second field, e.g. ?ordering=earliest_priority_date,-earliest_publication_date.
+        explode: false
+        style: form
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: priority_date_after
+        schema:
+          type: string
+          format: date
+        description: Families whose earliest priority date is on or after this date
+          (YYYY-MM-DD, inclusive). Invalid dates return 400.
+      - in: query
+        name: priority_date_before
+        schema:
+          type: string
+          format: date
+        description: Families whose earliest priority date is on or before this date
+          (YYYY-MM-DD, inclusive). Invalid dates return 400.
+      - in: query
+        name: publication_date_after
+        schema:
+          type: string
+          format: date
+        description: Families whose earliest publication date is on or after this
+          date (YYYY-MM-DD, inclusive). Invalid dates return 400.
+      - in: query
+        name: publication_date_before
+        schema:
+          type: string
+          format: date
+        description: Families whose earliest publication date is on or before this
+          date (YYYY-MM-DD, inclusive). Invalid dates return 400.
+      - in: query
+        name: publication_number
+        schema:
+          type: array
+          items:
+            type: string
+        description: 'Matches any publication in the family, in any common format:
+          EP4123456A1, EP 4123456 A1, EP-4123456-A1. Without a kind code (EP4123456)
+          it matches every kind. Comma-separated, OR semantics.'
+        explode: false
+        style: form
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Boolean search across title and summary. Bare terms are AND-ed;
+          uppercase OR/NOT and "quoted phrases" are supported. Claims are not searched.
+      - in: query
+        name: site_id
+        schema:
+          type: number
+        description: Filter by Django Site ID; returns patents carrying a subject
+          in that site's scope (see CustomSetting.scope_subjects). A site that does
+          not show patents (patents_enabled off) returns nothing.
+      - in: query
+        name: subject_id
+        schema:
+          type: integer
+        description: Filter by subject ID (see /subjects/).
+      - in: query
+        name: summary
+        schema:
+          type: string
+        description: Case-insensitive substring match against the summary only.
+      - in: query
+        name: title
+        schema:
+          type: string
+        description: Case-insensitive substring match against the title only.
+      tags:
+      - patents
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPatentListList'
+          description: ''
+  /patents/{patent_id}/:
+    get:
+      operationId: patents_retrieve
+      description: |-
+        List patent families (one DOCDB simple family per record), newest discovery first.
+
+        Patents are only visible through sites that have **patents_enabled** on
+        (`CustomSetting.patents_enabled`, off by default). A caller whose sites do
+        not show patents gets an empty list, and a 404 on a single record.
+
+        Every record's `link` points to its Espacenet page. Showing where the data
+        comes from is a condition of the EPO OPS licence it is fetched under, so
+        keep the link wherever you display a patent.
+
+        There is no CSV export and no `all_results`: the licence rules out bulk
+        export of records. `?format=csv` is not a supported format here, and
+        `?all_results=true` is ignored (you get an ordinary page). Page with
+        `page` / `page_size` (max 100).
+
+        # Query Parameters:
+        - **search** - boolean search over title and summary (bare terms AND-ed; uppercase `OR`/`NOT`; `"quoted phrases"`). Claims are not searched
+        - **title** - case-insensitive substring of the title only
+        - **summary** - case-insensitive substring of the summary only
+        - **subject_id** - filter by subject ID
+        - **site_id** - filter by Django Site ID; patents carrying a subject in that site's scope. A site with `patents_enabled` off returns nothing
+        - **category_id** / **category_slug** - filter by category
+        - **category_modality** - filter by the intervention modality of the patent's categories; one of the `CategoryModality` values
+        - **applicant_sponsor_id** / **applicant_sponsor_slug** - patents with an applicant linked to that sponsor (see `/sponsors/`)
+        - **applicant** - case-insensitive substring of an applicant's published name; for applicants not linked to a sponsor
+        - **priority_date_after** / **priority_date_before** - earliest priority date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **publication_date_after** / **publication_date_before** - earliest publication date, inclusive
+        - **has_grant** - `true`/`false`; a heuristic on kind codes, not legal status
+        - **cpc** - CPC class prefix match against any of the family's classes; comma-separated, OR (`?cpc=A61K31,A61P25/28`)
+        - **publication_number** - any member publication, in any common format (`EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`); without a kind code (`EP4123456`) it matches every kind. Comma-separated, OR
+        - **family_id** - exact DOCDB family id
+        - **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
+        - **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
+        - **include** - on the detail only: `claims` adds the full claims text
+        - **page**, **page_size**, **ordering**
+
+        # Ordering:
+        `?ordering=<field>` (prefix with `-` to reverse): `earliest_priority_date`,
+        `earliest_publication_date`, `discovery_date` (default `-discovery_date`),
+        `last_updated`. Families without the date sort last in both directions; ties
+        break on `-patent_id`. Unrecognised values are silently ignored.
+
+        # Fields:
+        The list returns `patent_id`, `family_id`, `title`, `summary`,
+        `representative_publication`, `link`, `earliest_priority_date`,
+        `earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
+        (`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
+        `team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+
+        `GET /patents/{id}/` adds `publications` (every member publication),
+        `inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
+        `claims` only with `?include=claims`.
+
+        # Trial links:
+        `trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
+        not suppressed, its trial is visible to the caller, and its basis is
+        `category`, meaning the patent and the trial share a team category,
+        typically the molecule. Links that rest on a shared subject only (`basis`
+        = `subject`) are 82% of all links and noisy for large sponsors; they appear
+        only with `?include_subject_links=true`. The mirror is `patent_links` on
+        `GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
+
+        # Stats Endpoint:
+        `GET /patents/stats/` returns `total`, `with_grant`, `with_trial_link` and
+        `by_priority_year` (`[{year, count}]`, ascending; a trailing `{year: null}`
+        for families with no priority date) over the filtered queryset. It accepts
+        the same query parameters as the list. Cached server-side.
+
+        # Examples:
+        - Granted EP patents on a molecule: `/patents/?category_slug=ocrelizumab&has_grant=true&publication_number=EP`
+        - By CPC class: `/patents/?cpc=A61K31/70`
+        - A publication number: `/patents/?publication_number=EP4123456`
+        - Filed since 2020 with a trial: `/patents/?priority_date_after=2020-01-01&has_trial_link=true`
+        - With claims: `/patents/123/?include=claims`
+      parameters:
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - claims
+        description: Opt in to extra content. Comma-separated; the accepted value
+          here is `claims`, which adds the family's full `claims` text to the detail
+          response (it averages ~12,000 characters and can run past 200,000, so it
+          is never in the default response and not available on the list). Unknown
+          values return 400.
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        description: A unique integer value identifying this patent family.
+        required: true
+      tags:
+      - patents
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatentDetail'
+          description: ''
+  /patents/stats/:
+    get:
+      operationId: patents_stats_retrieve
+      description: |-
+        Totals over the filtered patent families: ``total``, ``with_grant``,
+        ``with_trial_link`` and ``by_priority_year``.
+
+        Accepts the same query parameters as the list endpoint and the same
+        patent-scope visibility, so the totals match the equivalent list
+        request. Cached server-side; see ``CachedStatsActionMixin``.
+      tags:
+      - patents
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatentsStats'
+          description: ''
   /protected_endpoint/:
     get:
       operationId: protected_endpoint_retrieve
@@ -3508,8 +3941,16 @@ paths:
           academic_medical, government, nonprofit, other
         - **subject_id** - restrict to sponsors with >=1 trial in this subject
         - **subjects_any** - comma-separated subject IDs, OR semantics
+        - **include_patent_applicants** - `true` also lists sponsors that appear only
+          as applicants on patent families in the caller's patent scope (sites with
+          `patents_enabled` on); off by default
         - **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
         - **page_size** - items per page (max 100)
+
+        Each row carries `trials_count` and `patents_count`, both scoped to what
+        the caller may see. `patents_count` counts patent families the sponsor
+        applied for within the caller's patent scope (0 for a caller whose sites do
+        not show patents).
 
         # Examples:
         - Filter by type: `/sponsors/?sponsor_type=industry`
@@ -3525,6 +3966,14 @@ paths:
           enum:
           - csv
           - json
+      - in: query
+        name: include_patent_applicants
+        schema:
+          type: boolean
+        description: 'true: also list sponsors that are applicants on patent families
+          in the caller''s patent scope but have no trial in scope. Off by default,
+          so the list is exactly the sponsors with a trial. Only sites with patents
+          enabled contribute patent applicants.'
       - in: query
         name: ordering
         schema:
@@ -3645,8 +4094,16 @@ paths:
           academic_medical, government, nonprofit, other
         - **subject_id** - restrict to sponsors with >=1 trial in this subject
         - **subjects_any** - comma-separated subject IDs, OR semantics
+        - **include_patent_applicants** - `true` also lists sponsors that appear only
+          as applicants on patent families in the caller's patent scope (sites with
+          `patents_enabled` on); off by default
         - **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
         - **page_size** - items per page (max 100)
+
+        Each row carries `trials_count` and `patents_count`, both scoped to what
+        the caller may see. `patents_count` counts patent families the sponsor
+        applied for within the caller's patent scope (0 for a caller whose sites do
+        not show patents).
 
         # Examples:
         - Filter by type: `/sponsors/?sponsor_type=industry`
@@ -4493,6 +4950,14 @@ paths:
           - csv
           - json
       - in: query
+        name: has_patent_link
+        schema:
+          type: boolean
+        description: 'true: trials with at least one visible, unsuppressed link to
+          a patent family; false: without. Counts category-basis links only unless
+          include_subject_links=true. Only sites with patents enabled count: for any
+          other caller this matches nothing.'
+      - in: query
         name: has_results
         schema:
           type: boolean
@@ -4528,11 +4993,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
       - in: query
         name: include_public
         schema:
@@ -4541,6 +5006,13 @@ paths:
           Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
 
           Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
+        name: include_subject_links
+        schema:
+          type: boolean
+        description: Count and show patent links that rest on a shared subject only
+          (has_patent_link, patent_links on a single trial). They are noisy for large
+          sponsors, so by default only links on a shared category are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -5075,11 +5547,11 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
       - in: path
         name: trial_id
         schema:
@@ -5386,6 +5858,14 @@ paths:
           - csv
           - json
       - in: query
+        name: has_patent_link
+        schema:
+          type: boolean
+        description: 'true: trials with at least one visible, unsuppressed link to
+          a patent family; false: without. Counts category-basis links only unless
+          include_subject_links=true. Only sites with patents enabled count: for any
+          other caller this matches nothing.'
+      - in: query
         name: has_results
         schema:
           type: boolean
@@ -5421,11 +5901,18 @@ paths:
           type: string
           enum:
           - editorial
-        description: 'Opt in to extra content. Comma-separated; the only accepted
-          value is `editorial`, which adds an `editorial` list of the caller''s own
-          `takeaways` and `summary_plain_english`: one entry per site on articles,
-          one per organisation on trials (see docs/03-api-and-rss-feeds.md). Unknown
-          values return 400. Ignored for CSV output.'
+        description: 'Opt in to extra content. Comma-separated; `editorial` is the
+          value for this endpoint (`claims` is accepted but only patents use it),
+          and it adds an `editorial` list of the caller''s own `takeaways` and `summary_plain_english`:
+          one entry per site on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400. Ignored for CSV output.'
+      - in: query
+        name: include_subject_links
+        schema:
+          type: boolean
+        description: Count and show patent links that rest on a shared subject only
+          (has_patent_link, patent_links on a single trial). They are noisy for large
+          sponsors, so by default only links on a shared category are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -6033,6 +6520,18 @@ paths:
                     the caller''s own organisation (API key''s organisation, the organisations
                     of a logged-in user, or the organisation owning the resolved public
                     site). false: everything else. Does not require include=editorial.'
+                has_patent_link:
+                  type: boolean
+                  description: 'true: trials with at least one visible, unsuppressed
+                    link to a patent family; false: without. Counts category-basis
+                    links only unless include_subject_links=true. Only sites with
+                    patents enabled count: for any other caller this matches nothing.'
+                include_subject_links:
+                  type: boolean
+                  description: Count and show patent links that rest on a shared subject
+                    only (has_patent_link, patent_links on a single trial). They are
+                    noisy for large sponsors, so by default only links on a shared
+                    category are used.
                 subjects:
                   type: array
                   items:
@@ -6051,12 +6550,12 @@ paths:
                   type: string
                   enum:
                   - editorial
-                  description: 'Opt in to extra content. Comma-separated; the only
-                    accepted value is `editorial`, which adds an `editorial` list
-                    of the caller''s own `takeaways` and `summary_plain_english`:
-                    one entry per site on articles, one per organisation on trials
-                    (see docs/03-api-and-rss-feeds.md). Unknown values return 400.
-                    Ignored for CSV output.'
+                  description: 'Opt in to extra content. Comma-separated; `editorial`
+                    is the value for this endpoint (`claims` is accepted but only
+                    patents use it), and it adds an `editorial` list of the caller''s
+                    own `takeaways` and `summary_plain_english`: one entry per site
+                    on articles, one per organisation on trials (see docs/03-api-and-rss-feeds.md).
+                    Unknown values return 400. Ignored for CSV output.'
               required:
               - team_id
               - subject_id
@@ -6253,6 +6752,14 @@ paths:
           - csv
           - json
       - in: query
+        name: has_patent_link
+        schema:
+          type: boolean
+        description: 'true: trials with at least one visible, unsuppressed link to
+          a patent family; false: without. Counts category-basis links only unless
+          include_subject_links=true. Only sites with patents enabled count: for any
+          other caller this matches nothing.'
+      - in: query
         name: has_results
         schema:
           type: boolean
@@ -6282,6 +6789,13 @@ paths:
           excluded (not unique) — use acronym for those.
         explode: false
         style: form
+      - in: query
+        name: include_subject_links
+        schema:
+          type: boolean
+        description: Count and show patent links that rest on a shared subject only
+          (has_patent_link, patent_links on a single trial). They are noisy for large
+          sponsors, so by default only links on a shared category are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -6956,6 +7470,14 @@ components:
       - family_name
       - given_name
       - relevant_articles_count
+    BasisEnum:
+      enum:
+      - category
+      - subject
+      type: string
+      description: |-
+        * `category` - Shared team category
+        * `subject` - Shared subject only
     BlankEnum:
       enum:
       - ''
@@ -7025,6 +7547,13 @@ components:
             Prefer the queryset's Count(..., distinct=True) annotation; fall
             back to a live count for an un-annotated instance.
           readOnly: true
+        patents_count_total:
+          type: integer
+          description: |-
+            Patent families in the category within the caller's patent scope
+            (only sites with patents enabled count). Prefer the queryset's
+            annotation; fall back to a live count for an un-annotated instance.
+          readOnly: true
         authors_count:
           type: integer
           description: Optimized authors count avoiding complex JOINs
@@ -7046,6 +7575,7 @@ components:
       - category_name
       - id
       - monthly_counts
+      - patents_count_total
       - top_authors
       - trials_count_total
     CategoryTypeEnum:
@@ -7648,6 +8178,9 @@ components:
         mcp_description:
           type: string
           readOnly: true
+        patents_enabled:
+          type: boolean
+          readOnly: true
         subjects:
           type: array
           items:
@@ -7669,6 +8202,7 @@ components:
       - domain
       - mcp_description
       - name
+      - patents_enabled
       - prompts
       - site_id
       - subjects
@@ -7854,6 +8388,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedPatentListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentList'
     PaginatedSourceList:
       type: object
       required:
@@ -8067,6 +8624,317 @@ components:
           type: string
         summary_plain_english:
           type: string
+    PatentApplicant:
+      type: object
+      description: |-
+        An applicant as published. ``sponsor_*`` is null for applicants not
+        linked to a canonical sponsor, individuals among them.
+      properties:
+        raw_name:
+          type: string
+          maxLength: 500
+        sponsor_id:
+          type: integer
+          nullable: true
+          readOnly: true
+        sponsor_name:
+          type: string
+          readOnly: true
+        sponsor_slug:
+          type: string
+          readOnly: true
+        is_individual:
+          type: boolean
+      required:
+      - raw_name
+      - sponsor_id
+      - sponsor_name
+      - sponsor_slug
+    PatentDetail:
+      type: object
+      description: |-
+        ``PatentListSerializer`` plus the member publications, inventors, IPC
+        classes, source links and linked trials. ``claims`` is left out of the
+        response unless the caller asks for ``?include=claims``: it averages
+        ~12k characters and runs past 200k.
+      properties:
+        patent_id:
+          type: integer
+          readOnly: true
+        family_id:
+          type: string
+          nullable: true
+          maxLength: 20
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        representative_publication:
+          type: string
+          maxLength: 32
+        link:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 2000
+          - type: string
+            maxLength: 0
+        earliest_priority_date:
+          type: string
+          format: date
+          nullable: true
+        earliest_publication_date:
+          type: string
+          format: date
+          nullable: true
+        has_grant:
+          type: boolean
+          description: True when any member publication has a grant kind code. Heuristic
+            until legal status is fetched.
+        cpc_classes:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        applicants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentApplicant'
+          readOnly: true
+        team_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamCategory'
+          readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subjects'
+          readOnly: true
+        publications_count:
+          type: integer
+          readOnly: true
+        trial_links_count:
+          type: integer
+          readOnly: true
+        publications:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentPublication'
+          readOnly: true
+        inventors: {}
+        ipc_classes:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        links:
+          nullable: true
+          description: URLs keyed by source slug (e.g. "espacenet"); "link" holds
+            the canonical one
+        trial_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentTrialLink'
+          readOnly: true
+        claims:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - applicants
+      - claims
+      - patent_id
+      - publications
+      - publications_count
+      - subjects
+      - team_categories
+      - title
+      - trial_links
+      - trial_links_count
+    PatentList:
+      type: object
+      description: |-
+        One patent family (``/patents/``). Relies on PatentViewSet.get_queryset()
+        prefetching ``patent_applicants``, ``team_categories`` and ``subjects`` and
+        annotating the two counts, so a page costs a constant number of queries.
+
+        ``link`` is the Espacenet page for the family's representative publication
+        and is always present: showing where a record came from is a condition of
+        the EPO OPS licence this data is fetched under.
+      properties:
+        patent_id:
+          type: integer
+          readOnly: true
+        family_id:
+          type: string
+          nullable: true
+          maxLength: 20
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        representative_publication:
+          type: string
+          maxLength: 32
+        link:
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 2000
+          - type: string
+            maxLength: 0
+        earliest_priority_date:
+          type: string
+          format: date
+          nullable: true
+        earliest_publication_date:
+          type: string
+          format: date
+          nullable: true
+        has_grant:
+          type: boolean
+          description: True when any member publication has a grant kind code. Heuristic
+            until legal status is fetched.
+        cpc_classes:
+          type: array
+          items:
+            type: string
+            maxLength: 40
+        applicants:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentApplicant'
+          readOnly: true
+        team_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamCategory'
+          readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subjects'
+          readOnly: true
+        publications_count:
+          type: integer
+          readOnly: true
+        trial_links_count:
+          type: integer
+          readOnly: true
+      required:
+      - applicants
+      - patent_id
+      - publications_count
+      - subjects
+      - team_categories
+      - title
+      - trial_links_count
+    PatentPublication:
+      type: object
+      properties:
+        publication_number:
+          type: string
+          maxLength: 32
+        country:
+          type: string
+          maxLength: 4
+        kind:
+          type: string
+          maxLength: 4
+        publication_date:
+          type: string
+          format: date
+          nullable: true
+        application_number:
+          type: string
+          nullable: true
+          maxLength: 40
+        application_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - publication_number
+    PatentTrialLink:
+      type: object
+      description: |-
+        A trial linked to a patent family, as nested on the patent detail
+        (``trial_links``). The mirror of ``TrialPatentLinkSerializer``.
+      properties:
+        trial_id:
+          type: integer
+          readOnly: true
+        trial_title:
+          type: string
+          readOnly: true
+        sponsor_id:
+          type: integer
+          description: The sponsor shared by the patent (as applicant) and the trial.
+          readOnly: true
+        timing:
+          $ref: '#/components/schemas/TimingEnum'
+        days_after_completion:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: 'For ''after'' links: days between the trial''s completion
+            and the patent''s earliest priority date.'
+        basis:
+          allOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          description: |-
+            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.
+
+            * `category` - Shared team category
+            * `subject` - Shared subject only
+      required:
+      - basis
+      - sponsor_id
+      - timing
+      - trial_id
+      - trial_title
+    PatentsByPriorityYear:
+      type: object
+      description: One entry of ``GET /patents/stats/`` ``by_priority_year``.
+      properties:
+        year:
+          type: integer
+          nullable: true
+        count:
+          type: integer
+      required:
+      - count
+      - year
+    PatentsStats:
+      type: object
+      description: Response of ``GET /patents/stats/`` — see PatentViewSet.build_stats_payload.
+      properties:
+        total:
+          type: integer
+        with_grant:
+          type: integer
+          description: Families with a granted publication (has_grant), a heuristic
+            on kind codes.
+        with_trial_link:
+          type: integer
+          description: Families with at least one visible, unsuppressed trial link.
+            Category-basis links only unless include_subject_links=true.
+        by_priority_year:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatentsByPriorityYear'
+          description: 'Ascending by year of the earliest priority date; zero-count
+            years omitted, a trailing {year: null} entry for families with no priority
+            date (omitted when 0). Sums to total.'
+      required:
+      - by_priority_year
+      - total
+      - with_grant
+      - with_trial_link
     PublicSite:
       type: object
       description: |-
@@ -8186,8 +9054,9 @@ components:
     Sponsor:
       type: object
       description: |-
-        Used by SponsorViewSet (``/sponsors/``). ``trials_count`` is populated by an
-        annotation on the viewset's queryset, not a model field.
+        Used by SponsorViewSet (``/sponsors/``). ``trials_count`` and
+        ``patents_count`` are populated by annotations on the viewset's queryset,
+        not model fields.
       properties:
         id:
           type: integer
@@ -8208,9 +9077,13 @@ components:
         trials_count:
           type: integer
           readOnly: true
+        patents_count:
+          type: integer
+          readOnly: true
       required:
       - id
       - name
+      - patents_count
       - slug
       - trials_count
     SponsorTypeEnum:
@@ -8374,6 +9247,14 @@ components:
       required:
       - category_name
       - id
+    TimingEnum:
+      enum:
+      - during
+      - after
+      type: string
+      description: |-
+        * `during` - Filed during the trial
+        * `after` - Filed after the trial ended
     TokenObtainPair:
       type: object
       properties:
@@ -9090,6 +9971,11 @@ components:
           items:
             $ref: '#/components/schemas/TrialSite'
           readOnly: true
+        patent_links:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrialPatentLink'
+          readOnly: true
       required:
       - articles
       - countries_normalized
@@ -9100,6 +9986,7 @@ components:
       - inclusion_gender_normalized
       - last_updated
       - link
+      - patent_links
       - phase_normalized
       - recruitment_status_normalized
       - regions_normalized
@@ -9112,6 +9999,44 @@ components:
       - trial_countries
       - trial_id
       - trial_sites
+    TrialPatentLink:
+      type: object
+      description: |-
+        A patent family linked to a trial, as nested on the trial detail
+        (``patent_links``). The mirror of ``PatentTrialLinkSerializer``.
+      properties:
+        patent_id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          readOnly: true
+        representative_publication:
+          type: string
+          readOnly: true
+        timing:
+          $ref: '#/components/schemas/TimingEnum'
+        days_after_completion:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: 'For ''after'' links: days between the trial''s completion
+            and the patent''s earliest priority date.'
+        basis:
+          allOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          description: |-
+            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.
+
+            * `category` - Shared team category
+            * `subject` - Shared subject only
+      required:
+      - basis
+      - patent_id
+      - representative_publication
+      - timing
+      - title
     TrialSite:
       type: object
       description: |-

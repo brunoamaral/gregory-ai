@@ -39,8 +39,9 @@ a list endpoint resolves once however many rows it serialises.
 
 from rest_framework.exceptions import ValidationError
 
-#: Values ``?include=`` accepts. Comma-separated, so it can grow.
-INCLUDE_CHOICES = ("editorial",)
+#: Values ``?include=`` accepts. Comma-separated, so it can grow. ``claims`` is
+#: for patents only (``/patents/{id}/``) and is ignored by every other endpoint.
+INCLUDE_CHOICES = ("editorial", "claims")
 
 _INCLUDE_ATTR = "_editorial_requested"
 _ORG_IDS_ATTR = "_editorial_org_ids"
@@ -86,6 +87,14 @@ def editorial_requested(request) -> bool:
 	result = "editorial" in values and not _is_csv(request)
 	setattr(request, _INCLUDE_ATTR, result)
 	return result
+
+
+def claims_requested(request) -> bool:
+	"""True when the caller asked for ``?include=claims`` (patent detail only).
+	Validates ``include`` like ``editorial_requested`` does."""
+	if request is None:
+		return False
+	return "claims" in parse_include(request)
 
 
 def editorial_org_ids(request) -> list:

@@ -13,8 +13,13 @@ TRIAL_SEARCH_LOOKUPS = (
 	"scientific_title__icontains",
 )
 
+# Patents: title and summary only. Claims are not searched -- they have no index and
+# at ~12k characters each they would drown the ranking.
+PATENT_SEARCH_LOOKUPS = ("utitle__contains", "usummary__contains")
+
 # Human-readable field names for help text, docs and tests.
 ARTICLE_SEARCH_FIELDS = ("title", "summary")
+PATENT_SEARCH_FIELDS = ("title", "summary")
 TRIAL_SEARCH_FIELDS = ("title", "summary", "scientific_title")
 
 

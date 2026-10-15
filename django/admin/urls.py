@@ -31,6 +31,7 @@ from api.views import (
 	SourceViewSet,
 	TrialViewSet,
 	SponsorViewSet,
+	PatentViewSet,
 	post_article,
 	edit_article,
 	edit_trial,
@@ -95,6 +96,7 @@ router.register(r"sources", SourceViewSet)
 router.register(r"trials", TrialViewSet)
 router.register(r"subjects", SubjectsViewSet)
 router.register(r"sponsors", SponsorViewSet, basename="sponsors")
+router.register(r"patents", PatentViewSet, basename="patents")
 
 # Teams router (excluded from API root listing)
 teams_router = routers.SimpleRouter()
