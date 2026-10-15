@@ -154,6 +154,7 @@ from api.editorial import (
 	editorial_org_ids,
 	editorial_requested,
 	editorial_site_ids,
+	patent_site_contents,
 )
 from api.utils.utils import (
 	checkValidAccess,
@@ -3313,17 +3314,33 @@ _PATENTS_ORDERING_PARAM = _ordering_param(
 	"break on `-patent_id`.",
 )
 
+_PATENT_EDITORIAL_TEXT = (
+	"`editorial` adds an `editorial` list of the caller's own sites' "
+	"`takeaways` and `summary_plain_english` (one entry per site, as on "
+	"articles; see docs/03-api-and-rss-feeds.md)"
+)
+
+_PATENT_LIST_INCLUDE_PARAM = OpenApiParameter(
+	"include",
+	OpenApiTypes.STR,
+	OpenApiParameter.QUERY,
+	enum=["editorial"],
+	description=(
+		"Opt in to extra content. Comma-separated; " + _PATENT_EDITORIAL_TEXT + ". "
+		"`claims` is detail-only and ignored here. Unknown values return 400."
+	),
+)
+
 _PATENT_INCLUDE_PARAM = OpenApiParameter(
 	"include",
 	OpenApiTypes.STR,
 	OpenApiParameter.QUERY,
-	enum=["claims"],
+	enum=["claims", "editorial"],
 	description=(
-		"Opt in to extra content. Comma-separated; the accepted value here is "
-		"`claims`, which adds the family's full `claims` text to the detail "
-		"response (it averages ~12,000 characters and can run past 200,000, "
-		"so it is never in the default response and not available on the "
-		"list). Unknown values return 400."
+		"Opt in to extra content. Comma-separated. `claims` adds the family's "
+		"full `claims` text (it averages ~12,000 characters and can run past "
+		"200,000, so it is never in the default response and not available on "
+		"the list); " + _PATENT_EDITORIAL_TEXT + ". Unknown values return 400."
 	),
 )
 
@@ -3331,7 +3348,11 @@ _PATENT_INCLUDE_PARAM = OpenApiParameter(
 @extend_schema_view(
 	list=extend_schema(
 		auth=_OPTIONAL_API_KEY_SECURITY,
-		parameters=[_PATENTS_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+		parameters=[
+			_PATENTS_ORDERING_PARAM,
+			_INCLUDE_PUBLIC_PARAM,
+			_PATENT_LIST_INCLUDE_PARAM,
+		],
 	),
 	retrieve=extend_schema(
 		auth=_OPTIONAL_API_KEY_SECURITY,
@@ -3377,7 +3398,7 @@ class PatentViewSet(
 	- **family_id** - exact DOCDB family id
 	- **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
 	- **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
-	- **include** - on the detail only: `claims` adds the full claims text
+	- **include** - `editorial` adds the caller's own sites' takeaways and plain-English summary; on the detail only, `claims` adds the full claims text
 	- **page**, **page_size**, **ordering**
 
 	# Ordering:
@@ -3507,6 +3528,16 @@ class PatentViewSet(
 					queryset=links.select_related("trial").order_by("trial_id"),
 					to_attr="_visible_trial_links",
 				),
+			)
+		if editorial_requested(self.request):
+			# Only for ?include=editorial: the caller's own sites' text, so the
+			# serializer's editorial field costs no query per patent.
+			qs = qs.prefetch_related(
+				Prefetch(
+					"site_contents",
+					queryset=patent_site_contents(self.request),
+					to_attr="_prefetched_site_contents",
+				)
 			)
 		return qs
 

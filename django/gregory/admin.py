@@ -43,6 +43,7 @@ from .models import (
 	PatentApplicant,
 	PatentCategoryAssignment,
 	PatentPublication,
+	PatentSiteContent,
 	PatentTrialLink,
 	Patents,
 	OrganizationSite,
@@ -680,6 +681,9 @@ class ArticleSiteContentInline(admin.StackedInline):
 	"""
 
 	model = ArticleSiteContent
+	#: Admin URL name of the content model's history page (PatentSiteContentInline
+	#: points it at its own model).
+	history_url_name = "admin:gregory_articlesitecontent_history"
 	extra = 0
 	fields = ("site", "takeaways", "summary_plain_english", "updated_at")
 	readonly_fields = ("updated_at", "history_link")
@@ -691,7 +695,7 @@ class ArticleSiteContentInline(admin.StackedInline):
 		# to a site's takeaways and summary (admin, API key or MCP) are recorded
 		# on this row, whose history page is otherwise reachable by URL alone.
 		fields = super().get_fields(request, obj)
-		history_admin = self.admin_site._registry.get(ArticleSiteContent)
+		history_admin = self.admin_site._registry.get(self.model)
 		if history_admin and history_admin.has_view_history_or_change_history_permission(request):
 			fields = (*fields, "history_link")
 		return fields
@@ -700,7 +704,7 @@ class ArticleSiteContentInline(admin.StackedInline):
 	def history_link(self, obj):
 		if obj is None or not obj.pk:
 			return "-"
-		url = reverse("admin:gregory_articlesitecontent_history", args=[obj.pk])
+		url = reverse(self.history_url_name, args=[obj.pk])
 		return format_html('<a href="{}">Changes to this site\'s content</a>', url)
 
 	@staticmethod
@@ -773,6 +777,16 @@ class ArticleSiteContentInline(admin.StackedInline):
 				return form
 
 		return ScopedSiteContentFormSet
+
+
+class PatentSiteContentInline(ArticleSiteContentInline):
+	"""Per-site editorial content on the patent page. Everything but the model
+	is the article inline's: staff see and edit only their organisations'
+	sites, an existing row's site is locked, and each missing site gets one
+	extra row. ``Patents.site_contents`` has the same name as the article's."""
+
+	model = PatentSiteContent
+	history_url_name = "admin:gregory_patentsitecontent_history"
 
 
 class TrialOrgContentInline(_BaseOrgContentInline):
@@ -4576,6 +4590,7 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 		PatentApplicantInline,
 		PatentTrialLinkInline,
 		PatentCategoryAssignmentInline,
+		PatentSiteContentInline,
 	]
 
 	actions = ["export_xlsx_action"]
@@ -4741,6 +4756,16 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 		if latest_site_id is None or not site_ids.filter(pk=latest_site_id).exists():
 			return qs.none()
 		return qs.filter(site_id__in=site_ids)
+
+
+@admin.register(PatentSiteContent)
+class PatentSiteContentAdmin(ArticleSiteContentAdmin):
+	"""Audit history for a patent's per-site content; routine editing happens in
+	the patent page's inline. Same scoping as the article's."""
+
+	list_display = ("patent", "site", "updated_at")
+	raw_id_fields = ("patent",)
+	search_fields = ("takeaways", "summary_plain_english", "patent__title", "patent__family_id")
 
 
 @admin.register(TrialOrgContent)

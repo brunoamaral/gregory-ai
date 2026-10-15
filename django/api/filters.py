@@ -24,10 +24,7 @@ from gregory.models import (
 	PatentPublication,
 )
 from api.patent_links import visible_patent_trial_links_queryset
-from gregory.utils.patent_numbers import (
-	clean_publication_number,
-	normalise_publication_number,
-)
+from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
@@ -2138,37 +2135,12 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		return queryset.filter(CpcPrefixMatch(F("cpc_classes"), Value(patterns)))
 
 	def filter_publication_number(self, queryset, name, value: list[str]):
-		"""Match any member publication of the family, in any common format.
-
-		Matches on the stored parts (country, doc_number, kind), never
-		``startswith`` on the string: ``EP123`` must not find ``EP1234567``.
-		A number given without a kind code matches every kind, and a letter
-		alone (``B``) matches that letter with or without a digit (``B``,
-		``B1``, ``B2``). Numbers that do
-		not split into country + digits + kind (``MXPA02011163A``, with letters
-		inside the number) match the cleaned string exactly instead.
-		"""
+		"""Match any member publication of the family, in any common format;
+		see ``publication_number_q`` for exactly what a number matches."""
 		tokens = [v for v in (value or []) if v and v.strip()]
 		if not tokens:
 			return queryset
-		condition = Q()
-		for raw in tokens:
-			cleaned = clean_publication_number(raw)
-			if not cleaned:
-				continue
-			token_q = Q(publication_number=cleaned)
-			parts = normalise_publication_number(raw)
-			if parts is not None:
-				country, doc_number, kind = parts
-				parts_q = Q(country=country, doc_number=doc_number)
-				if kind and len(kind) == 1:
-					# "EP4123456B" is how people type "EP4123456B1": the stored
-					# kind is the letter plus a digit, so match the letter.
-					parts_q &= Q(kind__startswith=kind)
-				elif kind:
-					parts_q &= Q(kind=kind)
-				token_q |= parts_q
-			condition |= token_q
+		condition = publication_number_q(tokens)
 		if not condition:
 			return queryset.none()
 		return queryset.filter(
