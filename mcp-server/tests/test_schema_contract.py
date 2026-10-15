@@ -115,6 +115,10 @@ KNOWN_UNEXPOSED_PARAMS = {
 	},
 	"/trials/": {
 		"format",
+		# Patent links (mcp-patents): exposed by the patent tools PR, which
+		# adds them to search_trials / get_trial and removes these entries.
+		"has_patent_link",
+		"include_subject_links",
 		# Editorial content (EDITORIAL-API-SPEC.md): the MCP server doesn't
 		# expose per-org takeaways/summaries, so neither the opt-in nor the
 		# filter on it is a tool parameter. Out of scope per the spec.
@@ -211,6 +215,9 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"team_id",
 	},
 	"/sponsors/": {
+		# Patent applicants (mcp-patents): exposed by the patent tools PR,
+		# which adds it to list_sponsors and removes this entry.
+		"include_patent_applicants",
 		# Sponsor subject scoping arrived with site-scoped API visibility
 		# Phase 2 (a sponsor is reached only through its trials, via
 		# Exists() on primary_sponsor_normalized). list_sponsors stays
@@ -262,7 +269,14 @@ def test_site_id_declared_endpoints_match_what_this_audit_found(schema_params):
 	endpoints the parameter actually *does* something on.
 	"""
 	declared = {path for path, params in schema_params.items() if "site_id" in params}
-	assert declared == {"/articles/", "/articles/search/", "/trials/", "/trials/search/", "/trials/sites/"}
+	assert declared == {
+		"/articles/",
+		"/articles/search/",
+		"/patents/",
+		"/trials/",
+		"/trials/search/",
+		"/trials/sites/",
+	}
 
 
 def test_stats_endpoints_exist_in_schema(schema_params):
