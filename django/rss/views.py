@@ -97,6 +97,22 @@ def redirect_trials_by_subject_feed(request, subject_slug):
 	return _redirect_preserving_query(request, target)
 
 
+class _SelfLinkMixin:
+	"""Point <atom:link rel="self"> at the URL the feed was requested from.
+
+	Feed.get_feed otherwise builds it from get_current_site(request), which is
+	always the default Site (SITE_ID), not the site the feed is for.
+	get_object() must set obj._feed_url = self._request_url(request).
+	"""
+
+	@staticmethod
+	def _request_url(request):
+		return request.build_absolute_uri(request.path)
+
+	def feed_url(self, obj):
+		return obj._feed_url
+
+
 class _ArticleFeedItemMixin:
 	"""item_* methods shared by author-scoped article feeds.
 
@@ -225,7 +241,7 @@ class _TrialFeedItemMixin:
 		return item.last_updated
 
 
-class SiteArticlesByAuthorFeed(_ArticleFeedItemMixin, Feed):
+class SiteArticlesByAuthorFeed(_SelfLinkMixin, _ArticleFeedItemMixin, Feed):
 	"""feed/sites/<site_id>/author/<orcid>/ -- see module docstring."""
 
 	def get_object(self, request, site_id, orcid):
@@ -239,6 +255,7 @@ class SiteArticlesByAuthorFeed(_ArticleFeedItemMixin, Feed):
 		# Attach to the per-request obj (not self) so concurrent requests on
 		# the shared Feed instance don't interfere.
 		author._site = site
+		author._feed_url = self._request_url(request)
 		author._settings_row = settings_row
 		author._subject_ids = subject_ids
 
@@ -282,7 +299,7 @@ class SiteArticlesByAuthorFeed(_ArticleFeedItemMixin, Feed):
 		return f"https://{item._feed_site_domain}/articles/{str(item.pk)}/"
 
 
-class SiteTrialsBySubjectFeed(_TrialFeedItemMixin, Feed):
+class SiteTrialsBySubjectFeed(_SelfLinkMixin, _TrialFeedItemMixin, Feed):
 	"""feed/sites/<site_id>/trials/subject/<subject_slug>/ -- see module docstring."""
 
 	def get_object(self, request, site_id, subject_slug):
@@ -293,6 +310,7 @@ class SiteTrialsBySubjectFeed(_TrialFeedItemMixin, Feed):
 			raise Http404
 
 		subject._site = site
+		subject._feed_url = self._request_url(request)
 		return subject
 
 	def title(self, obj):
