@@ -19,6 +19,7 @@ class ForwardedProtoTest(TestCase):
 		org = make_org("Proxy Org")
 		team = Team.objects.create(organization=org, name="Proxy team", slug="proxy-team")
 		subject = Subject.objects.create(team=team, subject_name="Proxy subject", subject_slug="proxy-subject")
+		cls.subject = subject
 		cls.site = publish_subjects(subject, organization=org, domain="proxy.example.com")
 		for n in range(3):
 			trial = Trials.objects.create(title=f"Trial {n}", link=f"https://t.test/{n}")
@@ -72,11 +73,50 @@ class ForwardedProtoTest(TestCase):
 				data = self.get(HTTP_X_FORWARDED_PROTO=value).data
 				self.assertTrue(data["next"].startswith("http://localhost/"), (value, data["next"]))
 
-	def test_the_other_links_in_the_response_follow_the_same_scheme(self):
-		"""Not only `next`: nothing in the page may mix schemes."""
-		body = self.get(HTTP_X_FORWARDED_PROTO="https").content.decode()
+	def test_an_authors_articles_list_agrees_with_next_on_the_scheme(self):
+		"""`articles_list` used to read the header by hand; it now shares
+		request.scheme with `next`, so the two cannot disagree in one response."""
+		from gregory.models import Articles, Authors
 
-		self.assertNotIn("http://localhost", body)
+		# An author is listed only when an article in the site's scope has them, and
+		# /authors/ has a fixed page size of 10, so 11 are needed for a `next`.
+		for n in range(11):
+			author = Authors.objects.create(
+				given_name="A", family_name=f"Author{n}", full_name=f"A Author{n}", ORCID=f"0000-0001-0000-{n:04d}"
+			)
+			article = Articles.objects.create(title=f"Article {n}", link=f"https://a.test/{n}")
+			article.subjects.add(self.subject)
+			article.authors.add(author)
+		for value, expected in (("https", "https"), ("HTTPS", "http"), ("https, http", "https"), ("javascript", "http"), ("", "http")):
+			with self.subTest(value=value):
+				response = self.client.get(
+					f"/authors/?site_id={self.site.pk}", HTTP_HOST=self.HOST, HTTP_X_FORWARDED_PROTO=value
+				)
+				self.assertEqual(response.status_code, 200)
+				self.assertTrue(response.data["next"].startswith(f"{expected}://"), (value, response.data["next"]))
+				self.assertTrue(
+					response.data["results"][0]["articles_list"].startswith(f"{expected}://"),
+					(value, response.data["results"][0]["articles_list"]),
+				)
+
+	def test_the_rss_feeds_self_link_is_https_behind_a_tls_proxy(self):
+		"""Django's syndication framework picks the scheme of the feed's own link
+		from request.is_secure()."""
+		from django.urls import reverse
+		from sitesettings.models import CustomSetting
+
+		CustomSetting.objects.filter(site=self.site).update(rss_enabled=True)
+		url = reverse(
+			"site_trials_by_subject_feed",
+			kwargs={"site_id": self.site.pk, "subject_slug": "proxy-subject"},
+		)
+
+		plain = self.client.get(url, HTTP_HOST=self.HOST)
+		proxied = self.client.get(url, HTTP_HOST=self.HOST, HTTP_X_FORWARDED_PROTO="https")
+
+		self.assertEqual(plain.status_code, 200, plain.content[:200])
+		self.assertRegex(plain.content.decode(), r'<atom:link href="http://[^"]+" rel="self"')
+		self.assertRegex(proxied.content.decode(), r'<atom:link href="https://[^"]+" rel="self"')
 
 	def test_the_request_reports_itself_secure_only_through_the_header(self):
 		from django.test import RequestFactory

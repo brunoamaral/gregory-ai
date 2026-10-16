@@ -1113,20 +1113,13 @@ class AuthorSerializer(serializers.ModelSerializer):
 		# only place that prefixing rule is still required.
 		request = self.context.get("request")
 		if request is not None:
-			# Scheme comes from X-Forwarded-Proto when the proxy sends one.
-			# nginx does (nginx-example-configuration/nginx.conf), but
-			# SECURE_PROXY_SSL_HEADER is not configured, so request.scheme is
-			# "http" behind TLS termination and build_absolute_uri would hand
-			# out http:// links where the Site-based code always said https.
-			# Only http/https are accepted: nginx overwrites the header, but
-			# the API can be reached directly, and this value goes out in a
-			# JSON field.
-			forwarded = request.META.get("HTTP_X_FORWARDED_PROTO", "")
-			# A request through several proxies carries a comma-separated
-			# list; the first entry is the original client-facing scheme.
-			forwarded = forwarded.split(",")[0].strip().lower()
-			scheme = forwarded if forwarded in ("http", "https") else request.scheme
-			return f"{scheme}://{request.get_host()}/articles/?author_id={obj.author_id}"
+			# The scheme is request.scheme, which trusts nginx's X-Forwarded-Proto
+			# (SECURE_PROXY_SSL_HEADER in admin/settings.py): https behind TLS
+			# termination, and the same answer the `next` link of this very
+			# response gives. This used to read the header by hand, from before
+			# that setting existed, and disagreed with `next` on a header such
+			# as "HTTPS".
+			return request.build_absolute_uri(f"/articles/?author_id={obj.author_id}")
 
 		site = get_site()
 		if not site:
