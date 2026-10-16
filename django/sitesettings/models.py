@@ -256,7 +256,9 @@ class CustomSetting(models.Model):
 			"Also list clinical trials for the selected subjects, at "
 			"/sitemap/sites/<site_id>/trials.xml. Only enable this if the "
 			"site actually publishes trial pages at /trials/<trial_id>/ — "
-			"otherwise the sitemap would send crawlers to 404s."
+			"otherwise the sitemap would send crawlers to 404s. Also decides "
+			"where trial items in RSS feeds link to: this site's "
+			"/trials/<trial_id>/ page when on, the trial registry's page when off."
 		),
 	)
 	sitemap_trial_statuses = ArrayField(
