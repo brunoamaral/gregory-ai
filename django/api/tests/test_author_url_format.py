@@ -117,9 +117,8 @@ class AuthorURLFormatTests(TestCase):
 
 	@override_settings(ALLOWED_HOSTS=["api.brain-regeneration.com", "testserver"])
 	def test_articles_list_honours_forwarded_proto(self):
-		"""Behind TLS-terminating nginx, request.scheme is http (there is no
-		SECURE_PROXY_SSL_HEADER), so the proxy's header is what keeps these
-		links https."""
+		"""Behind TLS-terminating nginx the proxy's header is what keeps these
+		links https (request.scheme trusts it: SECURE_PROXY_SSL_HEADER)."""
 		response = self.client.get(
 			f"/authors/{self.author.author_id}/",
 			HTTP_HOST="api.brain-regeneration.com",

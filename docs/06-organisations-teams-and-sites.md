@@ -274,7 +274,7 @@ Clients register themselves, so two commands keep the tables small. Run them fro
 | Variable | Default | Meaning |
 |:---------|:--------|:--------|
 | `GREGORY_MCP_SERVICE_KEY` | empty | Shared secret between this API and the MCP server. Unset means introspection refuses every request. Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `OAUTH_ISSUER` | `https://api.<DOMAIN_NAME>` | The authorization server's issuer URL, with scheme and no path. Django sits behind a TLS-terminating proxy, so this is not derived from the request |
+| `OAUTH_ISSUER` | `https://api.<DOMAIN_NAME>` | The authorization server's issuer URL, with scheme and no path. It is pinned rather than derived from the request: the MCP server reaches Django over plain HTTP inside the compose network, where a derived issuer would differ from the one browsers see |
 | `MCP_EDITOR_HOST_PREFIX` | `gregory-ai` | The host prefix of editor addresses |
 | `OAUTH_LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per 15 minutes, per client address and per username, before the login page refuses |
 | `OAUTH_DCR_MAX_PER_HOUR` | `30` | Dynamic registrations per client address per hour |
