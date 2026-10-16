@@ -2,7 +2,7 @@
 
 > This is a historical implementation note. For current behaviour, see [Editor access](../07-mcp-server.md#editor-access-mcpeditor).
 
-**Context**: The editor address had 19 tools: ten reads, a history read and eight writes. Several were pairs that undo each other (link and unlink, assign and unassign), and adding patents tool by tool would have taken the list to 26. The tools that do the same thing are now one tool that takes the direction as an argument, so the editor list is 17 with six write tools, and it does not grow when a new kind of record is added.
+**Context**: The editor address had 19 tools: ten reads, a history read and eight writes. Several were pairs that undo each other (link and unlink, assign and unassign), and adding patents tool by tool would have taken the list to 26. The tools that do the same thing are now one tool that takes the direction as an argument, so the editor list is 17 with six write tools (19 on a site that has patents, which adds two read tools).
 
 ---
 

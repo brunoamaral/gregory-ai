@@ -47,6 +47,34 @@ async def test_instructions_differ_by_tier_and_stay_free_of_internal_names(djang
 	assert "read-only" in public.lower()
 
 
+async def test_the_editor_instructions_name_exactly_the_registered_write_tools(django):
+	"""Nothing else ties `identity._EDIT_TOOLS` to the tool names: an old name left
+	there would pass every other test and tell each editor session to call a tool
+	that does not exist."""
+	from gregory_mcp.tool_access import HISTORY_TOOL, WRITE_TOOLS
+
+	editor = await _instructions("editor")
+	readonly = await _instructions("readonly")
+
+	for name in WRITE_TOOLS:
+		assert name in editor, f"the editor instructions should name {name}"
+	assert HISTORY_TOOL in editor
+	assert HISTORY_TOOL in readonly
+	# A read-only sign-in is told it cannot edit, so it is not pointed at write tools.
+	for name in WRITE_TOOLS:
+		assert name not in readonly
+	for old in (
+		"get_article_history",
+		"update_article_editorial",
+		"link_trial_to_article",
+		"unlink_trial_from_article",
+		"assign_article_category",
+		"unassign_article_category",
+	):
+		assert old not in editor
+		assert old not in readonly
+
+
 async def test_edits_are_logged_with_field_names_never_values(django, caplog):
 	caplog.set_level(logging.INFO)
 	app = new_app()

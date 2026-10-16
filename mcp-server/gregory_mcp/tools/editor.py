@@ -41,6 +41,8 @@ def _log_edit(
 	article_id: int | None,
 	fields: list[str],
 	outcome: str,
+	*,
+	record_type: str,
 	category_id: int | None = None,
 	action: str | None = None,
 ) -> None:
@@ -49,12 +51,14 @@ def _log_edit(
 	history, which has its own access control. The caller is already on the
 	`mcp_request` line of the same call (user_id, tier).
 
-	`record_type` says what the edit was about (articles are the only record
-	type for now). `action` says which way a two-way tool went (`assign` /
-	`unassign`, `link` / `unlink`), which the tool name alone no longer does."""
+	`record_type` says what the edit was about: `article` for the tools that
+	edit an article, `category` for the ones that edit a category. It has no
+	default, so a new tool has to say. `action` says which way a two-way tool
+	went (`assign` / `unassign`, `link` / `unlink`), which the tool name alone
+	no longer does."""
 	extra = {
 		"tool": tool,
-		"record_type": "article",
+		"record_type": record_type,
 		"article_id": article_id,
 		"fields": sorted(fields),
 		"outcome": outcome,
@@ -168,9 +172,9 @@ async def update_editorial(
 	try:
 		stored = await get_client().patch(f"/editor/articles/{article}/editorial/", json=body)
 	except GregoryAPIError as exc:
-		_log_edit("update_editorial", article, list(body), "error")
+		_log_edit("update_editorial", article, list(body), "error", record_type="article")
 		raise _explain(exc, f"Article {article}") from exc
-	_log_edit("update_editorial", article, list(body), "ok")
+	_log_edit("update_editorial", article, list(body), "ok", record_type="article")
 	return stored
 
 
@@ -200,9 +204,9 @@ async def set_article_relevance(
 			f"/editor/articles/{article}/relevance/{subject_id}/", json={"is_relevant": is_relevant}
 		)
 	except GregoryAPIError as exc:
-		_log_edit("set_article_relevance", article, ["is_relevant"], "error")
+		_log_edit("set_article_relevance", article, ["is_relevant"], "error", record_type="article")
 		raise _explain(exc, f"Article {article} or subject {subject_id}") from exc
-	_log_edit("set_article_relevance", article, ["is_relevant"], "ok")
+	_log_edit("set_article_relevance", article, ["is_relevant"], "ok", record_type="article")
 	return stored
 
 
@@ -232,14 +236,14 @@ async def set_trial_link(
 		else:
 			stored = await get_client().delete(f"/editor/articles/{article}/trials/{trial_id}/")
 	except GregoryAPIError as exc:
-		_log_edit("set_trial_link", article, ["trial_link"], "error", action=action)
+		_log_edit("set_trial_link", article, ["trial_link"], "error", action=action, record_type="article")
 		what = (
 			f"Article {article} or trial {trial_id}"
 			if linked
 			else f"The link between article {article} and trial {trial_id}"
 		)
 		raise _explain(exc, what) from exc
-	_log_edit("set_trial_link", article, ["trial_link"], "ok", action=action)
+	_log_edit("set_trial_link", article, ["trial_link"], "ok", action=action, record_type="article")
 	return stored
 
 
@@ -325,9 +329,9 @@ async def create_category(
 	try:
 		stored = await get_client().post("/editor/categories/", json=body)
 	except GregoryAPIError as exc:
-		_log_edit("create_category", None, list(body), "error")
+		_log_edit("create_category", None, list(body), "error", record_type="category")
 		raise _explain(exc, "A subject") from exc
-	_log_edit("create_category", None, list(body), "ok", category_id=stored.get("id"))
+	_log_edit("create_category", None, list(body), "ok", category_id=stored.get("id"), record_type="category")
 	return stored
 
 
@@ -395,9 +399,9 @@ async def update_category(
 	try:
 		stored = await get_client().patch(f"/editor/categories/{category_id}/", json=body)
 	except GregoryAPIError as exc:
-		_log_edit("update_category", None, list(body), "error", category_id=category_id)
+		_log_edit("update_category", None, list(body), "error", category_id=category_id, record_type="category")
 		raise _explain(exc, f"Category {category_id}") from exc
-	_log_edit("update_category", None, list(body), "ok", category_id=category_id)
+	_log_edit("update_category", None, list(body), "ok", category_id=category_id, record_type="category")
 	return stored
 
 
@@ -430,8 +434,8 @@ async def set_category_assignment(
 	try:
 		stored = await (get_client().put(path) if assigned else get_client().delete(path))
 	except GregoryAPIError as exc:
-		_log_edit("set_category_assignment", article, ["category"], "error", category_id=category_id, action=action)
+		_log_edit("set_category_assignment", article, ["category"], "error", category_id=category_id, action=action, record_type="article")
 		what = f"Article {article} or category {category_id}" if assigned else f"Article {article} in category {category_id}"
 		raise _explain(exc, what) from exc
-	_log_edit("set_category_assignment", article, ["category"], "ok", category_id=category_id, action=action)
+	_log_edit("set_category_assignment", article, ["category"], "ok", category_id=category_id, action=action, record_type="article")
 	return stored

@@ -792,6 +792,78 @@ async def test_a_failed_two_way_edit_logs_the_error_and_the_direction(monkeypatc
 	)
 
 
+def _formatted(record) -> dict:
+	"""The JSON line the production formatter writes for `record`. caplog holds
+	the LogRecord before formatting, so asserting on it cannot show a field the
+	allowlist drops (logging_config._EXTRA_FIELDS)."""
+	import json as _json
+
+	from gregory_mcp.logging_config import JsonFormatter
+
+	return _json.loads(JsonFormatter().format(record))
+
+
+@pytest.mark.parametrize(
+	"tool,args,action",
+	[
+		("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True}, "link"),
+		("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": False}, "unlink"),
+		("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": True}, "assign"),
+		("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": False}, "unassign"),
+	],
+)
+async def test_the_direction_and_record_type_reach_the_written_log_line(django, caplog, tool, args, action):
+	"""What a dashboard reads is the formatted line, so this is the assertion that
+	matters for telling an assignment from a removal."""
+	caplog.set_level(logging.INFO)
+
+	await _call(tool, args)
+
+	(edit,) = _edits(caplog)
+	line = _formatted(edit)
+	assert line["message"] == "mcp_edit"
+	assert line["tool"] == tool
+	assert line["action"] == action
+	assert line["record_type"] == "article"
+	assert line["fields"] in (["trial_link"], ["category"])
+
+
+async def test_category_edits_are_logged_as_category_not_article(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call(
+		"create_category", {"category_name": "Apotransferrin", "subject_ids": [1], "category_terms": ["apotransferrin"]}
+	)
+	await _call("update_category", {"category_id": 140, "add_terms": ["apotransferrin"]})
+
+	edits = _edits(caplog)
+	assert [e.tool for e in edits] == ["create_category", "update_category"]
+	for edit in edits:
+		line = _formatted(edit)
+		assert line["record_type"] == "category"
+		assert "action" not in line
+
+
+async def test_one_way_article_tools_log_article_and_no_action(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("update_editorial", {"article_id": 11, "takeaways": "x"})
+	await _call("set_article_relevance", {"article_id": 11, "subject_id": 1, "is_relevant": True})
+
+	lines = [_formatted(e) for e in _edits(caplog)]
+	assert [line["tool"] for line in lines] == ["update_editorial", "set_article_relevance"]
+	assert {line["record_type"] for line in lines} == {"article"}
+	assert not any("action" in line for line in lines)
+
+
+async def test_a_value_never_reaches_the_written_log_line(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("update_editorial", {"article_id": 11, "takeaways": "SECRET-TEXT"})
+
+	assert "SECRET-TEXT" not in str(_formatted(_edits(caplog)[0]))
+
+
 async def test_one_way_tools_log_a_record_type_and_no_action(django, caplog):
 	caplog.set_level(logging.INFO)
 

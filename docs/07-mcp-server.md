@@ -717,7 +717,7 @@ answer is never served to `/mcp`.
 
 The editor tools are grouped by what they do, not by the record they act on: the tools that can both
 add and remove take a boolean for the direction (`linked`, `assigned`, required, with no default) instead
-of being two tools, which keeps the editor list at 17 tools with the read tools. They were
+of being two tools, which keeps the editor list at 17 tools with the read tools (on a site that has patents, two more; see [Patents](#patents)). They were
 `get_article_history`, `update_article_editorial`, `link_trial_to_article` / `unlink_trial_from_article` and
 `assign_article_category` / `unassign_article_category`; the old names are gone, with no aliases (see
 [the changelog entry](changelog/mcp-editor-tool-merge.md)).
@@ -739,7 +739,7 @@ of 30, so a newly granted editor sees the edit tools soon after reconnecting.
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, `record_type` (`article`), article and/or category id, field names and
+`mcp_edit` line with the tool, `record_type` (`article` for the tools that edit an article, `category` for `create_category` and `update_category`), article and/or category id, field names and
 outcome, never values (those live in Django's history). The two-way tools also log an `action`
 (`link`, `unlink`, `assign` or `unassign`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
 
