@@ -189,12 +189,21 @@ def ml_relevant_articles_q(threshold=0.8, subject_ids=None, *, exclude_manual_ir
 	return combined_q
 
 
-def relevant_articles_q(subject_ids=None, threshold=0.8):
+def relevant_articles_q(subject_ids=None, threshold=0.8, *, editor_verdict_wins=True):
 	"""
-	Q matching articles that count as "relevant", where an editor's verdict
-	wins over the models for each subject.
+	Q matching articles that count as "relevant".
 
-	Per subject, in order of authority:
+	There are two rules, chosen with ``editor_verdict_wins``:
+
+	- True (the default): the EDITORIAL rule, for content Gregory publishes
+	  under its own name -- relevant-only sitemaps and the RSS feeds. An
+	  editor's verdict wins over the models for each subject (below).
+	- False: the API rule behind ``/articles/?relevant=``. Relevant by a
+	  human OR by AI: an editor marked it relevant, or the ML consensus says
+	  so, even where an editor marked it not relevant. That is deliberate --
+	  the API is raw material and each frontend decides how to use it.
+
+	Editorial rule, per subject, in order of authority:
 	  1. An editor marked the article relevant (ArticleSubjectRelevance
 	     is_relevant=True)  -> relevant.
 	  2. An editor marked it not relevant (is_relevant=False) -> NOT relevant
@@ -218,7 +227,7 @@ def relevant_articles_q(subject_ids=None, threshold=0.8):
 	if subject_ids is not None:
 		manual_yes = manual_yes.filter(subject_id__in=subject_ids)
 	return Q(Exists(manual_yes)) | ml_relevant_articles_q(
-		threshold, subject_ids, exclude_manual_irrelevant=True
+		threshold, subject_ids, exclude_manual_irrelevant=editor_verdict_wins
 	)
 
 
@@ -417,20 +426,14 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_relevant",
 		label="Relevant",
 		help_text=(
-			"Filter for relevant articles (true/false). For each subject, an "
-			"editor's verdict wins: an article an editor marked relevant is "
-			"relevant, one an editor marked not relevant is not (however "
-			"confident the ML models are), and only when there is no verdict "
-			"does the ML consensus decide (see ml_threshold). An article is "
-			"relevant when it is relevant for at least one subject in play. "
-			"relevant=false is the exact complement. When combined with "
+			"Filter for relevant articles (true/false). When combined with "
 			"subject_id, subjects, and/or subjects_any, relevance is scoped to "
-			"that subject or subjects, so only verdicts and ML consensus for "
-			"those subjects count. Without any of those, relevance is checked "
-			"across every subject in the database, so a caller that also "
-			"scopes the query by subject should always pass the same "
-			"subject(s) here to avoid picking up relevance decided by an "
-			"unrelated subject."
+			"that subject or subjects — only articles relevant *for one of "
+			"those subjects* (via ML predictions or manual marking) are "
+			"returned. Without any of those, relevance is checked across every "
+			"subject in the database, so a caller that also scopes the query by "
+			"subject should always pass the same subject(s) here to avoid "
+			"picking up relevance decided by an unrelated subject."
 		),
 	)
 	ml_threshold = filters.NumberFilter(
@@ -679,9 +682,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_relevant(self, queryset, name, value):
 		"""
-		Filter for relevant articles: per subject, an editor's verdict wins
-		(relevant or not relevant) and the ML consensus decides only when
-		there is no verdict. See relevant_articles_q for the exact rule.
+		Filter for relevant articles: relevant by a human OR by AI. An editor
+		marked it relevant, or the ML consensus says so -- an editor's "not
+		relevant" does not hide an ML "yes" here. That is deliberate: the API
+		is raw material and each frontend decides how to use it. Editorial
+		surfaces (relevant-only sitemaps, RSS feeds) use the stricter rule;
+		see relevant_articles_q.
 		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
 
 		When subject_id, subjects, and/or subjects_any is provided, only checks
@@ -691,7 +697,9 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		"""
 		subject_ids = self._request_subject_ids()
 		threshold = self._parse_ml_threshold(0.8)
-		relevant_q = relevant_articles_q(subject_ids, threshold)
+		relevant_q = relevant_articles_q(
+			subject_ids, threshold, editor_verdict_wins=False
+		)
 
 		if value:
 			return queryset.filter(relevant_q)
