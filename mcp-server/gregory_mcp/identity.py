@@ -32,11 +32,11 @@ SERVER_VERSION = "0.1.0"
 _PUBLIC_TIER_NOTE = "Editing needs editor access on this site; this sign-in can read only."
 
 _EDIT_TOOLS = (
-	"update_article_editorial (set an article's takeaways and plain-English summary for this site), "
+	"update_editorial (set an article's takeaways and plain-English summary for this site), "
 	"set_article_relevance (mark an article relevant, not relevant or not reviewed for a subject), "
-	"link_trial_to_article and unlink_trial_from_article (connect or disconnect an article and a clinical trial), "
+	"set_trial_link (connect an article and a clinical trial, or disconnect them), "
 	"create_category and update_category (add a category or change its name, terms or subjects), "
-	"assign_article_category and unassign_article_category (put an article in a category by hand, or take it out)"
+	"set_category_assignment (put an article in a category by hand, or take it out)"
 )
 
 
@@ -57,7 +57,7 @@ def _behavior_paragraph(session: EditorSession | None) -> str:
 	if not session.is_editor:
 		return f"{anonymous} {_PUBLIC_TIER_NOTE}"
 	scope = "Searches and lists only return these subjects; a record outside them is reported as not found."
-	history = "get_article_history shows who changed an article's content, relevance and trial links, and when."
+	history = "get_history shows who changed an article's content, relevance and trial links, and when."
 	if not session.can_edit:
 		return f"You have read-only editor access to this site. {scope} {history} Editing is not available with this sign-in."
 	return (

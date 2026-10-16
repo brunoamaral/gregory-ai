@@ -2,8 +2,10 @@
 only (MCP-AUTH-PLAN.md, "Editor tools").
 
 Every article tool takes an article by `article_id` or by `doi`, never both;
-the category tools take a `category_id` (see list_categories). Each
-write goes to Django's `/editor/` routes as the signed-in person, applies
+the category tools take a `category_id` (see list_categories). A tool that can
+do and undo the same thing takes a boolean for the direction (`assigned`,
+`linked`) rather than being two tools: the list stays short, and a model picks
+between four verbs, not eight. Each write goes to Django's `/editor/` routes as the signed-in person, applies
 immediately, and returns what was stored plus who last changed it and when, so
 the model can confirm the change without a second read. The site is the
 sign-in's own: no tool takes a site, and none can reach another.
@@ -35,15 +37,32 @@ MAX_HISTORY_LIMIT = 200
 
 
 def _log_edit(
-	tool: str, article_id: int | None, fields: list[str], outcome: str, category_id: int | None = None
+	tool: str,
+	article_id: int | None,
+	fields: list[str],
+	outcome: str,
+	category_id: int | None = None,
+	action: str | None = None,
 ) -> None:
-	"""One `mcp_edit` line per write: which tool, which article and/or category,
-	which fields, and how it went. Field NAMES only, never values; the values
-	live in Django's history, which has its own access control. The caller is
-	already on the `mcp_request` line of the same call (user_id, tier)."""
-	extra = {"tool": tool, "article_id": article_id, "fields": sorted(fields), "outcome": outcome}
+	"""One `mcp_edit` line per write: which tool, which record, which fields,
+	and how it went. Field NAMES only, never values; the values live in Django's
+	history, which has its own access control. The caller is already on the
+	`mcp_request` line of the same call (user_id, tier).
+
+	`record_type` says what the edit was about (articles are the only record
+	type for now). `action` says which way a two-way tool went (`assign` /
+	`unassign`, `link` / `unlink`), which the tool name alone no longer does."""
+	extra = {
+		"tool": tool,
+		"record_type": "article",
+		"article_id": article_id,
+		"fields": sorted(fields),
+		"outcome": outcome,
+	}
 	if category_id is not None:
 		extra["category_id"] = category_id
+	if action is not None:
+		extra["action"] = action
 	logger.info("mcp_edit", extra=extra)
 
 
@@ -119,7 +138,7 @@ def _conflicting_ids(exc: GregoryAPIError) -> str:
 	return ", ".join(str(i) for i in ids) or "ids unavailable"
 
 
-async def update_article_editorial(
+async def update_editorial(
 	article_id: int | None = None,
 	doi: str | None = None,
 	takeaways: str | None = None,
@@ -149,9 +168,9 @@ async def update_article_editorial(
 	try:
 		stored = await get_client().patch(f"/editor/articles/{article}/editorial/", json=body)
 	except GregoryAPIError as exc:
-		_log_edit("update_article_editorial", article, list(body), "error")
+		_log_edit("update_editorial", article, list(body), "error")
 		raise _explain(exc, f"Article {article}") from exc
-	_log_edit("update_article_editorial", article, list(body), "ok")
+	_log_edit("update_editorial", article, list(body), "ok")
 	return stored
 
 
@@ -187,52 +206,44 @@ async def set_article_relevance(
 	return stored
 
 
-async def link_trial_to_article(trial_id: int, article_id: int | None = None, doi: str | None = None) -> dict:
-	"""Link a clinical trial to an article.
+async def set_trial_link(
+	trial_id: int, linked: bool, article_id: int | None = None, doi: str | None = None
+) -> dict:
+	"""Link a clinical trial to an article, or remove the link.
 
-	Adds a link that automatic detection will not change or duplicate. Linking
-	a pair that is already linked returns the existing link. The trial itself
-	cannot be edited. Live immediately and recorded under the signed-in
-	person's name.
+	`linked=true` adds a link that automatic detection will not change or
+	duplicate; linking a pair that is already linked returns the existing link.
+	`linked=false` removes the link: one added by an editor is deleted, and one
+	found automatically is hidden, so automatic detection does not bring it
+	back. The trial itself cannot be edited. Live immediately and recorded under
+	the signed-in person's name.
 
 	Args:
 		trial_id: The trial's id.
+		linked: true to link the trial to the article, false to remove the link.
 		article_id: The article's id. Give this or doi.
 		doi: The article's DOI. Give this or article_id.
 	"""
 	article = await _resolve_article(article_id, doi)
+	action = "link" if linked else "unlink"
 	try:
-		stored = await get_client().post(f"/editor/articles/{article}/trials/", json={"trial_id": trial_id})
+		if linked:
+			stored = await get_client().post(f"/editor/articles/{article}/trials/", json={"trial_id": trial_id})
+		else:
+			stored = await get_client().delete(f"/editor/articles/{article}/trials/{trial_id}/")
 	except GregoryAPIError as exc:
-		_log_edit("link_trial_to_article", article, ["trial_link"], "error")
-		raise _explain(exc, f"Article {article} or trial {trial_id}") from exc
-	_log_edit("link_trial_to_article", article, ["trial_link"], "ok")
+		_log_edit("set_trial_link", article, ["trial_link"], "error", action=action)
+		what = (
+			f"Article {article} or trial {trial_id}"
+			if linked
+			else f"The link between article {article} and trial {trial_id}"
+		)
+		raise _explain(exc, what) from exc
+	_log_edit("set_trial_link", article, ["trial_link"], "ok", action=action)
 	return stored
 
 
-async def unlink_trial_from_article(trial_id: int, article_id: int | None = None, doi: str | None = None) -> dict:
-	"""Remove the link between a clinical trial and an article.
-
-	A link added by an editor is deleted. A link found automatically is hidden,
-	so automatic detection does not bring it back. Live immediately and
-	recorded under the signed-in person's name.
-
-	Args:
-		trial_id: The trial's id.
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
-	"""
-	article = await _resolve_article(article_id, doi)
-	try:
-		stored = await get_client().delete(f"/editor/articles/{article}/trials/{trial_id}/")
-	except GregoryAPIError as exc:
-		_log_edit("unlink_trial_from_article", article, ["trial_link"], "error")
-		raise _explain(exc, f"The link between article {article} and trial {trial_id}") from exc
-	_log_edit("unlink_trial_from_article", article, ["trial_link"], "ok")
-	return stored
-
-
-async def get_article_history(
+async def get_history(
 	article_id: int | None = None, doi: str | None = None, limit: int = DEFAULT_HISTORY_LIMIT
 ) -> dict:
 	"""Who changed an article's content on this site, and when.
@@ -390,51 +401,37 @@ async def update_category(
 	return stored
 
 
-async def assign_article_category(
-	category_id: int, article_id: int | None = None, doi: str | None = None
+async def set_category_assignment(
+	category_id: int, assigned: bool, article_id: int | None = None, doi: str | None = None
 ) -> dict:
-	"""Put an article in a category by hand.
+	"""Put an article in a category by hand, or take it out of one.
 
-	For an article the category's terms don't catch. A hand assignment is
-	never removed by the pipeline; assigning an article the pipeline already
-	matched turns it into a hand assignment. Assigning twice changes nothing.
+	`assigned=true` is for an article the category's terms don't catch. A hand
+	assignment is never removed by the pipeline; assigning an article the
+	pipeline already matched turns it into a hand assignment. Assigning twice
+	changes nothing.
+
+	`assigned=false` takes an article out of a category it was assigned to by
+	hand. An article the pipeline matched from the category's terms can't be
+	taken out this way, because the next run would add it back: the call is
+	refused with the reason, so change the terms with update_category instead.
+
 	Live immediately and recorded under the signed-in person's name.
 
 	Args:
 		category_id: The category's id (see list_categories).
+		assigned: true to put the article in the category, false to take it out.
 		article_id: The article's id. Give this or doi.
 		doi: The article's DOI. Give this or article_id.
 	"""
 	article = await _resolve_article(article_id, doi)
+	action = "assign" if assigned else "unassign"
+	path = f"/editor/articles/{article}/categories/{category_id}/"
 	try:
-		stored = await get_client().put(f"/editor/articles/{article}/categories/{category_id}/")
+		stored = await (get_client().put(path) if assigned else get_client().delete(path))
 	except GregoryAPIError as exc:
-		_log_edit("assign_article_category", article, ["category"], "error", category_id=category_id)
-		raise _explain(exc, f"Article {article} or category {category_id}") from exc
-	_log_edit("assign_article_category", article, ["category"], "ok", category_id=category_id)
-	return stored
-
-
-async def unassign_article_category(
-	category_id: int, article_id: int | None = None, doi: str | None = None
-) -> dict:
-	"""Take an article out of a category it was assigned to by hand.
-
-	An article the pipeline matched from the category's terms can't be taken
-	out this way, because the next run would add it back: change the terms
-	with update_category instead. Live immediately and recorded under the
-	signed-in person's name.
-
-	Args:
-		category_id: The category's id (see list_categories).
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
-	"""
-	article = await _resolve_article(article_id, doi)
-	try:
-		stored = await get_client().delete(f"/editor/articles/{article}/categories/{category_id}/")
-	except GregoryAPIError as exc:
-		_log_edit("unassign_article_category", article, ["category"], "error", category_id=category_id)
-		raise _explain(exc, f"Article {article} in category {category_id}") from exc
-	_log_edit("unassign_article_category", article, ["category"], "ok", category_id=category_id)
+		_log_edit("set_category_assignment", article, ["category"], "error", category_id=category_id, action=action)
+		what = f"Article {article} or category {category_id}" if assigned else f"Article {article} in category {category_id}"
+		raise _explain(exc, what) from exc
+	_log_edit("set_category_assignment", article, ["category"], "ok", category_id=category_id, action=action)
 	return stored

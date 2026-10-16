@@ -5,10 +5,14 @@ MCP-AUTH-PLAN.md, "Editor tools" and "Access tiers"."""
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx2
 import pytest
 from mcp.shared.exceptions import MCPError
+
+import gregory_mcp.tools.editor as editor
+from gregory_mcp.client import GregoryAPIError
 
 from gregory_mcp.tool_access import HISTORY_TOOL, READ_TOOLS, WRITE_TOOLS
 from tests.editor_helpers import (
@@ -99,6 +103,28 @@ async def test_editor_with_edit_scope_sees_every_tool(django):
 	assert await _tool_names("editor") == READ_TOOLS | {HISTORY_TOOL} | WRITE_TOOLS
 
 
+async def test_tool_counts_per_tier(django):
+	"""The merge keeps the editor list short: 10 for the public tier, 11 with
+	history, 17 with the six write tools."""
+	assert len(await _tool_names("public")) == 10
+	assert len(await _tool_names("readonly")) == 11
+	assert len(await _tool_names("editor")) == 17
+	assert len(WRITE_TOOLS) == 6
+
+
+async def test_the_old_tool_names_are_gone_with_no_aliases(django):
+	names = await _tool_names("editor")
+	for old in (
+		"get_article_history",
+		"update_article_editorial",
+		"link_trial_to_article",
+		"unlink_trial_from_article",
+		"assign_article_category",
+		"unassign_article_category",
+	):
+		assert old not in names
+
+
 async def test_read_only_editor_sees_reads_and_history_but_no_writes(django):
 	assert await _tool_names("readonly") == READ_TOOLS | {HISTORY_TOOL}
 
@@ -122,32 +148,41 @@ async def test_write_tools_are_annotated_and_never_read_only(django):
 		async with mcp_client(app, token="editor") as client:
 			tools = {t.name: t for t in (await client.list_tools()).tools}
 
-	assert tools["get_article_history"].annotations.read_only_hint is True
+	assert tools["get_history"].annotations.read_only_hint is True
 	for name in WRITE_TOOLS:
 		assert tools[name].annotations.read_only_hint is False
 		assert tools[name].annotations.idempotent_hint is (name != "create_category")
-	assert tools["update_article_editorial"].annotations.destructive_hint is True
-	assert tools["link_trial_to_article"].annotations.destructive_hint is False
-	assert tools["unlink_trial_from_article"].annotations.destructive_hint is True
-	assert tools["create_category"].annotations.destructive_hint is False
+		# Every write tool can remove or overwrite, so all are destructive; only
+		# creating a category, which just adds, is not.
+		assert tools[name].annotations.destructive_hint is (name != "create_category"), name
+	assert tools["update_editorial"].annotations.destructive_hint is True
+	assert tools["set_trial_link"].annotations.destructive_hint is True
+	assert tools["set_category_assignment"].annotations.destructive_hint is True
+	assert tools["set_article_relevance"].annotations.destructive_hint is True
 	assert tools["update_category"].annotations.destructive_hint is True
-	assert tools["assign_article_category"].annotations.destructive_hint is False
-	assert tools["unassign_article_category"].annotations.destructive_hint is True
+	assert tools["create_category"].annotations.destructive_hint is False
+
+
+# Every write tool, with a valid call for each direction of the two-way ones.
+_WRITE_CALLS = [
+	("update_editorial", {"article_id": 11, "takeaways": "x"}),
+	("set_article_relevance", {"article_id": 11, "subject_id": 1, "is_relevant": True}),
+	("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True}),
+	("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": False}),
+	("create_category", {"category_name": "X", "subject_ids": [1], "category_terms": ["x"]}),
+	("update_category", {"category_id": 140, "add_terms": ["x"]}),
+	("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": True}),
+	("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": False}),
+]
+
+
+def test_the_hidden_call_matrix_covers_every_write_tool():
+	assert {tool for tool, _ in _WRITE_CALLS} == WRITE_TOOLS
 
 
 @pytest.mark.parametrize("token", ["readonly", "public"])
-@pytest.mark.parametrize("tool", sorted(WRITE_TOOLS))
-async def test_calling_a_hidden_write_tool_is_refused_and_writes_nothing(django, mock_editor_gregory, token, tool):
-	args = {
-		"update_article_editorial": {"article_id": 11, "takeaways": "x"},
-		"set_article_relevance": {"article_id": 11, "subject_id": 1, "is_relevant": True},
-		"link_trial_to_article": {"article_id": 11, "trial_id": 5},
-		"unlink_trial_from_article": {"article_id": 11, "trial_id": 5},
-		"create_category": {"category_name": "X", "subject_ids": [1], "category_terms": ["x"]},
-		"update_category": {"category_id": 140, "add_terms": ["x"]},
-		"assign_article_category": {"article_id": 11, "category_id": 140},
-		"unassign_article_category": {"article_id": 11, "category_id": 140},
-	}[tool]
+@pytest.mark.parametrize("tool,args", _WRITE_CALLS, ids=[f"{t}-{i}" for i, (t, _) in enumerate(_WRITE_CALLS)])
+async def test_calling_a_hidden_write_tool_is_refused_and_writes_nothing(django, mock_editor_gregory, token, tool, args):
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token=token) as client:
@@ -162,7 +197,7 @@ async def test_history_is_hidden_from_the_public_tier(django):
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token="public") as client:
-			result = await client.call_tool("get_article_history", {"article_id": 11})
+			result = await client.call_tool("get_history", {"article_id": 11})
 
 	assert result.is_error
 
@@ -182,7 +217,7 @@ def _writes(mock):
 
 
 async def test_update_editorial_patches_as_the_signed_in_person(django, mock_editor_gregory):
-	result = await _call("update_article_editorial", {"article_id": 11, "takeaways": "New takeaways"})
+	result = await _call("update_editorial", {"article_id": 11, "takeaways": "New takeaways"})
 
 	assert not result.is_error
 	assert json.loads(result.content[0].text)["last_change"]["via"] == "mcp"
@@ -196,14 +231,14 @@ async def test_update_editorial_patches_as_the_signed_in_person(django, mock_edi
 
 
 async def test_only_the_fields_given_are_sent_and_empty_string_clears(django, mock_editor_gregory):
-	await _call("update_article_editorial", {"article_id": 11, "summary_plain_english": ""})
+	await _call("update_editorial", {"article_id": 11, "summary_plain_english": ""})
 
 	(request,) = _writes(mock_editor_gregory)
 	assert request.content == b'{"summary_plain_english":""}'
 
 
 async def test_update_with_no_fields_is_a_tool_error_and_sends_nothing(django, mock_editor_gregory):
-	result = await _call("update_article_editorial", {"article_id": 11})
+	result = await _call("update_editorial", {"article_id": 11})
 
 	assert result.is_error
 	assert "takeaways" in result.content[0].text
@@ -211,7 +246,7 @@ async def test_update_with_no_fields_is_a_tool_error_and_sends_nothing(django, m
 
 
 async def test_doi_is_resolved_on_the_editor_route(django, mock_editor_gregory):
-	result = await _call("update_article_editorial", {"doi": "10.1/ok", "takeaways": "x"})
+	result = await _call("update_editorial", {"doi": "10.1/ok", "takeaways": "x"})
 
 	assert not result.is_error
 	resolves = [r for r in mock_editor_gregory.requests if r.url.path == "/editor/articles/resolve/"]
@@ -221,7 +256,7 @@ async def test_doi_is_resolved_on_the_editor_route(django, mock_editor_gregory):
 
 
 async def test_unknown_doi_is_a_readable_tool_error(django):
-	result = await _call("update_article_editorial", {"doi": "10.1/none", "takeaways": "x"})
+	result = await _call("update_editorial", {"doi": "10.1/none", "takeaways": "x"})
 
 	assert result.is_error
 	assert "10.1/none" in result.content[0].text
@@ -229,7 +264,7 @@ async def test_unknown_doi_is_a_readable_tool_error(django):
 
 
 async def test_ambiguous_doi_lists_the_candidates(django):
-	result = await _call("update_article_editorial", {"doi": "10.1/dup", "takeaways": "x"})
+	result = await _call("update_editorial", {"doi": "10.1/dup", "takeaways": "x"})
 
 	assert result.is_error
 	assert "11, 12" in result.content[0].text
@@ -242,7 +277,7 @@ async def test_both_or_neither_article_identifier_is_invalid_params(django, args
 	async with running(app):
 		async with mcp_client(app, token="editor") as client:
 			with pytest.raises(MCPError) as caught:
-				await client.call_tool("update_article_editorial", {**args, "takeaways": "x"})
+				await client.call_tool("update_editorial", {**args, "takeaways": "x"})
 
 	assert "exactly one" in str(caught.value).lower()
 
@@ -258,17 +293,17 @@ async def test_both_or_neither_article_identifier_is_invalid_params(django, args
 	],
 )
 async def test_upstream_failures_become_messages_the_model_can_read(django, article_id, expected):
-	result = await _call("update_article_editorial", {"article_id": article_id, "takeaways": "x"})
+	result = await _call("update_editorial", {"article_id": article_id, "takeaways": "x"})
 
 	assert result.is_error
 	assert expected in result.content[0].text
 	# The detail follows the SDK's prefix; the bare "Error executing tool <name>"
 	# is what any non-ToolError exception would have left the model with.
-	assert result.content[0].text.strip() != "Error executing tool update_article_editorial"
+	assert result.content[0].text.strip() != "Error executing tool update_editorial"
 
 
 async def test_a_failed_write_is_not_retried(django, mock_editor_gregory):
-	await _call("update_article_editorial", {"article_id": 500, "takeaways": "x"})
+	await _call("update_editorial", {"article_id": 500, "takeaways": "x"})
 
 	assert len([r for r in mock_editor_gregory.requests if r.url.path == "/editor/articles/500/editorial/"]) == 1
 
@@ -284,8 +319,8 @@ async def test_set_relevance_puts_null_for_not_reviewed(django, mock_editor_greg
 
 
 async def test_link_and_unlink_trial(django, mock_editor_gregory):
-	linked = await _call("link_trial_to_article", {"article_id": 11, "trial_id": 5})
-	unlinked = await _call("unlink_trial_from_article", {"article_id": 11, "trial_id": 5})
+	linked = await _call("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True})
+	unlinked = await _call("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": False})
 
 	assert not linked.is_error and not unlinked.is_error
 	post, delete = _writes(mock_editor_gregory)
@@ -380,8 +415,8 @@ async def test_a_category_shared_with_another_site_is_a_readable_refusal(django)
 
 
 async def test_assign_and_unassign_article_category(django, mock_editor_gregory):
-	assigned = await _call("assign_article_category", {"article_id": 11, "category_id": 140})
-	unassigned = await _call("unassign_article_category", {"doi": "10.1/ok", "category_id": 140})
+	assigned = await _call("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": True})
+	unassigned = await _call("set_category_assignment", {"doi": "10.1/ok", "category_id": 140, "assigned": False})
 
 	assert not assigned.is_error and not unassigned.is_error
 	put, delete = _writes(mock_editor_gregory)
@@ -390,7 +425,7 @@ async def test_assign_and_unassign_article_category(django, mock_editor_gregory)
 
 
 async def test_unassigning_a_pipeline_match_explains_why_not(django):
-	result = await _call("unassign_article_category", {"article_id": 11, "category_id": 141})
+	result = await _call("set_category_assignment", {"article_id": 11, "category_id": 141, "assigned": False})
 
 	assert result.is_error
 	assert "The edit was refused" in result.content[0].text
@@ -398,7 +433,7 @@ async def test_unassigning_a_pipeline_match_explains_why_not(django):
 
 
 async def test_history_reads_with_a_clamped_limit(django, mock_editor_gregory):
-	result = await _call("get_article_history", {"article_id": 11, "limit": 9999})
+	result = await _call("get_history", {"article_id": 11, "limit": 9999})
 
 	assert not result.is_error
 	(request,) = [r for r in mock_editor_gregory.requests if r.url.path == "/editor/articles/11/history/"]
@@ -529,3 +564,262 @@ async def test_detail_reads_include_editorial_content_for_editors_only(django, m
 	for request in reads:
 		assert (request.url.params.get("include") == "editorial") is editorial
 
+
+# ===== The merged tools: set_trial_link, set_category_assignment, get_history, update_editorial =====
+#
+# The merge is a pure rename: every call to an old tool has an equivalent call to a
+# new one that makes the same upstream request and returns the same result. These
+# tests pin that equivalence, the two directions' differences, and what is logged.
+
+
+# --- the direction flag is required, and means what it says ------------------------
+
+
+@pytest.mark.parametrize(
+	"tool,args",
+	[
+		("set_trial_link", {"article_id": 11, "trial_id": 5}),
+		("set_category_assignment", {"article_id": 11, "category_id": 140}),
+	],
+)
+async def test_the_direction_is_required(django, mock_editor_gregory, tool, args):
+	"""A model must say which way it means: there is no default that could turn
+	an intended removal into an addition, or the reverse."""
+	result = await _call(tool, args)
+
+	assert result.is_error
+	assert "linked" in result.content[0].text or "assigned" in result.content[0].text
+	assert _writes(mock_editor_gregory) == []
+
+
+@pytest.mark.parametrize("tool,flag", [("set_trial_link", "linked"), ("set_category_assignment", "assigned")])
+async def test_the_direction_must_be_a_boolean(django, mock_editor_gregory, tool, flag):
+	args = {"article_id": 11, "trial_id": 5, "category_id": 140, flag: "maybe"}
+	args = {k: v for k, v in args.items() if k != ("category_id" if tool == "set_trial_link" else "trial_id")}
+
+	result = await _call(tool, args)
+
+	assert result.is_error
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_the_schema_marks_the_direction_required_and_boolean(django):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			tools = {t.name: t for t in (await client.list_tools()).tools}
+
+	for name, flag in (("set_trial_link", "linked"), ("set_category_assignment", "assigned")):
+		schema = tools[name].input_schema
+		assert flag in schema["required"]
+		assert schema["properties"][flag]["type"] == "boolean"
+
+
+# --- the same upstream request as before, per direction ------------------------------
+
+
+@pytest.mark.parametrize(
+	"args,method,path,body",
+	[
+		({"article_id": 11, "trial_id": 5, "linked": True}, "POST", "/editor/articles/11/trials/", b'{"trial_id":5}'),
+		({"article_id": 11, "trial_id": 5, "linked": False}, "DELETE", "/editor/articles/11/trials/5/", b""),
+		({"doi": "10.1/ok", "trial_id": 5, "linked": True}, "POST", "/editor/articles/11/trials/", b'{"trial_id":5}'),
+	],
+)
+async def test_set_trial_link_makes_the_request_the_old_tools_did(django, mock_editor_gregory, args, method, path, body):
+	result = await _call("set_trial_link", args)
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path, request.content) == (method, path, body)
+
+
+@pytest.mark.parametrize(
+	"args,method",
+	[
+		({"article_id": 11, "category_id": 140, "assigned": True}, "PUT"),
+		({"article_id": 11, "category_id": 140, "assigned": False}, "DELETE"),
+		({"doi": "10.1/ok", "category_id": 140, "assigned": True}, "PUT"),
+	],
+)
+async def test_set_category_assignment_makes_the_request_the_old_tools_did(django, mock_editor_gregory, args, method):
+	result = await _call("set_category_assignment", args)
+
+	assert not result.is_error
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path) == (method, "/editor/articles/11/categories/140/")
+	assert request.content == b""
+
+
+async def test_the_result_is_what_django_stored(django):
+	linked = await _call("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True})
+	unlinked = await _call("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": False})
+
+	assert '"source": "editor"' in linked.content[0].text.replace('":"', '": "')
+	assert '"removed"' in unlinked.content[0].text
+
+
+# --- exactly one article identifier, for every merged tool ------------------------------
+
+
+@pytest.mark.parametrize(
+	"tool,extra",
+	[
+		("update_editorial", {"takeaways": "x"}),
+		("get_history", {}),
+		("set_trial_link", {"trial_id": 5, "linked": True}),
+		("set_category_assignment", {"category_id": 140, "assigned": True}),
+	],
+)
+@pytest.mark.parametrize("ids", [{}, {"article_id": 11, "doi": "10.1/ok"}])
+async def test_every_merged_tool_wants_exactly_one_article_identifier(django, mock_editor_gregory, tool, extra, ids):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool(tool, {**ids, **extra})
+
+	assert "exactly one of article_id and doi" in str(caught.value)
+	assert _writes(mock_editor_gregory) == []
+
+
+@pytest.mark.parametrize(
+	"tool,extra",
+	[
+		("get_history", {}),
+		("set_trial_link", {"trial_id": 5, "linked": False}),
+		("set_category_assignment", {"category_id": 140, "assigned": False}),
+	],
+)
+async def test_a_doi_resolves_through_the_editor_route_for_every_merged_tool(django, mock_editor_gregory, tool, extra):
+	result = await _call(tool, {"doi": "10.1/ok", **extra})
+
+	assert not result.is_error
+	assert [r.url.path for r in mock_editor_gregory.requests if r.url.path == "/editor/articles/resolve/"]
+
+
+# --- error wording per direction -------------------------------------------------------------
+
+
+class _Failing:
+	"""A client whose writes all fail with `status`."""
+
+	def __init__(self, status):
+		self.status = status
+
+	async def _fail(self, *args, **kwargs):
+		raise GregoryAPIError(self.status, '{"detail": "nope"}')
+
+	post = put = delete = patch = _fail
+
+
+@pytest.mark.parametrize(
+	"args,expected",
+	[
+		({"trial_id": 5, "linked": True}, "Article 11 or trial 5 was not found on this site."),
+		({"trial_id": 5, "linked": False}, "The link between article 11 and trial 5 was not found on this site."),
+	],
+)
+async def test_set_trial_link_404_names_the_pair_the_way_each_old_tool_did(monkeypatch, args, expected):
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(404))
+
+	with pytest.raises(editor.ToolError) as caught:
+		await editor.set_trial_link(article_id=11, **args)
+
+	assert str(caught.value) == expected
+
+
+@pytest.mark.parametrize(
+	"assigned,expected",
+	[
+		(True, "Article 11 or category 140 was not found on this site."),
+		(False, "Article 11 in category 140 was not found on this site."),
+	],
+)
+async def test_set_category_assignment_404_names_what_each_old_tool_did(monkeypatch, assigned, expected):
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(404))
+
+	with pytest.raises(editor.ToolError) as caught:
+		await editor.set_category_assignment(category_id=140, assigned=assigned, article_id=11)
+
+	assert str(caught.value) == expected
+
+
+# --- what is logged ---------------------------------------------------------------------------
+
+
+def _edits(caplog):
+	return [r for r in caplog.records if r.getMessage() == "mcp_edit"]
+
+
+@pytest.mark.parametrize(
+	"tool,args,action,fields",
+	[
+		("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True}, "link", ["trial_link"]),
+		("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": False}, "unlink", ["trial_link"]),
+		("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": True}, "assign", ["category"]),
+		("set_category_assignment", {"article_id": 11, "category_id": 140, "assigned": False}, "unassign", ["category"]),
+	],
+)
+async def test_two_way_tools_log_which_way_they_went(django, caplog, tool, args, action, fields):
+	"""One tool name now covers both directions, so the line says which."""
+	caplog.set_level(logging.INFO)
+
+	await _call(tool, args)
+
+	(edit,) = _edits(caplog)
+	assert edit.tool == tool
+	assert edit.record_type == "article"
+	assert edit.article_id == 11
+	assert edit.action == action
+	assert edit.fields == fields
+	assert edit.outcome == "ok"
+
+
+async def test_a_failed_two_way_edit_logs_the_error_and_the_direction(monkeypatch, caplog):
+	caplog.set_level(logging.INFO)
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(404))
+
+	with pytest.raises(editor.ToolError):
+		await editor.set_category_assignment(category_id=140, assigned=False, article_id=11)
+
+	(edit,) = _edits(caplog)
+	assert (edit.tool, edit.outcome, edit.action, edit.category_id) == (
+		"set_category_assignment",
+		"error",
+		"unassign",
+		140,
+	)
+
+
+async def test_one_way_tools_log_a_record_type_and_no_action(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("update_editorial", {"article_id": 11, "takeaways": "x"})
+	await _call("set_article_relevance", {"article_id": 11, "subject_id": 1, "is_relevant": True})
+
+	edits = _edits(caplog)
+	assert [e.tool for e in edits] == ["update_editorial", "set_article_relevance"]
+	assert {e.record_type for e in edits} == {"article"}
+	assert not any(hasattr(e, "action") for e in edits)
+
+
+# --- documentation the model reads -----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"fn,phrases",
+	[
+		(editor.set_trial_link, ["linked=true", "linked=false", "hidden"]),
+		(editor.set_category_assignment, ["assigned=true", "assigned=false", "update_category"]),
+	],
+)
+def test_docstrings_explain_both_directions(fn, phrases):
+	for phrase in phrases:
+		assert phrase in fn.__doc__, f"{fn.__name__} docstring should mention {phrase!r}"
+
+
+def test_the_merged_tools_name_no_old_tool():
+	for fn in (editor.set_trial_link, editor.set_category_assignment, editor.get_history, editor.update_editorial):
+		for old in ("link_trial_to_article", "unlink_trial_from_article", "assign_article_category", "unassign_article_category"):
+			assert old not in (fn.__doc__ or "")

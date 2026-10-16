@@ -690,8 +690,8 @@ SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
 | Sign-in | Tools |
 |:---|:---|
 | Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
-| Editor, read-only grant | the ten read tools plus `get_article_history` |
-| Editor with the edit scope | all of those plus eight write tools |
+| Editor, read-only grant | the ten read tools plus `get_history` |
+| Editor with the edit scope | all of those plus six write tools |
 
 On a site with patents every tier also gets `search_patents` and `get_patent`; that is decided
 by the site, not the sign-in (see [Patents](#patents)). An editor's `search_patents` and
@@ -707,19 +707,26 @@ answer is never served to `/mcp`.
 
 | Tool | Backing route | Notes |
 |:---|:---|:---|
-| `update_article_editorial` | `PATCH /editor/articles/{id}/editorial/` | `takeaways` and/or `summary_plain_english` for this site. Empty string clears. |
+| `update_editorial` | `PATCH /editor/articles/{id}/editorial/` | `takeaways` and/or `summary_plain_english` for this site. Empty string clears. |
 | `set_article_relevance` | `PUT /editor/articles/{id}/relevance/{subject_id}/` | `true`, `false` or `null` (not reviewed). Applies on every site covering the subject. |
-| `link_trial_to_article` | `POST /editor/articles/{id}/trials/` | Idempotent. |
-| `unlink_trial_from_article` | `DELETE /editor/articles/{id}/trials/{trial_id}/` | Deletes an editor link, hides an automatic one. |
+| `set_trial_link` | `POST` (`linked=true`) or `DELETE` (`linked=false`) `/editor/articles/{id}/trials/[{trial_id}/]` | `linked=true` adds a link, idempotent. `linked=false` deletes an editor link and hides an automatic one. |
 | `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
 | `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
-| `assign_article_category` | `PUT /editor/articles/{id}/categories/{category_id}/` | Hand assignment, never removed by the pipeline. Idempotent. |
-| `unassign_article_category` | `DELETE /editor/articles/{id}/categories/{category_id}/` | Hand assignments only; a pipeline match is refused with the reason. |
-| `get_article_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. |
+| `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
+| `get_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. |
+
+The editor tools are grouped by what they do, not by the record they act on: the tools that can both
+add and remove take a boolean for the direction (`linked`, `assigned`, required, with no default) instead
+of being two tools, which keeps the editor list at 17 tools with the read tools. They were
+`get_article_history`, `update_article_editorial`, `link_trial_to_article` / `unlink_trial_from_article` and
+`assign_article_category` / `unassign_article_category`; the old names are gone, with no aliases (see
+[the changelog entry](changelog/mcp-editor-tool-merge.md)).
 
 Each article tool takes `article_id` or `doi` (exactly one; both or neither is `INVALID_PARAMS`); the category tools take a `category_id` from `list_categories`. A DOI shared
-by two articles is a readable error listing the ids. No tool takes a site. Write tools carry
-`destructive_hint` (except link, assign and create, which only add) and `idempotent_hint` (except
+by two articles is a readable error listing the ids. No tool takes a site. Every write tool carries
+`destructive_hint` except `create_category`, which only adds: the tools that take a direction can remove as
+well as add, and a hint cannot say "only when the flag is false", so a client that confirms destructive
+calls also asks before an assignment or a link. They carry `idempotent_hint` too (except
 `create_category`: a second identical call is refused because the slug is taken), and ask the model to
 show the proposed text and get confirmation first; the rate limit (60 per hour, 500 per day per
 editor and site) and Django's history are the safeguards that do not depend on the client.
@@ -732,8 +739,9 @@ of 30, so a newly granted editor sees the edit tools soon after reconnecting.
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, article and/or category id, field names and outcome, never values (those live in
-Django's history). Tokens, authorization headers and the service key are never logged.
+`mcp_edit` line with the tool, `record_type` (`article`), article and/or category id, field names and
+outcome, never values (those live in Django's history). The two-way tools also log an `action`
+(`link`, `unlink`, `assign` or `unassign`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
 
 ---
 

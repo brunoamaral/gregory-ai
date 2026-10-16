@@ -52,10 +52,12 @@ async def test_edits_are_logged_with_field_names_never_values(django, caplog):
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token="editor") as client:
-			await client.call_tool("update_article_editorial", {"article_id": 11, "takeaways": "SECRET-TEXT"})
+			await client.call_tool("update_editorial", {"article_id": 11, "takeaways": "SECRET-TEXT"})
 
 	edits = [r for r in caplog.records if r.getMessage() == "mcp_edit"]
 	assert len(edits) == 1
+	assert edits[0].tool == "update_editorial"
+	assert edits[0].record_type == "article"
 	assert edits[0].fields == ["takeaways"]
 	assert edits[0].outcome == "ok"
 	assert "SECRET-TEXT" not in "".join(str(v) for v in edits[0].__dict__.values())
@@ -81,7 +83,7 @@ async def test_failed_edits_are_logged_as_errors_without_the_text(django, caplog
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token="editor") as client:
-			await client.call_tool("update_article_editorial", {"article_id": 500, "takeaways": "SECRET-TEXT"})
+			await client.call_tool("update_editorial", {"article_id": 500, "takeaways": "SECRET-TEXT"})
 
 	(edit,) = [r for r in caplog.records if r.getMessage() == "mcp_edit"]
 	assert edit.outcome == "error"
