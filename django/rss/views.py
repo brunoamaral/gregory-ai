@@ -1,8 +1,18 @@
 """
 rss/views.py
 
-Site-scoped RSS feeds: /feed/sites/<site_id>/author/<orcid>/ and
-/feed/sites/<site_id>/trials/subject/<subject_slug>/.
+Site-scoped RSS feeds, all under /feed/sites/<site_id>/:
+
+  author/<orcid>/                               articles by an author
+  articles/subject/<slug>/[relevant/]           research by condition
+  articles/category/<slug>/[relevant/]          research by topic
+  trials/subject/<slug>/                        new trials by condition
+  trials/subject/<slug>/recruiting/             trials a patient can join
+
+The module is split three ways: rss/feed_scope.py decides WHO may see a feed
+(site scope, slug resolution, base querysets), rss/feed_items.py decides what
+an ITEM looks like (descriptions, item_* mixins, hydration) and this module
+holds the feed classes and the permanent redirects.
 
 A feed serves the REQUESTED SITE's CustomSetting.scope_subjects, not the
 caller's own visibility -- these are crawler-and-reader-facing surfaces
@@ -14,8 +24,28 @@ sitemaps.
 
 404 when the site doesn't exist, has no CustomSetting, or has
 CustomSetting.rss_enabled=False -- matching how sitemaps 404 on
-generate_sitemap=False. 404 (not an empty feed) when the author/subject
-carries no subject in that site's scope.
+generate_sitemap=False -- or when the subject/category/author does not
+resolve inside that site's scope. A subject or category that IS in scope but
+currently has nothing to show is a valid subscription that will fill up
+later, so it returns an empty feed (200), not a 404. The author feed is the
+exception: an author with no in-scope article isn't a valid subscription
+for that site, so it keeps its 404.
+
+Feeds are EDITORIAL content and follow stricter rules than the API: a
+retracted article never appears, the editorial text shown is this site's own,
+and "relevant" means an editor's verdict wins over the ML models (see
+api.filters.relevant_articles_q). Those rules live in rss/, not in the API
+filters, because how the API treats relevance is a frontend decision.
+
+Articles and trials are ordered by DISCOVERY date, newest first, and
+<pubDate> is the discovery date too. Ordering by publication date would let a
+paper published three months ago but found today land below the cut-off and
+never be delivered. The author feed keeps publication-date order: it is low
+volume, so the drop-off problem doesn't apply, and readers expect it.
+
+Every site-scoped route is wrapped in cache_page(FEED_CACHE_SECONDS) in
+admin/urls.py, like the sitemaps. Editorial edits therefore take up to an
+hour to reach feeds.
 
 The old caller-scoped, unprefixed URLs (feed/author/<orcid>/,
 feed/trials/subject/<slug>/) still resolve, via redirect_articles_by_author_feed
@@ -29,41 +59,50 @@ rather than visibly. See docs/03-api-and-rss-feeds.md#old-feed-urls--permanent-r
 """
 
 from django.contrib.syndication.views import Feed
-from django.contrib.sites.models import Site
-from django.db.models import F
+from django.db.models import Exists, F, OuterRef
 from django.http import Http404, HttpResponsePermanentRedirect
-from django.shortcuts import get_object_or_404
 from django.urls import reverse
-from gregory.models import Articles, Authors, Trials, Subject
+
+from api.filters import relevant_articles_q
+from gregory.models import ArticleCategoryAssignment, Authors
 from gregory.functions import normalize_orcid
-from sitesettings.models import CustomSetting
 from sitesettings.utils import author_page_base
+
+from rss.feed_items import (
+	ArticleFeedItemMixin,
+	TrialFeedItemMixin,
+	hydrate_articles,
+	hydrate_trials,
+)
+from rss.feed_scope import (
+	article_base_qs,
+	resolve_scoped_category,
+	resolve_scoped_subject,
+	site_feed_scope,
+	trial_base_qs,
+)
+
+# One hour, like the sitemaps. Responses don't vary by caller, so one cached
+# copy per URL is correct.
+FEED_CACHE_SECONDS = 3600
+
+# Item limits. 100 for the whole-condition article feeds: a busy condition
+# gets ~40 new articles a day, so 50 would be a little over a day and a
+# reader that polls less often would silently drop articles. The relevant-only
+# variant is the one to recommend for low-volume reading.
+ARTICLE_FEED_LIMIT = 100
+TRIAL_FEED_LIMIT = 50
+AUTHOR_FEED_LIMIT = 50
+
+# What a patient can still sign up for. enrolling_by_invitation is left out:
+# a patient can't enrol themselves in one of those.
+RECRUITING_STATUSES = ["recruiting", "not_yet_recruiting"]
 
 # brain-regeneration.com -- the project's only api_public site today, and
 # the fixed redirect target for the old unprefixed feed URLs. Revisit only
 # if a second public site ever makes that ambiguous (spec: "Old URLs
 # redirect permanently").
 _REDIRECT_TARGET_SITE_ID = 3
-
-
-def _site_feed_scope(site_id):
-	"""Resolve the Site, its CustomSetting and its RSS-visible subject ids.
-
-	404s exactly like rss/sitemaps.py's _site_sitemaps: unknown site, no
-	CustomSetting row, or the feature switch off. Unlike sitemaps there is
-	no "narrow to the public scope" step -- a feed's scope IS its site's
-	scope_subjects regardless of whether that site is api_public, mirroring
-	how a site-bound API key reads its own scope in
-	gregory.visibility.visible_subject_ids.
-	"""
-	site = get_object_or_404(Site, pk=site_id)
-	# CustomSetting.site is a plain FK (not unique) -- order explicitly so
-	# the chosen row is deterministic if more than one ever exists for a site.
-	settings_row = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
-	if settings_row is None or not settings_row.rss_enabled:
-		raise Http404("RSS feed not enabled for this site.")
-	subject_ids = set(settings_row.scope_subjects.values_list("id", flat=True))
-	return site, settings_row, subject_ids
 
 
 def _redirect_preserving_query(request, target_url):
@@ -113,139 +152,42 @@ class _SelfLinkMixin:
 		return getattr(obj, "_feed_url", None)
 
 
-class _ArticleFeedItemMixin:
-	"""item_* methods shared by author-scoped article feeds.
 
-	item_link is deliberately not here: it needs the requested site's
-	domain, which differs per feed class (see SiteArticlesByAuthorFeed).
+
+def _homepage(site):
+	"""Channel <link> for the subject/category feeds: the site's homepage.
+
+	Per-subject and per-category pages aren't something every frontend has,
+	and there is no setting yet saying which paths exist. The existing trials
+	feed keeps its /trials/subject/<slug>/ link, which is already in use.
 	"""
-
-	def item_title(self, item):
-		return item.title
-
-	def item_description(self, item):
-		return item.summary
-
-	def item_guid(self, item):
-		if item.doi:
-			return f"doi:{item.doi}"
-		return f"urn:gregory:article:{item.pk}"
-
-	item_guid_is_permalink = False
-
-	def item_pubdate(self, item):
-		return item.published_date
-
-	def item_updateddate(self, item):
-		return item.discovery_date
+	return f"https://{site.domain}/"
 
 
-class _TrialFeedItemMixin:
-	"""item_* methods shared by subject-scoped trial feeds."""
+def _page_ids(queryset, limit):
+	"""Newest-first ids for a page of items, as a list.
 
-	def item_title(self, item):
-		return item.title
-
-	def item_description(self, item):
-		"""Build a rich description from available trial metadata."""
-		parts = []
-
-		# Primary summary
-		if item.summary:
-			parts.append(f"<p>{item.summary}</p>")
-
-		# Trial metadata section
-		metadata = []
-
-		if item.recruitment_status_normalized or item.recruitment_status:
-			# Prefer the canonical label; for "other" the raw registry string is more
-			# informative than the label.
-			status_display = (
-				item.get_recruitment_status_normalized_display()
-				if item.recruitment_status_normalized
-				and item.recruitment_status_normalized != "other"
-				else item.recruitment_status
-				or item.get_recruitment_status_normalized_display()
-			)
-			metadata.append(f"<strong>Status:</strong> {status_display}")
-
-		if item.phase_normalized or item.phase:
-			# Prefer the canonical label; for "other" the raw registry string
-			# (e.g. "Retrospective study") is more informative than the label.
-			phase_display = (
-				item.get_phase_normalized_display()
-				if item.phase_normalized and item.phase_normalized != "other"
-				else item.phase or item.get_phase_normalized_display()
-			)
-			metadata.append(f"<strong>Phase:</strong> {phase_display}")
-
-		if item.study_type:
-			metadata.append(f"<strong>Study Type:</strong> {item.study_type}")
-
-		if item.primary_sponsor:
-			metadata.append(f"<strong>Sponsor:</strong> {item.primary_sponsor}")
-
-		if item.countries:
-			metadata.append(f"<strong>Countries:</strong> {item.countries}")
-
-		if item.condition:
-			metadata.append(f"<strong>Condition:</strong> {item.condition}")
-
-		if item.intervention:
-			metadata.append(f"<strong>Intervention:</strong> {item.intervention}")
-
-		# Eligibility criteria
-		eligibility = []
-		if item.inclusion_gender:
-			eligibility.append(f"Gender: {item.inclusion_gender}")
-		if item.inclusion_agemin and item.inclusion_agemax:
-			eligibility.append(
-				f"Age: {item.inclusion_agemin} - {item.inclusion_agemax}"
-			)
-		elif item.inclusion_agemin:
-			eligibility.append(f"Min Age: {item.inclusion_agemin}")
-		elif item.inclusion_agemax:
-			eligibility.append(f"Max Age: {item.inclusion_agemax}")
-
-		if eligibility:
-			metadata.append(f"<strong>Eligibility:</strong> {', '.join(eligibility)}")
-
-		if item.target_size:
-			metadata.append(f"<strong>Target Size:</strong> {item.target_size}")
-
-		if item.date_registration:
-			metadata.append(
-				f"<strong>Registration Date:</strong> {item.date_registration.strftime('%Y-%m-%d')}"
-			)
-
-		if item.source_register:
-			metadata.append(f"<strong>Registry:</strong> {item.source_register}")
-
-		if metadata:
-			parts.append("<p>" + " | ".join(metadata) + "</p>")
-
-		return "".join(parts) if parts else item.title
-
-	def item_link(self, item):
-		return item.link
-
-	def item_guid(self, item):
-		return f"urn:gregory:trial:{item.pk}"
-
-	item_guid_is_permalink = False
-
-	def item_pubdate(self, item):
-		return item.published_date
-
-	def item_updateddate(self, item):
-		return item.last_updated
+	Feeds pick the ids first and hydrate them afterwards (rss/feed_items.py),
+	so the ordered query stays cheap and the full rows are loaded with a
+	fixed number of prefetches.
+	"""
+	return list(queryset.values_list("pk", flat=True)[:limit])
 
 
-class SiteArticlesByAuthorFeed(_SelfLinkMixin, _ArticleFeedItemMixin, Feed):
+def _discovery_order(queryset):
+	"""Newest discovery first. pk breaks ties so the cut-off is deterministic.
+
+	Trials.discovery_date is nullable and Postgres sorts NULLs first on DESC,
+	so push those last: an undated trial must not pin to the top of the feed.
+	"""
+	return queryset.order_by(F("discovery_date").desc(nulls_last=True), "-pk")
+
+
+class SiteArticlesByAuthorFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
 	"""feed/sites/<site_id>/author/<orcid>/ -- see module docstring."""
 
 	def get_object(self, request, site_id, orcid):
-		site, settings_row, subject_ids = _site_feed_scope(site_id)
+		site, settings_row, subject_ids = site_feed_scope(site_id)
 
 		normalized = normalize_orcid(orcid)
 		if not normalized:
@@ -259,8 +201,10 @@ class SiteArticlesByAuthorFeed(_SelfLinkMixin, _ArticleFeedItemMixin, Feed):
 		author._settings_row = settings_row
 		author._subject_ids = subject_ids
 
-		# 404 if the author has no articles under this site's scope.
-		if not author.articles_set.filter(subjects__in=subject_ids).exists():
+		# 404 if the author has no (non-retracted) articles under this
+		# site's scope. Unlike the subject feeds an empty author feed is not
+		# a valid subscription, so this one keeps its 404.
+		if not article_base_qs(subject_ids).filter(authors=author).exists():
 			raise Http404
 
 		return author
@@ -278,43 +222,143 @@ class SiteArticlesByAuthorFeed(_SelfLinkMixin, _ArticleFeedItemMixin, Feed):
 	description = "RSS feed for articles by a specific author."
 
 	def items(self, obj):
-		articles = list(
-			Articles.objects.filter(
-				authors=obj,
-				subjects__in=obj._subject_ids,
-			)
-			.distinct()
+		ids = _page_ids(
+			article_base_qs(obj._subject_ids)
+			.filter(authors=obj)
 			# nulls_last: articles ingested without a date (filled later from
 			# CrossRef) must not pin to the top of the feed
-			.order_by(F("published_date").desc(nulls_last=True))[:50]
+			.order_by(F("published_date").desc(nulls_last=True), "-pk"),
+			AUTHOR_FEED_LIMIT,
 		)
-		# item_link() below only receives the item, not obj -- stash the
-		# requested site's domain on each item rather than on self, for the
-		# same concurrency reason obj carries its own state above.
-		for article in articles:
-			article._feed_site_domain = obj._site.domain
-		return articles
+		return hydrate_articles(ids, obj._site, obj._subject_ids)
 
-	def item_link(self, item):
-		return f"https://{item._feed_site_domain}/articles/{str(item.pk)}/"
+	def item_pubdate(self, item):
+		# Publication order and date, not discovery: a person's feed is low
+		# volume (so nothing drops off the end) and readers expect the
+		# journal's date. See the module docstring.
+		return item.published_date
 
 
-class SiteTrialsBySubjectFeed(_SelfLinkMixin, _TrialFeedItemMixin, Feed):
-	"""feed/sites/<site_id>/trials/subject/<subject_slug>/ -- see module docstring."""
+class SiteArticlesBySubjectFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/articles/subject/<subject_slug>/[relevant/].
+
+	relevant_only=True is the same feed narrowed to articles that count as
+	relevant for the subject (api.filters.relevant_articles_q: an editor's
+	verdict wins, the ML models decide only when there is none). The variant
+	is fixed per route, so storing it on the shared instance is safe;
+	per-request state still goes on obj.
+	"""
+
+	def __init__(self, relevant_only=False):
+		self.relevant_only = relevant_only
+		super().__init__()
 
 	def get_object(self, request, site_id, subject_slug):
-		site, _settings_row, subject_ids = _site_feed_scope(site_id)
-		subject = Subject.objects.get(subject_slug=subject_slug)
-
-		if subject.id not in subject_ids:
-			raise Http404
+		site, _settings_row, subject_ids = site_feed_scope(site_id)
+		subject = resolve_scoped_subject(subject_ids, subject_slug)
 
 		subject._site = site
 		subject._feed_url = self._request_url(request)
 		return subject
 
 	def title(self, obj):
-		return f"Clinical Trials - {obj.subject_name}"
+		prefix = "Relevant " if self.relevant_only else ""
+		return f"{prefix}{obj.subject_name} research — {obj._site.name}"
+
+	def link(self, obj):
+		return _homepage(obj._site)
+
+	def description(self, obj):
+		if self.relevant_only:
+			return (
+				f"New {obj.subject_name} research that an editor marked relevant "
+				"or that our models agree is relevant, newest first."
+			)
+		return (
+			f"All new {obj.subject_name} research, newest first. "
+			"Not filtered by relevance."
+		)
+
+	def items(self, obj):
+		# obj's subject is in this site's scope (get_object), so tagging
+		# with it is the whole visibility test.
+		queryset = article_base_qs([obj.pk])
+		if self.relevant_only:
+			queryset = queryset.filter(relevant_articles_q(subject_ids=[obj.pk]))
+		ids = _page_ids(queryset.order_by("-discovery_date", "-pk"), ARTICLE_FEED_LIMIT)
+		return hydrate_articles(ids, obj._site, {obj.pk})
+
+
+class SiteArticlesByCategoryFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/articles/category/<category_slug>/[relevant/].
+
+	Articles in the category AND tagged with a subject that is in both the
+	category's subjects and the site's scope: an article can sit in a category
+	through a subject this site doesn't cover, and must not leak that way.
+	"""
+
+	def __init__(self, relevant_only=False):
+		self.relevant_only = relevant_only
+		super().__init__()
+
+	def get_object(self, request, site_id, category_slug):
+		site, _settings_row, subject_ids = site_feed_scope(site_id)
+		category, cat_subject_ids = resolve_scoped_category(subject_ids, category_slug)
+
+		category._site = site
+		category._feed_url = self._request_url(request)
+		category._cat_subject_ids = cat_subject_ids
+		return category
+
+	def title(self, obj):
+		if self.relevant_only:
+			return f"Relevant research: {obj.category_name} — {obj._site.name}"
+		return f"{obj.category_name} — {obj._site.name}"
+
+	def link(self, obj):
+		return _homepage(obj._site)
+
+	def description(self, obj):
+		if self.relevant_only:
+			return (
+				f"New research on {obj.category_name} that an editor marked relevant "
+				"or that our models agree is relevant, newest first."
+			)
+		return (
+			f"All new research on {obj.category_name}, newest first. "
+			"Not filtered by relevance."
+		)
+
+	def items(self, obj):
+		queryset = article_base_qs(obj._cat_subject_ids).filter(
+			Exists(
+				ArticleCategoryAssignment.objects.filter(
+					articles=OuterRef("pk"), teamcategory=obj
+				)
+			)
+		)
+		if self.relevant_only:
+			queryset = queryset.filter(
+				relevant_articles_q(subject_ids=obj._cat_subject_ids)
+			)
+		ids = _page_ids(queryset.order_by("-discovery_date", "-pk"), ARTICLE_FEED_LIMIT)
+		return hydrate_articles(ids, obj._site, obj._cat_subject_ids)
+
+
+class SiteTrialsBySubjectFeed(_SelfLinkMixin, TrialFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/trials/subject/<subject_slug>/ -- see module docstring."""
+
+	def get_object(self, request, site_id, subject_slug):
+		site, settings_row, subject_ids = site_feed_scope(site_id)
+		subject = resolve_scoped_subject(subject_ids, subject_slug)
+
+		subject._site = site
+		subject._settings_row = settings_row
+		subject._feed_url = self._request_url(request)
+		return subject
+
+	def title(self, obj):
+		return f"{obj.subject_name} clinical trials — {obj._site.name}"
 
 	def link(self, obj):
 		return f"https://{obj._site.domain}/trials/subject/{obj.subject_slug}/"
@@ -322,12 +366,33 @@ class SiteTrialsBySubjectFeed(_SelfLinkMixin, _TrialFeedItemMixin, Feed):
 	def description(self, obj):
 		return f"RSS feed for clinical trials related to {obj.subject_name}."
 
+	def trial_queryset(self, obj):
+		return trial_base_qs([obj.pk])
+
 	def items(self, obj):
+		ids = _page_ids(_discovery_order(self.trial_queryset(obj)), TRIAL_FEED_LIMIT)
+		return hydrate_trials(ids, obj._site, obj._settings_row, {obj.pk})
+
+
+class SiteRecruitingTrialsBySubjectFeed(SiteTrialsBySubjectFeed):
+	"""feed/sites/<site_id>/trials/subject/<subject_slug>/recruiting/.
+
+	The trials feed narrowed to trials a patient could still join. A trial is
+	picked up when it is discovered; moving from "not yet recruiting" to
+	"recruiting" later does not bring it back (status changes are a different
+	kind of item). A NULL status is left out.
+	"""
+
+	def title(self, obj):
+		return f"Recruiting {obj.subject_name} trials — {obj._site.name}"
+
+	def description(self, obj):
 		return (
-			# get_object() has already established that obj's subject is in
-			# this site's scope, so matching on it is the whole visibility
-			# test -- no second filter to add.
-			Trials.objects.filter(subjects=obj)
-			.distinct()
-			.order_by("-discovery_date")[:50]
+			f"RSS feed for {obj.subject_name} clinical trials that are recruiting "
+			"or about to start recruiting."
+		)
+
+	def trial_queryset(self, obj):
+		return super().trial_queryset(obj).filter(
+			recruitment_status_normalized__in=RECRUITING_STATUSES
 		)

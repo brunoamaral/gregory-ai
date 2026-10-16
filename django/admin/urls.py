@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path, re_path
+from django.views.decorators.cache import cache_page
 from rest_framework import routers
 from drf_spectacular.views import (
 	SpectacularAPIView,
@@ -66,7 +67,11 @@ from api.editor_views import (
 	EditorTenantsView,
 )
 from rss.views import (
+	FEED_CACHE_SECONDS,
 	SiteArticlesByAuthorFeed,
+	SiteArticlesByCategoryFeed,
+	SiteArticlesBySubjectFeed,
+	SiteRecruitingTrialsBySubjectFeed,
 	SiteTrialsBySubjectFeed,
 	redirect_articles_by_author_feed,
 	redirect_trials_by_subject_feed,
@@ -156,16 +161,43 @@ urlpatterns = (
 		# Site-scoped feed routes (see rss/views.py). Scoped to the
 		# REQUESTED site's CustomSetting.scope_subjects, not the caller's --
 		# crawler/reader-facing like the sitemaps below, not request-scoped
-		# like the rest of the API.
+		# like the rest of the API. Every one is cached for an hour for the
+		# same reason (the response doesn't vary by caller); the 301
+		# redirects above are not, they cost nothing.
 		path(
 			"feed/sites/<int:site_id>/author/<str:orcid>/",
-			SiteArticlesByAuthorFeed(),
+			cache_page(FEED_CACHE_SECONDS)(SiteArticlesByAuthorFeed()),
 			name="site_articles_by_author_feed",
 		),
 		path(
+			"feed/sites/<int:site_id>/articles/subject/<str:subject_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SiteArticlesBySubjectFeed()),
+			name="site_articles_by_subject_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/articles/subject/<str:subject_slug>/relevant/",
+			cache_page(FEED_CACHE_SECONDS)(SiteArticlesBySubjectFeed(relevant_only=True)),
+			name="site_relevant_articles_by_subject_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/articles/category/<str:category_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SiteArticlesByCategoryFeed()),
+			name="site_articles_by_category_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/articles/category/<str:category_slug>/relevant/",
+			cache_page(FEED_CACHE_SECONDS)(SiteArticlesByCategoryFeed(relevant_only=True)),
+			name="site_relevant_articles_by_category_feed",
+		),
+		path(
 			"feed/sites/<int:site_id>/trials/subject/<str:subject_slug>/",
-			SiteTrialsBySubjectFeed(),
+			cache_page(FEED_CACHE_SECONDS)(SiteTrialsBySubjectFeed()),
 			name="site_trials_by_subject_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/trials/subject/<str:subject_slug>/recruiting/",
+			cache_page(FEED_CACHE_SECONDS)(SiteRecruitingTrialsBySubjectFeed()),
+			name="site_recruiting_trials_by_subject_feed",
 		),
 		# Site-scoped sitemaps (see rss/sitemaps.py)
 		path(
