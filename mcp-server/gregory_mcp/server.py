@@ -1,12 +1,14 @@
 """Builds the MCPServer: registers tools, resources, and prompts.
 
 `build_server()` is the anonymous server behind `/mcp`: everything on it is
-read-only. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
+read-only. Twelve read tools are registered, but `search_patents` and
+`get_patent` are offered only to a tenant that has patents (tool_access.py), so
+the others see ten. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
 open_world_hint=False` since none of them write, and every one only ever talks
 to the one Gregory instance named by `GREGORY_API_URL`.
 
 `build_server(editor=True)` is the server behind `/mcp/editor`
-(MCP-AUTH-PLAN.md): the same ten read tools, plus `get_article_history` and four
+(MCP-AUTH-PLAN.md): the same read tools, plus `get_article_history` and the
 write tools. What a given request may see and call depends on who signed in
 (tool_access.py); the process registers every tool once, like the anonymous one.
 """
@@ -25,7 +27,7 @@ from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tenants import TenantGateMiddleware
 from .tool_access import ToolAccessMiddleware
-from .tools import articles, authors, catalog, stats, trials
+from .tools import articles, authors, catalog, patents, stats, trials
 from .tools import editor as editor_tools
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -167,7 +169,15 @@ def build_server(editor: bool = False) -> MCPServer:
 				TenantIdentityMiddleware(),
 			]
 			if editor
-			else [SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware(), TenantIdentityMiddleware()]
+			else [
+				SiteMiddleware(),
+				TelemetryMiddleware(),
+				TenantGateMiddleware(),
+				# Hides the patent tools on a tenant without patents; every other
+				# tool is allowed to everyone here (tool_access.py).
+				ToolAccessMiddleware(),
+				TenantIdentityMiddleware(),
+			]
 		),
 	)
 
@@ -176,6 +186,8 @@ def build_server(editor: bool = False) -> MCPServer:
 	server.add_tool(articles.get_article, annotations=READ_ONLY)
 	server.add_tool(trials.search_trials, annotations=READ_ONLY)
 	server.add_tool(trials.get_trial, annotations=READ_ONLY)
+	server.add_tool(patents.search_patents, annotations=READ_ONLY)
+	server.add_tool(patents.get_patent, annotations=READ_ONLY)
 	server.add_tool(authors.search_authors, annotations=READ_ONLY)
 	server.add_tool(authors.get_author, annotations=READ_ONLY)
 	server.add_tool(catalog.list_categories, annotations=READ_ONLY)

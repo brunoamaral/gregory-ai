@@ -57,6 +57,7 @@ async def list_categories(
 				"modality": c.get("modality"),
 				"article_count_total": c.get("article_count_total"),
 				"trials_count_total": c.get("trials_count_total"),
+				"patents_count_total": c.get("patents_count_total"),
 			}
 			for c in results
 		],
@@ -66,6 +67,7 @@ async def list_categories(
 async def list_sponsors(
 	search: str | None = None,
 	sponsor_type: str | None = None,
+	include_patent_applicants: bool | None = None,
 	page: int = 1,
 	page_size: int = 25,
 ) -> dict:
@@ -78,11 +80,22 @@ async def list_sponsors(
 	Args:
 		search: Case-insensitive substring match against the sponsor name.
 		sponsor_type: One of academic_medical, government, industry, nonprofit, other.
+		include_patent_applicants: Also list sponsors that appear only as
+			applicants on patent families (they have no clinical trial here;
+			their `trials_count` is 0). Only meaningful on a site that has
+			patents; each row's `patents_count` says how many families a
+			sponsor applied for.
 	"""
 	clamped_page = clamp_page(page)
 	data = await get_client().get(
 		"/sponsors/",
-		{"search": search, "sponsor_type": sponsor_type, "page": clamped_page, "page_size": clamp_page_size(page_size, 100)},
+		{
+			"search": search,
+			"sponsor_type": sponsor_type,
+			"include_patent_applicants": include_patent_applicants,
+			"page": clamped_page,
+			"page_size": clamp_page_size(page_size, 100),
+		},
 	)
 	results = data.get("results", [])
 	return {
@@ -95,6 +108,7 @@ async def list_sponsors(
 				"slug": s.get("slug"),
 				"sponsor_type": s.get("sponsor_type"),
 				"trials_count": s.get("trials_count"),
+				"patents_count": s.get("patents_count"),
 			}
 			for s in results
 		],

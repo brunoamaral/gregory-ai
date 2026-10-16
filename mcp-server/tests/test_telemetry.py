@@ -371,6 +371,43 @@ async def test_search_trials_falls_back_to_title_when_search_is_absent(caplog, m
 	assert fields["matched_category_slugs"] == ["encephalitis"]
 
 
+async def test_search_patents_gets_query_shape_analysis(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "patents": []})
+
+	ctx = _make_ctx(params={"name": "search_patents", "arguments": {"search": "encephalitis outcomes"}})
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	fields = _record_fields(records[0])
+	assert fields["matched_category_slugs"] == ["encephalitis"]
+	assert "length_bucket" in fields
+	# Shape only: never the query, and never the identifying filters.
+	assert "encephalitis outcomes" not in repr(fields)
+
+
+async def test_patent_lookup_filters_are_never_logged_by_value(caplog, monkeypatch):
+	_patch_categories(monkeypatch)
+
+	async def call_next(ctx):
+		return CallToolResult(content=[], structured_content={"count": 0, "patents": []})
+
+	ctx = _make_ctx(
+		params={
+			"name": "search_patents",
+			"arguments": {"publication_number": "EP4123456A1", "applicant": "Jane Researcher", "cpc": "A61K31"},
+		}
+	)
+	await TelemetryMiddleware()(ctx, call_next)
+
+	records = [r for r in caplog.records if r.name == "gregory_mcp.telemetry" and r.getMessage() == "mcp_request"]
+	text = repr(_record_fields(records[0]))
+	for value in ("EP4123456A1", "Jane Researcher", "A61K31"):
+		assert value not in text
+
+
 async def test_list_categories_uses_its_own_search_argument(caplog, monkeypatch):
 	_patch_categories(monkeypatch)
 

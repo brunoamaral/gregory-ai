@@ -84,10 +84,10 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 	"""
 	intro = tenant.mcp_description.strip()
 	if not intro:
-		intro = (
-			f"This is {tenant.title}'s research database: articles, clinical "
-			"trials and researchers, curated to the subjects below."
-		)
+		# Patents are named only for a tenant that has them (its patent tools
+		# are hidden otherwise, and the text must not point at what is absent).
+		records = "articles, clinical trials, patents and researchers" if tenant.patents_enabled else "articles, clinical trials and researchers"
+		intro = f"This is {tenant.title}'s research database: {records}, curated to the subjects below."
 	behavior_paragraph = _behavior_paragraph(session)
 	if not tenant.subjects:
 		# Only reachable if every subject row failed to parse: the API lists
@@ -100,13 +100,14 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 
 def _server_info(tenant: Tenant, session: EditorSession | None = None) -> dict[str, Any]:
 	access = "Read and edit access" if session is not None and session.can_edit else "Read-only access"
+	records = "articles, clinical trials, patents, authors" if tenant.patents_enabled else "articles, clinical trials, authors"
 	return {
 		"name": tenant.domain,
 		"title": tenant.title,
 		"version": SERVER_VERSION,
 		"description": (
-			f"{access} to {tenant.title}'s research database: articles, "
-			"clinical trials, authors, subjects, categories and sponsors."
+			f"{access} to {tenant.title}'s research database: {records}, "
+			"subjects, categories and sponsors."
 		),
 	}
 

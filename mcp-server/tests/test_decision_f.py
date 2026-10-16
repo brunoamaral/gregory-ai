@@ -43,11 +43,12 @@ def _assert_clean(label: str, payload) -> None:
 		assert banned not in text, f"{label} contains banned word {banned!r}: {text}"
 
 
-def _tenant_row(site_id: int, domain: str, title: str) -> dict:
+def _tenant_row(site_id: int, domain: str, title: str, patents_enabled: bool = False) -> dict:
 	return {
 		"site_id": site_id,
 		"domain": domain,
 		"title": title,
+		"patents_enabled": patents_enabled,
 		"mcp_description": "",
 		"subjects": [{"id": 1, "subject_name": "Multiple Sclerosis"}],
 		"prompts": [
@@ -71,12 +72,14 @@ def _tenant_row(site_id: int, domain: str, title: str) -> dict:
 	}
 
 
-async def _scan_every_method(mock_gregory, site_id: int, domain: str, title: str, mode: str) -> None:
+async def _scan_every_method(
+	mock_gregory, site_id: int, domain: str, title: str, mode: str, patents_enabled: bool = False
+) -> None:
 	mock_gregory.set_handler(
 		route_by_path(
 			{
 				"/tenants/": lambda request: httpx2.Response(
-					200, json=tenants_payload(_tenant_row(1, "other.test", "Other Tenant"), _tenant_row(site_id, domain, title))
+					200, json=tenants_payload(_tenant_row(1, "other.test", "Other Tenant"), _tenant_row(site_id, domain, title, patents_enabled))
 				),
 				"/subjects/": lambda request: httpx2.Response(
 					200, json={"next": None, "results": [{"id": 1, "subject_name": "Multiple Sclerosis"}]}
@@ -99,6 +102,9 @@ async def _scan_every_method(mock_gregory, site_id: int, domain: str, title: str
 
 		tools = await client.list_tools()
 		_assert_clean("tools/list", tools)
+		# The scan covers the patent tools only when they are offered.
+		offered = {t.name for t in tools.tools}
+		assert ({"search_patents", "get_patent"} <= offered) is patents_enabled
 
 		prompts = await client.list_prompts()
 		_assert_clean("prompts/list", prompts)
@@ -123,3 +129,15 @@ async def test_decision_f_across_every_method_modern(mock_gregory):
 
 async def test_decision_f_across_every_method_legacy(mock_gregory):
 	await _scan_every_method(mock_gregory, site_id=7, domain="encefalites.pt", title="Encefalites", mode="legacy")
+
+
+async def test_decision_f_with_patents_modern(mock_gregory):
+	await _scan_every_method(
+		mock_gregory, site_id=3, domain="brain-regeneration.com", title="Brain Regeneration", mode="auto", patents_enabled=True
+	)
+
+
+async def test_decision_f_with_patents_legacy(mock_gregory):
+	await _scan_every_method(
+		mock_gregory, site_id=7, domain="encefalites.pt", title="Encefalites", mode="legacy", patents_enabled=True
+	)

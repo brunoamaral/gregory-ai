@@ -1,19 +1,26 @@
-"""Which tools a request to the editor address may see and call.
+"""Which tools a request may see and call.
 
-The editor `MCPServer` registers every tool once per process, like the
-anonymous one, but what a given request may do depends on who signed in
-(MCP-AUTH-PLAN.md, "Access tiers on the editor address"):
+Both `MCPServer`s register every tool once per process, but what a given
+request may do depends on who signed in (MCP-AUTH-PLAN.md, "Access tiers on the
+editor address") and on the site it is for:
 
 | Sign-in                          | Tools                                        |
 |:---------------------------------|:---------------------------------------------|
-| Public tier (no editor grant)    | the ten read tools, exactly as on `/mcp`     |
+| Anonymous, or public tier        | the ten read tools, exactly as on `/mcp`     |
 | Editor, read-only grant          | the ten read tools plus `get_article_history`|
 | Editor with the edit scope       | all of those plus the eight write tools      |
 
+On top of that, `search_patents` and `get_patent` are offered only when the
+resolved tenant has patents (`Tenant.patents_enabled`, from `GET /tenants/`).
+A tenant without them has the list above and nothing mentions patents there.
+That applies on both addresses: `/mcp` runs this middleware too, for exactly
+this reason.
+
 `tools/list` is filtered to that set, and `tools/call` for anything outside it
 is answered exactly as a tool that doesn't exist is: a client that sends a
-write tool's name anyway learns nothing and writes nothing. The client's own
-refusal to write without the edit scope (`client.py`) is the second lock.
+write tool's (or a patent tool's) name anyway learns nothing and writes
+nothing. The client's own refusal to write without the edit scope (`client.py`)
+is the second lock.
 """
 
 from __future__ import annotations
@@ -23,7 +30,7 @@ from typing import Any
 import mcp_types as types
 from mcp.server.context import CallNext, HandlerResult, ServerMiddleware, ServerRequestContext
 
-from .site_context import EditorSession, get_editor_context
+from .site_context import EditorSession, get_current_tenant, get_editor_context
 
 READ_TOOLS = frozenset(
 	{
@@ -39,6 +46,8 @@ READ_TOOLS = frozenset(
 		"get_stats",
 	}
 )
+#: Offered only on a tenant with `patents_enabled`.
+PATENT_TOOLS = frozenset({"search_patents", "get_patent"})
 HISTORY_TOOL = "get_article_history"
 WRITE_TOOLS = frozenset(
 	{
@@ -54,12 +63,16 @@ WRITE_TOOLS = frozenset(
 )
 
 
-def allowed_tools(session: EditorSession | None) -> frozenset[str]:
-	if session is None or not session.is_editor:
-		return READ_TOOLS
-	tools = READ_TOOLS | {HISTORY_TOOL}
-	if session.can_edit:
-		tools |= WRITE_TOOLS
+def allowed_tools(session: EditorSession | None, tenant: Any = None) -> frozenset[str]:
+	"""The tools this caller may use on this tenant's site. A missing tenant has
+	no patents: nothing is offered that the tenant has not been shown to have."""
+	tools = READ_TOOLS
+	if session is not None and session.is_editor:
+		tools = tools | {HISTORY_TOOL}
+		if session.can_edit:
+			tools = tools | WRITE_TOOLS
+	if tenant is not None and getattr(tenant, "patents_enabled", False):
+		tools = tools | PATENT_TOOLS
 	return tools
 
 
@@ -73,7 +86,7 @@ class ToolAccessMiddleware(ServerMiddleware[Any]):
 	async def __call__(self, ctx: ServerRequestContext[Any, Any], call_next: CallNext) -> HandlerResult:
 		if ctx.method == "tools/call":
 			name = (ctx.params or {}).get("name")
-			if name not in allowed_tools(get_editor_context()):
+			if name not in allowed_tools(get_editor_context(), get_current_tenant()):
 				# The SDK's own answer for a tool that doesn't exist.
 				return types.CallToolResult(
 					content=[types.TextContent(type="text", text=f"Unknown tool: {name}")], is_error=True
@@ -82,7 +95,7 @@ class ToolAccessMiddleware(ServerMiddleware[Any]):
 
 		result = await call_next(ctx)
 		if ctx.method == "tools/list":
-			return _filter_tool_list(result, allowed_tools(get_editor_context()))
+			return _filter_tool_list(result, allowed_tools(get_editor_context(), get_current_tenant()))
 		return result
 
 

@@ -67,21 +67,24 @@ re-checks within a minute).
 
 ## Tools
 
-Ten task-shaped tools rather than a 1:1 mirror of every API endpoint — a large tool list
-crowds context and degrades model tool selection.
+Ten task-shaped tools, plus two for patents on sites that have them, rather than a 1:1
+mirror of every API endpoint — a large tool list crowds context and degrades model tool
+selection. The two patent tools are offered per site: see [Patents](#patents).
 
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
 | `list_subjects` | `GET /subjects/` | Discovery entry point for subject IDs, which most article/trial filters need. |
 | `search_articles` | `GET /articles/` | Boolean `search` plus subject, category, `category_modality`, journal, DOI, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `has_clinical_trials`, date range, `last_days`. Compact results — see [Payload shaping](#payload-shaping). `include_authors` and `full_summary` opt-ins add each article's authors and the untruncated summary. |
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
-| `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`. Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
-| `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. |
+| `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`, and on a site with patents `has_patent_link` (+ `include_subject_links`). Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
+| `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. On a site with patents it also lists `patent_links` (see [Patents](#patents)); `include_subject_links` widens them. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default: the top 10 co-authors plus `coauthors_total`. |
-| `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. |
-| `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. |
-| `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/` | `scope` selects which. |
+| `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. Each row carries `patents_count_total` (0 on a site without patents). |
+| `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. Each row carries `patents_count`; `include_patent_applicants` also lists sponsors that only appear as patent applicants. |
+| `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/`, `/patents/stats/` | `scope` selects which (`global`, `articles`, `trials`, `patents`). |
+| `search_patents` | `GET /patents/` | Only on a site with patents. See [Patents](#patents). |
+| `get_patent` | `GET /patents/{patent_id}/` | Only on a site with patents. See [Patents](#patents). |
 
 `ml_score_min` and `ml_threshold` are different filters. `ml_score_min` keeps articles whose
 `ml_score` — the score shown in each result — is at least that value, with no other rule; pair
@@ -91,9 +94,46 @@ setting) classed it relevant, and they only do so at or above their prediction c
 default), so `ml_threshold` below that cutoff acts as the cutoff. `relevant` and `ml_threshold`
 are scoped to `subject_id` when given; `ml_score` itself is not.
 
+### Patents
+
+Patent families are a per-site feature: `search_patents` and `get_patent` are listed, and can
+be called, only on a site whose `patents_enabled` switch is on (reported per site by
+`GET /tenants/`; see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#patents)). On any
+other site — on `/mcp` and `/mcp/editor` alike — `tools/list` leaves them out, a call to
+either is answered as a tool that doesn't exist, and the site's instructions and description
+never mention patents. The tool schemas are fixed per process, so the parameters the existing
+tools gained (`has_patent_link`, `include_patent_applicants`, `include_subject_links`) and
+`get_stats`'s `patents` scope still appear everywhere; on a site without patents they return
+nothing or zero. Only whole tools are hidden.
+
+| Tool | What it does |
+|:---|:---|
+| `search_patents` | One record per DOCDB simple family. `search` (boolean, over title and summary — never the claims), subject, category or `category_modality`, `applicant` (a substring of the published name) or `applicant_sponsor_id` / `applicant_sponsor_slug`, priority and publication date ranges, `has_grant`, `cpc` (a class prefix, e.g. `A61K31`), `publication_number` (any publication of the family, in any common format; without a kind code it matches every kind), `has_trial_link`. Compact rows: `patent_id`, `title`, a ~400-character summary, `representative_publication`, `link`, dates, `has_grant`, `applicants` (names), `trial_links_count`. Page size 10, at most 25. A zero-hit response carries `guidance` with `fields_read` for `search` (`title`, `summary`) and `publication_number` (`publications`). |
+| `get_patent` | One family, by exactly one of `patent_id` or `publication_number` (one number: a blank value or a list is refused before any request; a number that matches several families is an error that says how many and lists the first ten ids). The full record with every publication, inventors, classification, applicants, categories and `trial_links`; team data stripped. |
+
+**Claims.** `get_patent` leaves the claims out. They average ~12,500 characters and run past
+200,000, so `include_claims=true` returns the first 20,000 characters as `claims`, with
+`claims_length` (the full length) and `claims_truncated`. That is the whole claims text for
+about 83% of the families that have any. A family with no full text — the EPO's Open Patent
+Services have it only for some offices, so a family filed only at the US, CN or JP offices
+has none — returns `claims: null` and a `claims_note`.
+
+**Trial links.** A patent and a trial are linked when the trial's sponsor filed the patent while
+the trial was running or shortly after it ended. `get_patent` lists them as `trial_links` and
+`get_trial` as `patent_links`; `search_trials` filters on `has_patent_link`. Only links on a
+shared category (typically the molecule) count by default. Links resting on a shared subject
+alone are the large majority and noisy for big sponsors, so they come only with
+`include_subject_links=true`. A link an editor suppressed is never shown.
+
+**Espacenet link.** Every record carries `link`, its Espacenet page, and the tools' descriptions
+tell the model to show it. The patent data is fetched under the EPO's Open Patent Services terms,
+which allow showing processed records in a product but not republishing the data as such; that
+is why patents are opt-in per site, claims are capped and there is no bulk export (see
+[patents.md](patents.md#licence-and-the-api)).
+
 ### `search` syntax
 
-`search_articles`'s and `search_trials`'s `search` parameter is boolean (same semantics
+`search_articles`'s, `search_trials`'s and `search_patents`'s `search` parameter is boolean (same semantics
 as the REST API's `?search=` — see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md)):
 
 - space-separated terms are AND-ed
@@ -104,11 +144,11 @@ as the REST API's `?search=` — see [03-api-and-rss-feeds.md](03-api-and-rss-fe
 scientific title — registries other than ClinicalTrials.gov (WHO ICTRP-sourced records)
 commonly put a trial's real name and acronym there rather than in the public title or a
 summary, since WHO-only trials rarely have one. Use `title=` / `summary=` instead to
-match only one field.
+match only one field. `search_patents`'s reads title and summary only.
 
 ### Zero-hit guidance
 
-When `search_articles` or `search_trials` returns zero results, the response carries a
+When `search_articles`, `search_trials` or `search_patents` returns zero results, the response carries a
 `guidance` key instead of just an empty list:
 
 - `applied_filters` — the names (never the values) of every filter that was set on the
@@ -118,7 +158,7 @@ When `search_articles` or `search_trials` returns zero results, the response car
   taxonomy/registry/sponsor ID. Checked in priority order per tool; the broadest ones
   (like `search`) rank last since a narrower filter is a more likely culprit.
 - `fields_read` — which fields the *text-matching* filters actually searched: `search`
-  (both tools), and for trials also `acronym` and the registry-ID filters (`nct`, `euct`,
+  (all three tools), and for patents also `publication_number`, and for trials also `acronym` and the registry-ID filters (`nct`, `euct`,
   `eudract`, `ctis`) — the ones where a zero hit usually means the term sits in a field
   the filter doesn't read, e.g. `{"search": ["title", "summary", "scientific_title"]}`
   for a `search_trials` call. A registry-ID filter reports
@@ -133,12 +173,12 @@ names and static advice text.
 
 ### Payload shaping
 
-`search_articles` / `search_trials` / `search_authors` return a compact projection — id,
+`search_articles` / `search_trials` / `search_patents` / `search_authors` return a compact projection — id,
 title, date, a few key fields, and a summary truncated to ~400 characters — not the full
 record. A ten-result search with full abstracts and nested author lists is a very large
 response, and most searches are followed by a `get_*` read of one or two records anyway.
-`get_article` / `get_trial` / `get_author` return the full record, minus team data:
-`get_article` and `get_trial` drop every `teams` and `team_id` key, at any depth
+`get_article` / `get_trial` / `get_patent` / `get_author` return the full record, minus team data:
+`get_article`, `get_trial` and `get_patent` drop every `teams` and `team_id` key, at any depth
 (`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
 team plumbing is noise to the model. `team_categories` stays — despite the name, it holds
 the record's category tags.
@@ -158,7 +198,7 @@ server — see [Risks](#risks).
 
 ### Not-found errors
 
-`get_article`, `get_trial`, and `get_author` turn a `404` from their endpoint into a clear
+`get_article`, `get_trial`, `get_patent` and `get_author` turn a `404` from their endpoint into a clear
 `ToolError` naming the record — e.g. `Article 123 was not found.` — rather than the
 generic upstream error text. Django returns `404` both for a record that doesn't exist and
 one outside this site's scope (see [Tenant resolution](#tenant-resolution-site_id)),
@@ -349,7 +389,7 @@ The anonymous endpoint exposes exactly what an anonymous API caller already sees
 public organisations any unauthenticated `GET` against the REST API returns. Nothing new
 is leaked, but the endpoint is unauthenticated, so it's rate-limited at the nginx layer,
 per (client address, tool name) — the tool name coming from the client-controlled
-`Mcp-Name` request header, whitelisted to the ten known names so a caller can't dodge the
+`Mcp-Name` request header, whitelisted to the twelve known names so a caller can't dodge the
 limit by inventing new header values. Every tool shares one flat rate rather than a
 stricter one for the search/stats tools — nginx's `limit_req` has no notion of a
 per-request "cost", and doing that correctly needs routing each tool class to its own
@@ -569,7 +609,7 @@ curl -s --max-time 10 -X POST https://<host>/mcp \
        "io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-Expect a JSON-RPC result listing all ten tools. This is the check that matters: it is a
+Expect a JSON-RPC result listing all the tools (ten, or twelve on a site with patents). This is the check that matters: it is a
 POST, which is what real clients use, and it is what proves the routing above is right.
 
 To confirm rate limiting is applied and returns `429` rather than nginx's default `503`,
@@ -652,6 +692,11 @@ SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
 | Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
 | Editor, read-only grant | the ten read tools plus `get_article_history` |
 | Editor with the edit scope | all of those plus eight write tools |
+
+On a site with patents every tier also gets `search_patents` and `get_patent`; that is decided
+by the site, not the sign-in (see [Patents](#patents)). An editor's `search_patents` and
+`get_patent` read Django's `/editor/patents/` routes, like the other reads, and `get_patent`
+adds the site's editorial text to the record.
 
 `tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
 does not exist. `GregoryClient` refuses a write without an edit session as a second lock, and

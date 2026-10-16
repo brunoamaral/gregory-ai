@@ -1,4 +1,4 @@
-"""Model-authored `intent` capture for search_articles/search_trials.
+"""Model-authored `intent` capture for search_articles/search_trials/search_patents.
 
 Phase 4 of MCP-TELEMETRY-PLAN.md. Unlike Phase 1/2's bagged, closed-vocabulary
 telemetry, `intent` is stored as the full phrase the model supplied — bagging
