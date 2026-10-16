@@ -281,7 +281,9 @@ class Command(BaseCommand):
 				patent_match_config_hash=self.patent_category_config_hash(cat)
 			)
 
-	def sync_category(self, manager, automatic_rows, id_field, desired_ids, automatic_ids, manual_ids):
+	def sync_category(
+		self, manager, automatic_rows, id_field, desired_ids, automatic_ids, manual_ids, record_history=True
+	):
 		"""Diff desired vs current automatic associations and apply only the changes.
 
 		Manual assignments are never touched: they are not removed when stale,
@@ -292,6 +294,13 @@ class Command(BaseCommand):
 		id whatever the source. The ids were read earlier in the run; an editor
 		may have made one of them a manual assignment since, and that one must
 		survive.
+
+		``record_history=False`` removes with a single DELETE that records no
+		history. Patent assignments use it: their history is for people's
+		changes (it shows a hand assignment being added or removed), and a
+		delete receiver would switch off fast delete, turning a rebuild's
+		removals into a load of every row plus one history row each. Articles
+		keep recording their removals.
 		"""
 		to_add = desired_ids - automatic_ids - manual_ids
 		to_remove = automatic_ids - desired_ids
@@ -302,7 +311,11 @@ class Command(BaseCommand):
 					through_defaults={"source": CategoryAssignmentSource.AUTOMATIC},
 				)
 			if to_remove:
-				automatic_rows.filter(**{f"{id_field}__in": to_remove}).delete()
+				doomed = automatic_rows.filter(**{f"{id_field}__in": to_remove})
+				if record_history:
+					doomed.delete()
+				else:
+					doomed._raw_delete(doomed.db)
 		return len(to_add), len(to_remove)
 
 	def candidate_query(self, terms, weights, field_query):
@@ -854,6 +867,7 @@ class Command(BaseCommand):
 				desired_ids,
 				automatic_ids,
 				manual_ids,
+				record_history=False,
 			)
 			total_added += added
 			total_removed += removed

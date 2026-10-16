@@ -47,6 +47,7 @@ _INCLUDE_ATTR = "_editorial_requested"
 _ORG_IDS_ATTR = "_editorial_org_ids"
 _ORG_NAMES_ATTR = "_editorial_org_names"
 _SITE_IDS_ATTR = "_editorial_site_ids"
+_PATENT_SITE_IDS_ATTR = "_editorial_patent_site_ids"
 _SITES_ATTR = "_editorial_sites"
 
 
@@ -225,7 +226,33 @@ def is_editor_request(request) -> bool:
 	return request is not None and editor_auth_of(request) is not None
 
 
-def _site_contents(request, model):
+def patent_editorial_site_ids(request) -> list:
+	"""``editorial_site_ids`` narrowed to sites with ``patents_enabled`` on.
+
+	Patents are shown only through such sites, and the editor API treats every
+	other site as having no patents at all, so ``?include=editorial`` on a
+	patent must not offer (or return) text for a site that never shows it.
+	Cached on the request like the list it narrows.
+	"""
+	if request is None:
+		return []
+	cached = getattr(request, _PATENT_SITE_IDS_ATTR, None)
+	if cached is not None:
+		return cached
+	from sitesettings.models import CustomSetting
+
+	site_ids = editorial_site_ids(request)
+	enabled = set(
+		CustomSetting.objects.filter(site_id__in=site_ids, patents_enabled=True).values_list(
+			"site_id", flat=True
+		)
+	)
+	result = [site_id for site_id in site_ids if site_id in enabled]
+	setattr(request, _PATENT_SITE_IDS_ATTR, result)
+	return result
+
+
+def _site_contents(request, model, site_ids=None):
 	"""The per-site content rows of ``model`` (``ArticleSiteContent`` or
 	``PatentSiteContent``) ``?include=editorial`` may show this caller.
 
@@ -236,7 +263,9 @@ def _site_contents(request, model):
 	from django.db.models import OuterRef, Subquery, Value
 	from django.db.models.functions import Coalesce, NullIf
 
-	queryset = model.objects.filter(site_id__in=editorial_site_ids(request))
+	if site_ids is None:
+		site_ids = editorial_site_ids(request)
+	queryset = model.objects.filter(site_id__in=site_ids)
 	if is_editor_request(request):
 		newest = model.history.filter(id=OuterRef("id")).order_by("-history_date")
 		queryset = queryset.annotate(
@@ -259,4 +288,4 @@ def patent_site_contents(request):
 	"""The ``PatentSiteContent`` rows ``?include=editorial`` may show this caller."""
 	from gregory.models import PatentSiteContent
 
-	return _site_contents(request, PatentSiteContent)
+	return _site_contents(request, PatentSiteContent, patent_editorial_site_ids(request))

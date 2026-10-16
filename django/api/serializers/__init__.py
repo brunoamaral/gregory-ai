@@ -38,6 +38,7 @@ from api.editorial import (
 	editorial_site_ids,
 	editorial_sites,
 	is_editor_request,
+	patent_editorial_site_ids,
 	patent_site_contents,
 )
 from api.serializers.mixins import ScopedSerializerMixin
@@ -497,6 +498,10 @@ class SiteEditorialFieldMixin(_EditorialIncludeMixin):
 	def site_contents_for(request):
 		return article_site_contents(request)
 
+	@staticmethod
+	def site_ids_for(request):
+		return editorial_site_ids(request)
+
 	@extend_schema_field(EditorialSiteEntrySerializer(many=True))
 	def get_editorial(self, obj) -> list:
 		"""One entry per editorial site (sorted by id); null fields when that
@@ -506,7 +511,7 @@ class SiteEditorialFieldMixin(_EditorialIncludeMixin):
 		request = self.context.get("request")
 		if not editorial_requested(request):
 			return []  # popped in to_representation
-		site_ids = editorial_site_ids(request)
+		site_ids = self.site_ids_for(request)
 		if not site_ids:
 			return []
 		sites = editorial_sites(request)
@@ -714,6 +719,10 @@ class PatentListSerializer(
 	@staticmethod
 	def site_contents_for(request):
 		return patent_site_contents(request)
+
+	@staticmethod
+	def site_ids_for(request):
+		return patent_editorial_site_ids(request)
 
 	class Meta:
 		model = Patents

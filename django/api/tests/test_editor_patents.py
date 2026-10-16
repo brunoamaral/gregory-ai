@@ -270,6 +270,125 @@ class ResolveTest(PatentEditorFixture):
 		self.assertEqual(self.get(self.url + "EP4123456").status_code, 200)
 
 
+class ResolveListTest(PatentEditorFixture):
+	def test_a_list_is_a_400_not_a_misleading_404(self):
+		for value in ("EP4123456A1,WO2020123456A1", "EP4123456A1;WO2020123456A1", "EP4123456,"):
+			with self.subTest(value=value):
+				response = self.get(f"/editor/patents/resolve/?publication_number={value}")
+				self.assertEqual(response.status_code, 400, response.content)
+				self.assertIn("Send one publication number", str(response.json()))
+
+	def test_spaces_inside_one_number_are_still_fine(self):
+		self.assertEqual(
+			self.get("/editor/patents/resolve/?publication_number=EP%204123456%20A1").status_code, 200
+		)
+
+
+class EditorialRespectsThePatentSwitchTest(PatentEditorFixture):
+	"""Patents are shown only through sites with patents_enabled on, and the
+	editor API treats every other site as having none. The editorial text the
+	read API offers, and the admin inline, must agree."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		# A patent visible through site A, with text on A and (stale, e.g. from
+		# before the switch was turned off) on site B.
+		cls.pat_both = _patent("Visible via A", cls.subject_a, cls.subject_b)
+		PatentSiteContent.objects.create(patent=cls.pat_both, site=cls.site_a, takeaways="Text A")
+		PatentSiteContent.objects.create(patent=cls.pat_both, site=cls.site_b, takeaways="Text B")
+
+	def sites_in(self, entries):
+		return [entry["site"]["id"] for entry in entries]
+
+	def test_a_member_of_both_sites_gets_only_the_site_with_patents(self):
+		self.client.force_login(make_user("pe-member", self.org))
+		detail = self.client.get(f"/patents/{self.pat_both.pk}/?include=editorial")
+		self.assertEqual(detail.status_code, 200)
+		self.assertEqual(self.sites_in(detail.data["editorial"]), [self.site_a.pk])
+		self.assertEqual(detail.data["editorial"][0]["takeaways"], "Text A")
+		listing = self.client.get("/patents/?include=editorial")
+		row = next(r for r in listing.data["results"] if r["patent_id"] == self.pat_both.pk)
+		self.assertEqual(self.sites_in(row["editorial"]), [self.site_a.pk])
+
+	def test_the_same_member_still_sees_both_sites_on_an_article(self):
+		from gregory.models import Articles, ArticleSiteContent
+
+		article = Articles.objects.create(title="Both sites", link="https://a.test/both")
+		article.subjects.add(self.subject_a, self.subject_b)
+		ArticleSiteContent.objects.create(article=article, site=self.site_b, takeaways="B")
+		self.client.force_login(make_user("pe-member-art", self.org))
+		detail = self.client.get(f"/articles/{article.pk}/?include=editorial")
+		self.assertEqual(sorted(self.sites_in(detail.data["editorial"])), sorted([self.site_a.pk, self.site_b.pk]))
+
+	def test_the_editor_of_the_site_with_patents_gets_only_that_site(self):
+		body = self.get(f"/editor/patents/{self.pat_both.pk}/?include=editorial").json()
+		self.assertEqual(self.sites_in(body["editorial"]), [self.site_a.pk])
+
+	def test_a_key_bound_to_a_site_without_patents_sees_no_patent_at_all(self):
+		from datetime import timedelta
+		from django.utils.timezone import now
+		from api.models import APIAccessScheme
+
+		key = APIAccessScheme.objects.create(
+			client_name="b-key",
+			client_contacts="k@example.com",
+			organization=self.org,
+			site=self.site_b,
+			ip_addresses="",
+			begin_date=now() - timedelta(days=1),
+			end_date=now() + timedelta(days=30),
+		)
+		response = self.client.get("/patents/?include=editorial", HTTP_AUTHORIZATION=key.api_key)
+		self.assertEqual(response.data["results"], [])
+
+	def test_admin_inline_offers_only_sites_with_patents(self):
+		from django.test import RequestFactory
+
+		from gregory.admin import ArticleSiteContentInline, PatentSiteContentInline
+
+		member = make_user("pe-staff", self.org)
+		request = RequestFactory().get("/admin/")
+		request.user = member
+		self.assertEqual(
+			list(PatentSiteContentInline._user_sites(request).values_list("pk", flat=True)), [self.site_a.pk]
+		)
+		# The article inline is untouched.
+		self.assertEqual(
+			sorted(ArticleSiteContentInline._user_sites(request).values_list("pk", flat=True)),
+			sorted([self.site_a.pk, self.site_b.pk]),
+		)
+
+	def test_admin_inline_narrows_superusers_too(self):
+		from django.contrib.auth import get_user_model
+		from django.test import RequestFactory
+
+		from gregory.admin import PatentSiteContentInline
+
+		root = get_user_model().objects.create_superuser("pe-root", "root@example.com", "pw")
+		request = RequestFactory().get("/admin/")
+		request.user = root
+		offered = set(PatentSiteContentInline._user_sites(request).values_list("pk", flat=True))
+		self.assertEqual(offered, {self.site_a.pk, self.site_other.pk})
+		self.assertNotIn(self.site_b.pk, offered)
+
+	def test_admin_history_follows_the_same_sites(self):
+		from django.contrib import admin
+		from django.test import RequestFactory
+
+		from gregory.admin import PatentSiteContentAdmin, PatentSiteContentInline
+
+		self.assertIs(PatentSiteContentAdmin.inline_class, PatentSiteContentInline)
+		model_admin = PatentSiteContentAdmin(PatentSiteContent, admin.site)
+		request = RequestFactory().get("/admin/")
+		request.user = make_user("pe-staff-2", self.org)
+		on_a = PatentSiteContent.objects.get(patent=self.pat_both, site=self.site_a)
+		on_b = PatentSiteContent.objects.get(patent=self.pat_both, site=self.site_b)
+		history = PatentSiteContent.history
+		self.assertTrue(model_admin.get_history_queryset(request, history, "id", on_a.pk).exists())
+		self.assertFalse(model_admin.get_history_queryset(request, history, "id", on_b.pk).exists())
+
+
 class EditorialTest(PatentEditorFixture):
 	def url(self, patent=None):
 		return f"/editor/patents/{(patent or self.pat_a).pk}/editorial/"

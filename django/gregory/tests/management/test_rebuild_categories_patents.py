@@ -7,7 +7,9 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from organizations.models import Organization
 
@@ -228,3 +230,66 @@ class PatentHashIsolationTests(TestCase):
 		new = self.reload()
 		self.assertEqual(new.match_config_hash, old.match_config_hash)
 		self.assertNotEqual(new.patent_match_config_hash, old.patent_match_config_hash)
+
+
+class PatentCategoryHistoryTests(TestCase):
+	"""Patent category history is for people's changes: the rebuild's removals of
+	automatic rows are one DELETE and record nothing (articles keep recording
+	theirs)."""
+
+	def setUp(self):
+		self.org = Organization.objects.create(name="Org", slug="cat-hist-org")
+		self.team = Team.objects.create(organization=self.org, name="Research", slug="research-h")
+		self.subject = Subject.objects.create(subject_name="MS", subject_slug="ms-h", team=self.team)
+		self.category = TeamCategory.objects.create(
+			team=self.team, category_name="Ocrelizumab", category_terms=["ocrelizumab"]
+		)
+		self.category.subjects.add(self.subject)
+		self._n = 0
+
+	def make_patent(self, title):
+		self._n += 1
+		patent = Patents.objects.create(family_id=f"h{self._n}", title=title)
+		patent.subjects.add(self.subject)
+		return patent
+
+	def run_rebuild(self, **kwargs):
+		call_command("rebuild_categories", stdout=StringIO(), **kwargs)
+
+	def assignment(self, patent):
+		return PatentCategoryAssignment.objects.filter(patents=patent, teamcategory=self.category).first()
+
+	def test_removing_automatic_assignments_is_one_delete_with_no_history(self):
+		stale = [self.make_patent(f"Unrelated {n}") for n in range(4)]
+		for patent in stale:
+			PatentCategoryAssignment.objects.create(
+				patents=patent, teamcategory=self.category, source=CategoryAssignmentSource.AUTOMATIC
+			)
+		PatentCategoryAssignment.history.all().delete()
+
+		with CaptureQueriesContext(connection) as ctx:
+			self.run_rebuild(patents_only=True)
+
+		self.assertFalse(PatentCategoryAssignment.objects.filter(teamcategory=self.category).exists())
+		deletes = [q["sql"] for q in ctx.captured_queries if q["sql"].startswith('DELETE FROM "patents_team_categories"')]
+		self.assertEqual(len(deletes), 1, deletes)
+		self.assertEqual(PatentCategoryAssignment.history.count(), 0)
+
+	def test_a_hand_assignment_and_its_history_survive_a_rebuild(self):
+		patent = self.make_patent("Unrelated by title")
+		assignment = PatentCategoryAssignment.objects.create(
+			patents=patent, teamcategory=self.category, source=CategoryAssignmentSource.MANUAL
+		)
+		self.run_rebuild(patents_only=True)
+		self.assertEqual(self.assignment(patent).pk, assignment.pk)
+		self.assertEqual(PatentCategoryAssignment.history.filter(id=assignment.pk).count(), 1)
+
+	def test_a_person_removing_an_assignment_is_still_recorded(self):
+		patent = self.make_patent("Unrelated by title")
+		assignment = PatentCategoryAssignment.objects.create(
+			patents=patent, teamcategory=self.category, source=CategoryAssignmentSource.MANUAL
+		)
+		assignment.delete()
+		self.assertEqual(
+			[r.history_type for r in PatentCategoryAssignment.history.order_by("history_date")], ["+", "-"]
+		)

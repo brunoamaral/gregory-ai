@@ -3528,9 +3528,9 @@ paths:
       description: 'Editor-only. Who changed this patent family''s editorial content
         for the editor''s site, its hand assignments to categories in scope, and the
         suppressing or restoring of its links to trials in scope, and when. Newest
-        first. There are no relevance entries: patents have none. Changes made by
-        an API key name the key instead of a person; changes made by the pipeline
-        have no name.'
+        first. There are no relevance entries: patents have none. Only people''s changes
+        are recorded (the pipeline''s category matching and link detection write no
+        history); a change made by an API key names the key instead of a person.'
       summary: Edit history of a patent (editor)
       parameters:
       - in: query
@@ -3759,12 +3759,13 @@ paths:
   /editor/patents/resolve/:
     get:
       operationId: editor_patents_resolve_retrieve
-      description: Editor-only. Finds the patent family with a member publication
-        matching this number, in any common format (`EP4123456A1`, `EP 4123456 A1`;
-        without a kind code it matches every kind) among the families inside the editor's
-        site patent scope. 404 when there is none, which is also the answer for a
-        family outside that scope or a site without patents. 409 when several in-scope
-        families match, with their ids.
+      description: 'Editor-only. Takes ONE number (a list is 400: use `GET /patents/?publication_number=a,b`
+        for lists). Finds the patent family with a member publication matching this
+        number, in any common format (`EP4123456A1`, `EP 4123456 A1`; without a kind
+        code it matches every kind) among the families inside the editor''s site patent
+        scope. 404 when there is none, which is also the answer for a family outside
+        that scope or a site without patents. 409 when several in-scope families match,
+        with their ids.'
       summary: Resolve a publication number to a patent id (editor)
       parameters:
       - in: query

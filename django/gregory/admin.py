@@ -788,6 +788,17 @@ class PatentSiteContentInline(ArticleSiteContentInline):
 	model = PatentSiteContent
 	history_url_name = "admin:gregory_patentsitecontent_history"
 
+	@staticmethod
+	def _user_sites(request):
+		"""The article inline's sites, narrowed to those with ``patents_enabled``
+		on. Patents are shown (and the editor API reachable) only through such
+		sites, so offering a content row for any other would store text that is
+		never shown. Applies to superusers too; existing rows on other sites
+		stay visible to them."""
+		return ArticleSiteContentInline._user_sites(request).filter(
+			customsetting__patents_enabled=True
+		).distinct()
+
 
 class TrialOrgContentInline(_BaseOrgContentInline):
 	model = TrialOrgContent
@@ -4690,6 +4701,10 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 	"""Standalone page for browsing audit history; routine editing happens in
 	the Article page's inline."""
 
+	#: The inline whose site rules scope this admin (PatentSiteContentAdmin
+	#: points it at the patent one).
+	inline_class = ArticleSiteContentInline
+
 	list_display = ("article", "site", "updated_at")
 	list_filter = ("site",)
 	raw_id_fields = ("article",)
@@ -4735,7 +4750,7 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 			return False
 		if obj is None or request.user.is_superuser:
 			return True
-		return ArticleSiteContentInline._user_sites(request).filter(
+		return self.inline_class._user_sites(request).filter(
 			pk=obj.site_id
 		).exists()
 
@@ -4749,7 +4764,7 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 		qs = super().get_history_queryset(request, history_manager, pk_name, object_id)
 		if request.user.is_superuser:
 			return qs
-		site_ids = ArticleSiteContentInline._user_sites(request).values("pk")
+		site_ids = self.inline_class._user_sites(request).values("pk")
 		latest_site_id = (
 			qs.order_by("-history_date").values_list("site_id", flat=True).first()
 		)
@@ -4762,6 +4777,8 @@ class ArticleSiteContentAdmin(SimpleHistoryAdmin):
 class PatentSiteContentAdmin(ArticleSiteContentAdmin):
 	"""Audit history for a patent's per-site content; routine editing happens in
 	the patent page's inline. Same scoping as the article's."""
+
+	inline_class = PatentSiteContentInline
 
 	list_display = ("patent", "site", "updated_at")
 	raw_id_fields = ("patent",)

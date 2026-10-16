@@ -6,7 +6,9 @@ from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from organizations.models import Organization, OrganizationUser
@@ -281,6 +283,78 @@ class SuppressionTests(LinkTestCase):
 		self.detect(reset=True, after_months=1)
 		self.assertEqual(PatentTrialLink.objects.count(), 1)
 		self.assertTrue(self.link(patent, kept).suppressed)
+
+
+class DetectionHistoryTests(LinkTestCase):
+	"""PatentTrialLink keeps a history for people's changes (an editor
+	suppressing a link). Detection is not a person: it writes none, and its
+	removals stay a single DELETE rather than a row-by-row delete with a
+	history row each."""
+
+	def history(self):
+		return PatentTrialLink.history.count()
+
+	def delete_statements(self, queries):
+		return [q["sql"] for q in queries if q["sql"].startswith('DELETE FROM "patent_trial_links"')]
+
+	def test_creating_links_records_no_history(self):
+		self.make_patent(), self.make_trial()
+		self.detect()
+		self.assertEqual(PatentTrialLink.objects.count(), 1)
+		self.assertEqual(self.history(), 0)
+
+	def test_updating_a_link_records_no_history(self):
+		patent, trial = self.make_patent(), self.make_trial()
+		self.detect()
+		PatentTrialLink.objects.update(basis="subject")
+		TrialCategoryAssignment.objects.create(trials=trial, teamcategory=self.category)
+		PatentCategoryAssignment.objects.create(patents=patent, teamcategory=self.category)
+		self.detect()
+		self.assertEqual(self.link(patent, trial).basis, "category")
+		self.assertEqual(self.history(), 0)
+
+	def test_stale_removal_is_one_delete_and_records_no_history(self):
+		patents = [self.make_patent() for _ in range(3)]
+		trial = self.make_trial()
+		self.detect()
+		self.assertEqual(PatentTrialLink.objects.count(), 3)
+		Trials.objects.filter(pk=trial.pk).update(primary_completion_date=D(2020, 2, 1))
+		with CaptureQueriesContext(connection) as ctx:
+			self.detect(after_months=1)
+		self.assertEqual(PatentTrialLink.objects.count(), 0)
+		# One DELETE per patent that lost links, never one per link, and no
+		# history rows or inserts.
+		self.assertEqual(len(self.delete_statements(ctx.captured_queries)), len(patents))
+		self.assertFalse([q for q in ctx.captured_queries if "historicalpatenttriallink" in q["sql"]])
+		self.assertEqual(self.history(), 0)
+
+	def test_reset_is_a_single_delete_and_records_no_history(self):
+		for _ in range(5):
+			self.make_patent()
+		self.make_trial()
+		self.detect()
+		self.assertEqual(PatentTrialLink.objects.count(), 5)
+		with CaptureQueriesContext(connection) as ctx:
+			self.detect(reset=True)
+		deletes = self.delete_statements(ctx.captured_queries)
+		self.assertEqual(len(deletes), 1, deletes)
+		self.assertFalse([q for q in ctx.captured_queries if "historicalpatenttriallink" in q["sql"]])
+		self.assertEqual(PatentTrialLink.objects.count(), 5)  # recreated
+		self.assertEqual(self.history(), 0)
+
+	def test_a_persons_change_is_still_recorded(self):
+		patent, trial = self.make_patent(), self.make_trial()
+		self.detect()
+		link = self.link(patent, trial)
+		link.suppressed = True
+		link.save()
+		rows = list(PatentTrialLink.history.filter(id=link.id))
+		self.assertEqual([r.history_type for r in rows], ["~"])
+		self.assertTrue(rows[0].suppressed)
+		# And detection still leaves the suppressed link alone, recording nothing more.
+		self.detect(reset=True)
+		self.assertTrue(self.link(patent, trial).suppressed)
+		self.assertEqual(self.history(), 1)
 
 
 class LinkAdminTests(LinkTestCase):
