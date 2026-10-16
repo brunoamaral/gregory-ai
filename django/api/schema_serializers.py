@@ -250,6 +250,11 @@ class EditorErrorSerializer(serializers.Serializer):
 		required=False,
 		help_text="On 409 from the DOI lookup: the articles that share the DOI.",
 	)
+	patent_ids = serializers.ListField(
+		child=serializers.IntegerField(),
+		required=False,
+		help_text="On 409 from the publication-number lookup: the families that match.",
+	)
 	category_id = serializers.IntegerField(
 		required=False,
 		help_text=(
@@ -345,6 +350,60 @@ class EditorHistoryResponseSerializer(serializers.Serializer):
 	article_id = serializers.IntegerField()
 	entries = EditorHistoryEntrySerializer(many=True)
 
+
+
+# --- /editor/ patent routes ----------------------------------------------------
+
+
+class EditorPatentResolveResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	family_id = serializers.CharField(allow_null=True)
+	title = serializers.CharField()
+	representative_publication = serializers.CharField()
+
+
+class EditorPatentEditorialUpdateResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	site_id = serializers.IntegerField()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+	updated_by = serializers.CharField(
+		allow_null=True, help_text="Name and email of whoever last changed the row."
+	)
+	updated_at = serializers.DateTimeField()
+
+
+class EditorPatentCategoryAssignmentResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	source = serializers.CharField(
+		help_text="Always `manual` after an editor assigns it; the pipeline never removes a manual assignment.",
+	)
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorPatentCategoryUnassignResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	removed = serializers.CharField(help_text="Always `manual`: only a hand assignment can be removed.")
+
+
+class EditorPatentTrialLinkResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	trial_id = serializers.IntegerField()
+	suppressed = serializers.BooleanField(
+		help_text="True after a DELETE (the link is hidden everywhere), false after a PUT (restored)."
+	)
+	timing = serializers.CharField()
+	basis = serializers.CharField()
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorPatentHistoryResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	entries = EditorHistoryEntrySerializer(many=True)
 
 
 # --- /editor/ category routes -------------------------------------------------

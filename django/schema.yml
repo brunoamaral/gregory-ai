@@ -3232,6 +3232,616 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /editor/patents/{patent_id}/categories/{category_id}/:
+    put:
+      operationId: editor_patents_categories_update
+      description: Editor-only. Assigns the patent family to the category by hand.
+        The patent must be in the editor's site patent scope and the category in its
+        scope (a category is in scope when one of its subjects is), else 404. A new
+        assignment is 201. A family the pipeline already matched becomes a hand assignment
+        (200), which `rebuild_categories` never removes; one already assigned by hand
+        is returned unchanged (200). Recorded under the editor's name.
+      summary: Assign a patent to a category (editor)
+      parameters:
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryAssignmentResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryAssignmentResponse'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryAssignmentResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryAssignmentResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+    delete:
+      operationId: editor_patents_categories_destroy
+      description: 'Editor-only. Removes a hand assignment. An assignment the pipeline
+        made from the category''s terms is 409: it would come back on the next run,
+        so change the terms instead. 404 when the patent is not in the category, or
+        either is outside the editor''s site scope.'
+      summary: Remove a patent from a category (editor)
+      parameters:
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryUnassignResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentCategoryUnassignResponse'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/patents/{patent_id}/editorial/:
+    patch:
+      operationId: editor_patents_editorial_partial_update
+      description: Editor-only. Upserts `takeaways` and/or `summary_plain_english`
+        of the patent family for the editor's site; fields not sent are left alone
+        and an empty string clears a field (stored as NULL). Applies immediately and
+        is recorded under the editor's name. Returns the stored values and who last
+        changed them. Writes are throttled per editor and site.
+      summary: Set this site's editorial content for a patent (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEditorialUpdateRequest'
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentEditorialUpdateResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentEditorialUpdateResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/patents/{patent_id}/history/:
+    get:
+      operationId: editor_patents_history_retrieve
+      description: 'Editor-only. Who changed this patent family''s editorial content
+        for the editor''s site, its hand assignments to categories in scope, and the
+        suppressing or restoring of its links to trials in scope, and when. Newest
+        first. There are no relevance entries: patents have none. Only people''s changes
+        are recorded (the pipeline''s category matching and link detection write no
+        history); a change made by an API key names the key instead of a person.'
+      summary: Edit history of a patent (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Entries to return (default 50, max 200).
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentHistoryResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentHistoryResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/patents/{patent_id}/trials/{trial_id}/:
+    put:
+      operationId: editor_patents_trials_update
+      description: 'Editor-only. Un-hides a link an editor suppressed. Editors cannot
+        create a patent-trial link: links need a shared sponsor and timing, which
+        only detection computes, so a pair that is not linked at all is 404 with that
+        explanation. Idempotent: a link that is not suppressed is returned unchanged
+        (200). 404 as well when the patent is outside the editor''s site patent scope
+        or the trial outside its scope.'
+      summary: Restore a suppressed patent-trial link (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: trial_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+    delete:
+      operationId: editor_patents_trials_destroy
+      description: 'Editor-only. Hides the link between the patent and a trial everywhere
+        (it stays, marked `suppressed`, so detection doesn''t recreate it). Idempotent:
+        an already suppressed link is returned unchanged (200). 404 when the pair
+        isn''t linked, or either side is outside the editor''s site scope.'
+      summary: Suppress a patent-trial link (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: patent_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: trial_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/patents/resolve/:
+    get:
+      operationId: editor_patents_resolve_retrieve
+      description: 'Editor-only. Takes ONE number (a list is 400: use `GET /patents/?publication_number=a,b`
+        for lists). Finds the patent family with a member publication matching this
+        number, in any common format (`EP4123456A1`, `EP 4123456 A1`; without a kind
+        code it matches every kind) among the families inside the editor''s site patent
+        scope. 404 when there is none, which is also the answer for a family outside
+        that scope or a site without patents. 409 when several in-scope families match,
+        with their ids.'
+      summary: Resolve a publication number to a patent id (editor)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: query
+        name: publication_number
+        schema:
+          type: string
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentResolveResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentResolveResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
   /editor/tenants/:
     get:
       operationId: editor_tenants_list
@@ -3313,7 +3923,7 @@ paths:
         - **family_id** - exact DOCDB family id
         - **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
         - **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
-        - **include** - on the detail only: `claims` adds the full claims text
+        - **include** - `editorial` adds the caller's own sites' takeaways and plain-English summary; on the detail only, `claims` adds the full claims text
         - **page**, **page_size**, **ordering**
 
         # Ordering:
@@ -3435,6 +4045,16 @@ paths:
           type: boolean
         description: 'true: families with at least one visible, unsuppressed link
           to a trial; false: without. Counts category-basis links only unless include_subject_links=true.'
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - editorial
+        description: Opt in to extra content. Comma-separated; `editorial` adds an
+          `editorial` list of the caller's own sites' `takeaways` and `summary_plain_english`
+          (one entry per site, as on articles; see docs/03-api-and-rss-feeds.md).
+          `claims` is detail-only and ignored here. Unknown values return 400.
       - in: query
         name: include_public
         schema:
@@ -3602,7 +4222,7 @@ paths:
         - **family_id** - exact DOCDB family id
         - **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
         - **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
-        - **include** - on the detail only: `claims` adds the full claims text
+        - **include** - `editorial` adds the caller's own sites' takeaways and plain-English summary; on the detail only, `claims` adds the full claims text
         - **page**, **page_size**, **ordering**
 
         # Ordering:
@@ -3650,11 +4270,13 @@ paths:
           type: string
           enum:
           - claims
-        description: Opt in to extra content. Comma-separated; the accepted value
-          here is `claims`, which adds the family's full `claims` text to the detail
-          response (it averages ~12,000 characters and can run past 200,000, so it
-          is never in the default response and not available on the list). Unknown
-          values return 400.
+          - editorial
+        description: Opt in to extra content. Comma-separated. `claims` adds the family's
+          full `claims` text (it averages ~12,000 characters and can run past 200,000,
+          so it is never in the default response and not available on the list); `editorial`
+          adds an `editorial` list of the caller's own sites' `takeaways` and `summary_plain_english`
+          (one entry per site, as on articles; see docs/03-api-and-rss-feeds.md).
+          Unknown values return 400.
       - in: query
         name: include_public
         schema:
@@ -7191,8 +7813,9 @@ components:
     Article:
       type: object
       description: |-
-        ``?include=editorial`` for articles: one entry per site, since article
-        editorial content is per site (``ArticleSiteContent``).
+        ``?include=editorial`` for articles and patents: one entry per site,
+        since their editorial content is per site (``ArticleSiteContent``,
+        ``PatentSiteContent``). Patents override the two attributes below.
       properties:
         article_id:
           type: integer
@@ -7775,6 +8398,12 @@ components:
           items:
             type: integer
           description: 'On 409 from the DOI lookup: the articles that share the DOI.'
+        patent_ids:
+          type: array
+          items:
+            type: integer
+          description: 'On 409 from the publication-number lookup: the families that
+            match.'
         category_id:
           type: integer
           description: 'On 409 from creating a category: the existing category that
@@ -7825,6 +8454,130 @@ components:
       required:
       - article_id
       - entries
+    EditorPatentCategoryAssignmentResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        category_id:
+          type: integer
+        source:
+          type: string
+          description: Always `manual` after an editor assigns it; the pipeline never
+            removes a manual assignment.
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - category_id
+      - patent_id
+      - source
+      - updated_at
+      - updated_by
+    EditorPatentCategoryUnassignResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        category_id:
+          type: integer
+        removed:
+          type: string
+          description: 'Always `manual`: only a hand assignment can be removed.'
+      required:
+      - category_id
+      - patent_id
+      - removed
+    EditorPatentEditorialUpdateResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        site_id:
+          type: integer
+        takeaways:
+          type: string
+          nullable: true
+        summary_plain_english:
+          type: string
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+          description: Name and email of whoever last changed the row.
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - patent_id
+      - site_id
+      - summary_plain_english
+      - takeaways
+      - updated_at
+      - updated_by
+    EditorPatentHistoryResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorHistoryEntry'
+      required:
+      - entries
+      - patent_id
+    EditorPatentResolveResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        family_id:
+          type: string
+          nullable: true
+        title:
+          type: string
+        representative_publication:
+          type: string
+      required:
+      - family_id
+      - patent_id
+      - representative_publication
+      - title
+    EditorPatentTrialLinkResponse:
+      type: object
+      properties:
+        patent_id:
+          type: integer
+        trial_id:
+          type: integer
+        suppressed:
+          type: boolean
+          description: True after a DELETE (the link is hidden everywhere), false
+            after a PUT (restored).
+        timing:
+          type: string
+        basis:
+          type: string
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - basis
+      - patent_id
+      - suppressed
+      - timing
+      - trial_id
+      - updated_at
+      - updated_by
     EditorResolveResponse:
       type: object
       properties:
@@ -8717,6 +9470,11 @@ components:
         trial_links_count:
           type: integer
           readOnly: true
+        editorial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorialSiteEntry'
+          readOnly: true
         publications:
           type: array
           items:
@@ -8744,6 +9502,7 @@ components:
       required:
       - applicants
       - claims
+      - editorial
       - patent_id
       - publications
       - publications_count
@@ -8823,8 +9582,14 @@ components:
         trial_links_count:
           type: integer
           readOnly: true
+        editorial:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorialSiteEntry'
+          readOnly: true
       required:
       - applicants
+      - editorial
       - patent_id
       - publications_count
       - subjects

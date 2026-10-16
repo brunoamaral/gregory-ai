@@ -160,6 +160,22 @@ Differences from the public endpoints:
 
 `GET /editor/categories/` and `GET /editor/categories/{id}/` stay the read endpoints described above; the category writes share their paths. `GET /categories/` and the editor category responses include `category_exclude_terms`: the veto list used by `rebuild_categories`, where any excluded term (whole word, case-insensitive) found in a field the category searches stops an article or trial being assigned automatically, whatever its score; manual assignments are never touched. Changing terms, excluded terms, subjects or scope makes the next pipeline run re-match the whole category. Category changes are recorded in `HistoricalTeamCategory` under the editor's name.
 
+#### Patent routes
+
+The same actions on patent families. A patent is found through the site's **patent scope** (its `scope_subjects`, but only when the site has `patents_enabled` on, see [Patents](#patents)), so every one of these routes is `404` for an editor of a site without the switch, and for a family outside the scope. Writes need a grant with `can_edit`, run under the editor's name, and count against the same per-(editor, site) limit as article writes.
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `GET /editor/patents/resolve/?publication_number=` | Publication number to `patent_id` among in-scope families, in any common format (`EP4123456A1`, `EP 4123456 A1`; without a kind code it matches every kind, and a letter alone matches that letter with or without its digit). Takes one number: a list (commas or semicolons) is `400`, since `GET /patents/?publication_number=a,b` is the endpoint for lists. Returns `patent_id`, `family_id`, `title`, `representative_publication`. `404` for none, or for one outside the scope. `409` with `patent_ids` when several in-scope families match, as DOI resolution does for articles |
+| `PATCH /editor/patents/{patent_id}/editorial/` | Upsert this site's `takeaways` and/or `summary_plain_english`. Omitted fields are left alone; an empty string clears. Returns the stored values with `updated_by` and `updated_at` |
+| `PUT /editor/patents/{patent_id}/categories/{category_id}/` | Assigns the family to the category by hand, `201`. A family the pipeline already matched becomes a hand assignment, `200`, which `rebuild_categories` never removes; one already assigned by hand is returned unchanged, `200`. The category is in scope when one of its subjects is |
+| `DELETE /editor/patents/{patent_id}/categories/{category_id}/` | Removes a hand assignment. `409` for one the pipeline made from the category's terms. `404` when the family isn't in the category |
+| `DELETE /editor/patents/{patent_id}/trials/{trial_id}/` | Suppresses the link between the family and a trial: it stays, marked `suppressed`, hidden everywhere, and detection never recreates it. Idempotent: an already suppressed link is returned unchanged, `200`. `404` when the pair isn't linked, or the trial is outside the site's scope |
+| `PUT /editor/patents/{patent_id}/trials/{trial_id}/` | Restores a suppressed link, `200`; a link that isn't suppressed is returned unchanged. Editors **cannot create** a link (links need a shared sponsor and timing, which only detection computes), so a pair with no link is `404` and the message says so |
+| `GET /editor/patents/{patent_id}/history/?limit=` | Who changed this site's editorial content for the family, its hand assignments to categories in scope, and the suppressing or restoring of its links to trials in scope; newest first, `limit` 1 to 200 (default 50). Entry kinds are `editorial`, `category` and `trial_link`: patents have no relevance. Only people's changes are recorded (the pipeline's category matching and link detection write no history), so every entry is an editor, admin or API-key action |
+
+The reads `GET /editor/patents/` and `GET /editor/patents/{id}/` accept `?include=editorial` (and `claims` on the detail) like the public endpoints; each editorial entry also carries `updated_at` and `updated_by`.
+
 Trials are read-only over MCP: an editor can link a trial to an article but cannot change the trial. `access`, `retracted` and `kind` stay on `POST /articles/edit/` (API key) and the admin.
 
 ---
@@ -358,9 +374,9 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 ## Editorial content
 
-Editorial content is the `takeaways` and `summary_plain_english` of a record. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field). CSV output never includes it.
+Editorial content is the `takeaways` and `summary_plain_english` of a record. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field), and on `/patents/` and `/patents/{id}/`. CSV output never includes it.
 
-Articles carry editorial content **per site**, so two sites of one organisation can say different things about the same article. Each entry is labelled by site:
+Articles and patents carry editorial content **per site**, so two sites of one organisation can say different things about the same article. Each entry is labelled by site:
 
 ```json
 "editorial": [
@@ -831,7 +847,7 @@ The list returns:
 | `trial_links` | `trial_id`, `trial_title`, `sponsor_id`, `timing` (`during` / `after`), `days_after_completion`, `basis` |
 | `claims` | **Only with `?include=claims`**; otherwise the key is absent. Averages ~12,000 characters and runs past 200,000, so it is never on the list. `null` when OPS has no full text for the family's offices (US-, CN- or JP-only families) |
 
-`?include=claims` is the only `include` value that does anything on `/patents/`; `?include=editorial` is accepted on every endpoint but adds nothing here yet. `claims` is ignored on other endpoints.
+`?include=claims` (detail only) and `?include=editorial` (list and detail) are the `include` values that do anything on `/patents/`; combine them with a comma. `editorial` adds an `editorial` list of the caller's own sites' `takeaways` and `summary_plain_english`, one entry per site, as on articles (see [Editorial content](#editorial-content)); for an MCP editor each entry also carries `updated_at` and `updated_by`. Only sites with `patents_enabled` on get an entry, since the others never show the patent, even when the caller owns them (on an article the same caller would get every site they own). `claims` is ignored on other endpoints.
 
 ### Trial links
 

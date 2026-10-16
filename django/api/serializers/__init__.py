@@ -38,6 +38,8 @@ from api.editorial import (
 	editorial_site_ids,
 	editorial_sites,
 	is_editor_request,
+	patent_editorial_site_ids,
+	patent_site_contents,
 )
 from api.serializers.mixins import ScopedSerializerMixin
 from api.patent_links import visible_patent_trial_links_queryset
@@ -485,8 +487,20 @@ class _EditorialIncludeMixin:
 
 
 class SiteEditorialFieldMixin(_EditorialIncludeMixin):
-	"""``?include=editorial`` for articles: one entry per site, since article
-	editorial content is per site (``ArticleSiteContent``)."""
+	"""``?include=editorial`` for articles and patents: one entry per site,
+	since their editorial content is per site (``ArticleSiteContent``,
+	``PatentSiteContent``). Patents override the two attributes below."""
+
+	#: Name of the content model's foreign key to the record being serialised.
+	site_contents_fk = "article"
+
+	@staticmethod
+	def site_contents_for(request):
+		return article_site_contents(request)
+
+	@staticmethod
+	def site_ids_for(request):
+		return editorial_site_ids(request)
 
 	@extend_schema_field(EditorialSiteEntrySerializer(many=True))
 	def get_editorial(self, obj) -> list:
@@ -497,14 +511,14 @@ class SiteEditorialFieldMixin(_EditorialIncludeMixin):
 		request = self.context.get("request")
 		if not editorial_requested(request):
 			return []  # popped in to_representation
-		site_ids = editorial_site_ids(request)
+		site_ids = self.site_ids_for(request)
 		if not site_ids:
 			return []
 		sites = editorial_sites(request)
 		prefetched = getattr(obj, "_prefetched_site_contents", None)
-		rows = prefetched if prefetched is not None else article_site_contents(request).filter(
-			article=obj
-		)
+		rows = prefetched if prefetched is not None else self.site_contents_for(
+			request
+		).filter(**{self.site_contents_fk: obj})
 		by_site = {row.site_id: row for row in rows}
 		with_audit = is_editor_request(request)
 		entries = []
@@ -679,7 +693,9 @@ class PatentApplicantSerializer(serializers.ModelSerializer):
 		fields = ["raw_name", "sponsor_id", "sponsor_name", "sponsor_slug", "is_individual"]
 
 
-class PatentListSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
+class PatentListSerializer(
+	SiteEditorialFieldMixin, ScopedSerializerMixin, serializers.ModelSerializer
+):
 	"""One patent family (``/patents/``). Relies on PatentViewSet.get_queryset()
 	prefetching ``patent_applicants``, ``team_categories`` and ``subjects`` and
 	annotating the two counts, so a page costs a constant number of queries.
@@ -696,6 +712,17 @@ class PatentListSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	publications_count = serializers.IntegerField(read_only=True)
 	trial_links_count = serializers.IntegerField(read_only=True)
+	editorial = serializers.SerializerMethodField()
+
+	site_contents_fk = "patent"
+
+	@staticmethod
+	def site_contents_for(request):
+		return patent_site_contents(request)
+
+	@staticmethod
+	def site_ids_for(request):
+		return patent_editorial_site_ids(request)
 
 	class Meta:
 		model = Patents
@@ -715,6 +742,7 @@ class PatentListSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 			"subjects",
 			"publications_count",
 			"trial_links_count",
+			"editorial",
 		]
 
 

@@ -25,7 +25,7 @@ authentication, with ``gregory.visibility`` giving them the editor's site scope.
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import Case, When
+from django.db.models import Case, Exists, OuterRef, When
 from django.utils.text import slugify
 from drf_spectacular.utils import (
 	OpenApiParameter,
@@ -62,6 +62,12 @@ from api.views import (
 from api.schema_serializers import (
 	EditorCategoryAssignmentResponseSerializer,
 	EditorCategoryCreateSerializer,
+	EditorPatentCategoryAssignmentResponseSerializer,
+	EditorPatentCategoryUnassignResponseSerializer,
+	EditorPatentEditorialUpdateResponseSerializer,
+	EditorPatentHistoryResponseSerializer,
+	EditorPatentResolveResponseSerializer,
+	EditorPatentTrialLinkResponseSerializer,
 	EditorCategoryResponseSerializer,
 	EditorCategoryUnassignResponseSerializer,
 	EditorCategoryUpdateSerializer,
@@ -85,10 +91,16 @@ from gregory.models import (
 	ArticleTrialReference,
 	CategoryAssignmentSource,
 	CategoryType,
+	PatentCategoryAssignment,
+	PatentPublication,
+	PatentSiteContent,
+	PatentTrialLink,
+	Patents,
 	Subject,
 	TeamCategory,
 	Trials,
 )
+from gregory.utils.patent_numbers import publication_number_q
 from gregory.visibility import site_scope_subject_ids
 from mcpauth.editor_auth import (
 	EditorAuth,
@@ -206,6 +218,20 @@ class _EditorView(APIView):
 			raise NotFound("Trial not found.")
 		return trial
 
+	def patent_scope(self):
+		"""Subject ids the editor's site shows PATENTS for: its scope, but only
+		when the site has ``patents_enabled`` on (empty otherwise)."""
+		return site_scope_subject_ids(self.request.auth.site_id, public_only=False, patents=True)
+
+	def get_patent(self, patent_id):
+		"""A patent family in the editor's patent scope. A site with the switch
+		off has none, so every patent route is 404 there, the same answer as
+		for a family that doesn't exist."""
+		patent = Patents.objects.filter(pk=patent_id, subjects__id__in=self.patent_scope()).distinct().first()
+		if patent is None:
+			raise NotFound("Patent not found.")
+		return patent
+
 
 class _CategoryScopeMixin:
 	"""Which categories an editor may touch, shared by the category routes.
@@ -264,6 +290,124 @@ def _last_change(history_model, **lookup):
 class ConflictError(APIException):
 	status_code = 409
 	default_code = "conflict"
+
+
+# --- Shared by the article and patent routes ------------------------------
+#
+# The two record types get the same editorial, category and link rules. The
+# locking, the column-limited save, the automatic-vs-manual category rules and
+# the history scoping live here once, parameterised by the content or
+# assignment model and the name of its foreign key to the record.
+
+
+def _editorial_fields(request):
+	"""The validated ``takeaways`` / ``summary_plain_english`` of a PATCH body,
+	with an empty string meaning "clear" (stored as NULL)."""
+	body = EditorialUpdateRequestSerializer(data=request.data)
+	body.is_valid(raise_exception=True)
+	fields = {key: (value or None) for key, value in body.validated_data.items()}
+	if not fields:
+		raise ValidationError({"non_field_errors": ["Send `takeaways` and/or `summary_plain_english`."]})
+	return fields
+
+
+def _upsert_site_content(request, content_model, record_field, record, fields):
+	"""Upsert this editor's site's content row for ``record`` and return it."""
+	site_id = request.auth.site_id
+	with transaction.atomic(), editing_as(request.user, "mcp"):
+		# Locked so two overlapping PATCHes queue rather than each read the
+		# old row, and only the sent columns are written, so an omitted
+		# field keeps whatever another request just stored.
+		content, created = content_model.objects.select_for_update().get_or_create(
+			**{record_field: record}, site_id=site_id, defaults=fields
+		)
+		if not created:
+			changed = [k for k, v in fields.items() if getattr(content, k) != v]
+			for key in changed:
+				setattr(content, key, fields[key])
+			if changed:
+				content.save(update_fields=[*changed, "updated_at"])
+	content.refresh_from_db()
+	return content
+
+
+def _site_content_payload(content_model, record_field, content):
+	updated_by, _ = _last_change(content_model.history, id=content.id)
+	return {
+		f"{record_field}_id": getattr(content, f"{record_field}_id"),
+		"site_id": content.site_id,
+		"takeaways": content.takeaways,
+		"summary_plain_english": content.summary_plain_english,
+		"updated_by": updated_by,
+		"updated_at": content.updated_at,
+	}
+
+
+def _assign_category(request, assignment_model, record_field, record, category):
+	"""Assign ``record`` to ``category`` by hand: ``(assignment, created)``. A
+	row the pipeline made becomes a hand assignment, which it then never removes."""
+	with transaction.atomic(), editing_as(request.user, "mcp"):
+		assignment, created = assignment_model.objects.select_for_update().get_or_create(
+			**{record_field: record, "teamcategory": category},
+			defaults={"source": CategoryAssignmentSource.MANUAL},
+		)
+		if not created and assignment.source != CategoryAssignmentSource.MANUAL:
+			assignment.source = CategoryAssignmentSource.MANUAL
+			assignment.save()
+	return assignment, created
+
+
+def _unassign_category(request, assignment_model, record_field, record, category, noun):
+	"""Remove a hand assignment. One the pipeline made would come back on the
+	next run, so it is refused (409) rather than deleted."""
+	with transaction.atomic(), editing_as(request.user, "mcp"):
+		assignment = assignment_model.objects.filter(**{record_field: record, "teamcategory": category}).first()
+		if assignment is None:
+			raise NotFound(f"The {noun} is not in this category.")
+		if assignment.source != CategoryAssignmentSource.MANUAL:
+			raise ConflictError(
+				f"The pipeline assigned this {noun} from the category's terms and would add it back. "
+				"Change the category's terms instead."
+			)
+		assignment.delete()
+
+
+def _history_limit(request):
+	try:
+		limit = int(request.query_params.get("limit", HISTORY_DEFAULT_LIMIT))
+	except ValueError:
+		raise ValidationError({"limit": "Must be an integer."})
+	if not 1 <= limit <= HISTORY_MAX_LIMIT:
+		raise ValidationError({"limit": f"Must be between 1 and {HISTORY_MAX_LIMIT}."})
+	return limit
+
+
+def _editorial_history_entries(content_model, record_field, record_pk, site_id, limit):
+	rows = content_model.history.filter(**{f"{record_field}_id": record_pk, "site_id": site_id})
+	return [
+		_history_entry(
+			"editorial",
+			row,
+			{
+				"site_id": row.site_id,
+				"takeaways": row.takeaways,
+				"summary_plain_english": row.summary_plain_english,
+			},
+		)
+		for row in rows.order_by("-history_date")[:limit]
+	]
+
+
+def _category_history_entries(assignment_model, record_field, record_pk, scope, limit):
+	history = assignment_model.history.filter(**{f"{record_field}_id": record_pk})
+	# Scope first, then the limit, as for trial links.
+	visible = TeamCategory.objects.filter(
+		pk__in=history.values("teamcategory_id"), subjects__id__in=scope
+	).values("pk")
+	return [
+		_history_entry("category", row, {"category_id": row.teamcategory_id, "source": row.source})
+		for row in history.filter(teamcategory_id__in=visible).order_by("-history_date")[:limit]
+	]
 
 
 # --- Read: resolve a DOI ------------------------------------------------
@@ -336,40 +480,9 @@ class EditorArticleEditorialView(_EditorView):
 
 	def patch(self, request, article_id):
 		article = self.get_article(article_id)
-		body = EditorialUpdateRequestSerializer(data=request.data)
-		body.is_valid(raise_exception=True)
-		fields = {key: (value or None) for key, value in body.validated_data.items()}
-		if not fields:
-			raise ValidationError({"non_field_errors": ["Send `takeaways` and/or `summary_plain_english`."]})
-
-		site_id = request.auth.site_id
-		with transaction.atomic(), editing_as(request.user, "mcp"):
-			# Locked so two overlapping PATCHes queue rather than each read the
-			# old row, and only the sent columns are written, so an omitted
-			# field keeps whatever another request just stored.
-			content, created = ArticleSiteContent.objects.select_for_update().get_or_create(
-				article=article, site_id=site_id, defaults=fields
-			)
-			if not created:
-				changed = [k for k, v in fields.items() if getattr(content, k) != v]
-				for key in changed:
-					setattr(content, key, fields[key])
-				if changed:
-					content.save(update_fields=[*changed, "updated_at"])
-		content.refresh_from_db()
-		return Response(self.serialize(content))
-
-	@staticmethod
-	def serialize(content):
-		updated_by, _ = _last_change(ArticleSiteContent.history, id=content.id)
-		return {
-			"article_id": content.article_id,
-			"site_id": content.site_id,
-			"takeaways": content.takeaways,
-			"summary_plain_english": content.summary_plain_english,
-			"updated_by": updated_by,
-			"updated_at": content.updated_at,
-		}
+		fields = _editorial_fields(request)
+		content = _upsert_site_content(request, ArticleSiteContent, "article", article, fields)
+		return Response(_site_content_payload(ArticleSiteContent, "article", content))
 
 
 # --- Write: relevance ---------------------------------------------------
@@ -764,13 +877,7 @@ class EditorArticleCategoryView(_CategoryScopeMixin, _EditorView):
 	def put(self, request, article_id, category_id):
 		article = self.get_article(article_id)
 		category = self.category_in_scope(category_id)
-		with transaction.atomic(), editing_as(request.user, "mcp"):
-			assignment, created = ArticleCategoryAssignment.objects.select_for_update().get_or_create(
-				articles=article, teamcategory=category, defaults={"source": CategoryAssignmentSource.MANUAL}
-			)
-			if not created and assignment.source != CategoryAssignmentSource.MANUAL:
-				assignment.source = CategoryAssignmentSource.MANUAL
-				assignment.save()
+		assignment, created = _assign_category(request, ArticleCategoryAssignment, "articles", article, category)
 		return Response(
 			self.serialize(assignment),
 			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -795,16 +902,7 @@ class EditorArticleCategoryView(_CategoryScopeMixin, _EditorView):
 	def delete(self, request, article_id, category_id):
 		article = self.get_article(article_id)
 		category = self.category_in_scope(category_id)
-		with transaction.atomic(), editing_as(request.user, "mcp"):
-			assignment = ArticleCategoryAssignment.objects.filter(articles=article, teamcategory=category).first()
-			if assignment is None:
-				raise NotFound("The article is not in this category.")
-			if assignment.source != CategoryAssignmentSource.MANUAL:
-				raise ConflictError(
-					"The pipeline assigned this article from the category's terms and would add it back. "
-					"Change the category's terms instead."
-				)
-			assignment.delete()
+		_unassign_category(request, ArticleCategoryAssignment, "articles", article, category, "article")
 		return Response(
 			{"article_id": article.article_id, "category_id": category.pk, "removed": CategoryAssignmentSource.MANUAL}
 		)
@@ -869,28 +967,10 @@ class EditorArticleHistoryView(_EditorView):
 
 	def get(self, request, article_id):
 		article = self.get_article(article_id)
-		try:
-			limit = int(request.query_params.get("limit", HISTORY_DEFAULT_LIMIT))
-		except ValueError:
-			raise ValidationError({"limit": "Must be an integer."})
-		if not 1 <= limit <= HISTORY_MAX_LIMIT:
-			raise ValidationError({"limit": f"Must be between 1 and {HISTORY_MAX_LIMIT}."})
+		limit = _history_limit(request)
 		scope = self.site_scope()
 
-		entries = []
-		editorial = ArticleSiteContent.history.filter(article_id=article.pk, site_id=request.auth.site_id)
-		for row in editorial.order_by("-history_date")[:limit]:
-			entries.append(
-				_history_entry(
-					"editorial",
-					row,
-					{
-						"site_id": row.site_id,
-						"takeaways": row.takeaways,
-						"summary_plain_english": row.summary_plain_english,
-					},
-				)
-			)
+		entries = _editorial_history_entries(ArticleSiteContent, "article", article.pk, request.auth.site_id, limit)
 		relevance = ArticleSubjectRelevance.history.filter(article_id=article.pk, subject_id__in=scope)
 		for row in relevance.order_by("-history_date")[:limit]:
 			entries.append(
@@ -916,17 +996,316 @@ class EditorArticleHistoryView(_EditorView):
 				)
 			)
 
-		category_history = ArticleCategoryAssignment.history.filter(articles_id=article.pk)
-		visible_categories = TeamCategory.objects.filter(
-			pk__in=category_history.values("teamcategory_id"), subjects__id__in=scope
-		).values("pk")
-		for row in category_history.filter(teamcategory_id__in=visible_categories).order_by("-history_date")[:limit]:
-			entries.append(
-				_history_entry("category", row, {"category_id": row.teamcategory_id, "source": row.source})
-			)
+		entries += _category_history_entries(ArticleCategoryAssignment, "articles", article.pk, scope, limit)
 
 		entries.sort(key=lambda e: e["changed_at"], reverse=True)
 		return Response({"article_id": article.article_id, "entries": entries[:limit]})
+
+
+# --- Patents --------------------------------------------------------------
+#
+# The same actions as the article routes, on patent families. Differences:
+# a patent is found through the site's PATENT scope (a site with
+# ``patents_enabled`` off has none, so every route is 404), editors cannot
+# create a patent-trial link (only detection can: it needs a shared sponsor and
+# timing), and patents have no relevance verdict.
+
+_PATENT_ERRORS = {
+	401: EditorErrorSerializer,
+	403: EditorErrorSerializer,
+	404: EditorErrorSerializer,
+}
+
+
+@extend_schema(
+	summary="Resolve a publication number to a patent id (editor)",
+	description=(
+		"Editor-only. Takes ONE number (a list is 400: use `GET /patents/"
+		"?publication_number=a,b` for lists). Finds the patent family with a "
+		"member publication matching this number, in any common format (`EP4123456A1`, `EP 4123456 A1`; "
+		"without a kind code it matches every kind) among the families inside the "
+		"editor's site patent scope. 404 when there is none, which is also the "
+		"answer for a family outside that scope or a site without patents. 409 "
+		"when several in-scope families match, with their ids."
+	),
+	parameters=[OpenApiParameter("publication_number", OpenApiTypes.STR, OpenApiParameter.QUERY, required=True)],
+	responses={
+		200: EditorPatentResolveResponseSerializer,
+		400: EDITOR_VALIDATION_ERROR,
+		409: EditorErrorSerializer,
+		**_PATENT_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorPatentResolveView(_EditorView):
+	"""``GET /editor/patents/resolve/?publication_number=``"""
+
+	def get(self, request):
+		number = request.query_params.get("publication_number", "").strip()
+		if not number:
+			raise ValidationError({"publication_number": "This query parameter is required."})
+		if "," in number or ";" in number:
+			# `/patents/?publication_number=` takes a list; this resolves one.
+			# Merging a list into one string would match nothing and answer 404,
+			# which reads as "no such patent".
+			raise ValidationError(
+				{"publication_number": "Send one publication number. To look up several, use GET /patents/?publication_number=a,b."}
+			)
+		condition = publication_number_q([number])
+		if not condition:
+			raise NotFound("Patent not found.")
+		member = PatentPublication.objects.filter(condition, patent=OuterRef("pk"))
+		matches = list(
+			Patents.objects.filter(subjects__id__in=self.patent_scope())
+			.filter(Exists(member))
+			.distinct()
+			.order_by("patent_id")
+			.values("patent_id", "family_id", "title", "representative_publication")
+		)
+		if not matches:
+			raise NotFound("Patent not found.")
+		if len(matches) > 1:
+			error = ConflictError(f"{len(matches)} patents match {number}.")
+			error.detail = {
+				"detail": f"{len(matches)} patents match {number}.",
+				"patent_ids": [m["patent_id"] for m in matches],
+			}
+			raise error
+		return Response(matches[0])
+
+
+@extend_schema(
+	summary="Set this site's editorial content for a patent (editor)",
+	description=(
+		"Editor-only. Upserts `takeaways` and/or `summary_plain_english` of the "
+		"patent family for the editor's site; fields not sent are left alone and "
+		"an empty string clears a field (stored as NULL). Applies immediately and "
+		"is recorded under the editor's name. Returns the stored values and who "
+		"last changed them. Writes are throttled per editor and site."
+	),
+	request=EditorialUpdateRequestSerializer,
+	responses={
+		200: EditorPatentEditorialUpdateResponseSerializer,
+		400: EDITOR_VALIDATION_ERROR,
+		429: EditorErrorSerializer,
+		**_PATENT_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorPatentEditorialView(_EditorView):
+	"""``PATCH /editor/patents/{patent_id}/editorial/``"""
+
+	def patch(self, request, patent_id):
+		patent = self.get_patent(patent_id)
+		fields = _editorial_fields(request)
+		content = _upsert_site_content(request, PatentSiteContent, "patent", patent, fields)
+		return Response(_site_content_payload(PatentSiteContent, "patent", content))
+
+
+@extend_schema(
+	summary="Assign a patent to a category (editor)",
+	description=(
+		"Editor-only. Assigns the patent family to the category by hand. The "
+		"patent must be in the editor's site patent scope and the category in its "
+		"scope (a category is in scope when one of its subjects is), else 404. A "
+		"new assignment is 201. A family the pipeline already matched becomes a "
+		"hand assignment (200), which `rebuild_categories` never removes; one "
+		"already assigned by hand is returned unchanged (200). Recorded under the "
+		"editor's name."
+	),
+	request=None,
+	responses={
+		200: EditorPatentCategoryAssignmentResponseSerializer,
+		201: EditorPatentCategoryAssignmentResponseSerializer,
+		**_CATEGORY_WRITE_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorPatentCategoryView(_CategoryScopeMixin, _EditorView):
+	"""``PUT`` and ``DELETE /editor/patents/{patent_id}/categories/{category_id}/``"""
+
+	def put(self, request, patent_id, category_id):
+		patent = self.get_patent(patent_id)
+		category = self.category_in_scope(category_id)
+		assignment, created = _assign_category(request, PatentCategoryAssignment, "patents", patent, category)
+		return Response(
+			self.serialize(assignment),
+			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+		)
+
+	@extend_schema(
+		summary="Remove a patent from a category (editor)",
+		description=(
+			"Editor-only. Removes a hand assignment. An assignment the pipeline "
+			"made from the category's terms is 409: it would come back on the next "
+			"run, so change the terms instead. 404 when the patent is not in the "
+			"category, or either is outside the editor's site scope."
+		),
+		request=None,
+		responses={
+			200: EditorPatentCategoryUnassignResponseSerializer,
+			409: EditorErrorSerializer,
+			**_CATEGORY_WRITE_ERRORS,
+		},
+		auth=[{"editorServiceAuth": []}],
+	)
+	def delete(self, request, patent_id, category_id):
+		patent = self.get_patent(patent_id)
+		category = self.category_in_scope(category_id)
+		_unassign_category(request, PatentCategoryAssignment, "patents", patent, category, "patent")
+		return Response(
+			{"patent_id": patent.patent_id, "category_id": category.pk, "removed": CategoryAssignmentSource.MANUAL}
+		)
+
+	@staticmethod
+	def serialize(assignment):
+		updated_by, updated_at = _last_change(PatentCategoryAssignment.history, id=assignment.pk)
+		return {
+			"patent_id": assignment.patents_id,
+			"category_id": assignment.teamcategory_id,
+			"source": assignment.source,
+			"updated_by": updated_by,
+			"updated_at": updated_at,
+		}
+
+
+def _patent_link_payload(link):
+	updated_by, updated_at = _last_change(PatentTrialLink.history, id=link.pk)
+	return {
+		"patent_id": link.patent_id,
+		"trial_id": link.trial_id,
+		"suppressed": link.suppressed,
+		"timing": link.timing,
+		"basis": link.basis,
+		"updated_by": updated_by,
+		"updated_at": updated_at,
+	}
+
+
+@extend_schema(
+	summary="Restore a suppressed patent-trial link (editor)",
+	description=(
+		"Editor-only. Un-hides a link an editor suppressed. Editors cannot create "
+		"a patent-trial link: links need a shared sponsor and timing, which only "
+		"detection computes, so a pair that is not linked at all is 404 with that "
+		"explanation. Idempotent: a link that is not suppressed is returned "
+		"unchanged (200). 404 as well when the patent is outside the editor's "
+		"site patent scope or the trial outside its scope."
+	),
+	request=None,
+	responses={
+		200: EditorPatentTrialLinkResponseSerializer,
+		429: EditorErrorSerializer,
+		**_PATENT_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorPatentTrialDetailView(_EditorView):
+	"""``PUT`` (restore) and ``DELETE`` (suppress) ``/editor/patents/{patent_id}/trials/{trial_id}/``"""
+
+	def set_suppressed(self, request, patent_id, trial_id, suppressed, missing_message):
+		"""Set ``suppressed`` on the link, locked, and return its payload. A link
+		already in that state is returned unchanged and records nothing."""
+		patent = self.get_patent(patent_id)
+		trial = self.get_trial(trial_id)
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			link = PatentTrialLink.objects.select_for_update().filter(patent=patent, trial=trial).first()
+			if link is None:
+				raise NotFound(missing_message)
+			if link.suppressed != suppressed:
+				link.suppressed = suppressed
+				link.save(update_fields=["suppressed"])
+		return Response(_patent_link_payload(link))
+
+	def put(self, request, patent_id, trial_id):
+		return self.set_suppressed(
+			request,
+			patent_id,
+			trial_id,
+			False,
+			"The patent and trial are not linked. Editors can't create patent-trial links, "
+			"only restore suppressed ones: links need a shared sponsor and timing, which "
+			"only the pipeline's detection computes.",
+		)
+
+	@extend_schema(
+		summary="Suppress a patent-trial link (editor)",
+		description=(
+			"Editor-only. Hides the link between the patent and a trial everywhere "
+			"(it stays, marked `suppressed`, so detection doesn't recreate it). "
+			"Idempotent: an already suppressed link is returned unchanged (200). "
+			"404 when the pair isn't linked, or either side is outside the editor's "
+			"site scope."
+		),
+		request=None,
+		responses={
+			200: EditorPatentTrialLinkResponseSerializer,
+			429: EditorErrorSerializer,
+			**_PATENT_ERRORS,
+		},
+		auth=[{"editorServiceAuth": []}],
+	)
+	def delete(self, request, patent_id, trial_id):
+		return self.set_suppressed(request, patent_id, trial_id, True, "The patent and trial are not linked.")
+
+
+@extend_schema(
+	summary="Edit history of a patent (editor)",
+	description=(
+		"Editor-only. Who changed this patent family's editorial content for the "
+		"editor's site, its hand assignments to categories in scope, and the "
+		"suppressing or restoring of its links to trials in scope, and when. "
+		"Newest first. There are no relevance entries: patents have none. Only "
+		"people's changes are recorded (the pipeline's category matching and link "
+		"detection write no history); a change made by an API key names the key "
+		"instead of a person."
+	),
+	parameters=[
+		OpenApiParameter(
+			"limit",
+			OpenApiTypes.INT,
+			OpenApiParameter.QUERY,
+			description=f"Entries to return (default {HISTORY_DEFAULT_LIMIT}, max {HISTORY_MAX_LIMIT}).",
+		)
+	],
+	responses={
+		200: EditorPatentHistoryResponseSerializer,
+		400: EDITOR_VALIDATION_ERROR,
+		**_PATENT_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorPatentHistoryView(_EditorView):
+	"""``GET /editor/patents/{patent_id}/history/``"""
+
+	def get(self, request, patent_id):
+		patent = self.get_patent(patent_id)
+		limit = _history_limit(request)
+		scope = self.site_scope()
+
+		entries = _editorial_history_entries(PatentSiteContent, "patent", patent.pk, request.auth.site_id, limit)
+		link_history = PatentTrialLink.history.filter(patent_id=patent.pk)
+		# Scope first, then the limit, as for articles.
+		visible_trials = Trials.objects.filter(
+			pk__in=link_history.values("trial_id"), subjects__id__in=scope
+		).values("pk")
+		for row in link_history.filter(trial_id__in=visible_trials).order_by("-history_date")[:limit]:
+			entries.append(
+				_history_entry(
+					"trial_link",
+					row,
+					{
+						"trial_id": row.trial_id,
+						"timing": row.timing,
+						"basis": row.basis,
+						"suppressed": row.suppressed,
+					},
+				)
+			)
+		entries += _category_history_entries(PatentCategoryAssignment, "patents", patent.pk, scope, limit)
+
+		entries.sort(key=lambda e: e["changed_at"], reverse=True)
+		return Response({"patent_id": patent.patent_id, "entries": entries[:limit]})
 
 
 # --- Read: tenants, for the MCP server's editor mount --------------------
