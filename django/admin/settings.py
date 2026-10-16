@@ -69,6 +69,22 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'gregory'] + _extra_hosts
 if _domain:
 	ALLOWED_HOSTS += [_domain, f'api.{_domain}']
 
+# nginx terminates TLS and proxies to gunicorn over plain HTTP, setting
+# X-Forwarded-Proto to the scheme the client used. `proxy_set_header` replaces any
+# value the client sent, so on a request that came through nginx the header is
+# nginx's. Trusting it makes request.scheme / is_secure() / build_absolute_uri()
+# say https for those requests; without it they said http, so pagination links
+# (`next`/`previous`), hyperlinked `url` fields and the sitemap index handed out
+# http:// URLs. Gunicorn would honour the header itself for requests from
+# 127.0.0.1 (its forwarded-allow-ips default), but through Docker's published
+# port it sees the bridge gateway's address instead, so it never does.
+#
+# Only safe while gunicorn is reached from outside only through nginx (the
+# compose file binds it to 127.0.0.1): a client that could talk to it directly
+# could send the header itself. Django reads the first entry of a comma-separated
+# list and it must be exactly "https" (what nginx's $scheme gives).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in _extra_hosts if not h.startswith('http')]
 if _domain:
 	CSRF_TRUSTED_ORIGINS += [f'https://{_domain}', f'https://api.{_domain}']

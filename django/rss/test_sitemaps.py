@@ -331,6 +331,24 @@ class SiteSitemapTests(TestCase):
 			404,
 		)
 
+	def test_index_locations_are_https_behind_a_tls_proxy(self):
+		"""nginx terminates TLS and says so in X-Forwarded-Proto; the index must
+		not advertise http:// URLs to crawlers because the hop to gunicorn is
+		plain HTTP. Without the header nothing changes."""
+		url = reverse("site-sitemap-index", kwargs={"site_id": self.site.pk})
+
+		# A Host header with no port, as a real request has; the test client would
+		# otherwise print ":80" next to https.
+		plain = self.client.get(url, HTTP_HOST="localhost").content.decode()
+		proxied = self.client.get(
+			url, HTTP_HOST="localhost", HTTP_X_FORWARDED_PROTO="https"
+		).content.decode()
+
+		self.assertIn("<loc>http://localhost/", plain)
+		self.assertNotIn("<loc>https://", plain)
+		self.assertIn("<loc>https://localhost/", proxied)
+		self.assertNotIn("<loc>http://", proxied)
+
 	def test_index_lists_one_entry_per_page(self):
 		original_limit = SiteArticlesSitemap.limit
 		# 5 subject-A articles + article_both + article_wrong_team → 4 pages.
