@@ -17,8 +17,10 @@ Covers:
     (organisations, API keys).
 """
 
+import re
+
 from django.contrib.sites.models import Site
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from gregory.models import (
@@ -163,6 +165,73 @@ class SiteAuthorFeedLinkTest(TestCase):
 		).scope_subjects.add(self.subject)
 		content = self._fetch_feed()
 		self.assertIn(f"https://{self.site.domain}/articles/", content)
+
+
+@override_settings(ALLOWED_HOSTS=["api.self-link.example.com"])
+class FeedSelfLinkTest(TestCase):
+	"""<atom:link rel="self"> is the URL the feed was requested from, not the
+	default Site's domain (Feed.get_feed uses get_current_site otherwise)."""
+
+	def setUp(self):
+		org = Organization.objects.create(name="Self Link Org", slug="self-link-org")
+		OrganizationApiSettings.objects.filter(organization=org).update(
+			make_api_public=True
+		)
+		team = Team.objects.create(name="Self Link Team", organization=org, slug="self-link-team")
+		self.subject = Subject.objects.create(
+			subject_name="Self Link Subject", team=team, subject_slug="self-link-subject"
+		)
+		# The default Site (SITE_ID) deliberately differs from the requested one.
+		Site.objects.filter(pk=1).update(domain="default-site.example.com")
+		Site.objects.clear_cache()
+		self.site = Site.objects.create(domain="self-link.example.com", name="Self Link")
+		CustomSetting.objects.create(
+			site=self.site, title="Self Link", rss_enabled=True
+		).scope_subjects.add(self.subject)
+		self.author = Authors.objects.create(
+			given_name="Jane", family_name="Doe", ORCID="0000-0002-7922-9785"
+		)
+		article = Articles.objects.create(
+			title="Self Link Article",
+			doi="10.9999/self-link-1",
+			link="https://example.com/self-link-1",
+		)
+		article.subjects.add(self.subject)
+		article.teams.add(team)
+		article.authors.add(self.author)
+
+	def _assert_self_link(self, url):
+		response = self.client.get(
+			url, HTTP_HOST="api.self-link.example.com", HTTP_X_FORWARDED_PROTO="https"
+		)
+		self.assertEqual(response.status_code, 200)
+		content = response.content.decode()
+		# Host and scheme both come from the request (nginx: Host + X-Forwarded-Proto).
+		self.assertRegex(
+			content,
+			r'<atom:link href="https://api\.self-link\.example\.com'
+			+ re.escape(url)
+			+ '" rel="self"',
+		)
+		self.assertNotIn("default-site.example.com", content)
+		# Nothing else about the feed changes: channel link stays on the site.
+		self.assertIn("<link>https://self-link.example.com/", content)
+
+	def test_author_feed_self_link_is_the_request_url(self):
+		self._assert_self_link(
+			reverse(
+				"site_articles_by_author_feed",
+				kwargs={"site_id": self.site.pk, "orcid": self.author.ORCID},
+			)
+		)
+
+	def test_trials_feed_self_link_is_the_request_url(self):
+		self._assert_self_link(
+			reverse(
+				"site_trials_by_subject_feed",
+				kwargs={"site_id": self.site.pk, "subject_slug": self.subject.subject_slug},
+			)
+		)
 
 
 class SiteFeedScopeTest(TestCase):
