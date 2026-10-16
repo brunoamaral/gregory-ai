@@ -50,6 +50,8 @@ async def search_trials(
 	acronym: str | None = None,
 	has_results: bool | None = None,
 	therapeutic_areas: str | None = None,
+	has_patent_link: bool | None = None,
+	include_subject_links: bool | None = None,
 	ordering: str | None = None,
 	intent: str | None = None,
 	page: int = 1,
@@ -79,6 +81,13 @@ async def search_trials(
 	use whichever registry the caller already has an ID from. A lookup can
 	return more than one row when a trial was imported from two registries
 	and hasn't been merged yet.
+
+	`has_patent_link=true` keeps trials linked to a patent family of the same
+	sponsor (filed while the trial was running or shortly after it ended); false
+	keeps the rest. Only links on a shared category (typically the molecule)
+	count, unless `include_subject_links` is true — links on a shared subject
+	alone are numerous and noisy for large sponsors. It matches nothing on a
+	site that has no patents; see search_patents.
 
 	A zero-hit response adds a `guidance` key: which filters were applied,
 	ranked suggestions for what's most likely over-constraining the search,
@@ -122,6 +131,8 @@ async def search_trials(
 		"acronym": acronym,
 		"has_results": has_results,
 		"therapeutic_areas": therapeutic_areas,
+		"has_patent_link": has_patent_link,
+		"include_subject_links": include_subject_links,
 		"ordering": ordering,
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
@@ -139,24 +150,35 @@ async def search_trials(
 	return response
 
 
-def _detail_params() -> dict | None:
+def _detail_params(include_subject_links: bool = False) -> dict | None:
 	"""An editor's detail read includes the site's editorial content (the
 	takeaways and summary they may be about to edit), which Django leaves out
 	without ``?include=editorial``. Anonymous and public-tier reads are
-	unchanged."""
+	unchanged. ``include_subject_links`` widens `patent_links` (see get_trial)."""
 	session = get_editor_context()
-	return {"include": "editorial"} if session is not None and session.is_editor else None
+	params: dict = {}
+	if session is not None and session.is_editor:
+		params["include"] = "editorial"
+	if include_subject_links:
+		params["include_subject_links"] = True
+	return params or None
 
 
-async def get_trial(trial_id: int) -> dict:
+async def get_trial(trial_id: int, include_subject_links: bool = False) -> dict:
 	"""Fetch the full record for one clinical trial by ID, including
 	trial_sites (detail-only), eligibility criteria, and results detail.
+
+	On a site that has patents, the record also lists `patent_links`: patent
+	families of the same sponsor filed while the trial was running or shortly
+	after it ended, on a shared category (typically the molecule); see
+	get_patent. Pass `include_subject_links=true` to also list links on a
+	shared subject alone — numerous and noisy for large sponsors.
 
 	Raises:
 		ToolError: If the trial can't be found.
 	"""
 	try:
-		trial = await get_client().get(f"/trials/{trial_id}/", _detail_params())
+		trial = await get_client().get(f"/trials/{trial_id}/", _detail_params(include_subject_links))
 	except GregoryAPIError as exc:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".

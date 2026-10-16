@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gregory_mcp.zero_result import (
 	ARTICLE_SEARCH_FIELDS,
+	PATENT_SEARCH_FIELDS,
 	TRIAL_SEARCH_FIELDS,
 	guidance_for,
 )
@@ -179,3 +180,50 @@ def test_registry_id_fields_read_includes_secondary_id_sources():
 			"secondary_id",
 			"ctg_secondary_ids",
 		]
+
+
+def test_patent_search_fields_never_include_claims():
+	assert PATENT_SEARCH_FIELDS == ("title", "summary")
+
+
+def test_patents_fields_read_names_search_and_publication_number():
+	guidance = guidance_for({"search": "x", "publication_number": "ZZ1", "has_grant": True}, "patents")
+	assert guidance["fields_read"] == {
+		"search": ["title", "summary"],
+		"publication_number": ["publications"],
+	}
+
+
+def test_patents_has_no_fields_read_for_filters_that_read_no_text():
+	guidance = guidance_for({"cpc": "A61K", "has_grant": False}, "patents")
+	assert guidance["fields_read"] == {}
+
+
+def test_each_patent_filter_triggers_its_own_suggestion():
+	cases = {
+		"priority_date_after": "date range",
+		"publication_date_before": "date range",
+		"has_grant": "has_grant",
+		"cpc": "cpc",
+		"publication_number": "publication_number",
+		"has_trial_link": "has_trial_link",
+		"include_subject_links": "has_trial_link",
+		"applicant": "applicant",
+		"applicant_sponsor_slug": "applicant",
+		"category_slug": "list_categories",
+		"subject_id": "list_subjects",
+		"search": "claims",
+	}
+	for name, hint in cases.items():
+		guidance = guidance_for({name: "x"}, "patents")
+		assert any(hint in s for s in guidance["suggestions"]), (name, guidance["suggestions"])
+
+
+def test_patents_suggestions_never_quote_a_value():
+	guidance = guidance_for({"cpc": "H99Z77", "applicant": "Zorblax", "search": "qwxy"}, "patents")
+	assert not any(v in str(guidance) for v in ("H99Z77", "Zorblax", "qwxy"))
+
+
+def test_patents_with_no_matching_rule_gets_the_fallback():
+	guidance = guidance_for({"family": "x"}, "patents")
+	assert len(guidance["suggestions"]) == 1

@@ -22,6 +22,10 @@ EXPECTED_TOOLS = {
 	"list_categories",
 	"list_sponsors",
 	"get_stats",
+	# Registered on every server, but offered only to a tenant with patents:
+	# see tests/test_patent_tool_access.py.
+	"search_patents",
+	"get_patent",
 }
 
 
