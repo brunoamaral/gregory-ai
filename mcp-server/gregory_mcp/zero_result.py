@@ -27,7 +27,12 @@ PATENT_SEARCH_FIELDS = ("title", "summary")  # claims are never searched
 # Pagination/ordering controls aren't filters that can cause a zero-hit
 # result on their own — excluded from the "applied filters" list so it
 # only ever names things that narrow the result set.
-_NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering"})
+#
+# `include_subject_links` is a display option, not a filter: on its own it
+# narrows nothing (it only widens which links `has_trial_link` /
+# `has_patent_link` count), so it is neither an "applied filter" nor a reason
+# for a suggestion.
+_NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering", "include_subject_links"})
 
 # `fields_read` covers only the text-matching filters: `search` (both
 # tools), and for trials also `acronym` and the registry-ID filters (`nct`,
@@ -134,11 +139,32 @@ _PUBLICATION_NUMBER_RULE = (
 	"(MXPA02011163A) must be given whole. Check the country code and digits.",
 )
 
-_TRIAL_LINK_RULE = (
-	("has_trial_link", "include_subject_links"),
-	"Drop `has_trial_link` — only category-basis links count unless "
-	"`include_subject_links` is true, so a family linked to a trial through a "
-	"shared subject alone does not match.",
+def _link_rule_text(name: str):
+	"""The suggestion for a trial-link filter, worded for whether the caller
+	already widened it with `include_subject_links` (a rule's text may be a
+	function of the call's params)."""
+
+	def text(params: dict[str, Any]) -> str:
+		if params.get("include_subject_links"):
+			return (
+				f"Drop `{name}` — with `include_subject_links` it already counts links on a "
+				"shared subject too, so no sponsor-timing link exists for what is left."
+			)
+		return (
+			f"Drop `{name}` — only links on a shared category count unless "
+			"`include_subject_links` is true, so one linked through a shared subject "
+			"alone does not match."
+		)
+
+	return text
+
+
+_TRIAL_LINK_RULE = (("has_trial_link",), _link_rule_text("has_trial_link"))
+
+_PATENT_LINK_RULE = (
+	("has_patent_link",),
+	lambda params: _link_rule_text("has_patent_link")(params)
+	+ " On a site that has no patents it matches nothing.",
 )
 
 _APPLICANT_RULE = (
@@ -172,7 +198,7 @@ _TRIAL_SEARCH_RULE = (
 # out an otherwise-good search rank first. Every matching rule fires; `search`
 # is last in both because it's the broadest filter, so its suggestion ranks
 # after the narrower ones.
-_RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], str], ...]] = {
+_RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 	"articles": (
 		_RELEVANCE_RULE,
 		_DATE_RULE,
@@ -185,6 +211,7 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], str], ...]] = {
 		_REGISTRY_ID_RULE,
 		_ACRONYM_RULE,
 		_SPONSOR_RULE,
+		_PATENT_LINK_RULE,
 		_TRIAL_SEARCH_RULE,
 	),
 	"patents": (
@@ -214,7 +241,11 @@ def guidance_for(params: dict[str, Any], tool: str) -> dict[str, Any]:
 	applied = sorted(k for k, v in params.items() if v is not None and k not in _NON_FILTER_ARGS)
 	applied_set = set(applied)
 	rules = _RULES_BY_TOOL.get(tool, ())
-	suggestions = [text for arg_names, text in rules if applied_set.intersection(arg_names)]
+	suggestions = [
+		text(params) if callable(text) else text
+		for arg_names, text in rules
+		if applied_set.intersection(arg_names)
+	]
 	if not suggestions:
 		suggestions = [_FALLBACK_SUGGESTION]
 	fields_map = _FIELDS_READ_BY_TOOL.get(tool, {})

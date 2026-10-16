@@ -264,6 +264,53 @@ async def test_get_patent_unknown_publication_number_is_not_found(mock_gregory):
 	assert len(mock_gregory.requests) == 1
 
 
+@pytest.mark.parametrize("value", ["", "   ", ",", " , ", ";", "-", "\t"])
+async def test_a_blank_publication_number_is_refused_before_any_request(mock_gregory, value):
+	"""Django ignores a blank filter, so the lookup would come back as every
+	patent on the site and be reported as an ambiguous match."""
+	with pytest.raises(ToolError, match="publication_number is empty|takes one publication_number"):
+		await get_patent(publication_number=value)
+
+	assert mock_gregory.requests == []
+
+
+@pytest.mark.parametrize("value", ["EP4123456A1,WO2020123456A1", "EP4123456A1;WO2020123456A1", "EP4123456A1,"])
+async def test_a_list_of_publication_numbers_is_refused_before_any_request(mock_gregory, value):
+	with pytest.raises(ToolError) as exc_info:
+		await get_patent(publication_number=value)
+
+	assert "one publication_number" in str(exc_info.value)
+	assert "search_patents" in str(exc_info.value)
+	assert mock_gregory.requests == []
+
+
+async def test_the_publication_number_is_stripped_before_it_is_sent(mock_gregory):
+	def handler(request):
+		if request.url.path == "/patents/":
+			return httpx2.Response(200, json={"count": 1, "results": [{"patent_id": 42}]})
+		return httpx2.Response(200, json={"patent_id": 42})
+
+	mock_gregory.set_handler(handler)
+
+	await get_patent(publication_number="  EP4123456A1 \n")
+
+	assert mock_gregory.requests[0].url.params["publication_number"] == "EP4123456A1"
+
+
+async def test_an_ambiguity_over_the_page_says_how_many_matched(mock_gregory):
+	mock_gregory.set_handler(
+		_json({"count": 37, "results": [{"patent_id": n} for n in range(1, 11)]})
+	)
+
+	with pytest.raises(ToolError) as exc_info:
+		await get_patent(publication_number="EP4123456")
+
+	message = str(exc_info.value)
+	assert "37 patents match" in message
+	assert "first 10" in message
+	assert "1, 2, 3" in message
+
+
 async def test_get_patent_ambiguous_publication_number_lists_the_ids(mock_gregory):
 	mock_gregory.set_handler(
 		_json({"count": 2, "results": [{"patent_id": 11}, {"patent_id": 12}]})

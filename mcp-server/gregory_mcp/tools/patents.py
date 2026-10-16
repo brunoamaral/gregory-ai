@@ -152,6 +152,24 @@ def _detail_params(include_claims: bool, include_subject_links: bool) -> dict | 
 	return params or None
 
 
+def _single_publication_number(value: str) -> str:
+	"""`value` stripped, or a ToolError if it is blank or a list.
+
+	Checked before any request: Django ignores a blank `publication_number`
+	filter, so a blank value would come back as every patent on the site and be
+	reported as an ambiguous match; and the filter ORs a comma-separated list,
+	which has no single family to resolve to."""
+	value = value.strip()
+	if not value or not any(ch.isalnum() for ch in value):
+		raise ToolError("publication_number is empty. Give one number, e.g. EP4123456A1.")
+	if "," in value or ";" in value:
+		raise ToolError(
+			"get_patent takes one publication_number. To look up several, use search_patents "
+			"with publication_number=a,b."
+		)
+	return value
+
+
 async def _resolve_publication_number(publication_number: str) -> int:
 	"""The `patent_id` of the one family a publication number belongs to."""
 	data = await get_client().get(
@@ -161,9 +179,12 @@ async def _resolve_publication_number(publication_number: str) -> int:
 	if not results:
 		raise ToolError(f"Patent {publication_number} was not found.")
 	if len(results) > 1:
+		count = data.get("count", len(results))
 		ids = ", ".join(str(r.get("patent_id")) for r in results)
+		how_many = f"{count} patents match" if count > len(results) else "More than one patent matches"
+		listed = f"first {len(results)}: " if count > len(results) else ""
 		raise ToolError(
-			f"More than one patent matches {publication_number} (patent_id {ids}). "
+			f"{how_many} {publication_number} ({listed}patent_id {ids}). "
 			"Call again with the patent_id, or give the full number with its kind code."
 		)
 	return results[0]["patent_id"]
@@ -200,6 +221,8 @@ async def get_patent(
 	"""
 	if (patent_id is None) == (publication_number is None):
 		raise ToolError("Give exactly one of patent_id or publication_number.")
+	if publication_number is not None:
+		publication_number = _single_publication_number(publication_number)
 	label = f"Patent {patent_id}" if patent_id is not None else f"Patent {publication_number}"
 	try:
 		if patent_id is None:

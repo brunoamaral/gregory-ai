@@ -109,7 +109,7 @@ nothing or zero. Only whole tools are hidden.
 | Tool | What it does |
 |:---|:---|
 | `search_patents` | One record per DOCDB simple family. `search` (boolean, over title and summary — never the claims), subject, category or `category_modality`, `applicant` (a substring of the published name) or `applicant_sponsor_id` / `applicant_sponsor_slug`, priority and publication date ranges, `has_grant`, `cpc` (a class prefix, e.g. `A61K31`), `publication_number` (any publication of the family, in any common format; without a kind code it matches every kind), `has_trial_link`. Compact rows: `patent_id`, `title`, a ~400-character summary, `representative_publication`, `link`, dates, `has_grant`, `applicants` (names), `trial_links_count`. Page size 10, at most 25. A zero-hit response carries `guidance` with `fields_read` for `search` (`title`, `summary`) and `publication_number` (`publications`). |
-| `get_patent` | One family, by exactly one of `patent_id` or `publication_number` (a number that matches several families is an error listing their ids). The full record with every publication, inventors, classification, applicants, categories and `trial_links`; team data stripped. |
+| `get_patent` | One family, by exactly one of `patent_id` or `publication_number` (one number: a blank value or a list is refused before any request; a number that matches several families is an error that says how many and lists the first ten ids). The full record with every publication, inventors, classification, applicants, categories and `trial_links`; team data stripped. |
 
 **Claims.** `get_patent` leaves the claims out. They average ~12,500 characters and run past
 200,000, so `include_claims=true` returns the first 20,000 characters as `claims`, with

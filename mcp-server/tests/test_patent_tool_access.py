@@ -97,6 +97,25 @@ async def test_anonymous_mcp_hides_the_patent_tools_without_patents(mock_gregory
 	assert names == READ_TOOLS
 
 
+async def test_no_listed_description_points_at_a_hidden_patent_tool(mock_gregory):
+	"""A tenant without patents must not be sent to a tool it doesn't have: the
+	parameters the existing tools gained appear everywhere, but their text must
+	not name search_patents or get_patent."""
+	mock_gregory.set_handler(
+		route_by_path(
+			{"/tenants/": lambda request: httpx2.Response(200, json=tenants_payload({"site_id": 3, **WITHOUT}))}
+		)
+	)
+	init_tenant_resolution(dataclasses.replace(TEST_SETTINGS, site_id_override=3))
+	async with Client(build_server()) as client:
+		listed = (await client.list_tools()).tools
+	assert listed
+	for tool in listed:
+		text = f"{tool.description or ''} {tool.input_schema}"
+		for hidden in PATENT_TOOLS:
+			assert hidden not in text, f"{tool.name} points at {hidden}"
+
+
 async def test_anonymous_mcp_lists_the_patent_tools_with_patents(mock_gregory):
 	_, names = await _anonymous_tools(mock_gregory, **WITH)
 	assert names == READ_TOOLS | PATENT_TOOLS

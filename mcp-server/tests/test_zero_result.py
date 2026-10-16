@@ -207,7 +207,6 @@ def test_each_patent_filter_triggers_its_own_suggestion():
 		"cpc": "cpc",
 		"publication_number": "publication_number",
 		"has_trial_link": "has_trial_link",
-		"include_subject_links": "has_trial_link",
 		"applicant": "applicant",
 		"applicant_sponsor_slug": "applicant",
 		"category_slug": "list_categories",
@@ -227,3 +226,39 @@ def test_patents_suggestions_never_quote_a_value():
 def test_patents_with_no_matching_rule_gets_the_fallback():
 	guidance = guidance_for({"family": "x"}, "patents")
 	assert len(guidance["suggestions"]) == 1
+
+
+def test_include_subject_links_alone_is_not_an_applied_filter_or_a_reason():
+	guidance = guidance_for({"search": "x", "include_subject_links": True}, "patents")
+	assert guidance["applied_filters"] == ["search"]
+	assert not any("has_trial_link" in s for s in guidance["suggestions"])
+
+
+def test_trials_ignore_include_subject_links_the_same_way():
+	guidance = guidance_for({"search": "x", "include_subject_links": True}, "trials")
+	assert guidance["applied_filters"] == ["search"]
+	assert not any("has_patent_link" in s for s in guidance["suggestions"])
+
+
+def test_trial_link_suggestion_depends_on_include_subject_links():
+	plain = guidance_for({"has_trial_link": True}, "patents")["suggestions"][0]
+	widened = guidance_for({"has_trial_link": True, "include_subject_links": True}, "patents")["suggestions"][0]
+	assert "unless `include_subject_links` is true" in plain
+	# The wrong explanation ("only category-basis links count") must not be given
+	# to a caller who already asked for subject links.
+	assert "unless" not in widened
+	assert "already counts links on a shared subject" in widened
+
+
+def test_has_trial_link_false_still_gets_the_suggestion():
+	guidance = guidance_for({"has_trial_link": False}, "patents")
+	assert guidance["applied_filters"] == ["has_trial_link"]
+	assert "Drop `has_trial_link`" in guidance["suggestions"][0]
+
+
+def test_has_patent_link_on_trials_has_a_suggestion():
+	guidance = guidance_for({"has_patent_link": True}, "trials")
+	assert guidance["applied_filters"] == ["has_patent_link"]
+	(suggestion,) = guidance["suggestions"]
+	assert "Drop `has_patent_link`" in suggestion
+	assert "no patents it matches nothing" in suggestion
