@@ -1,27 +1,29 @@
 """Editor tools: the writes (and the history read) offered on the editor address
 only (MCP-AUTH-PLAN.md, "Editor tools").
 
-Every article tool takes an article by `article_id` or by `doi`, never both;
-the category tools take a `category_id` (see list_categories). A tool that can
-do and undo the same thing takes a boolean for the direction (`assigned`,
-`linked`) rather than being two tools: the list stays short, and a model picks
-between four verbs, not eight. Each write goes to Django's `/editor/` routes as the signed-in person, applies
-immediately, and returns what was stored plus who last changed it and when, so
+A tool that acts on a record takes it by exactly one of `article_id`, `doi`,
+`patent_id` or `publication_number`: the record type follows from which one, so
+there is no separate type to get wrong. The category tools take a `category_id`
+(see list_categories). A tool that can do and undo the same thing takes a
+boolean for the direction (`assigned`, `linked`) rather than being two tools:
+the list stays short, and a model picks between four verbs, not eight, however
+many kinds of record they work on. Each write goes to Django's `/editor/` routes
+as the signed-in person, applies immediately, and returns what was stored plus who last changed it and when, so
 the model can confirm the change without a second read. The site is the
 sign-in's own: no tool takes a site, and none can reach another.
 
 A failure the model should read raises `ToolError` (since mcp 2.1 anything else
 reaches it only as "Error executing tool <name>"). The one exception is passing
-both or neither of `article_id` and `doi`, which is a malformed call rather than
-a failed one: it raises `MCPError(INVALID_PARAMS)`, which the SDK passes through
-unchanged.
+none or more than one of the four identifiers, which is a malformed call rather
+than a failed one: it raises `MCPError(INVALID_PARAMS)`, which the SDK passes
+through unchanged.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import quote
 
 import mcp_types as types
@@ -35,10 +37,12 @@ logger = logging.getLogger("gregory_mcp.editor")
 DEFAULT_HISTORY_LIMIT = 50
 MAX_HISTORY_LIMIT = 200
 
+Record = Literal["article", "patent"]
+
 
 def _log_edit(
 	tool: str,
-	article_id: int | None,
+	record_id: int | None,
 	fields: list[str],
 	outcome: str,
 	*,
@@ -51,18 +55,14 @@ def _log_edit(
 	history, which has its own access control. The caller is already on the
 	`mcp_request` line of the same call (user_id, tier).
 
-	`record_type` says what the edit was about: `article` for the tools that
-	edit an article, `category` for the ones that edit a category. It has no
-	default, so a new tool has to say. `action` says which way a two-way tool
-	went (`assign` / `unassign`, `link` / `unlink`), which the tool name alone
-	no longer does."""
-	extra = {
-		"tool": tool,
-		"record_type": record_type,
-		"article_id": article_id,
-		"fields": sorted(fields),
-		"outcome": outcome,
-	}
+	`record_type` says what the edit was about: `article` or `patent` for the
+	tools that edit one, `category` for the ones that edit a category. It has no
+	default, so a new tool has to say. `record_id` is logged as `article_id` or
+	`patent_id` to match. `action` says which way a two-way tool went (`assign` /
+	`unassign`, `link` / `unlink`), which the tool name alone no longer does."""
+	extra = {"tool": tool, "record_type": record_type, "fields": sorted(fields), "outcome": outcome}
+	if record_type in ("article", "patent"):
+		extra[f"{record_type}_id"] = record_id
 	if category_id is not None:
 		extra["category_id"] = category_id
 	if action is not None:
@@ -70,8 +70,12 @@ def _log_edit(
 	logger.info("mcp_edit", extra=extra)
 
 
-def _explain(exc: GregoryAPIError, what: str) -> ToolError:
-	"""A `ToolError` the model can act on, from an upstream failure of a write."""
+def _explain(exc: GregoryAPIError, what: str, record: str = "article") -> ToolError:
+	"""A `ToolError` the model can act on, from an upstream failure of a write.
+
+	`record` is the kind of record whose history the model is sent to check after
+	a timeout (`article` or `patent`): get_history takes either, and pointing at
+	the wrong kind would have it read an unrelated record."""
 	status = exc.status_code
 	if status == 404:
 		return ToolError(f"{what} was not found on this site.")
@@ -95,17 +99,12 @@ def _explain(exc: GregoryAPIError, what: str) -> ToolError:
 		# A write is never retried, so a timeout may or may not have been applied.
 		return ToolError(
 			"The edit may not have been applied: the request to the server failed. "
-			"Check the article's history before trying again."
+			f"Check the {record}'s history before trying again."
 		)
 	return ToolError(f"The edit could not be applied (status {status}).")
 
 
-async def _resolve_article(article_id: int | None, doi: str | None) -> int:
-	"""The article id for a call that gave either `article_id` or `doi`."""
-	if (article_id is None) == (not doi):
-		raise MCPError(types.INVALID_PARAMS, "Pass exactly one of article_id and doi.")
-	if article_id is not None:
-		return article_id
+async def _article_id_for_doi(doi: str) -> int:
 	try:
 		found = await get_client().get("/editor/articles/resolve/", {"doi": doi})
 	except GregoryAPIError as exc:
@@ -113,11 +112,78 @@ async def _resolve_article(article_id: int | None, doi: str | None) -> int:
 			raise ToolError(f"No article with DOI {doi} was found on this site.") from exc
 		if exc.status_code == 409:
 			raise ToolError(
-				f"More than one article has DOI {doi}: {_conflicting_ids(exc)}. "
+				f"More than one article has DOI {doi}: {_conflicting_ids(exc, 'article_ids')}. "
 				"Use article_id to say which."
 			) from exc
 		raise
 	return found["article_id"]
+
+
+async def _patent_id_for_number(number: str) -> int:
+	try:
+		found = await get_client().get("/editor/patents/resolve/", {"publication_number": number})
+	except GregoryAPIError as exc:
+		if exc.status_code == 404:
+			raise ToolError(f"No patent with publication number {number} was found on this site.") from exc
+		if exc.status_code == 409:
+			raise ToolError(
+				f"More than one patent matches publication number {number}: {_conflicting_ids(exc, 'patent_ids')}. "
+				"Use patent_id to say which, or give the number with its kind code."
+			) from exc
+		if exc.status_code == 400:
+			raise ToolError(
+				f"{number!r} is not one publication number. Give a single number, e.g. EP4123456A1."
+			) from exc
+		raise
+	return found["patent_id"]
+
+
+async def _resolve_article(article_id: int | None, doi: str | None) -> int:
+	"""The article id for a call that gave either `article_id` or `doi`. For the
+	tools that only ever act on articles."""
+	doi = (doi or "").strip()
+	if (article_id is None) == (not doi):
+		raise MCPError(types.INVALID_PARAMS, "Pass exactly one of article_id and doi.")
+	if article_id is not None:
+		return article_id
+	return await _article_id_for_doi(doi)
+
+
+async def _resolve_record(
+	article_id: int | None, doi: str | None, patent_id: int | None, publication_number: str | None
+) -> tuple[Record, int]:
+	"""The record a call is about, from exactly one of the four identifiers.
+
+	The type follows from the identifier (`article_id` / `doi` are an article,
+	`patent_id` / `publication_number` a patent), so a call cannot name one type
+	and mean another. None, or more than one, is a malformed call. A DOI or a
+	publication number is resolved through the editor routes, so it is looked up
+	among this site's records only."""
+	# A blank value is "not given", for the DOI and the number alike: a model that
+	# fills every field with "" must not have one of them counted as a second
+	# identifier (or, alone, sent to Django to be answered with a 400).
+	doi = (doi or "").strip()
+	number = (publication_number or "").strip()
+	given = (article_id is not None) + bool(doi) + (patent_id is not None) + bool(number)
+	if given != 1:
+		raise MCPError(
+			types.INVALID_PARAMS, "Pass exactly one of article_id, doi, patent_id and publication_number."
+		)
+	if article_id is not None:
+		return "article", article_id
+	if patent_id is not None:
+		return "patent", patent_id
+	if doi:
+		return "article", await _article_id_for_doi(doi)
+	return "patent", await _patent_id_for_number(number)
+
+
+def _collection(record: Record) -> str:
+	return "articles" if record == "article" else "patents"
+
+
+def _label(record: Record, record_id: int) -> str:
+	return f"{record.capitalize()} {record_id}"
 
 
 def _detail_message(exc: GregoryAPIError) -> str:
@@ -134,9 +200,9 @@ def _detail_message(exc: GregoryAPIError) -> str:
 	return message
 
 
-def _conflicting_ids(exc: GregoryAPIError) -> str:
+def _conflicting_ids(exc: GregoryAPIError, key: str) -> str:
 	try:
-		ids = json.loads(exc.detail).get("article_ids", [])
+		ids = json.loads(exc.detail).get(key, [])
 	except (ValueError, AttributeError):
 		return "ids unavailable"
 	return ", ".join(str(i) for i in ids) or "ids unavailable"
@@ -145,23 +211,28 @@ def _conflicting_ids(exc: GregoryAPIError) -> str:
 async def update_editorial(
 	article_id: int | None = None,
 	doi: str | None = None,
+	patent_id: int | None = None,
+	publication_number: str | None = None,
 	takeaways: str | None = None,
 	summary_plain_english: str | None = None,
 ) -> dict:
-	"""Set this site's takeaways and/or plain-English summary of an article.
+	"""Set this site's takeaways and/or plain-English summary of an article or a patent.
 
-	Give the article by `article_id` or `doi`. Send only the fields to change;
-	an empty string clears a field. The change is live immediately, recorded
-	under the signed-in person's name, and affects only this site. Show the
-	proposed text and get confirmation before calling.
+	Give the record by exactly one of `article_id`, `doi`, `patent_id` or
+	`publication_number`. Send only the fields to change; an empty string clears
+	a field. The change is live immediately, recorded under the signed-in
+	person's name, and affects only this site. Show the proposed text and get
+	confirmation before calling.
 
 	Args:
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
+		article_id: An article's id.
+		doi: An article's DOI.
+		patent_id: A patent family's id.
+		publication_number: Any publication of a patent family, e.g. EP4123456A1.
 		takeaways: The key takeaways. Empty string clears them.
 		summary_plain_english: A plain-English summary. Empty string clears it.
 	"""
-	article = await _resolve_article(article_id, doi)
+	record, record_id = await _resolve_record(article_id, doi, patent_id, publication_number)
 	body = {
 		key: value
 		for key, value in (("takeaways", takeaways), ("summary_plain_english", summary_plain_english))
@@ -170,11 +241,11 @@ async def update_editorial(
 	if not body:
 		raise ToolError("Pass takeaways and/or summary_plain_english.")
 	try:
-		stored = await get_client().patch(f"/editor/articles/{article}/editorial/", json=body)
+		stored = await get_client().patch(f"/editor/{_collection(record)}/{record_id}/editorial/", json=body)
 	except GregoryAPIError as exc:
-		_log_edit("update_editorial", article, list(body), "error", record_type="article")
-		raise _explain(exc, f"Article {article}") from exc
-	_log_edit("update_editorial", article, list(body), "ok", record_type="article")
+		_log_edit("update_editorial", record_id, list(body), "error", record_type=record)
+		raise _explain(exc, _label(record, record_id), record) from exc
+	_log_edit("update_editorial", record_id, list(body), "ok", record_type=record)
 	return stored
 
 
@@ -211,66 +282,97 @@ async def set_article_relevance(
 
 
 async def set_trial_link(
-	trial_id: int, linked: bool, article_id: int | None = None, doi: str | None = None
+	trial_id: int,
+	linked: bool,
+	article_id: int | None = None,
+	doi: str | None = None,
+	patent_id: int | None = None,
+	publication_number: str | None = None,
 ) -> dict:
-	"""Link a clinical trial to an article, or remove the link.
+	"""Link a clinical trial to an article, or remove the link; for a patent,
+	hide or restore the link to a trial.
 
-	`linked=true` adds a link that automatic detection will not change or
-	duplicate; linking a pair that is already linked returns the existing link.
-	`linked=false` removes the link: one added by an editor is deleted, and one
-	found automatically is hidden, so automatic detection does not bring it
-	back. The trial itself cannot be edited. Live immediately and recorded under
-	the signed-in person's name.
+	Articles. `linked=true` adds a link that automatic detection will not
+	change or duplicate; linking a pair that is already linked returns the
+	existing link. `linked=false` removes the link: one added by an editor is
+	deleted, and one found automatically is hidden, so automatic detection does
+	not bring it back.
+
+	Patents. Links between a patent and a trial come only from detection (they
+	need a shared sponsor and timing), so an editor cannot create one:
+	`linked=false` hides a link, `linked=true` restores a hidden one, and a pair
+	with no link at all is refused.
+
+	The trial itself cannot be edited. Live immediately and recorded under the
+	signed-in person's name.
 
 	Args:
 		trial_id: The trial's id.
-		linked: true to link the trial to the article, false to remove the link.
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
+		linked: true to link (or restore), false to remove (or hide) the link.
+		article_id: An article's id.
+		doi: An article's DOI.
+		patent_id: A patent family's id.
+		publication_number: Any publication of a patent family, e.g. EP4123456A1.
 	"""
-	article = await _resolve_article(article_id, doi)
+	record, record_id = await _resolve_record(article_id, doi, patent_id, publication_number)
 	action = "link" if linked else "unlink"
 	try:
-		if linked:
-			stored = await get_client().post(f"/editor/articles/{article}/trials/", json={"trial_id": trial_id})
+		if record == "patent":
+			path = f"/editor/patents/{record_id}/trials/{trial_id}/"
+			stored = await (get_client().put(path) if linked else get_client().delete(path))
+		elif linked:
+			stored = await get_client().post(f"/editor/articles/{record_id}/trials/", json={"trial_id": trial_id})
 		else:
-			stored = await get_client().delete(f"/editor/articles/{article}/trials/{trial_id}/")
+			stored = await get_client().delete(f"/editor/articles/{record_id}/trials/{trial_id}/")
 	except GregoryAPIError as exc:
-		_log_edit("set_trial_link", article, ["trial_link"], "error", action=action, record_type="article")
+		_log_edit("set_trial_link", record_id, ["trial_link"], "error", action=action, record_type=record)
+		if record == "patent" and linked and exc.status_code == 404 and "create patent-trial links" in _detail_message(exc):
+			# Not a missing record: there is simply no link, and editors cannot make one.
+			raise ToolError(
+				f"Patent {record_id} and trial {trial_id} are not linked, and editors can't create "
+				"patent-trial links: only detection does (it needs a shared sponsor and timing). "
+				"linked=true only restores a link that was hidden."
+			) from exc
 		what = (
-			f"Article {article} or trial {trial_id}"
+			f"{_label(record, record_id)} or trial {trial_id}"
 			if linked
-			else f"The link between article {article} and trial {trial_id}"
+			else f"The link between {record} {record_id} and trial {trial_id}"
 		)
-		raise _explain(exc, what) from exc
-	_log_edit("set_trial_link", article, ["trial_link"], "ok", action=action, record_type="article")
+		raise _explain(exc, what, record) from exc
+	_log_edit("set_trial_link", record_id, ["trial_link"], "ok", action=action, record_type=record)
 	return stored
 
 
 async def get_history(
-	article_id: int | None = None, doi: str | None = None, limit: int = DEFAULT_HISTORY_LIMIT
+	article_id: int | None = None,
+	doi: str | None = None,
+	patent_id: int | None = None,
+	publication_number: str | None = None,
+	limit: int = DEFAULT_HISTORY_LIMIT,
 ) -> dict:
-	"""Who changed an article's content on this site, and when.
+	"""Who changed an article's or a patent's content on this site, and when.
 
 	Lists, newest first, the changes to this site's takeaways and summary, to
-	the article's relevance for this site's subjects, and to its links to
-	trials, each with the values after the change, who made it and how
-	(`mcp`, `api_key` or `admin`).
+	the record's links to trials, and to its hand category assignments (for an
+	article also its relevance for this site's subjects), each with the values
+	after the change, who made it and how (`mcp`, `api_key` or `admin`).
 
 	Args:
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
+		article_id: An article's id.
+		doi: An article's DOI.
+		patent_id: A patent family's id.
+		publication_number: Any publication of a patent family, e.g. EP4123456A1.
 		limit: How many entries to return (1 to 200, default 50).
 	"""
-	article = await _resolve_article(article_id, doi)
+	record, record_id = await _resolve_record(article_id, doi, patent_id, publication_number)
 	clamped = max(1, min(int(limit), MAX_HISTORY_LIMIT))
 	try:
 		history: dict[str, Any] = await get_client().get(
-			f"/editor/articles/{quote(str(article))}/history/", {"limit": clamped}
+			f"/editor/{_collection(record)}/{quote(str(record_id))}/history/", {"limit": clamped}
 		)
 	except GregoryAPIError as exc:
 		if exc.status_code == 404:
-			raise ToolError(f"Article {article} was not found on this site.") from exc
+			raise ToolError(f"{_label(record, record_id)} was not found on this site.") from exc
 		raise
 	return history
 
@@ -406,36 +508,63 @@ async def update_category(
 
 
 async def set_category_assignment(
-	category_id: int, assigned: bool, article_id: int | None = None, doi: str | None = None
+	category_id: int,
+	assigned: bool,
+	article_id: int | None = None,
+	doi: str | None = None,
+	patent_id: int | None = None,
+	publication_number: str | None = None,
 ) -> dict:
-	"""Put an article in a category by hand, or take it out of one.
+	"""Put an article or a patent in a category by hand, or take it out of one.
 
-	`assigned=true` is for an article the category's terms don't catch. A hand
-	assignment is never removed by the pipeline; assigning an article the
+	`assigned=true` is for a record the category's terms don't catch. A hand
+	assignment is never removed by the pipeline; assigning a record the
 	pipeline already matched turns it into a hand assignment. Assigning twice
 	changes nothing.
 
-	`assigned=false` takes an article out of a category it was assigned to by
-	hand. An article the pipeline matched from the category's terms can't be
-	taken out this way, because the next run would add it back: the call is
-	refused with the reason, so change the terms with update_category instead.
+	`assigned=false` takes a record out of a category it was assigned to by
+	hand. One the pipeline matched from the category's terms can't be taken out
+	this way, because the next run would add it back: the call is refused with
+	the reason, so change the terms with update_category instead.
 
 	Live immediately and recorded under the signed-in person's name.
 
 	Args:
 		category_id: The category's id (see list_categories).
-		assigned: true to put the article in the category, false to take it out.
-		article_id: The article's id. Give this or doi.
-		doi: The article's DOI. Give this or article_id.
+		assigned: true to put the record in the category, false to take it out.
+		article_id: An article's id.
+		doi: An article's DOI.
+		patent_id: A patent family's id.
+		publication_number: Any publication of a patent family, e.g. EP4123456A1.
 	"""
-	article = await _resolve_article(article_id, doi)
+	record, record_id = await _resolve_record(article_id, doi, patent_id, publication_number)
 	action = "assign" if assigned else "unassign"
-	path = f"/editor/articles/{article}/categories/{category_id}/"
+	path = f"/editor/{_collection(record)}/{record_id}/categories/{category_id}/"
 	try:
 		stored = await (get_client().put(path) if assigned else get_client().delete(path))
 	except GregoryAPIError as exc:
-		_log_edit("set_category_assignment", article, ["category"], "error", category_id=category_id, action=action, record_type="article")
-		what = f"Article {article} or category {category_id}" if assigned else f"Article {article} in category {category_id}"
-		raise _explain(exc, what) from exc
-	_log_edit("set_category_assignment", article, ["category"], "ok", category_id=category_id, action=action, record_type="article")
+		_log_edit(
+			"set_category_assignment",
+			record_id,
+			["category"],
+			"error",
+			category_id=category_id,
+			action=action,
+			record_type=record,
+		)
+		what = (
+			f"{_label(record, record_id)} or category {category_id}"
+			if assigned
+			else f"{_label(record, record_id)} in category {category_id}"
+		)
+		raise _explain(exc, what, record) from exc
+	_log_edit(
+		"set_category_assignment",
+		record_id,
+		["category"],
+		"ok",
+		category_id=category_id,
+		action=action,
+		record_type=record,
+	)
 	return stored

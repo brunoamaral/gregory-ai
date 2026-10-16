@@ -35,3 +35,7 @@ The old names are **gone, with no aliases**. A client that still sends one gets 
 - **Telemetry.** `tool` in `mcp_request` and `mcp_edit` lines carries the new names from the day this deploys, so counts by tool do not reconcile across that day. `mcp_edit` lines gain `record_type` (`article`), and the two-way tools add `action` (`link`, `unlink`, `assign`, `unassign`), because the tool name alone no longer says which way a call went.
 - **Instructions.** The editor instructions name the new tools.
 - **Prompts and documents.** A tenant prompt or document (`SiteMcpPrompt`, `SiteMcpDocument`) that names an old tool now points at a tool that does not exist. Check production rows for the six old names before deploying; the research dossier drafts do not name any.
+
+## Patents
+
+The four merged tools also take a patent family, by `patent_id` or `publication_number` (see [Patents](../07-mcp-server.md#patents)), so adding patents did not add any tools. Each identifies its record by exactly one of `article_id`, `doi`, `patent_id` and `publication_number`; the type follows from which one is given. `set_trial_link` on a patent hides or restores a link that detection found and cannot create one. `mcp_edit` lines carry `record_type: patent` and `patent_id` for these edits. A site whose patents switch is off answers "not found" for any patent identifier.

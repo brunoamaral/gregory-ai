@@ -351,3 +351,56 @@ def test_the_wording_without_patents_is_exactly_what_it_was():
 		"Read-only access to Brain Regeneration's research database: articles, "
 		"clinical trials, authors, subjects, categories and sponsors."
 	)
+
+
+# --- the editor instructions ------------------------------------------------------------------
+
+
+def test_editor_instructions_name_patents_only_for_a_site_with_them():
+	with_patents = instructions_for(_tenant(patents_enabled=True), _editor())
+	without = instructions_for(_tenant(patents_enabled=False), _editor())
+
+	assert "patent" in with_patents.lower()
+	assert "patent" not in without.lower()
+	assert "article and patent content" in with_patents
+	assert "article content" in without
+
+
+def test_the_wording_for_an_editor_of_a_site_without_patents_is_exactly_what_it_was():
+	text = instructions_for(_tenant(title="Brain Regeneration"), _editor())
+	assert (
+		"can change its article content with: update_editorial (set an article's takeaways and plain-English "
+		"summary for this site), set_article_relevance (mark an article relevant, not relevant or not reviewed "
+		"for a subject), set_trial_link (connect an article and a clinical trial, or disconnect them), "
+		"create_category and update_category (add a category or change its name, terms or subjects), "
+		"set_category_assignment (put an article in a category by hand, or take it out)."
+	) in text
+	assert "get_history shows who changed an article's content, relevance and trial links, and when." in text
+
+
+def test_editor_instructions_for_patents_name_every_write_tool_and_the_link_rule():
+	text = instructions_for(_tenant(patents_enabled=True), _editor())
+
+	for name in WRITE_TOOLS | {HISTORY_TOOL}:
+		assert name in text, name
+	# The model is told, up front, that a patent's link can be hidden or restored but not made.
+	assert "hide a link to a trial or restore a hidden one" in text
+	assert "only detection creates those" in text
+	assert "confirm" in text.lower()
+
+
+def test_read_only_editor_instructions_name_patents_only_with_them():
+	assert "patent" in instructions_for(_tenant(patents_enabled=True), _editor(can_edit=False)).lower()
+	assert "patent" not in instructions_for(_tenant(), _editor(can_edit=False)).lower()
+	# A read-only editor is not pointed at write tools either way.
+	for enabled in (True, False):
+		text = instructions_for(_tenant(patents_enabled=enabled), _editor(can_edit=False))
+		for name in WRITE_TOOLS:
+			assert name not in text
+
+
+def test_the_public_tier_never_hears_about_editing_patents():
+	for enabled in (True, False):
+		text = instructions_for(_tenant(patents_enabled=enabled), _editor(tier="public", can_edit=False))
+		assert "set_trial_link" not in text
+		assert "hand" not in text.lower()

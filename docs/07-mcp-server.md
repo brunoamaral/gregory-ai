@@ -707,13 +707,13 @@ answer is never served to `/mcp`.
 
 | Tool | Backing route | Notes |
 |:---|:---|:---|
-| `update_editorial` | `PATCH /editor/articles/{id}/editorial/` | `takeaways` and/or `summary_plain_english` for this site. Empty string clears. |
+| `update_editorial` | `PATCH /editor/articles/{id}/editorial/`, or `/editor/patents/{id}/editorial/` | `takeaways` and/or `summary_plain_english` for this site. Empty string clears. An article or a patent. |
 | `set_article_relevance` | `PUT /editor/articles/{id}/relevance/{subject_id}/` | `true`, `false` or `null` (not reviewed). Applies on every site covering the subject. |
-| `set_trial_link` | `POST` (`linked=true`) or `DELETE` (`linked=false`) `/editor/articles/{id}/trials/[{trial_id}/]` | `linked=true` adds a link, idempotent. `linked=false` deletes an editor link and hides an automatic one. |
+| `set_trial_link` | Article: `POST` (`linked=true`) or `DELETE` (`linked=false`) `/editor/articles/{id}/trials/[{trial_id}/]`. Patent: `PUT` (`linked=true`) or `DELETE` (`linked=false`) `/editor/patents/{id}/trials/{trial_id}/` | Article: `linked=true` adds a link, idempotent; `linked=false` deletes an editor link and hides an automatic one. Patent: links come only from detection, so `linked=false` hides a link and `linked=true` **restores a hidden one**; a pair with no link at all is refused with a message saying editors cannot create patent–trial links. |
 | `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
 | `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
-| `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
-| `get_history` | `GET /editor/articles/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. |
+| `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/`, or `/editor/patents/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
+| `get_history` | `GET /editor/articles/{id}/history/`, or `/editor/patents/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. A patent has no relevance entries. |
 
 The editor tools are grouped by what they do, not by the record they act on: the tools that can both
 add and remove take a boolean for the direction (`linked`, `assigned`, required, with no default) instead
@@ -722,8 +722,12 @@ of being two tools, which keeps the editor list at 17 tools with the read tools 
 `assign_article_category` / `unassign_article_category`; the old names are gone, with no aliases (see
 [the changelog entry](changelog/mcp-editor-tool-merge.md)).
 
-Each article tool takes `article_id` or `doi` (exactly one; both or neither is `INVALID_PARAMS`); the category tools take a `category_id` from `list_categories`. A DOI shared
-by two articles is a readable error listing the ids. No tool takes a site. Every write tool carries
+`update_editorial`, `get_history`, `set_trial_link` and `set_category_assignment` identify their record by **exactly one** of `article_id`, `doi`, `patent_id` or
+`publication_number` (none, or more than one, is `INVALID_PARAMS`). The record type follows from the identifier, so there is no `record_type` argument to get wrong. A `doi` or
+`publication_number` is looked up among the site's own records (`/editor/articles/resolve/`, `/editor/patents/resolve/`), and a number that matches several is a readable error listing the ids. A
+publication number is a single number in any common format (`EP4123456A1`, `EP 4123456 A1`); a list is refused. `set_article_relevance` takes only an article (`article_id` or `doi`), since patents
+have no relevance. The category tools take a `category_id` from `list_categories`. On a site whose patents switch is off, every patent route answers "not found", the same as for a missing record. The
+parameters appear on every site (the tool schemas are fixed per process); only the editor instructions name patents, and only for a site that has them. No tool takes a site. Every write tool carries
 `destructive_hint` except `create_category`, which only adds: the tools that take a direction can remove as
 well as add, and a hint cannot say "only when the flag is false", so a client that confirms destructive
 calls also asks before an assignment or a link. They carry `idempotent_hint` too (except
@@ -739,7 +743,7 @@ of 30, so a newly granted editor sees the edit tools soon after reconnecting.
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, `record_type` (`article` for the tools that edit an article, `category` for `create_category` and `update_category`), article and/or category id, field names and
+`mcp_edit` line with the tool, `record_type` (`article` or `patent` for the tools that edit one, `category` for `create_category` and `update_category`), `article_id` or `patent_id`, category id, field names and
 outcome, never values (those live in Django's history). The two-way tools also log an `action`
 (`link`, `unlink`, `assign` or `unassign`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
 

@@ -39,8 +39,21 @@ _EDIT_TOOLS = (
 	"set_category_assignment (put an article in a category by hand, or take it out)"
 )
 
+# The same tools for a site that shows patents. Patents are named here only for
+# such a site: elsewhere the patent tools are hidden and the text must not point
+# at what is absent. A patent's trial links come only from detection, so the
+# tool can hide or restore one but not make one.
+_EDIT_TOOLS_WITH_PATENTS = (
+	"update_editorial (set an article's or a patent's takeaways and plain-English summary for this site), "
+	"set_article_relevance (mark an article relevant, not relevant or not reviewed for a subject), "
+	"set_trial_link (connect an article and a clinical trial, or disconnect them; for a patent, hide a link "
+	"to a trial or restore a hidden one, since only detection creates those), "
+	"create_category and update_category (add a category or change its name, terms or subjects), "
+	"set_category_assignment (put an article or a patent in a category by hand, or take it out)"
+)
 
-def _behavior_paragraph(session: EditorSession | None) -> str:
+
+def _behavior_paragraph(session: EditorSession | None, patents: bool = False) -> str:
 	"""How the tools behave, for the caller's tier.
 
 	Anonymous callers and the public tier get the original wording: every tool
@@ -57,11 +70,19 @@ def _behavior_paragraph(session: EditorSession | None) -> str:
 	if not session.is_editor:
 		return f"{anonymous} {_PUBLIC_TIER_NOTE}"
 	scope = "Searches and lists only return these subjects; a record outside them is reported as not found."
-	history = "get_history shows who changed an article's content, relevance and trial links, and when."
+	if patents:
+		history = (
+			"get_history shows who changed an article's or a patent's content, trial links and hand "
+			"category assignments, and (for an article) its relevance, and when."
+		)
+	else:
+		history = "get_history shows who changed an article's content, relevance and trial links, and when."
 	if not session.can_edit:
 		return f"You have read-only editor access to this site. {scope} {history} Editing is not available with this sign-in."
+	content = "article and patent content" if patents else "article content"
+	tools = _EDIT_TOOLS_WITH_PATENTS if patents else _EDIT_TOOLS
 	return (
-		f"You are signed in as an editor of this site and can change its article content with: {_EDIT_TOOLS}. "
+		f"You are signed in as an editor of this site and can change its {content} with: {tools}. "
 		"Edits are live immediately and recorded under the signed-in person's name, so show the proposed text "
 		"and get confirmation before writing it. Relevance belongs to the article and the subject, not the "
 		"site: a change applies to every site that covers that subject. "
@@ -88,7 +109,7 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 		# are hidden otherwise, and the text must not point at what is absent).
 		records = "articles, clinical trials, patents and researchers" if tenant.patents_enabled else "articles, clinical trials and researchers"
 		intro = f"This is {tenant.title}'s research database: {records}, curated to the subjects below."
-	behavior_paragraph = _behavior_paragraph(session)
+	behavior_paragraph = _behavior_paragraph(session, tenant.patents_enabled)
 	if not tenant.subjects:
 		# Only reachable if every subject row failed to parse: the API lists
 		# no tenant whose scope is empty. Drop the paragraph rather than

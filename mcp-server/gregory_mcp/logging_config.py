@@ -67,12 +67,13 @@ _EXTRA_FIELDS = (
 	# a write changed, never their values -- those live in Django's history,
 	# which has its own access control). An Authorization header or token has
 	# no way through. `record_type` is what the edit was about (article,
-	# category; patent later) and `action` which way a two-way tool went (link,
+	# category, patent) and `action` which way a two-way tool went (link,
 	# unlink, assign, unassign): both fixed vocabularies set by this server,
 	# never caller text.
 	"tier",
 	"user_id",
 	"article_id",
+	"patent_id",
 	"category_id",
 	"fields",
 	"record_type",

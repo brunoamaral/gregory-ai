@@ -70,6 +70,46 @@ def _editor_routes():
 		"/editor/articles/11/categories/141/": httpx2.Response(
 			409, json={"detail": "The pipeline assigned this article from the category's terms."}
 		),
+		# --- patents ---
+		"/editor/patents/resolve/": lambda r: {
+			"EP4123456A1": httpx2.Response(200, json={"patent_id": 31, "family_id": "9001"}),
+			"EP5000000": httpx2.Response(
+				409, json={"detail": "2 patents match EP5000000.", "patent_ids": [31, 32]}
+			),
+			"EP1,EP2": httpx2.Response(400, json={"publication_number": "Send one publication number."}),
+		}.get(r.url.params.get("publication_number"), httpx2.Response(404, json={"detail": "Patent not found."})),
+		"/editor/patents/31/editorial/": httpx2.Response(
+			200, json={"patent_id": 31, "takeaways": "T", "summary_plain_english": None, "updated_by": "ana"}
+		),
+		"/editor/patents/31/history/": httpx2.Response(200, json={"patent_id": 31, "entries": []}),
+		"/editor/patents/31/categories/140/": lambda r: httpx2.Response(
+			201 if r.method == "PUT" else 200,
+			json={"patent_id": 31, "category_id": 140, "source": "manual"},
+		),
+		"/editor/patents/31/categories/141/": httpx2.Response(
+			409, json={"detail": "The pipeline assigned this patent from the category's terms."}
+		),
+		"/editor/patents/31/trials/5/": httpx2.Response(
+			200, json={"patent_id": 31, "trial_id": 5, "suppressed": False, "timing": "during", "basis": "category"}
+		),
+		"/editor/patents/31/trials/6/": lambda r: (
+			httpx2.Response(
+				404,
+				json={
+					"detail": "The patent and trial are not linked. Editors can't create patent-trial links, "
+					"only restore suppressed ones: links need a shared sponsor and timing, which only "
+					"the pipeline's detection computes."
+				},
+			)
+			if r.method == "PUT"
+			else httpx2.Response(404, json={"detail": "The patent and trial are not linked."})
+		),
+		"/editor/patents/32/trials/9/": httpx2.Response(404, json={"detail": "Trial not found."}),
+		# What every patent route answers on a site whose patents switch is off.
+		"/editor/patents/404/editorial/": httpx2.Response(404, json={"detail": "Patent not found."}),
+		"/editor/patents/404/history/": httpx2.Response(404, json={"detail": "Patent not found."}),
+		"/editor/patents/404/categories/140/": httpx2.Response(404, json={"detail": "Patent not found."}),
+		"/editor/patents/404/trials/5/": httpx2.Response(404, json={"detail": "Patent not found."}),
 		"/editor/articles/404/editorial/": httpx2.Response(404, json={"detail": "nope"}),
 		"/editor/articles/405/editorial/": httpx2.Response(403, json={"detail": "nope"}),
 		"/editor/articles/429/editorial/": httpx2.Response(429, json={"detail": "slow"}, headers={"Retry-After": "30"}),
@@ -679,7 +719,7 @@ async def test_every_merged_tool_wants_exactly_one_article_identifier(django, mo
 			with pytest.raises(MCPError) as caught:
 				await client.call_tool(tool, {**ids, **extra})
 
-	assert "exactly one of article_id and doi" in str(caught.value)
+	assert "exactly one of article_id, doi, patent_id and publication_number" in str(caught.value)
 	assert _writes(mock_editor_gregory) == []
 
 
@@ -895,3 +935,384 @@ def test_the_merged_tools_name_no_old_tool():
 	for fn in (editor.set_trial_link, editor.set_category_assignment, editor.get_history, editor.update_editorial):
 		for old in ("link_trial_to_article", "unlink_trial_from_article", "assign_article_category", "unassign_article_category"):
 			assert old not in (fn.__doc__ or "")
+
+
+# ===== Patents in the merged tools ==========================================================
+#
+# The same four tools take a patent by `patent_id` or `publication_number`, and
+# go to Django's /editor/patents/ routes. The record type follows from the
+# identifier, so there is no type argument.
+
+
+def _requests_to(mock, prefix):
+	return [r for r in mock.requests if r.url.path.startswith(prefix)]
+
+
+@pytest.mark.parametrize(
+	"tool,args,method,path,body",
+	[
+		("update_editorial", {"patent_id": 31, "takeaways": "T"}, "PATCH", "/editor/patents/31/editorial/", b'{"takeaways":"T"}'),
+		(
+			"set_category_assignment",
+			{"patent_id": 31, "category_id": 140, "assigned": True},
+			"PUT",
+			"/editor/patents/31/categories/140/",
+			b"",
+		),
+		(
+			"set_category_assignment",
+			{"patent_id": 31, "category_id": 140, "assigned": False},
+			"DELETE",
+			"/editor/patents/31/categories/140/",
+			b"",
+		),
+		("set_trial_link", {"patent_id": 31, "trial_id": 5, "linked": True}, "PUT", "/editor/patents/31/trials/5/", b""),
+		("set_trial_link", {"patent_id": 31, "trial_id": 5, "linked": False}, "DELETE", "/editor/patents/31/trials/5/", b""),
+	],
+)
+async def test_each_write_tool_takes_a_patent_by_id(django, mock_editor_gregory, tool, args, method, path, body):
+	result = await _call(tool, args)
+
+	assert not result.is_error, result.content[0].text
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path, request.content) == (method, path, body)
+	assert request.headers["x-gregory-editor-user"] == "7"
+
+
+async def test_a_patent_is_read_by_id_for_history(django, mock_editor_gregory):
+	result = await _call("get_history", {"patent_id": 31, "limit": 9999})
+
+	assert not result.is_error
+	(request,) = _requests_to(mock_editor_gregory, "/editor/patents/31/history/")
+	assert request.url.params["limit"] == "200"
+
+
+@pytest.mark.parametrize(
+	"tool,extra,method,path",
+	[
+		("update_editorial", {"takeaways": "T"}, "PATCH", "/editor/patents/31/editorial/"),
+		("set_category_assignment", {"category_id": 140, "assigned": True}, "PUT", "/editor/patents/31/categories/140/"),
+		("set_trial_link", {"trial_id": 5, "linked": False}, "DELETE", "/editor/patents/31/trials/5/"),
+		("get_history", {}, "GET", "/editor/patents/31/history/"),
+	],
+)
+async def test_a_publication_number_is_resolved_on_the_editor_route(django, mock_editor_gregory, tool, extra, method, path):
+	result = await _call(tool, {"publication_number": "EP4123456A1", **extra})
+
+	assert not result.is_error, result.content[0].text
+	(resolve,) = _requests_to(mock_editor_gregory, "/editor/patents/resolve/")
+	assert resolve.url.params["publication_number"] == "EP4123456A1"
+	assert resolve.headers["x-gregory-editor-user"] == "7"
+	(call,) = [r for r in mock_editor_gregory.requests if r.url.path == path]
+	assert call.method == method
+
+
+async def test_the_publication_number_is_stripped_before_it_is_resolved(django, mock_editor_gregory):
+	await _call("get_history", {"publication_number": "  EP4123456A1 "})
+
+	assert _requests_to(mock_editor_gregory, "/editor/patents/resolve/")[0].url.params["publication_number"] == "EP4123456A1"
+
+
+async def test_an_unknown_publication_number_is_a_readable_tool_error(django, mock_editor_gregory):
+	result = await _call("update_editorial", {"publication_number": "EP9999999A1", "takeaways": "x"})
+
+	assert result.is_error
+	assert "EP9999999A1" in result.content[0].text
+	assert "No patent with publication number" in result.content[0].text
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_an_ambiguous_publication_number_lists_the_patent_ids(django, mock_editor_gregory):
+	result = await _call("update_editorial", {"publication_number": "EP5000000", "takeaways": "x"})
+
+	assert result.is_error
+	text = result.content[0].text
+	assert "31, 32" in text
+	assert "patent_id" in text
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_a_list_of_publication_numbers_is_a_readable_error(django, mock_editor_gregory):
+	result = await _call("update_editorial", {"publication_number": "EP1,EP2", "takeaways": "x"})
+
+	assert result.is_error
+	assert "single number" in result.content[0].text
+	assert _writes(mock_editor_gregory) == []
+
+
+@pytest.mark.parametrize(
+	"ids",
+	[
+		{},
+		{"publication_number": "   "},
+		{"article_id": 11, "patent_id": 31},
+		{"doi": "10.1/ok", "publication_number": "EP4123456A1"},
+		{"article_id": 11, "doi": "10.1/ok"},
+		{"patent_id": 31, "publication_number": "EP4123456A1"},
+		{"article_id": 11, "doi": "10.1/ok", "patent_id": 31, "publication_number": "EP4123456A1"},
+	],
+)
+@pytest.mark.parametrize(
+	"tool,extra",
+	[
+		("update_editorial", {"takeaways": "x"}),
+		("get_history", {}),
+		("set_trial_link", {"trial_id": 5, "linked": True}),
+		("set_category_assignment", {"category_id": 140, "assigned": True}),
+	],
+)
+async def test_none_or_several_identifiers_is_invalid_params_for_every_tool(django, mock_editor_gregory, tool, extra, ids):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool(tool, {**ids, **extra})
+
+	assert "exactly one of article_id, doi, patent_id and publication_number" in str(caught.value)
+	assert _writes(mock_editor_gregory) == []
+	assert _requests_to(mock_editor_gregory, "/editor/patents/") == []
+
+
+async def test_set_article_relevance_still_takes_only_an_article(django):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			tool = next(t for t in (await client.list_tools()).tools if t.name == "set_article_relevance")
+
+	assert {"article_id", "doi"} <= set(tool.input_schema["properties"])
+	assert not {"patent_id", "publication_number"} & set(tool.input_schema["properties"])
+
+
+async def test_the_four_tools_expose_the_patent_identifiers(django):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			tools = {t.name: t for t in (await client.list_tools()).tools}
+
+	for name in ("update_editorial", "get_history", "set_trial_link", "set_category_assignment"):
+		properties = tools[name].input_schema["properties"]
+		assert {"article_id", "doi", "patent_id", "publication_number"} <= set(properties), name
+		# None is required: the identifier is chosen, not mandatory by name.
+		assert not {"article_id", "doi", "patent_id", "publication_number"} & set(tools[name].input_schema.get("required", []))
+
+
+# --- the patent link rules --------------------------------------------------------------------
+
+
+async def test_creating_a_patent_trial_link_is_refused_with_the_reason(django, mock_editor_gregory):
+	result = await _call("set_trial_link", {"patent_id": 31, "trial_id": 6, "linked": True})
+
+	assert result.is_error
+	text = result.content[0].text
+	assert "can't create patent-trial links" in text
+	assert "only detection does" in text
+	assert "restores a link that was hidden" in text
+	# Not the generic "not found on this site", which would suggest the patent or trial is missing.
+	assert "was not found on this site" not in text
+
+
+async def test_hiding_a_link_that_does_not_exist_is_an_ordinary_not_found(django):
+	result = await _call("set_trial_link", {"patent_id": 31, "trial_id": 6, "linked": False})
+
+	assert result.is_error
+	assert "The link between patent 31 and trial 6 was not found on this site." in result.content[0].text
+
+
+async def test_a_trial_outside_the_site_on_a_restore_is_an_ordinary_not_found(django):
+	"""A 404 that is not the link-creation refusal keeps its normal wording."""
+	result = await _call("set_trial_link", {"patent_id": 32, "trial_id": 9, "linked": True})
+
+	assert result.is_error
+	assert "Patent 32 or trial 9 was not found on this site." in result.content[0].text
+
+
+async def test_a_pipeline_category_match_on_a_patent_is_refused_with_the_reason(django):
+	result = await _call("set_category_assignment", {"patent_id": 31, "category_id": 141, "assigned": False})
+
+	assert result.is_error
+	assert "The edit was refused" in result.content[0].text
+	assert "category's terms" in result.content[0].text
+
+
+async def test_a_site_without_patents_gets_not_found_for_a_patent_id(django):
+	"""Django answers 404 for every patent route on a site whose patents switch is
+	off, so the tools say the same thing as for any missing record."""
+	for tool, args in (
+		("update_editorial", {"patent_id": 404, "takeaways": "x"}),
+		("set_trial_link", {"patent_id": 404, "trial_id": 5, "linked": False}),
+		("set_category_assignment", {"patent_id": 404, "category_id": 140, "assigned": True}),
+		("get_history", {"patent_id": 404}),
+	):
+		result = await _call(tool, args)
+		assert result.is_error, tool
+		assert "Patent 404" in result.content[0].text or "patent 404" in result.content[0].text, tool
+		assert "was not found on this site" in result.content[0].text, tool
+		for word in ("instance", "tenant", "patents_enabled", "switch", "enabled"):
+			assert word not in result.content[0].text.lower(), (tool, word)
+
+
+# --- a timed-out write points at the right record -----------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"call,expected",
+	[
+		(lambda: editor.update_editorial(patent_id=31, takeaways="x"), "patent"),
+		(lambda: editor.set_trial_link(patent_id=31, trial_id=5, linked=False), "patent"),
+		(lambda: editor.set_category_assignment(patent_id=31, category_id=140, assigned=True), "patent"),
+		(lambda: editor.update_editorial(article_id=11, takeaways="x"), "article"),
+		(lambda: editor.set_trial_link(article_id=11, trial_id=5, linked=True), "article"),
+		(lambda: editor.set_category_assignment(article_id=11, category_id=140, assigned=False), "article"),
+	],
+)
+async def test_a_timed_out_write_names_the_right_kind_of_record(monkeypatch, call, expected):
+	"""After a timeout the model is told to check the history before retrying; for a
+	patent that has to say patent, or it reads an unrelated article's history."""
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(0))
+	other = "article" if expected == "patent" else "patent"
+
+	with pytest.raises(editor.ToolError) as caught:
+		await call()
+
+	message = str(caught.value)
+	assert f"Check the {expected}'s history" in message
+	assert other not in message
+
+
+# --- blank identifiers are "not given", for every kind ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"blanks",
+	[{"doi": "   "}, {"publication_number": "   "}, {"doi": " ", "publication_number": "\t"}, {"doi": "", "publication_number": ""}],
+)
+@pytest.mark.parametrize("real", [{"article_id": 11}, {"patent_id": 31}])
+async def test_blank_identifiers_do_not_count_as_a_second_identifier(django, mock_editor_gregory, blanks, real):
+	result = await _call("update_editorial", {**real, **blanks, "takeaways": "x"})
+
+	assert not result.is_error, result.content[0].text
+	(request,) = _writes(mock_editor_gregory)
+	collection = "articles" if "article_id" in real else "patents"
+	assert request.url.path.startswith(f"/editor/{collection}/")
+	assert _requests_to(mock_editor_gregory, "/editor/articles/resolve/") == []
+	assert _requests_to(mock_editor_gregory, "/editor/patents/resolve/") == []
+
+
+@pytest.mark.parametrize("blanks", [{"doi": "   "}, {"publication_number": "  "}, {"doi": "", "publication_number": " "}])
+@pytest.mark.parametrize(
+	"tool,extra",
+	[
+		("update_editorial", {"takeaways": "x"}),
+		("get_history", {}),
+		("set_trial_link", {"trial_id": 5, "linked": True}),
+		("set_category_assignment", {"category_id": 140, "assigned": True}),
+	],
+)
+async def test_only_blank_identifiers_is_invalid_params_not_a_raw_api_error(django, mock_editor_gregory, tool, extra, blanks):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool(tool, {**blanks, **extra})
+
+	assert "exactly one of article_id, doi, patent_id and publication_number" in str(caught.value)
+	assert mock_editor_gregory.requests == [] or all(
+		r.url.path == "/o/introspect/" or r.url.path.endswith("/tenants/") or r.url.path == "/tenants/"
+		for r in mock_editor_gregory.requests
+	)
+
+
+async def test_set_article_relevance_treats_a_blank_doi_as_not_given(django, mock_editor_gregory):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool("set_article_relevance", {"doi": "  ", "subject_id": 1, "is_relevant": True})
+
+	assert "exactly one of article_id and doi" in str(caught.value)
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_a_doi_is_stripped_before_it_is_resolved(django, mock_editor_gregory):
+	await _call("get_history", {"doi": "  10.1/ok  "})
+
+	assert _requests_to(mock_editor_gregory, "/editor/articles/resolve/")[0].url.params["doi"] == "10.1/ok"
+
+
+# --- what is logged ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"tool,args,action,fields",
+	[
+		("update_editorial", {"patent_id": 31, "takeaways": "SECRET"}, None, ["takeaways"]),
+		("set_trial_link", {"patent_id": 31, "trial_id": 5, "linked": True}, "link", ["trial_link"]),
+		("set_trial_link", {"patent_id": 31, "trial_id": 5, "linked": False}, "unlink", ["trial_link"]),
+		("set_category_assignment", {"patent_id": 31, "category_id": 140, "assigned": True}, "assign", ["category"]),
+		("set_category_assignment", {"patent_id": 31, "category_id": 140, "assigned": False}, "unassign", ["category"]),
+	],
+)
+async def test_patent_edits_log_a_patent_record_type_and_id(django, caplog, tool, args, action, fields):
+	caplog.set_level(logging.INFO)
+
+	await _call(tool, args)
+
+	(edit,) = _edits(caplog)
+	line = _formatted(edit)
+	assert line["tool"] == tool
+	assert line["record_type"] == "patent"
+	assert line["patent_id"] == 31
+	assert "article_id" not in line
+	assert line["fields"] == fields
+	assert line.get("action") == action
+	assert line["outcome"] == "ok"
+	assert "SECRET" not in str(line)
+
+
+async def test_a_resolved_publication_number_logs_the_patent_id(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("update_editorial", {"publication_number": "EP4123456A1", "takeaways": "x"})
+
+	(edit,) = _edits(caplog)
+	assert _formatted(edit)["patent_id"] == 31
+
+
+async def test_a_failed_patent_edit_is_logged_as_an_error(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("set_trial_link", {"patent_id": 31, "trial_id": 6, "linked": True})
+
+	(edit,) = _edits(caplog)
+	line = _formatted(edit)
+	assert (line["record_type"], line["patent_id"], line["action"], line["outcome"]) == ("patent", 31, "link", "error")
+
+
+async def test_article_edits_still_log_an_article_id_and_no_patent_id(django, caplog):
+	caplog.set_level(logging.INFO)
+
+	await _call("set_trial_link", {"article_id": 11, "trial_id": 5, "linked": True})
+
+	line = _formatted(_edits(caplog)[0])
+	assert (line["record_type"], line["article_id"]) == ("article", 11)
+	assert "patent_id" not in line
+
+
+# --- the docstrings the model reads ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"fn", [editor.update_editorial, editor.get_history, editor.set_trial_link, editor.set_category_assignment]
+)
+def test_docstrings_name_the_patent_identifiers(fn):
+	assert "patent_id" in fn.__doc__ and "publication_number" in fn.__doc__
+
+
+def test_the_trial_link_docstring_says_editors_cannot_create_a_patent_link():
+	doc = editor.set_trial_link.__doc__
+	assert "cannot create one" in doc
+	assert "restores a hidden one" in doc
+
+
+def test_set_article_relevance_does_not_mention_patents():
+	assert "patent" not in editor.set_article_relevance.__doc__.lower()
