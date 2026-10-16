@@ -30,7 +30,7 @@ Key terms used across GregoryAI documentation.
 
 **Pseudo-labelling** — a semi-supervised technique used during training where the model's own high-confidence predictions on unlabelled data are used as additional training labels. Enabled with `--pseudo-label` on `train_models`.
 
-**Relevant** — an article is "relevant" if, for at least one of its subjects, an admin reviewer marked it relevant, or no reviewer rejected it for that subject and it meets the ML consensus criteria. A reviewer's "not relevant" for a subject overrides the ML models for that subject.
+**Relevant** — an article is "relevant" if it has been manually marked so by an admin reviewer, or if it meets the ML consensus criteria for at least one of its subjects. This is what the API's `relevant` filter uses. Editorial surfaces (sitemaps with *Relevant only* on) apply a stricter rule: for each subject, a reviewer's "not relevant" overrides the ML models.
 
 **Source** — a configured feed or endpoint from which GregoryAI pulls articles. Sources use an RSS method by default. Each source is linked to a subject and specifies what kind of content it provides (`science paper`, `news`, or `trials`). See [02-sources-and-articles.md](02-sources-and-articles.md).
 

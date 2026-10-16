@@ -1,10 +1,16 @@
-"""An editor's verdict for a subject beats the ML consensus for that subject.
+"""The two relevance rules: the API's and the editorial one.
 
-Rule under test (api.filters.relevant_articles_q, used by
-``/articles/?relevant=true|false``): for each subject, an editor's
-is_relevant=True or False wins; ML consensus decides only when there is no
-verdict. An article is relevant when it is relevant for at least one subject
-in play, and ``relevant=false`` is the exact complement.
+api.filters.relevant_articles_q has two modes:
+
+- API rule (``/articles/?relevant=true|false``, editor_verdict_wins=False):
+  relevant by a human OR by AI. An editor's "not relevant" does not hide an
+  ML "yes" -- deliberate, the frontend decides how to use the API.
+- Editorial rule (default, used by relevant-only sitemaps and RSS feeds): for
+  each subject an editor's is_relevant=True or False wins, and ML consensus
+  decides only when there is no verdict.
+
+Either way an article is relevant when it is relevant for at least one subject
+in play, and ``relevant=false`` is the exact complement of ``relevant=true``.
 """
 
 from django.test import TestCase
@@ -24,7 +30,7 @@ from gregory.models import (
 )
 
 
-class RelevanceManualOverrideTests(TestCase):
+class RelevanceRulesTests(TestCase):
 	@classmethod
 	def setUpTestData(cls):
 		cls.org = Organization.objects.create(
@@ -113,8 +119,8 @@ class RelevanceManualOverrideTests(TestCase):
 		return {r["article_id"] for r in response.data["results"]}
 
 	def _expect(self, query, included):
-		"""relevant=true returns exactly `included`; relevant=false returns the
-		rest of the fixture (the exact complement)."""
+		"""API: relevant=true returns exactly `included`; relevant=false returns
+		the rest of the fixture (the exact complement)."""
 		everything = {a.article_id for a in self.all_articles}
 		wanted = {a.article_id for a in included}
 		sep = "&" if query else ""
@@ -123,9 +129,74 @@ class RelevanceManualOverrideTests(TestCase):
 			self._ids(f"{query}{sep}relevant=false") & everything, everything - wanted
 		)
 
-	def test_unscoped(self):
+	def _expect_editorial(self, subject_ids, included):
+		"""Editorial rule via relevant_articles_q's default mode."""
+		everything = {a.article_id for a in self.all_articles}
+		ids = set(
+			Articles.objects.filter(
+				relevant_articles_q(subject_ids=subject_ids)
+			).values_list("article_id", flat=True)
+		)
+		self.assertEqual(ids & everything, {a.article_id for a in included})
+
+	# --- API rule: human OR AI ---
+
+	def test_api_unscoped(self):
 		self._expect(
 			"",
+			[
+				self.ml_only,
+				self.ml_yes_editor_no,  # ML yes is enough; the editor's no doesn't hide it
+				self.ml_yes_s1_editor_no_s1_yes_s2,
+				self.ml_yes_s1_editor_no_s2,
+				self.editor_yes_ml_no,
+				self.ml_yes_unreviewed,
+			],
+		)
+
+	def test_api_scoped_to_s1(self):
+		self._expect(
+			f"subject_id={self.s1.id}",
+			[
+				self.ml_only,
+				self.ml_yes_editor_no,
+				self.ml_yes_s1_editor_no_s1_yes_s2,
+				self.ml_yes_s1_editor_no_s2,
+				self.editor_yes_ml_no,
+				self.ml_yes_unreviewed,
+			],
+		)
+
+	def test_api_scoped_to_s2(self):
+		self._expect(
+			f"subject_id={self.s2.id}",
+			[self.ml_yes_s1_editor_no_s1_yes_s2],  # only an editor yes for S2
+		)
+
+	def test_api_scoped_via_subjects_any(self):
+		self._expect(
+			f"subjects_any={self.s1.id},{self.s2.id}",
+			[
+				self.ml_only,
+				self.ml_yes_editor_no,
+				self.ml_yes_s1_editor_no_s1_yes_s2,
+				self.ml_yes_s1_editor_no_s2,
+				self.editor_yes_ml_no,
+				self.ml_yes_unreviewed,
+			],
+		)
+
+	def test_api_editor_no_does_not_hide_ml_yes(self):
+		self.assertIn(self.ml_yes_editor_no.article_id, self._ids("relevant=true"))
+		self.assertNotIn(
+			self.ml_yes_editor_no.article_id, self._ids("relevant=false")
+		)
+
+	# --- Editorial rule: the editor's verdict wins per subject ---
+
+	def test_editorial_unscoped(self):
+		self._expect_editorial(
+			None,
 			[
 				self.ml_only,  # ML yes S1, no verdict
 				self.ml_yes_s1_editor_no_s1_yes_s2,  # editor yes S2 carries it
@@ -135,9 +206,9 @@ class RelevanceManualOverrideTests(TestCase):
 			],
 		)
 
-	def test_scoped_to_s1(self):
-		self._expect(
-			f"subject_id={self.s1.id}",
+	def test_editorial_scoped_to_s1(self):
+		self._expect_editorial(
+			[self.s1.id],
 			[
 				self.ml_only,
 				self.ml_yes_s1_editor_no_s2,  # editor no for S2 only
@@ -146,15 +217,14 @@ class RelevanceManualOverrideTests(TestCase):
 			],
 		)
 
-	def test_scoped_to_s2(self):
-		self._expect(
-			f"subject_id={self.s2.id}",
-			[self.ml_yes_s1_editor_no_s1_yes_s2],  # only editor yes for S2
+	def test_editorial_scoped_to_s2(self):
+		self._expect_editorial(
+			[self.s2.id], [self.ml_yes_s1_editor_no_s1_yes_s2]
 		)
 
-	def test_scoped_via_subjects_any(self):
-		self._expect(
-			f"subjects_any={self.s1.id},{self.s2.id}",
+	def test_editorial_scoped_to_both(self):
+		self._expect_editorial(
+			[self.s1.id, self.s2.id],
 			[
 				self.ml_only,
 				self.ml_yes_s1_editor_no_s1_yes_s2,
@@ -164,15 +234,9 @@ class RelevanceManualOverrideTests(TestCase):
 			],
 		)
 
-	def test_editor_no_beats_ml_yes_explicitly(self):
-		self.assertNotIn(
-			self.ml_yes_editor_no.article_id, self._ids("relevant=true")
-		)
-		self.assertIn(self.ml_yes_editor_no.article_id, self._ids("relevant=false"))
-
 	def test_ml_threshold_still_reports_what_ml_says(self):
-		"""ml_threshold is "what the models say", not "relevant": the override
-		deliberately doesn't apply to it."""
+		"""ml_threshold is "what the models say", not "relevant": editor
+		verdicts never apply to it."""
 		self.assertIn(
 			self.ml_yes_editor_no.article_id, self._ids("ml_threshold=0.5")
 		)
@@ -198,9 +262,10 @@ class RelevanceManualOverrideTests(TestCase):
 
 	def test_relevant_articles_q_does_not_duplicate_rows(self):
 		"""An article with verdicts on both subjects must appear once."""
-		pks = list(
-			Articles.objects.filter(relevant_articles_q()).values_list(
-				"article_id", flat=True
+		for editor_verdict_wins in (True, False):
+			pks = list(
+				Articles.objects.filter(
+					relevant_articles_q(editor_verdict_wins=editor_verdict_wins)
+				).values_list("article_id", flat=True)
 			)
-		)
-		self.assertEqual(len(pks), len(set(pks)))
+			self.assertEqual(len(pks), len(set(pks)))
