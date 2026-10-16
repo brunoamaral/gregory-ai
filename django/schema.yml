@@ -313,18 +313,13 @@ paths:
         name: relevant
         schema:
           type: boolean
-        description: 'Filter for relevant articles (true/false). For each subject,
-          an editor''s verdict wins: an article an editor marked relevant is relevant,
-          one an editor marked not relevant is not (however confident the ML models
-          are), and only when there is no verdict does the ML consensus decide (see
-          ml_threshold). An article is relevant when it is relevant for at least one
-          subject in play. relevant=false is the exact complement. When combined with
+        description: Filter for relevant articles (true/false). When combined with
           subject_id, subjects, and/or subjects_any, relevance is scoped to that subject
-          or subjects, so only verdicts and ML consensus for those subjects count.
-          Without any of those, relevance is checked across every subject in the database,
-          so a caller that also scopes the query by subject should always pass the
-          same subject(s) here to avoid picking up relevance decided by an unrelated
-          subject.'
+          or subjects — only articles relevant *for one of those subjects* (via ML
+          predictions or manual marking) are returned. Without any of those, relevance
+          is checked across every subject in the database, so a caller that also scopes
+          the query by subject should always pass the same subject(s) here to avoid
+          picking up relevance decided by an unrelated subject.
       - in: query
         name: search
         schema:
@@ -958,18 +953,13 @@ paths:
         name: relevant
         schema:
           type: boolean
-        description: 'Filter for relevant articles (true/false). For each subject,
-          an editor''s verdict wins: an article an editor marked relevant is relevant,
-          one an editor marked not relevant is not (however confident the ML models
-          are), and only when there is no verdict does the ML consensus decide (see
-          ml_threshold). An article is relevant when it is relevant for at least one
-          subject in play. relevant=false is the exact complement. When combined with
+        description: Filter for relevant articles (true/false). When combined with
           subject_id, subjects, and/or subjects_any, relevance is scoped to that subject
-          or subjects, so only verdicts and ML consensus for those subjects count.
-          Without any of those, relevance is checked across every subject in the database,
-          so a caller that also scopes the query by subject should always pass the
-          same subject(s) here to avoid picking up relevance decided by an unrelated
-          subject.'
+          or subjects — only articles relevant *for one of those subjects* (via ML
+          predictions or manual marking) are returned. Without any of those, relevance
+          is checked across every subject in the database, so a caller that also scopes
+          the query by subject should always pass the same subject(s) here to avoid
+          picking up relevance decided by an unrelated subject.
       - in: query
         name: search
         schema:
@@ -1168,19 +1158,14 @@ paths:
                   description: Filter by source ID (see /sources/).
                 relevant:
                   type: boolean
-                  description: 'Filter for relevant articles (true/false). For each
-                    subject, an editor''s verdict wins: an article an editor marked
-                    relevant is relevant, one an editor marked not relevant is not
-                    (however confident the ML models are), and only when there is
-                    no verdict does the ML consensus decide (see ml_threshold). An
-                    article is relevant when it is relevant for at least one subject
-                    in play. relevant=false is the exact complement. When combined
+                  description: Filter for relevant articles (true/false). When combined
                     with subject_id, subjects, and/or subjects_any, relevance is scoped
-                    to that subject or subjects, so only verdicts and ML consensus
-                    for those subjects count. Without any of those, relevance is checked
-                    across every subject in the database, so a caller that also scopes
-                    the query by subject should always pass the same subject(s) here
-                    to avoid picking up relevance decided by an unrelated subject.'
+                    to that subject or subjects — only articles relevant *for one
+                    of those subjects* (via ML predictions or manual marking) are
+                    returned. Without any of those, relevance is checked across every
+                    subject in the database, so a caller that also scopes the query
+                    by subject should always pass the same subject(s) here to avoid
+                    picking up relevance decided by an unrelated subject.
                 ml_threshold:
                   type: number
                   description: 'The consensus rule behind relevant=true, with a custom
