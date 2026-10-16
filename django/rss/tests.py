@@ -20,6 +20,7 @@ Covers:
 import re
 
 from django.contrib.sites.models import Site
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -94,6 +95,7 @@ class OldFeedUrlRedirectTest(TestCase):
 
 class SiteAuthorFeedLinkTest(TestCase):
 	def setUp(self):
+		cache.clear()
 		self.organization = Organization.objects.create(
 			name="RSS Author Org", slug="rss-author-org"
 		)
@@ -173,6 +175,7 @@ class FeedSelfLinkTest(TestCase):
 	default Site's domain (Feed.get_feed uses get_current_site otherwise)."""
 
 	def setUp(self):
+		cache.clear()
 		org = Organization.objects.create(name="Self Link Org", slug="self-link-org")
 		OrganizationApiSettings.objects.filter(organization=org).update(
 			make_api_public=True
@@ -233,6 +236,22 @@ class FeedSelfLinkTest(TestCase):
 			)
 		)
 
+	def test_subject_articles_feed_self_link_is_the_request_url(self):
+		self._assert_self_link(
+			reverse(
+				"site_articles_by_subject_feed",
+				kwargs={"site_id": self.site.pk, "subject_slug": self.subject.subject_slug},
+			)
+		)
+
+	def test_recruiting_feed_self_link_is_the_request_url(self):
+		self._assert_self_link(
+			reverse(
+				"site_recruiting_trials_by_subject_feed",
+				kwargs={"site_id": self.site.pk, "subject_slug": self.subject.subject_slug},
+			)
+		)
+
 
 class SiteFeedScopeTest(TestCase):
 	"""
@@ -244,6 +263,8 @@ class SiteFeedScopeTest(TestCase):
 	"""
 
 	def setUp(self):
+		# Feeds are cache_page'd (LocMemCache under test).
+		cache.clear()
 		self.org = Organization.objects.create(name="Feed Org", slug="feed-org-p5")
 		self.team = Team.objects.create(
 			name="Feed Team", organization=self.org, slug="feed-team-p5"
