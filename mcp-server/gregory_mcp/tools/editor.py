@@ -70,8 +70,12 @@ def _log_edit(
 	logger.info("mcp_edit", extra=extra)
 
 
-def _explain(exc: GregoryAPIError, what: str) -> ToolError:
-	"""A `ToolError` the model can act on, from an upstream failure of a write."""
+def _explain(exc: GregoryAPIError, what: str, record: str = "article") -> ToolError:
+	"""A `ToolError` the model can act on, from an upstream failure of a write.
+
+	`record` is the kind of record whose history the model is sent to check after
+	a timeout (`article` or `patent`): get_history takes either, and pointing at
+	the wrong kind would have it read an unrelated record."""
 	status = exc.status_code
 	if status == 404:
 		return ToolError(f"{what} was not found on this site.")
@@ -95,7 +99,7 @@ def _explain(exc: GregoryAPIError, what: str) -> ToolError:
 		# A write is never retried, so a timeout may or may not have been applied.
 		return ToolError(
 			"The edit may not have been applied: the request to the server failed. "
-			"Check the article's history before trying again."
+			f"Check the {record}'s history before trying again."
 		)
 	return ToolError(f"The edit could not be applied (status {status}).")
 
@@ -137,6 +141,7 @@ async def _patent_id_for_number(number: str) -> int:
 async def _resolve_article(article_id: int | None, doi: str | None) -> int:
 	"""The article id for a call that gave either `article_id` or `doi`. For the
 	tools that only ever act on articles."""
+	doi = (doi or "").strip()
 	if (article_id is None) == (not doi):
 		raise MCPError(types.INVALID_PARAMS, "Pass exactly one of article_id and doi.")
 	if article_id is not None:
@@ -154,6 +159,10 @@ async def _resolve_record(
 	and mean another. None, or more than one, is a malformed call. A DOI or a
 	publication number is resolved through the editor routes, so it is looked up
 	among this site's records only."""
+	# A blank value is "not given", for the DOI and the number alike: a model that
+	# fills every field with "" must not have one of them counted as a second
+	# identifier (or, alone, sent to Django to be answered with a 400).
+	doi = (doi or "").strip()
 	number = (publication_number or "").strip()
 	given = (article_id is not None) + bool(doi) + (patent_id is not None) + bool(number)
 	if given != 1:
@@ -235,7 +244,7 @@ async def update_editorial(
 		stored = await get_client().patch(f"/editor/{_collection(record)}/{record_id}/editorial/", json=body)
 	except GregoryAPIError as exc:
 		_log_edit("update_editorial", record_id, list(body), "error", record_type=record)
-		raise _explain(exc, _label(record, record_id)) from exc
+		raise _explain(exc, _label(record, record_id), record) from exc
 	_log_edit("update_editorial", record_id, list(body), "ok", record_type=record)
 	return stored
 
@@ -329,7 +338,7 @@ async def set_trial_link(
 			if linked
 			else f"The link between {record} {record_id} and trial {trial_id}"
 		)
-		raise _explain(exc, what) from exc
+		raise _explain(exc, what, record) from exc
 	_log_edit("set_trial_link", record_id, ["trial_link"], "ok", action=action, record_type=record)
 	return stored
 
@@ -548,7 +557,7 @@ async def set_category_assignment(
 			if assigned
 			else f"{_label(record, record_id)} in category {category_id}"
 		)
-		raise _explain(exc, what) from exc
+		raise _explain(exc, what, record) from exc
 	_log_edit(
 		"set_category_assignment",
 		record_id,

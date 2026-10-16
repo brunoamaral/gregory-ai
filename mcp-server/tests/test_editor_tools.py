@@ -1151,6 +1151,94 @@ async def test_a_site_without_patents_gets_not_found_for_a_patent_id(django):
 			assert word not in result.content[0].text.lower(), (tool, word)
 
 
+# --- a timed-out write points at the right record -----------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"call,expected",
+	[
+		(lambda: editor.update_editorial(patent_id=31, takeaways="x"), "patent"),
+		(lambda: editor.set_trial_link(patent_id=31, trial_id=5, linked=False), "patent"),
+		(lambda: editor.set_category_assignment(patent_id=31, category_id=140, assigned=True), "patent"),
+		(lambda: editor.update_editorial(article_id=11, takeaways="x"), "article"),
+		(lambda: editor.set_trial_link(article_id=11, trial_id=5, linked=True), "article"),
+		(lambda: editor.set_category_assignment(article_id=11, category_id=140, assigned=False), "article"),
+	],
+)
+async def test_a_timed_out_write_names_the_right_kind_of_record(monkeypatch, call, expected):
+	"""After a timeout the model is told to check the history before retrying; for a
+	patent that has to say patent, or it reads an unrelated article's history."""
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(0))
+	other = "article" if expected == "patent" else "patent"
+
+	with pytest.raises(editor.ToolError) as caught:
+		await call()
+
+	message = str(caught.value)
+	assert f"Check the {expected}'s history" in message
+	assert other not in message
+
+
+# --- blank identifiers are "not given", for every kind ---------------------------------------------
+
+
+@pytest.mark.parametrize(
+	"blanks",
+	[{"doi": "   "}, {"publication_number": "   "}, {"doi": " ", "publication_number": "\t"}, {"doi": "", "publication_number": ""}],
+)
+@pytest.mark.parametrize("real", [{"article_id": 11}, {"patent_id": 31}])
+async def test_blank_identifiers_do_not_count_as_a_second_identifier(django, mock_editor_gregory, blanks, real):
+	result = await _call("update_editorial", {**real, **blanks, "takeaways": "x"})
+
+	assert not result.is_error, result.content[0].text
+	(request,) = _writes(mock_editor_gregory)
+	collection = "articles" if "article_id" in real else "patents"
+	assert request.url.path.startswith(f"/editor/{collection}/")
+	assert _requests_to(mock_editor_gregory, "/editor/articles/resolve/") == []
+	assert _requests_to(mock_editor_gregory, "/editor/patents/resolve/") == []
+
+
+@pytest.mark.parametrize("blanks", [{"doi": "   "}, {"publication_number": "  "}, {"doi": "", "publication_number": " "}])
+@pytest.mark.parametrize(
+	"tool,extra",
+	[
+		("update_editorial", {"takeaways": "x"}),
+		("get_history", {}),
+		("set_trial_link", {"trial_id": 5, "linked": True}),
+		("set_category_assignment", {"category_id": 140, "assigned": True}),
+	],
+)
+async def test_only_blank_identifiers_is_invalid_params_not_a_raw_api_error(django, mock_editor_gregory, tool, extra, blanks):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool(tool, {**blanks, **extra})
+
+	assert "exactly one of article_id, doi, patent_id and publication_number" in str(caught.value)
+	assert mock_editor_gregory.requests == [] or all(
+		r.url.path == "/o/introspect/" or r.url.path.endswith("/tenants/") or r.url.path == "/tenants/"
+		for r in mock_editor_gregory.requests
+	)
+
+
+async def test_set_article_relevance_treats_a_blank_doi_as_not_given(django, mock_editor_gregory):
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			with pytest.raises(MCPError) as caught:
+				await client.call_tool("set_article_relevance", {"doi": "  ", "subject_id": 1, "is_relevant": True})
+
+	assert "exactly one of article_id and doi" in str(caught.value)
+	assert _writes(mock_editor_gregory) == []
+
+
+async def test_a_doi_is_stripped_before_it_is_resolved(django, mock_editor_gregory):
+	await _call("get_history", {"doi": "  10.1/ok  "})
+
+	assert _requests_to(mock_editor_gregory, "/editor/articles/resolve/")[0].url.params["doi"] == "10.1/ok"
+
+
 # --- what is logged ---------------------------------------------------------------------------
 
 
