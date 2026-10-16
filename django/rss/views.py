@@ -8,6 +8,7 @@ Site-scoped RSS feeds, all under /feed/sites/<site_id>/:
   articles/category/<slug>/[relevant/]          research by topic
   trials/subject/<slug>/                        new trials by condition
   trials/subject/<slug>/recruiting/             trials a patient can join
+  articles/search/?..., trials/search/?...      search feeds (rss/search_feeds.py)
 
 The module is split three ways: rss/feed_scope.py decides WHO may see a feed
 (site scope, slug resolution, base querysets), rss/feed_items.py decides what
@@ -43,8 +44,9 @@ paper published three months ago but found today land below the cut-off and
 never be delivered. The author feed keeps publication-date order: it is low
 volume, so the drop-off problem doesn't apply, and readers expect it.
 
-Every site-scoped route is wrapped in cache_page(FEED_CACHE_SECONDS) in
-admin/urls.py, like the sitemaps. Editorial edits therefore take up to an
+Every site-scoped route except the search feeds is wrapped in
+cache_page(FEED_CACHE_SECONDS) in admin/urls.py, like the sitemaps (the search
+feeds cache themselves, keyed on their canonical query string). Editorial edits therefore take up to an
 hour to reach feeds.
 
 The old caller-scoped, unprefixed URLs (feed/author/<orcid>/,

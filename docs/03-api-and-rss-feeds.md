@@ -33,8 +33,10 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 | Recruiting clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/recruiting/` |
 | New clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` |
 | Articles by author (ORCID) | `GET /feed/sites/{site_id}/author/{orcid}/` |
+| Article search results | `GET /feed/sites/{site_id}/articles/search/?…` — see [Search feeds](#search-feeds) |
+| Clinical trial search results | `GET /feed/sites/{site_id}/trials/search/?…` — see [Search feeds](#search-feeds) |
 
-The variants are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **Any query string is ignored** and does not change the response.
+The variants of the subject, category and author feeds are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **On those feeds any query string is ignored** and does not change the response. The [search feeds](#search-feeds) are the one exception: a search is open-ended, so they take an allowlisted query string.
 
 **Feeds are editorial content.** They follow stricter rules than the API, where the frontend decides how to use what the API returns:
 
@@ -67,13 +69,40 @@ A busy condition gets dozens of new articles a day, so a reader that polls less 
 
 **Slug resolution.** A subject slug is looked up *only among the requested site's scope subjects*: `Subject.subject_slug` is unique per team, not globally, so two teams may share a slug. If two subjects in the **same** site's scope share a slug the feed returns 404 and logs a warning, because that is a curation error and the feed doesn't guess which was meant. `TeamCategory.category_slug` is globally unique; a category is in scope when its subjects overlap the site's scope, otherwise 404.
 
-**Caching.** Every site-scoped feed is cached for **one hour** (`cache_page(3600)`, like the sitemaps), so editorial edits and newly found items take up to an hour to show up. The 301 redirects below are not cached.
+**Caching.** Every site-scoped feed is cached for **one hour** (`cache_page(3600)`, like the sitemaps), so editorial edits and newly found items take up to an hour to show up. The [search feeds](#search-feeds) cache themselves for the same hour, keyed on the canonical query string. The 301 redirects below are not cached.
 
 **Feeds are site-scoped, not caller-scoped** — the same design as the [sitemaps](#sitemaps) below, and a deliberate change from how this worked before. A feed serves the *requested site's* `CustomSetting.scope_subjects`: the subject, category and trials feeds 404 when the requested subject or category is not in that site's scope, and the author feed 404s when none of the author's articles carries a subject in it, otherwise listing only the articles that do. The response never varies by who (or what) is asking — a feed reader has no identity and the response is cached, so there is nothing to key a caller-specific response on. `?include_public=true` and any notion of "the caller's own scope" (API key, signed-in user) do not apply to these URLs at all.
 
 A site's feed is gated by its own `CustomSetting.rss_enabled` alone — 404 when it's off, or when the site has no `CustomSetting` row, or when `site_id` doesn't exist. Unlike the sitemaps, a feed's scope is **not** narrowed to the publicly-visible subject set: `rss_enabled` and `scope_subjects` are the whole gate, whether or not the site is `api_public` — the same rule a site-bound API key follows for its own scope (see [Visibility rules summary](#visibility-rules-summary)). Curation into the site's scope is the whole grant otherwise, so team ownership plays no part: a subject with no team is served once some site's scope names it, exactly as for the API and sitemaps.
 
 The author feed's `<link>` element points at the requested site's author profile page (`https://{site.domain}/authors/{orcid}/`) when that site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
+
+### Search feeds
+
+"Tell me when something new matches what I searched for." A reader runs a search on the frontend and gets a feed URL for it; the feed returns the newest items matching the same search. It is the general-purpose version of the fixed feeds, and it covers combinations no fixed feed will ever have ("recruiting MS trials in Europe for a 40-year-old").
+
+| Feed | URL |
+|:-----|:----|
+| Articles | `GET /feed/sites/{site_id}/articles/search/?…` |
+| Clinical trials | `GET /feed/sites/{site_id}/trials/search/?…` |
+
+The parameters have **the same names and meaning as on `/articles/` and `/trials/`** (the feeds reuse `ArticleFilter` and `TrialFilter`), so a frontend can pass its current search state straight through. Only these are accepted:
+
+| Feed | Allowed parameters |
+|:-----|:-------------------|
+| Articles | `search`, `title`, `summary`, `subject_id`, `category_slug`, `relevant`, `open_access`, `has_takeaways` |
+| Trials | `search`, `title`, `summary`, `subject_id`, `category_slug`, `recruitment_status_normalized`, `phase_normalized`, `region`, `country`, `sponsor_slug`, `age_eligible`, `inclusion_gender_normalized` |
+
+Everything else is **ignored**: `utm_*`, anything a reader adds, and deliberately also date windows (`published_date_*`, `last_days`, `week`, `year`; a feed already shows "newest first" and a fixed window would eventually leave it permanently empty), `team_id` and `site_id` (the site comes from the path), the ML parameters (`ml_threshold`, `ml_score_min`; `relevant=true` covers what readers need), single-record lookups (`doi`, `nct`, identifiers) and the legacy raw-text filters. An ignored parameter does not change the response or the cache key.
+
+- **Base set.** Everything in the requested site's scope, minus retracted articles, ordered by discovery date (newest first) with `<pubDate>` the discovery date, 50 items, no pagination. With no parameters at all the feed is the whole site, newest first.
+- **`relevant` is scoped to the site.** `relevant=true` / `false` uses the editorial rule of the relevant-only feeds (an editor's verdict wins, the ML models decide only when there is none), restricted to the subjects the feed covers: the site's scope, narrowed by `subject_id` and by the category's subjects. That is not what `relevant=` does on `/articles/`, where the rule is "relevant by a human or by AI" and, with no `subject_id`, any auto-predicted subject in the database counts.
+- **`has_takeaways`** means *this site* has takeaways for the article, whoever is asking.
+- **`subject_id` / `category_slug`** outside the site's scope return **404**, like the fixed feeds. A category is also narrowed to the subjects it shares with the site, so an article can't leak through a subject the site doesn't cover. A `subject_id` and a `category_slug` that are each in scope but share no subject give an empty feed (200).
+- **Invalid values return 400** with a plain-text message naming the parameters (never the values): a non-integer `subject_id`, `relevant` / `open_access` / `has_takeaways` other than `true` or `false`, a choice outside its allowed values (`region=mars`), a non-numeric or out-of-range `age_eligible` (0 to 150), and any value longer than **300 characters** (`search`, `title` and `summary` are capped at 300; there is no feed equivalent of the API's POST route for very long boolean searches, because feed readers only send GET). The boolean search parser is best-effort and never rejects a `search` string; a malformed one falls back to a phrase match. Only `GET` and `HEAD` are accepted (no POST).
+- **Canonical query string.** The allowlisted parameters, values trimmed, boolean values lower-cased, sorted by key, empty ones dropped. It is the cache key (with the host and site) and it is the query string in the feed's own `<atom:link rel="self">`, so `?b=1&a=2&utm_source=x` and `?a=2&b=1` are one feed. It is also the key a future saved-search model would use.
+- **Channel.** The title spells out the search, built from the canonical parameters: `Search: "remyelination" · Multiple Sclerosis · relevant only — Brain Regeneration`; with no parameters, `All articles — {site}` or `All clinical trials — {site}`. The `<link>` is the site's homepage.
+- **Crawler and load protection.** Every response carries `X-Robots-Tag: noindex, nofollow`; the frontend's "Get updates for this search" link should be `rel="nofollow"` and only rendered after a search has run; each distinct search costs at most one query an hour whatever the number of subscribers; and `/robots.txt` on the API host disallows `/feed/sites/*/articles/search/`, `/feed/sites/*/trials/search/` and `/feed/sites/*/patents/search/`. Django serves that file (`rss.search_feeds.robots_txt`); the API host's nginx server block has to proxy `/robots.txt` to Django rather than answer it itself, as `nginx-example-configuration/nginx.conf` does.
 
 ### Old feed URLs — permanent redirect
 
@@ -496,6 +525,8 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Email templates | `GET /emails/` | None | Template preview dashboard |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
+| RSS feeds | `GET /feed/sites/{site_id}/articles/search/` | `site_id` (path); `search`, `title`, `summary`, `subject_id`, `category_slug`, `relevant`, `open_access`, `has_takeaways` | Search feed; other parameters ignored, invalid values 400 — see [Search feeds](#search-feeds) |
+| RSS feeds | `GET /feed/sites/{site_id}/trials/search/` | `site_id` (path); `search`, `title`, `summary`, `subject_id`, `category_slug`, `recruitment_status_normalized`, `phase_normalized`, `region`, `country`, `sponsor_slug`, `age_eligible`, `inclusion_gender_normalized` | Search feed; other parameters ignored, invalid values 400 — see [Search feeds](#search-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/author/{orcid}/` | `site_id`, `orcid` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` | `site_id`, `subject_slug` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/recruiting/` | `site_id`, `subject_slug` (path) | Recruiting and not-yet-recruiting trials only — see [RSS feeds](#rss-feeds) |
