@@ -7,8 +7,8 @@ editor address") and on the site it is for:
 | Sign-in                          | Tools                                        |
 |:---------------------------------|:---------------------------------------------|
 | Anonymous, or public tier        | the ten read tools, exactly as on `/mcp`     |
-| Editor, read-only grant          | the ten read tools plus `get_article_history`|
-| Editor with the edit scope       | all of those plus the eight write tools      |
+| Editor, read-only grant          | the ten read tools plus `get_history`        |
+| Editor with the edit scope       | all of those plus the six write tools        |
 
 On top of that, `search_patents` and `get_patent` are offered only when the
 resolved tenant has patents (`Tenant.patents_enabled`, from `GET /tenants/`).
@@ -48,17 +48,15 @@ READ_TOOLS = frozenset(
 )
 #: Offered only on a tenant with `patents_enabled`.
 PATENT_TOOLS = frozenset({"search_patents", "get_patent"})
-HISTORY_TOOL = "get_article_history"
+HISTORY_TOOL = "get_history"
 WRITE_TOOLS = frozenset(
 	{
-		"update_article_editorial",
+		"update_editorial",
 		"set_article_relevance",
-		"link_trial_to_article",
-		"unlink_trial_from_article",
+		"set_trial_link",
 		"create_category",
 		"update_category",
-		"assign_article_category",
-		"unassign_article_category",
+		"set_category_assignment",
 	}
 )
 
