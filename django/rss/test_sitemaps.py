@@ -8,6 +8,7 @@ from gregory.models import (
 	Articles,
 	ArticleSubjectRelevance,
 	Authors,
+	MLPredictions,
 	OrganizationApiSettings,
 	Subject,
 	Team,
@@ -306,6 +307,36 @@ class SiteSitemapTests(TestCase):
 		body = self.client.get(self._section_url(self.site.pk)).content.decode()
 		self.assertIn(f"/articles/{self.articles_a[0].pk}/", body)
 		self.assertNotIn(f"/articles/{self.articles_a[1].pk}/", body)
+
+	def test_relevant_only_editor_no_beats_ml_yes(self):
+		# An editor's "not relevant" for a subject overrides the models for
+		# that subject. articles_a[0]: ML yes + editor no -> out.
+		# articles_a[1]: ML yes, no verdict -> in. articles_a[2]: editor yes,
+		# no ML -> in. articles_a[3]: nothing -> out.
+		Subject.objects.filter(pk=self.subject_a.pk).update(
+			auto_predict=True, ml_consensus_type="any"
+		)
+		for article in self.articles_a[:2]:
+			MLPredictions.objects.create(
+				article=article,
+				subject=self.subject_a,
+				algorithm="pubmed_bert",
+				probability_score=0.95,
+				predicted_relevant=True,
+			)
+		ArticleSubjectRelevance.objects.create(
+			article=self.articles_a[0], subject=self.subject_a, is_relevant=False
+		)
+		ArticleSubjectRelevance.objects.create(
+			article=self.articles_a[2], subject=self.subject_a, is_relevant=True
+		)
+		self.config.sitemap_relevant_only = True
+		self.config.save()
+		body = self.client.get(self._section_url(self.site.pk)).content.decode()
+		self.assertNotIn(f"/articles/{self.articles_a[0].pk}/", body)
+		self.assertIn(f"/articles/{self.articles_a[1].pk}/", body)
+		self.assertIn(f"/articles/{self.articles_a[2].pk}/", body)
+		self.assertNotIn(f"/articles/{self.articles_a[3].pk}/", body)
 
 	def test_switch_off_404s(self):
 		self.config.generate_sitemap = False

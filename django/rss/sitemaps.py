@@ -42,13 +42,13 @@ is listed whatever team owns it, including a row with no team at all.
 from django.contrib.sitemaps import Sitemap
 from django.contrib.sitemaps.views import sitemap as django_sitemap_view
 from django.contrib.sites.models import Site
-from django.db.models import Count, Exists, Max, OuterRef, Q
+from django.db.models import Count, Exists, Max, OuterRef
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.views.decorators.cache import cache_page
 
-from api.filters import ml_relevant_articles_q
+from api.filters import relevant_articles_q
 from gregory.models import Articles, Authors, Trials
 from gregory.visibility import _public_subject_ids
 from sitesettings.models import CustomSetting
@@ -133,14 +133,11 @@ class SiteArticlesSitemap(_SiteContentSitemap):
 	def get_queryset(self):
 		qs = super().get_queryset()
 		if self._relevant_only:
-			manually_relevant = Q(
-				article_subject_relevances__is_relevant=True,
-				article_subject_relevances__subject_id__in=self._subject_ids,
-			)
-			qs = qs.filter(
-				manually_relevant
-				| ml_relevant_articles_q(subject_ids=self._subject_ids)
-			).distinct()
+			# An editor's verdict for a subject wins over the models: an
+			# article marked not relevant for every subject it's tagged with
+			# stays out even when the models like it. relevant_articles_q is
+			# Exists()-based, so no DISTINCT is needed.
+			qs = qs.filter(relevant_articles_q(subject_ids=self._subject_ids))
 		return qs
 
 
