@@ -47,15 +47,45 @@ async def test_instructions_differ_by_tier_and_stay_free_of_internal_names(djang
 	assert "read-only" in public.lower()
 
 
+async def test_the_editor_instructions_name_exactly_the_registered_write_tools(django):
+	"""Nothing else ties `identity._EDIT_TOOLS` to the tool names: an old name left
+	there would pass every other test and tell each editor session to call a tool
+	that does not exist."""
+	from gregory_mcp.tool_access import HISTORY_TOOL, WRITE_TOOLS
+
+	editor = await _instructions("editor")
+	readonly = await _instructions("readonly")
+
+	for name in WRITE_TOOLS:
+		assert name in editor, f"the editor instructions should name {name}"
+	assert HISTORY_TOOL in editor
+	assert HISTORY_TOOL in readonly
+	# A read-only sign-in is told it cannot edit, so it is not pointed at write tools.
+	for name in WRITE_TOOLS:
+		assert name not in readonly
+	for old in (
+		"get_article_history",
+		"update_article_editorial",
+		"link_trial_to_article",
+		"unlink_trial_from_article",
+		"assign_article_category",
+		"unassign_article_category",
+	):
+		assert old not in editor
+		assert old not in readonly
+
+
 async def test_edits_are_logged_with_field_names_never_values(django, caplog):
 	caplog.set_level(logging.INFO)
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token="editor") as client:
-			await client.call_tool("update_article_editorial", {"article_id": 11, "takeaways": "SECRET-TEXT"})
+			await client.call_tool("update_editorial", {"article_id": 11, "takeaways": "SECRET-TEXT"})
 
 	edits = [r for r in caplog.records if r.getMessage() == "mcp_edit"]
 	assert len(edits) == 1
+	assert edits[0].tool == "update_editorial"
+	assert edits[0].record_type == "article"
 	assert edits[0].fields == ["takeaways"]
 	assert edits[0].outcome == "ok"
 	assert "SECRET-TEXT" not in "".join(str(v) for v in edits[0].__dict__.values())
@@ -81,7 +111,7 @@ async def test_failed_edits_are_logged_as_errors_without_the_text(django, caplog
 	app = new_app()
 	async with running(app):
 		async with mcp_client(app, token="editor") as client:
-			await client.call_tool("update_article_editorial", {"article_id": 500, "takeaways": "SECRET-TEXT"})
+			await client.call_tool("update_editorial", {"article_id": 500, "takeaways": "SECRET-TEXT"})
 
 	(edit,) = [r for r in caplog.records if r.getMessage() == "mcp_edit"]
 	assert edit.outcome == "error"

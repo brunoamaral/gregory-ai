@@ -136,7 +136,7 @@ Rules:
 
 ### Reads
 
-The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
+The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/`, `/editor/patents/`, `/editor/patents/{id}/`, `/editor/patents/stats/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
 
 Differences from the public endpoints:
 
@@ -159,6 +159,22 @@ Differences from the public endpoints:
 | `GET /editor/articles/{article_id}/history/?limit=` | Who changed this site's editorial content, the article's relevance for subjects in scope, its links to trials in scope and its hand assignments to categories in scope; newest first, `limit` up to 200 (default 50) |
 
 `GET /editor/categories/` and `GET /editor/categories/{id}/` stay the read endpoints described above; the category writes share their paths. `GET /categories/` and the editor category responses include `category_exclude_terms`: the veto list used by `rebuild_categories`, where any excluded term (whole word, case-insensitive) found in a field the category searches stops an article or trial being assigned automatically, whatever its score; manual assignments are never touched. Changing terms, excluded terms, subjects or scope makes the next pipeline run re-match the whole category. Category changes are recorded in `HistoricalTeamCategory` under the editor's name.
+
+#### Patent routes
+
+The same actions on patent families. A patent is found through the site's **patent scope** (its `scope_subjects`, but only when the site has `patents_enabled` on, see [Patents](#patents)), so every one of these routes is `404` for an editor of a site without the switch, and for a family outside the scope. Writes need a grant with `can_edit`, run under the editor's name, and count against the same per-(editor, site) limit as article writes.
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `GET /editor/patents/resolve/?publication_number=` | Publication number to `patent_id` among in-scope families, in any common format (`EP4123456A1`, `EP 4123456 A1`; without a kind code it matches every kind, and a letter alone matches that letter with or without its digit). Takes one number: a list (commas or semicolons) is `400`, since `GET /patents/?publication_number=a,b` is the endpoint for lists. Returns `patent_id`, `family_id`, `title`, `representative_publication`. `404` for none, or for one outside the scope. `409` with `patent_ids` when several in-scope families match, as DOI resolution does for articles |
+| `PATCH /editor/patents/{patent_id}/editorial/` | Upsert this site's `takeaways` and/or `summary_plain_english`. Omitted fields are left alone; an empty string clears. Returns the stored values with `updated_by` and `updated_at` |
+| `PUT /editor/patents/{patent_id}/categories/{category_id}/` | Assigns the family to the category by hand, `201`. A family the pipeline already matched becomes a hand assignment, `200`, which `rebuild_categories` never removes; one already assigned by hand is returned unchanged, `200`. The category is in scope when one of its subjects is |
+| `DELETE /editor/patents/{patent_id}/categories/{category_id}/` | Removes a hand assignment. `409` for one the pipeline made from the category's terms. `404` when the family isn't in the category |
+| `DELETE /editor/patents/{patent_id}/trials/{trial_id}/` | Suppresses the link between the family and a trial: it stays, marked `suppressed`, hidden everywhere, and detection never recreates it. Idempotent: an already suppressed link is returned unchanged, `200`. `404` when the pair isn't linked, or the trial is outside the site's scope |
+| `PUT /editor/patents/{patent_id}/trials/{trial_id}/` | Restores a suppressed link, `200`; a link that isn't suppressed is returned unchanged. Editors **cannot create** a link (links need a shared sponsor and timing, which only detection computes), so a pair with no link is `404` and the message says so |
+| `GET /editor/patents/{patent_id}/history/?limit=` | Who changed this site's editorial content for the family, its hand assignments to categories in scope, and the suppressing or restoring of its links to trials in scope; newest first, `limit` 1 to 200 (default 50). Entry kinds are `editorial`, `category` and `trial_link`: patents have no relevance. Only people's changes are recorded (the pipeline's category matching and link detection write no history), so every entry is an editor, admin or API-key action |
+
+The reads `GET /editor/patents/` and `GET /editor/patents/{id}/` accept `?include=editorial` (and `claims` on the detail) like the public endpoints; each editorial entry also carries `updated_at` and `updated_by`.
 
 Trials are read-only over MCP: an editor can link a trial to an article but cannot change the trial. `access`, `retracted` and `kind` stay on `POST /articles/edit/` (API key) and the admin.
 
@@ -225,6 +241,7 @@ The response is a plain JSON array, ordered by `site_id`, with no pagination:
     "title": "Brain Regeneration",
     "api_public": true,
     "mcp_description": "",
+    "patents_enabled": true,
     "subjects": [{"id": 1, "subject_name": "Multiple Sclerosis"}],
     "prompts": [
       {
@@ -240,7 +257,7 @@ The response is a plain JSON array, ordered by `site_id`, with no pagination:
 ]
 ```
 
-`subjects` carries `id` and `subject_name` only — no `team_id`, anywhere. `prompts` and `documents` list only `is_active` rows, in their model `ordering`; a prompt's `template` is raw text (`$name`-style placeholders), substituted by the MCP server at render time, not here.
+`patents_enabled` says whether patent families are reachable through this tenant (see [Patents](#patents)): `true` when a settings row in the same slice of the site that supplies its scope has `patents_enabled` on. The MCP server uses it to hide the patent tools and leave patents out of the instructions. `subjects` carries `id` and `subject_name` only — no `team_id`, anywhere. `prompts` and `documents` list only `is_active` rows, in their model `ordering`; a prompt's `template` is raw text (`$name`-style placeholders), substituted by the MCP server at render time, not here.
 
 Like `GET /sites/`, this endpoint is **never gated by the resolution above** — it answers the same way no matter how many `api_public` sites exist, even where `/articles/` would 400 on an anonymous caller who names none. Every response carries `Vary: Authorization`, since the answer depends on the caller's key.
 
@@ -357,9 +374,9 @@ GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv
 
 ## Editorial content
 
-Editorial content is the `takeaways` and `summary_plain_english` of a record. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field). CSV output never includes it.
+Editorial content is the `takeaways` and `summary_plain_english` of a record. It is **off by default** and returned only with `?include=editorial`, on `/articles/`, `/articles/{id}/`, `/trials/`, `/trials/{id}/` and both search endpoints (as a query parameter or a body field), and on `/patents/` and `/patents/{id}/`. CSV output never includes it.
 
-Articles carry editorial content **per site**, so two sites of one organisation can say different things about the same article. Each entry is labelled by site:
+Articles and patents carry editorial content **per site**, so two sites of one organisation can say different things about the same article. Each entry is labelled by site:
 
 ```json
 "editorial": [
@@ -387,7 +404,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 - **Which site** (articles) is decided by the caller, never by a parameter: an API key gets its own site, a logged-in user gets every site owned by an organisation they belong to, and an anonymous caller gets the `api_public` site resolved from `?site_id=`, `Origin`, `Referer` or the single public site (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)). An API key whose site is missing, or belongs to a different organisation, gets `[]`. `?team_id=` has no effect, and there is no way to request another site's content.
 - **Which organisation** (trials) follows the same rule: an API key gets its own organisation, a logged-in user gets every organisation they belong to, and an anonymous caller gets the organisation that owns the resolved site.
 - Anonymous and API-key callers get 0 or 1 entries; a logged-in user whose organisations own two sites gets 2 on articles.
-- `?include=` is a comma-separated list; the only accepted value is `editorial`, and an unknown value returns 400.
+- `?include=` is a comma-separated list; `editorial` is the value for articles and trials. `claims` is also accepted but does something only on a single patent (see [Patents](#patents)); on other endpoints it is ignored. An unknown value returns 400.
 - `?has_takeaways=true|false` filters on the same site(s) (articles) or organisation(s) (trials) and doesn't need `include=editorial`. Empty-string takeaways count as missing.
 - Responses already vary by `Origin` whenever site resolution depends on it, so caches in front of the API must honour `Vary: Origin`.
 
@@ -413,24 +430,27 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
-| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering) |
+| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents) |
 | Categories | `GET /categories/{id}/` | `id` (path) | Includes `category_terms` and `category_exclude_terms` |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
 | Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
-| Sponsors | `GET /sponsors/` | `sponsor_type`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below |
+| Sponsors | `GET /sponsors/` | `sponsor_type`, `include_patent_applicants`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below. Each row carries `trials_count` and `patents_count`; `include_patent_applicants=true` also lists sponsors that only applied for patents ([Patents](#patents)) |
 | Sponsors | `GET /sponsors/{id}/` | `id` (path) | |
 | Subjects | `GET /subjects/` | `team_id`, `search`, `ordering`, pagination | |
 | Subjects | `GET /subjects/{id}/` | `id` (path) | |
 | Teams | `GET /teams/` | Standard pagination | |
 | Teams | `GET /teams/{id}/` | `id` (path) | |
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
-| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `category_modality`, `source_id`, `status`, `search`, `ordering`, trial-specific filters, pagination | See parameter details below |
-| Trials | `GET /trials/{id}/` | `id` (path) | |
+| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `category_modality`, `source_id`, `status`, `search`, `ordering`, `has_patent_link`, `include_subject_links`, trial-specific filters, pagination | See parameter details below |
+| Trials | `GET /trials/{id}/` | `id` (path), `include_subject_links` | Adds `trial_sites` and `patent_links` ([Patents](#patents)) |
 | Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), `by_modality` (per `CategoryModality` + `no_modality`, joined over `team_categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality"), `by_study_type` (per `TrialStudyType` + `no_study_type`; `no_study_type` is large — ~13.2k globally — mostly legacy rows with no `source_register` rather than a normalization gap), and `by_sex` (per `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is large — ~46% globally — same legacy-rows caveat as `no_study_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results`, plus every `GET /trials/` filter (`date_registration_after`, `date_registration_before`, `phase_normalized`, `country`, …) | See [Search endpoints](#search-endpoints) below |
 | Trials | `POST /trials/search/` | Request **body** accepts the same fields as `GET /trials/search/`: `team_id`, `subject_id`, `title`, `summary`, `search`, `status`, `ordering`, `page`, `page_size`, `all_results`, plus every `GET /trials/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints) |
 | Trials | `GET /trials/sites/` | Same filters as `GET /trials/`, plus `latitude__isnull` (`true`/`false`) | Flat, paginated `TrialSite` listing across the filtered trial set: `{trial_id, name, city, country, latitude, longitude}` per row — for a site-level pin map. `trial_sites` itself is detail-only (appears on `GET /trials/{id}/`, never on the list/CSV/search responses). Pagination is mandatory here — `?all_results=true` returns 400; max `page_size` is 500 |
+| Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
+| Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
+| Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
 | Email templates | `GET /emails/` | None | Template preview dashboard |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
@@ -655,6 +675,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `trial_id` | Filter by specific trial ID |
 | `has_takeaways` | `true`/`false`: whether the caller's own organisation has written takeaways for the trial (see [Editorial content](#editorial-content)) |
 | `include` | `editorial` adds the `editorial` list to each trial (see [Editorial content](#editorial-content)) |
+| `has_patent_link` | `true`/`false`: at least one visible, unsuppressed link to a patent family (see [Patents](#patents)). Category-basis links only unless `include_subject_links=true`. A caller whose sites don't show patents matches nothing |
+| `include_subject_links` | `true` also counts (and, on the detail, shows) patent links that rest on a shared subject only |
 | `internal_number` | Filter by WHO internal number |
 | `phase` | Filter by trial phase (e.g., `Phase III`) |
 | `phase_normalized` | Exact match against the canonical phase: `early_phase_1`, `phase_1`, `phase_1_2`, `phase_2`, `phase_2_3`, `phase_3`, `phase_3_4`, `phase_4`, `post_market`, `not_applicable`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?phase_normalized=phase_2,phase_3` |
@@ -746,6 +768,106 @@ Every trial response includes a nested, read-only `sponsor` object resolved from
 ```
 
 `sponsor` is `null` when the raw string hasn't been resolved to a canonical entity yet (tracked by the `no_sponsor` count on `/trials/stats/`). Filter trials by canonical sponsor with `sponsor_id` or `sponsor_slug` (both listed above), and browse the full canonical list at `GET /sponsors/`.
+
+---
+
+## Patents
+
+`GET /patents/` lists patent families: one DOCDB simple family per record, with every published document of the family nested on the detail. Where the data comes from and how it is kept up to date is in [patents.md](patents.md).
+
+### Which sites show patents
+
+Patents are shown only through sites with `CustomSetting.patents_enabled` on (off by default). The patents are fetched with Brain Regeneration's EPO OPS account, so only sites covered by that licence decision should turn it on.
+
+`patents_enabled` is checked on top of the usual scope: a patent is visible when it carries a subject in a site's `scope_subjects` **and** that site has the switch on. A site with it off shows no patents even when its scope lists the subject. The caller rules are those of every other endpoint (see [Visibility rules summary](#visibility-rules-summary)), counting only sites with the switch on:
+
+| Caller | Sees patents of |
+|:-------|:----------------|
+| Site-bound API key | its own site, if the switch is on |
+| MCP editor | the one site their token is bound to, if the switch is on |
+| Signed-in user | every site of their organisations that has the switch on |
+| Anonymous | the one resolved `api_public` site, if the switch is on |
+| `?include_public=true` | adds every `api_public` site that has the switch on |
+
+A caller with nothing in scope gets an empty list from `/patents/`, `404` on a single record, no `patent_links` on a trial, `patents_count` of `0` on sponsors and `patents_count_total` of `0` on categories. The same set decides `has_patent_link` and the patent counts in stats.
+
+### `GET /patents/`
+
+Every parameter is optional.
+
+| Parameter | Matches |
+|:----------|:--------|
+| `search` | Boolean search over `title` and `summary`, as on `/articles/` and `/trials/` (bare terms AND-ed, uppercase `OR` / `NOT`, `"quoted phrases"`). Claims are not searched |
+| `title`, `summary` | Case-insensitive substring of one field |
+| `subject_id`, `site_id` | As on `/trials/`. `site_id` of a site with the switch off returns nothing |
+| `category_id`, `category_slug`, `category_modality` | As on `/trials/` |
+| `applicant_sponsor_id`, `applicant_sponsor_slug` | Any applicant linked to that canonical sponsor |
+| `applicant` | Case-insensitive substring of an applicant's name as published; for applicants not linked to a sponsor |
+| `priority_date_after`, `priority_date_before` | `earliest_priority_date`, inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
+| `publication_date_after`, `publication_date_before` | `earliest_publication_date`, same rules |
+| `has_grant` | `true`/`false`. A heuristic on kind codes, not legal status |
+| `cpc` | Prefix match against any of the family's CPC classes: `A61K31`, `A61P25/28`. Comma-separated, OR. Spaces are ignored |
+| `publication_number` | Any member publication, in any common format: `EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`. Without a kind code (`EP4123456`) it matches every kind. Matches on the stored country, number and kind, never as a prefix: `EP123` does not find `EP1234567`. Comma-separated, OR |
+| `family_id` | Exact DOCDB family id |
+| `has_trial_link` | At least one visible, unsuppressed link to a trial. See [Trial links](#trial-links) |
+| `include_subject_links` | Also count and show subject-basis links. See [Trial links](#trial-links) |
+| `ordering` | `earliest_priority_date`, `earliest_publication_date`, `discovery_date`, `last_updated`, each with an optional `-`. Default `-discovery_date`. Families without the date sort last in both directions; ties break on `-patent_id` |
+| `page`, `page_size` | `page_size` up to 100; `page * page_size` above 10,000 is `400`, as elsewhere |
+
+A family appears once however many of its publications or applicants match.
+
+**No bulk export.** The licence rules out republishing the records, so there is no CSV and no `all_results`: `?format=csv` is `404`, and `?all_results=true` is ignored (you get an ordinary page).
+
+**Espacenet link.** `link` is always present and points to the family's Espacenet page. Showing where a record comes from is a condition of the EPO OPS terms, so keep the link wherever you display a patent.
+
+### Fields
+
+The list returns:
+
+| Field | Meaning |
+|:------|:--------|
+| `patent_id`, `family_id` | Gregory's id and the DOCDB family id |
+| `title`, `summary` | As published (the summary is the abstract) |
+| `representative_publication`, `link` | The publication OPS flags as representative, and its Espacenet page |
+| `earliest_priority_date`, `earliest_publication_date` | Dates, or `null` |
+| `has_grant` | A member publication has a grant kind code |
+| `cpc_classes` | Strings such as `A61K31/435` |
+| `applicants` | In published order: `raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug` (`null` when not linked to a sponsor), `is_individual` |
+| `team_categories`, `subjects` | Categories and subjects in the caller's scope |
+| `publications_count` | Member publications |
+| `trial_links_count` | Visible trial links, by the [rules below](#trial-links) |
+
+`GET /patents/{id}/` adds:
+
+| Field | Meaning |
+|:------|:--------|
+| `publications` | Every member: `publication_number`, `country`, `kind`, `publication_date`, `application_number`, `application_date` |
+| `inventors` | Names as published |
+| `ipc_classes`, `links` | IPC classes; source URLs keyed by source (`espacenet`) |
+| `trial_links` | `trial_id`, `trial_title`, `sponsor_id`, `timing` (`during` / `after`), `days_after_completion`, `basis` |
+| `claims` | **Only with `?include=claims`**; otherwise the key is absent. Averages ~12,000 characters and runs past 200,000, so it is never on the list. `null` when OPS has no full text for the family's offices (US-, CN- or JP-only families) |
+
+`?include=claims` (detail only) and `?include=editorial` (list and detail) are the `include` values that do anything on `/patents/`; combine them with a comma. `editorial` adds an `editorial` list of the caller's own sites' `takeaways` and `summary_plain_english`, one entry per site, as on articles (see [Editorial content](#editorial-content)); for an MCP editor each entry also carries `updated_at` and `updated_by`. Only sites with `patents_enabled` on get an entry, since the others never show the patent, even when the caller owns them (on an article the same caller would get every site they own). `claims` is ignored on other endpoints.
+
+### Trial links
+
+A sponsor can file a patent while one of its trials is running or shortly after it ends; detection records that as a link. They are shown in both directions: `trial_links` on a patent, `patent_links` (`patent_id`, `title`, `representative_publication`, `timing`, `days_after_completion`, `basis`) on `GET /trials/{id}/`. A link shows only when all of these hold:
+
+- it is not suppressed (an editor dismissed it), ever;
+- its trial is visible to the caller;
+- its patent is visible to the caller, which needs a site with the switch on, so **a trial seen only through a site without patents shows no patent links**;
+- its `basis` is `category`, meaning the patent and the trial share a team category (typically the molecule), unless the request has `include_subject_links=true`.
+
+`subject`-basis links rest on a shared subject alone. They are the large majority and noisy for big sponsors, which is why they are opt-in. The same rule feeds `trial_links_count` and the filters `has_trial_link` (patents) and `has_patent_link` (trials).
+
+### Sponsors and categories
+
+- `GET /sponsors/` rows carry `patents_count`: the families the sponsor applied for within the caller's patent scope. Without a parameter the list is unchanged: sponsors with a trial in scope. `?include_patent_applicants=true` also lists sponsors that only appear as applicants on patents in scope (their `trials_count` is `0`).
+- `GET /categories/` rows carry `patents_count_total`, scoped the same way.
+
+### `GET /patents/stats/`
+
+Takes the same parameters as the list and the same scope. Returns `total`, `with_grant`, `with_trial_link` (category-basis unless `include_subject_links=true`) and `by_priority_year` (`[{year, count}]`, ascending, with a trailing `{"year": null, ...}` for families with no priority date). Cached for `STATS_CACHE_TTL` seconds; the cache key includes the patent scope, since two callers with the same subjects can differ on which of their sites show patents.
 
 ---
 

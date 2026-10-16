@@ -1,13 +1,15 @@
 """Builds the MCPServer: registers tools, resources, and prompts.
 
 `build_server()` is the anonymous server behind `/mcp`: everything on it is
-read-only. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
+read-only. Twelve read tools are registered, but `search_patents` and
+`get_patent` are offered only to a tenant that has patents (tool_access.py), so
+the others see ten. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
 open_world_hint=False` since none of them write, and every one only ever talks
 to the one Gregory instance named by `GREGORY_API_URL`.
 
 `build_server(editor=True)` is the server behind `/mcp/editor`
-(MCP-AUTH-PLAN.md): the same ten read tools, plus `get_article_history` and four
-write tools. What a given request may see and call depends on who signed in
+(MCP-AUTH-PLAN.md): the same read tools, plus `get_history` and the six write
+tools. What a given request may see and call depends on who signed in
 (tool_access.py); the process registers every tool once, like the anonymous one.
 """
 
@@ -25,7 +27,7 @@ from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tenants import TenantGateMiddleware
 from .tool_access import ToolAccessMiddleware
-from .tools import articles, authors, catalog, stats, trials
+from .tools import articles, authors, catalog, patents, stats, trials
 from .tools import editor as editor_tools
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
@@ -33,12 +35,13 @@ READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_worl
 # The write tools ask the client for confirmation (`destructive_hint`), which
 # clients may or may not honour: the edit rate limit and Django's history are
 # the safeguards that don't depend on the client. All are idempotent (the same
-# call twice leaves the same state). Linking only adds, so it isn't destructive.
+# call twice leaves the same state). The tools that can both add and remove
+# (update_editorial overwrites, set_trial_link and set_category_assignment take
+# a boolean for the direction) are destructive, since a hint cannot say "only
+# when the flag is false": a client that confirms destructive calls asks before
+# an assignment or a link as well, and editors are told to confirm anyway.
 EDIT_DESTRUCTIVE = ToolAnnotations(
 	read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=False
-)
-EDIT_ADDITIVE = ToolAnnotations(
-	read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
 # Creating a category: adds rather than overwrites, but a second identical call
 # is refused (the slug is taken) rather than answered with the first result.
@@ -167,7 +170,15 @@ def build_server(editor: bool = False) -> MCPServer:
 				TenantIdentityMiddleware(),
 			]
 			if editor
-			else [SiteMiddleware(), TelemetryMiddleware(), TenantGateMiddleware(), TenantIdentityMiddleware()]
+			else [
+				SiteMiddleware(),
+				TelemetryMiddleware(),
+				TenantGateMiddleware(),
+				# Hides the patent tools on a tenant without patents; every other
+				# tool is allowed to everyone here (tool_access.py).
+				ToolAccessMiddleware(),
+				TenantIdentityMiddleware(),
+			]
 		),
 	)
 
@@ -176,6 +187,8 @@ def build_server(editor: bool = False) -> MCPServer:
 	server.add_tool(articles.get_article, annotations=READ_ONLY)
 	server.add_tool(trials.search_trials, annotations=READ_ONLY)
 	server.add_tool(trials.get_trial, annotations=READ_ONLY)
+	server.add_tool(patents.search_patents, annotations=READ_ONLY)
+	server.add_tool(patents.get_patent, annotations=READ_ONLY)
 	server.add_tool(authors.search_authors, annotations=READ_ONLY)
 	server.add_tool(authors.get_author, annotations=READ_ONLY)
 	server.add_tool(catalog.list_categories, annotations=READ_ONLY)
@@ -183,15 +196,13 @@ def build_server(editor: bool = False) -> MCPServer:
 	server.add_tool(stats.get_stats, annotations=READ_ONLY)
 
 	if editor:
-		server.add_tool(editor_tools.get_article_history, annotations=READ_ONLY)
-		server.add_tool(editor_tools.update_article_editorial, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.get_history, annotations=READ_ONLY)
+		server.add_tool(editor_tools.update_editorial, annotations=EDIT_DESTRUCTIVE)
 		server.add_tool(editor_tools.set_article_relevance, annotations=EDIT_DESTRUCTIVE)
-		server.add_tool(editor_tools.link_trial_to_article, annotations=EDIT_ADDITIVE)
-		server.add_tool(editor_tools.unlink_trial_from_article, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.set_trial_link, annotations=EDIT_DESTRUCTIVE)
 		server.add_tool(editor_tools.create_category, annotations=EDIT_CREATE)
 		server.add_tool(editor_tools.update_category, annotations=EDIT_DESTRUCTIVE)
-		server.add_tool(editor_tools.assign_article_category, annotations=EDIT_ADDITIVE)
-		server.add_tool(editor_tools.unassign_article_category, annotations=EDIT_DESTRUCTIVE)
+		server.add_tool(editor_tools.set_category_assignment, annotations=EDIT_DESTRUCTIVE)
 
 	_replace_handler(server, "prompts/list", types.PaginatedRequestParams, prompts.list_prompts)
 	_replace_handler(server, "prompts/get", types.GetPromptRequestParams, prompts.get_prompt)

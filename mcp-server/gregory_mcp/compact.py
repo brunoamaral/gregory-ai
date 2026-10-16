@@ -3,7 +3,7 @@
 Search tools return a small, flat projection of each record — full abstracts
 and nested author/site lists blow up context fast, and most searches are
 followed by a `get_*` read of one or two records anyway. Detail tools
-(`get_article`, `get_trial`) return the full record, minus team data
+(`get_article`, `get_trial`, `get_patent`) return the full record, minus team data
 (`strip_team_data`).
 
 Nested author lists are left out by default and are opt-in on article search
@@ -90,6 +90,31 @@ def compact_trial(trial: dict[str, Any]) -> dict[str, Any]:
 		"summary": _truncate(trial.get("summary")),
 		"identifiers": trial.get("identifiers"),
 		"identifiers_normalized": trial.get("identifiers_normalized"),
+	}
+
+
+def compact_patent(patent: dict[str, Any]) -> dict[str, Any]:
+	"""A patent family's search row. `link` is the Espacenet page: showing
+	where a record comes from is a condition of the EPO OPS licence the data is
+	fetched under, so it stays on every row. `applicants` are the names to show
+	(the canonical sponsor's where one is linked, else the name as published),
+	in published order and without repeats."""
+	names: list[str] = []
+	for applicant in patent.get("applicants") or []:
+		name = applicant.get("sponsor_name") or applicant.get("raw_name")
+		if name and name not in names:
+			names.append(name)
+	return {
+		"patent_id": patent.get("patent_id"),
+		"title": patent.get("title"),
+		"summary": _truncate(patent.get("summary")),
+		"representative_publication": patent.get("representative_publication"),
+		"link": patent.get("link"),
+		"earliest_priority_date": patent.get("earliest_priority_date"),
+		"earliest_publication_date": patent.get("earliest_publication_date"),
+		"has_grant": patent.get("has_grant"),
+		"applicants": names,
+		"trial_links_count": patent.get("trial_links_count"),
 	}
 
 

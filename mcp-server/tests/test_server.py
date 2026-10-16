@@ -22,6 +22,10 @@ EXPECTED_TOOLS = {
 	"list_categories",
 	"list_sponsors",
 	"get_stats",
+	# Registered on every server, but offered only to a tenant with patents:
+	# see tests/test_patent_tool_access.py.
+	"search_patents",
+	"get_patent",
 }
 
 
@@ -197,10 +201,13 @@ def test_client_exposes_no_write_methods():
 
 	anonymous_tools = {t.name for t in build_server()._tool_manager.list_tools()}
 	assert not anonymous_tools & {
-		"update_article_editorial",
+		"update_editorial",
 		"set_article_relevance",
-		"link_trial_to_article",
-		"unlink_trial_from_article",
+		"set_trial_link",
+		"create_category",
+		"update_category",
+		"set_category_assignment",
+		"get_history",
 	}
 
 

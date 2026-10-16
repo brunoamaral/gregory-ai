@@ -38,10 +38,11 @@ _MAX_SLUG_LENGTH = 100
 
 # Which argument(s) hold the free-text query for a given tool, in
 # preference order (the first one present and non-empty wins). Only these
-# three tools get query-shape analysis — see MCP-TELEMETRY-PLAN.md Phase 2.
+# tools get query-shape analysis — see MCP-TELEMETRY-PLAN.md Phase 2.
 _QUERY_ARGS_BY_TOOL = {
 	"search_articles": ("search", "title", "summary"),
 	"search_trials": ("search", "title", "summary"),
+	"search_patents": ("search",),
 	"list_categories": ("search",),
 }
 

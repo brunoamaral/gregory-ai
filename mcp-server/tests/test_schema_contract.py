@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from gregory_mcp.tools import articles, authors, catalog, trials
+from gregory_mcp.tools import articles, authors, catalog, patents, trials
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "django" / "schema.yml"
 
@@ -44,6 +44,7 @@ TOOL_ENDPOINTS = [
 	# compact_article keeps) and are likewise never sent to Django.
 	(articles.search_articles, "/articles/", {"intent", "include_authors", "full_summary"}),
 	(trials.search_trials, "/trials/", {"intent"}),
+	(patents.search_patents, "/patents/", {"intent"}),
 	(authors.search_authors, "/authors/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
 	(catalog.list_categories, "/categories/", set()),
@@ -53,6 +54,7 @@ TOOL_ENDPOINTS = [
 DETAIL_ENDPOINTS = [
 	(articles.get_article, "/articles/{article_id}/"),
 	(trials.get_trial, "/trials/{trial_id}/"),
+	(patents.get_patent, "/patents/{patent_id}/"),
 	(authors.get_author, "/authors/{id}/"),
 ]
 
@@ -112,6 +114,21 @@ KNOWN_UNEXPOSED_PARAMS = {
 		# become purely cosmetic. Removed from the tool surface for
 		# quality; the API still accepts and declares it.
 		"team_id",
+	},
+	# Not exposed by search_patents. `title` and `summary` are single-field
+	# substring filters that `search` (title and summary, boolean) covers;
+	# `family_id` is a DOCDB id nobody searches by (`publication_number` is the
+	# lookup people have). `site_id` and `include_public` are the same
+	# transport-level / no-op parameters as on /articles/ and /trials/.
+	"/patents/": {
+		# `claims` come through get_patent(include_claims=...), which builds the
+		# `include` value itself (and adds `editorial` for an editor's session).
+		"include",
+		"title",
+		"summary",
+		"family_id",
+		"site_id",
+		"include_public",
 	},
 	"/trials/": {
 		"format",
@@ -262,7 +279,14 @@ def test_site_id_declared_endpoints_match_what_this_audit_found(schema_params):
 	endpoints the parameter actually *does* something on.
 	"""
 	declared = {path for path, params in schema_params.items() if "site_id" in params}
-	assert declared == {"/articles/", "/articles/search/", "/trials/", "/trials/search/", "/trials/sites/"}
+	assert declared == {
+		"/articles/",
+		"/articles/search/",
+		"/patents/",
+		"/trials/",
+		"/trials/search/",
+		"/trials/sites/",
+	}
 
 
 def test_stats_endpoints_exist_in_schema(schema_params):
@@ -271,6 +295,6 @@ def test_stats_endpoints_exist_in_schema(schema_params):
 	# (see STAGE-1-OPENAPI-SCHEMA-PLAN.md's "hard parts" table). Only /stats/
 	# (a plain APIView with @extend_schema) is fully annotated; check its
 	# params for real, and just check the other two exist.
-	for path in ("/stats/", "/articles/stats/", "/trials/stats/"):
+	for path in ("/stats/", "/articles/stats/", "/trials/stats/", "/patents/stats/"):
 		assert path in schema_params, f"{path} is missing from schema.yml entirely"
 	assert {"team", "subject"} <= schema_params["/stats/"]

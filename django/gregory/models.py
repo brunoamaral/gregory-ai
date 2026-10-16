@@ -2546,6 +2546,10 @@ class PatentCategoryAssignment(models.Model):
 		choices=CategoryAssignmentSource.choices,
 		default=CategoryAssignmentSource.MANUAL,
 	)
+	# Records a person's assignments (admin, an MCP editor). rebuild_categories
+	# adds its automatic rows through the related manager, which bulk-writes and
+	# records nothing; its removals are ordinary deletes, recorded with no editor.
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):
 		return f"{self.patents_id} → {self.teamcategory} ({self.source})"
@@ -2599,6 +2603,10 @@ class PatentTrialLink(models.Model):
 		help_text="Set when an editor dismissed the link. Detection never recreates or changes a suppressed link.",
 	)
 	discovered_date = models.DateTimeField(auto_now_add=True, db_index=True)
+	# Records suppressing and restoring a link (admin, an MCP editor) and
+	# detection's own creations and changes, so an editor's history can show
+	# when a link was dismissed.
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):
 		return f"patent {self.patent_id} / trial {self.trial_id} ({self.timing})"
@@ -2611,3 +2619,38 @@ class PatentTrialLink(models.Model):
 				fields=["patent", "trial"], name="unique_patent_trial_link"
 			)
 		]
+
+
+class PatentSiteContent(models.Model):
+	"""Per-site editorial content for a patent family: the site's own
+	``takeaways`` and ``summary_plain_english``, as ``ArticleSiteContent`` is for
+	articles. Two sites showing the same family can say different things."""
+
+	patent = models.ForeignKey(
+		Patents,
+		on_delete=models.CASCADE,
+		related_name="site_contents",
+	)
+	site = models.ForeignKey(
+		"sites.Site",
+		on_delete=models.CASCADE,
+		related_name="patent_contents",
+	)
+	takeaways = models.TextField(blank=True, null=True)
+	summary_plain_english = models.TextField(blank=True, null=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
+
+	def __str__(self):
+		return f"{self.patent_id}/{self.site_id}"
+
+	class Meta:
+		db_table = "patent_site_content"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["patent", "site"], name="unique_patent_site_content"
+			)
+		]
+		verbose_name = "patent site content"
+		verbose_name_plural = "patent site contents"

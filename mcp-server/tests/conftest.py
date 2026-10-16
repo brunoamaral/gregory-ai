@@ -145,6 +145,7 @@ def tenants_payload(*tenants: dict) -> list[dict]:
 		"title": "Example",
 		"api_public": True,
 		"mcp_description": "",
+		"patents_enabled": False,
 		"subjects": [],
 		"prompts": [],
 		"documents": [],

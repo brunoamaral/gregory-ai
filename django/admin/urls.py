@@ -31,6 +31,7 @@ from api.views import (
 	SourceViewSet,
 	TrialViewSet,
 	SponsorViewSet,
+	PatentViewSet,
 	post_article,
 	edit_article,
 	edit_trial,
@@ -56,6 +57,11 @@ from api.editor_views import (
 	EditorArticleResolveView,
 	EditorArticleTrialDetailView,
 	EditorArticleTrialsView,
+	EditorPatentCategoryView,
+	EditorPatentEditorialView,
+	EditorPatentHistoryView,
+	EditorPatentResolveView,
+	EditorPatentTrialDetailView,
 	EditorStatsView,
 	EditorTenantsView,
 )
@@ -95,6 +101,7 @@ router.register(r"sources", SourceViewSet)
 router.register(r"trials", TrialViewSet)
 router.register(r"subjects", SubjectsViewSet)
 router.register(r"sponsors", SponsorViewSet, basename="sponsors")
+router.register(r"patents", PatentViewSet, basename="patents")
 
 # Teams router (excluded from API root listing)
 teams_router = routers.SimpleRouter()
@@ -285,6 +292,27 @@ urlpatterns = (
 			"editor/articles/<int:article_id>/history/",
 			EditorArticleHistoryView.as_view(),
 			name="editor-article-history",
+		),
+		path("editor/patents/resolve/", EditorPatentResolveView.as_view(), name="editor-patent-resolve"),
+		path(
+			"editor/patents/<int:patent_id>/editorial/",
+			EditorPatentEditorialView.as_view(),
+			name="editor-patent-editorial",
+		),
+		path(
+			"editor/patents/<int:patent_id>/categories/<int:category_id>/",
+			EditorPatentCategoryView.as_view(),
+			name="editor-patent-category",
+		),
+		path(
+			"editor/patents/<int:patent_id>/trials/<int:trial_id>/",
+			EditorPatentTrialDetailView.as_view(),
+			name="editor-patent-trial",
+		),
+		path(
+			"editor/patents/<int:patent_id>/history/",
+			EditorPatentHistoryView.as_view(),
+			name="editor-patent-history",
 		),
 		path("editor/tenants/", EditorTenantsView.as_view(), name="editor-tenants"),
 		path("editor/stats/", EditorStatsView.as_view(), name="editor-stats"),

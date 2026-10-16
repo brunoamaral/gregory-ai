@@ -109,6 +109,36 @@ class TrialsBySponsorSerializer(serializers.Serializer):
 	count = serializers.IntegerField()
 
 
+class PatentsByPriorityYearSerializer(serializers.Serializer):
+	"""One entry of ``GET /patents/stats/`` ``by_priority_year``."""
+
+	year = serializers.IntegerField(allow_null=True)
+	count = serializers.IntegerField()
+
+
+class PatentsStatsSerializer(serializers.Serializer):
+	"""Response of ``GET /patents/stats/`` — see PatentViewSet.build_stats_payload."""
+
+	total = serializers.IntegerField()
+	with_grant = serializers.IntegerField(
+		help_text="Families with a granted publication (has_grant), a heuristic on kind codes."
+	)
+	with_trial_link = serializers.IntegerField(
+		help_text=(
+			"Families with at least one visible, unsuppressed trial link. "
+			"Category-basis links only unless include_subject_links=true."
+		)
+	)
+	by_priority_year = PatentsByPriorityYearSerializer(
+		many=True,
+		help_text=(
+			"Ascending by year of the earliest priority date; zero-count years "
+			"omitted, a trailing {year: null} entry for families with no "
+			"priority date (omitted when 0). Sums to total."
+		),
+	)
+
+
 class TrialsStatsSerializer(serializers.Serializer):
 	"""Response of ``GET /trials/stats/`` — see TrialViewSet.build_stats_payload.
 
@@ -220,6 +250,11 @@ class EditorErrorSerializer(serializers.Serializer):
 		required=False,
 		help_text="On 409 from the DOI lookup: the articles that share the DOI.",
 	)
+	patent_ids = serializers.ListField(
+		child=serializers.IntegerField(),
+		required=False,
+		help_text="On 409 from the publication-number lookup: the families that match.",
+	)
 	category_id = serializers.IntegerField(
 		required=False,
 		help_text=(
@@ -315,6 +350,60 @@ class EditorHistoryResponseSerializer(serializers.Serializer):
 	article_id = serializers.IntegerField()
 	entries = EditorHistoryEntrySerializer(many=True)
 
+
+
+# --- /editor/ patent routes ----------------------------------------------------
+
+
+class EditorPatentResolveResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	family_id = serializers.CharField(allow_null=True)
+	title = serializers.CharField()
+	representative_publication = serializers.CharField()
+
+
+class EditorPatentEditorialUpdateResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	site_id = serializers.IntegerField()
+	takeaways = serializers.CharField(allow_null=True)
+	summary_plain_english = serializers.CharField(allow_null=True)
+	updated_by = serializers.CharField(
+		allow_null=True, help_text="Name and email of whoever last changed the row."
+	)
+	updated_at = serializers.DateTimeField()
+
+
+class EditorPatentCategoryAssignmentResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	source = serializers.CharField(
+		help_text="Always `manual` after an editor assigns it; the pipeline never removes a manual assignment.",
+	)
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorPatentCategoryUnassignResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	removed = serializers.CharField(help_text="Always `manual`: only a hand assignment can be removed.")
+
+
+class EditorPatentTrialLinkResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	trial_id = serializers.IntegerField()
+	suppressed = serializers.BooleanField(
+		help_text="True after a DELETE (the link is hidden everywhere), false after a PUT (restored)."
+	)
+	timing = serializers.CharField()
+	basis = serializers.CharField()
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
+class EditorPatentHistoryResponseSerializer(serializers.Serializer):
+	patent_id = serializers.IntegerField()
+	entries = EditorHistoryEntrySerializer(many=True)
 
 
 # --- /editor/ category routes -------------------------------------------------

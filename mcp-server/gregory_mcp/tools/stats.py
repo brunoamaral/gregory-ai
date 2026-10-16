@@ -8,7 +8,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from ..client import get_client
 
-Scope = Literal["global", "articles", "trials"]
+Scope = Literal["global", "articles", "trials", "patents"]
 
 
 async def get_stats(
@@ -29,11 +29,14 @@ async def get_stats(
 			authors, sources, by_subject breakdown) via GET /stats/;
 			"articles" for GET /articles/stats/ (total, by_access, relevant,
 			retracted, missing_doi, by_subject); "trials" for GET
-			/trials/stats/ (by_phase, by_region, by_country, by_sponsor, etc.).
+			/trials/stats/ (by_phase, by_region, by_country, by_sponsor, etc.);
+			"patents" for GET /patents/stats/ (total, with_grant,
+			with_trial_link, by_priority_year) — only a site that has patents
+			returns anything but zeros.
 		subject_id: Scope to one subject. For "articles"/"trials", also
 			scopes `relevant`'s semantics the same way search_articles does.
 		search: Boolean search filter (see search_articles), only meaningful
-			for "articles"/"trials".
+			for "articles"/"trials"/"patents".
 		relevant: Only meaningful for "articles".
 	"""
 	if scope == "global":
@@ -45,4 +48,7 @@ async def get_stats(
 	if scope == "trials":
 		params = {"subject_id": subject_id, "search": search}
 		return await get_client().get("/trials/stats/", params)
-	raise ToolError(f"unknown scope {scope!r} — expected 'global', 'articles', or 'trials'")
+	if scope == "patents":
+		params = {"subject_id": subject_id, "search": search}
+		return await get_client().get("/patents/stats/", params)
+	raise ToolError(f"unknown scope {scope!r} — expected 'global', 'articles', 'trials', or 'patents'")

@@ -104,12 +104,26 @@ def _resolve_api_scheme(request):
 		raise
 
 
-def _public_subject_ids() -> set[int]:
-	"""Return the union of scope_subjects across every api_public site."""
+def _settings_rows(*, patents: bool):
+	"""CustomSetting rows that count towards a scope.
+
+	``patents=True`` keeps only rows with ``patents_enabled`` on, so the same
+	resolution code that answers "which subjects can this caller see" can
+	answer "which subjects can they see patents for" without a second copy.
+	"""
 	from sitesettings.models import CustomSetting
 
+	qs = CustomSetting.objects.all()
+	if patents:
+		qs = qs.filter(patents_enabled=True)
+	return qs
+
+
+def _public_subject_ids(*, patents: bool = False) -> set[int]:
+	"""Return the union of scope_subjects across every api_public site."""
 	return set(
-		CustomSetting.objects.filter(api_public=True)
+		_settings_rows(patents=patents)
+		.filter(api_public=True)
 		.exclude(scope_subjects__isnull=True)
 		.values_list("scope_subjects__id", flat=True)
 	)
@@ -150,7 +164,9 @@ def api_key_site_id(request) -> int | None:
 	return site_id_for_api_scheme(_resolve_api_scheme(request))
 
 
-def site_scope_subject_ids(site_id, *, public_only: bool) -> set[int]:
+def site_scope_subject_ids(
+	site_id, *, public_only: bool, patents: bool = False
+) -> set[int]:
 	"""Return the union of scope_subjects across site_id's CustomSetting
 	row(s).
 
@@ -158,10 +174,11 @@ def site_scope_subject_ids(site_id, *, public_only: bool) -> set[int]:
 	it is api_public -- what a site-bound API key sees of its own site.
 	public_only=True restricts to rows with api_public=True -- what an
 	anonymous caller may see of that site.
-	"""
-	from sitesettings.models import CustomSetting
 
-	qs = CustomSetting.objects.filter(site_id=site_id)
+	patents=True counts only rows with ``patents_enabled`` on: a site whose
+	switch is off contributes nothing, even when its scope lists the subject.
+	"""
+	qs = _settings_rows(patents=patents).filter(site_id=site_id)
 	if public_only:
 		qs = qs.filter(api_public=True)
 	return set(
@@ -174,6 +191,10 @@ def site_scope_subject_ids(site_id, *, public_only: bool) -> set[int]:
 def visible_subject_ids(request) -> set[int]:
 	"""
 	Return the set of Subject IDs the caller is permitted to see.
+
+	The resolution below is shared with ``visible_patent_subject_ids`` through
+	``_resolve_visible_subject_ids``; the rules are identical, so everything
+	said here about scope applies to both.
 
 	Site-scoped API visibility: introduced in Phase 1 alongside
 	``visible_org_ids`` -- see that function's docstring for the middleware
@@ -250,19 +271,46 @@ def visible_subject_ids(request) -> set[int]:
 	site's scope has no way to ask for it from this function; that is
 	intentional, since "give me everything public" is not a resolvable site.
 	"""
-	from sitesettings.models import CustomSetting
+	return _resolve_visible_subject_ids(request, patents=False)
 
+
+def visible_patent_subject_ids(request) -> set[int]:
+	"""
+	Return the set of Subject IDs the caller may see PATENTS for.
+
+	Same caller rules as ``visible_subject_ids`` (site-bound key, MCP editor,
+	authenticated user, resolved anonymous site, ``?include_public=true``),
+	but only ``CustomSetting`` rows with ``patents_enabled`` on count. A
+	patent is visible when it carries a subject in this set; a site with the
+	switch off shows no patents, whatever its ``scope_subjects`` say.
+
+	This is a subset of ``visible_subject_ids`` for the same request. Like
+	that function, the anonymous branch can raise ``NoSiteResolvedError``.
+	"""
+	return _resolve_visible_subject_ids(request, patents=True)
+
+
+def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
+	"""Shared body of ``visible_subject_ids`` / ``visible_patent_subject_ids``.
+
+	``patents`` only changes which CustomSetting rows are counted. Site
+	resolution (which site an anonymous caller means, whether that is
+	ambiguous) is the same either way, on purpose: a caller must get the same
+	400 for the same request on both.
+	"""
 	include_public = request.GET.get("include_public", "").lower() == "true"
 
 	def _resolve(owned: set[int]) -> set[int]:
-		return owned | _public_subject_ids() if include_public else owned
+		return owned | _public_subject_ids(patents=patents) if include_public else owned
 
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
 		site_id = site_id_for_api_scheme(api_scheme)
 		if site_id is None:
 			return _resolve(set())
-		return _resolve(site_scope_subject_ids(site_id, public_only=False))
+		return _resolve(
+			site_scope_subject_ids(site_id, public_only=False, patents=patents)
+		)
 
 	# An MCP editor (MCP-AUTH-PLAN.md): the one site their token is bound to,
 	# private or not. Placed before the user branch, whose "every site of every
@@ -273,7 +321,7 @@ def visible_subject_ids(request) -> set[int]:
 
 	editor = editor_auth_of(request)
 	if editor is not None:
-		return site_scope_subject_ids(editor.site_id, public_only=False)
+		return site_scope_subject_ids(editor.site_id, public_only=False, patents=patents)
 
 	if getattr(request, "user", None) is not None and request.user.is_authenticated:
 		from gregory.models import OrganizationSite
@@ -294,7 +342,8 @@ def visible_subject_ids(request) -> set[int]:
 			return _resolve(set())
 		return _resolve(
 			set(
-				CustomSetting.objects.filter(site_id__in=site_ids)
+				_settings_rows(patents=patents)
+				.filter(site_id__in=site_ids)
 				.exclude(scope_subjects__isnull=True)
 				.values_list("scope_subjects__id", flat=True)
 			)
@@ -304,7 +353,14 @@ def visible_subject_ids(request) -> set[int]:
 	# include_public is deliberately NOT applied here (see docstring).
 	from gregory.site_resolution import NoSiteResolvedError, resolve_anonymous_site
 
-	site_id, varies_by_origin, ambiguous = resolve_anonymous_site(request)
+	# Resolved once per request: visible_subject_ids and
+	# visible_patent_subject_ids both land here, and the answer (which public
+	# site the caller means) does not depend on the patents switch.
+	resolution = getattr(request, "_anonymous_site_resolution", None)
+	if resolution is None:
+		resolution = resolve_anonymous_site(request)
+		request._anonymous_site_resolution = resolution
+	site_id, varies_by_origin, ambiguous = resolution
 	if varies_by_origin:
 		# Consumed by VisibleOrgMiddleware after get_response() returns, to
 		# set Vary: Origin -- see that module. A plain request attribute
@@ -325,7 +381,32 @@ def visible_subject_ids(request) -> set[int]:
 	# site_id alone would union that private row's own scope_subjects into
 	# this anonymous response -- matching _public_subject_ids()'s own filter
 	# for the same reason.
-	return site_scope_subject_ids(site_id, public_only=True)
+	return site_scope_subject_ids(site_id, public_only=True, patents=patents)
+
+
+#: Query parameters whose effect depends on the caller's PATENT scope, on
+#: endpoints that are not patent endpoints. A cache of counts or stats that
+#: involves one of these has to be keyed on that scope too (see
+#: ``patent_scope_cache_part``).
+PATENT_SCOPE_PARAMS = frozenset({"has_patent_link", "include_patent_applicants"})
+
+
+def patent_scope_cache_part(request, *, always: bool = False):
+	"""The caller's patent scope as a cache-key fragment, or None.
+
+	Two callers can share a ``visible_subject_ids`` and still differ in
+	``visible_patent_subject_ids`` (one site has ``patents_enabled`` on, the
+	other off), so any cached count or stats payload that depends on patent
+	visibility must hash it in -- or it would serve one site's patents to
+	the other. ``always=True`` for patent endpoints; for everything else the
+	fragment is added only when the request uses a patent-aware parameter, so
+	ordinary requests keep their existing keys and never pay for resolving
+	the patent scope.
+	"""
+	if not always and not PATENT_SCOPE_PARAMS & set(request.query_params.keys()):
+		return None
+	ids = getattr(request, "visible_patent_subject_ids", None)
+	return None if ids is None else sorted(ids)
 
 
 def visible_org_ids(request) -> set[int]:

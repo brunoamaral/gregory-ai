@@ -32,11 +32,11 @@ SERVER_VERSION = "0.1.0"
 _PUBLIC_TIER_NOTE = "Editing needs editor access on this site; this sign-in can read only."
 
 _EDIT_TOOLS = (
-	"update_article_editorial (set an article's takeaways and plain-English summary for this site), "
+	"update_editorial (set an article's takeaways and plain-English summary for this site), "
 	"set_article_relevance (mark an article relevant, not relevant or not reviewed for a subject), "
-	"link_trial_to_article and unlink_trial_from_article (connect or disconnect an article and a clinical trial), "
+	"set_trial_link (connect an article and a clinical trial, or disconnect them), "
 	"create_category and update_category (add a category or change its name, terms or subjects), "
-	"assign_article_category and unassign_article_category (put an article in a category by hand, or take it out)"
+	"set_category_assignment (put an article in a category by hand, or take it out)"
 )
 
 
@@ -57,7 +57,7 @@ def _behavior_paragraph(session: EditorSession | None) -> str:
 	if not session.is_editor:
 		return f"{anonymous} {_PUBLIC_TIER_NOTE}"
 	scope = "Searches and lists only return these subjects; a record outside them is reported as not found."
-	history = "get_article_history shows who changed an article's content, relevance and trial links, and when."
+	history = "get_history shows who changed an article's content, relevance and trial links, and when."
 	if not session.can_edit:
 		return f"You have read-only editor access to this site. {scope} {history} Editing is not available with this sign-in."
 	return (
@@ -84,10 +84,10 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 	"""
 	intro = tenant.mcp_description.strip()
 	if not intro:
-		intro = (
-			f"This is {tenant.title}'s research database: articles, clinical "
-			"trials and researchers, curated to the subjects below."
-		)
+		# Patents are named only for a tenant that has them (its patent tools
+		# are hidden otherwise, and the text must not point at what is absent).
+		records = "articles, clinical trials, patents and researchers" if tenant.patents_enabled else "articles, clinical trials and researchers"
+		intro = f"This is {tenant.title}'s research database: {records}, curated to the subjects below."
 	behavior_paragraph = _behavior_paragraph(session)
 	if not tenant.subjects:
 		# Only reachable if every subject row failed to parse: the API lists
@@ -100,13 +100,14 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 
 def _server_info(tenant: Tenant, session: EditorSession | None = None) -> dict[str, Any]:
 	access = "Read and edit access" if session is not None and session.can_edit else "Read-only access"
+	records = "articles, clinical trials, patents, authors" if tenant.patents_enabled else "articles, clinical trials, authors"
 	return {
 		"name": tenant.domain,
 		"title": tenant.title,
 		"version": SERVER_VERSION,
 		"description": (
-			f"{access} to {tenant.title}'s research database: articles, "
-			"clinical trials, authors, subjects, categories and sponsors."
+			f"{access} to {tenant.title}'s research database: {records}, "
+			"subjects, categories and sponsors."
 		),
 	}
 

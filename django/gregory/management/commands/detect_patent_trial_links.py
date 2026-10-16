@@ -64,6 +64,21 @@ def trial_window(trial):
 	return start, end
 
 
+# PatentTrialLink keeps a history so an editor's suppress/restore shows up, but
+# detection is not an editor: its creations, updates and removals are not
+# recorded. Beyond keeping the history to people's changes, a model with history
+# has a delete receiver, which switches off Django's fast delete: `--reset` over
+# thousands of links would stop being one DELETE and become a load of every
+# row plus one history row each. So detection saves with
+# `skip_history_when_saving` and removes with `delete_without_history`.
+def delete_without_history(queryset):
+	"""One DELETE statement for ``queryset``, skipping signals and cascades.
+
+	Only for rows nothing depends on (a link has no dependents; its history rows
+	are not foreign keys)."""
+	queryset._raw_delete(queryset.db)
+
+
 def classify(priority_date: date, window, after_months=DEFAULT_AFTER_MONTHS):
 	"""Return (timing, days_after_completion) for a priority date against a trial window,
 	or None when there is no signal."""
@@ -129,7 +144,7 @@ class Command(BaseCommand):
 				reset_pks = set(resettable.values_list("pk", flat=True))
 				self.stdout.write(f"Would delete {count} existing links (dry run)")
 			else:
-				resettable.delete()
+				delete_without_history(resettable)
 				self.stdout.write(f"Deleted {count} existing links")
 
 		trials_by_sponsor = {}
@@ -181,7 +196,9 @@ class Command(BaseCommand):
 				if link is None:
 					created += 1
 					if not dry_run:
-						PatentTrialLink.objects.create(patent=patent, trial_id=trial_id, **values)
+						link = PatentTrialLink(patent=patent, trial_id=trial_id, **values)
+						link.skip_history_when_saving = True
+						link.save()
 				elif link.suppressed:
 					skipped_suppressed += 1
 				elif any(getattr(link, key) != value for key, value in values.items()):
@@ -189,6 +206,7 @@ class Command(BaseCommand):
 					if not dry_run:
 						for key, value in values.items():
 							setattr(link, key, value)
+						link.skip_history_when_saving = True
 						link.save()
 
 			stale = [
@@ -196,7 +214,9 @@ class Command(BaseCommand):
 			]
 			removed += len(stale)
 			if stale and not dry_run:
-				PatentTrialLink.objects.filter(pk__in=[link.pk for link in stale]).delete()
+				delete_without_history(
+					PatentTrialLink.objects.filter(pk__in=[link.pk for link in stale])
+				)
 
 		prefix = "Would " if dry_run else ""
 		self.stdout.write(

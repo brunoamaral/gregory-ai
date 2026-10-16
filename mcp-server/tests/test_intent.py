@@ -11,12 +11,16 @@ from gregory_mcp.logging_config import INTENT_LOGGER_NAME, IntentJsonFormatter
 from gregory_mcp.site_context import _current_site_id
 from gregory_mcp.tools.articles import search_articles
 from gregory_mcp.tools.authors import search_authors
+from gregory_mcp.tools.patents import get_patent, search_patents
 from gregory_mcp.tools.trials import search_trials
 
 
-def test_intent_is_offered_on_search_articles_and_search_trials_only():
+def test_intent_is_offered_on_the_search_tools_but_not_the_lookups():
 	assert "intent" in inspect.signature(search_articles).parameters
 	assert "intent" in inspect.signature(search_trials).parameters
+	assert "intent" in inspect.signature(search_patents).parameters
+	# A lookup of one named record is not an information need to record.
+	assert "intent" not in inspect.signature(get_patent).parameters
 	# An intent phrased around a named person would reintroduce exactly what
 	# search_authors' own carve-out removes — see MCP-TELEMETRY-PLAN.md.
 	assert "intent" not in inspect.signature(search_authors).parameters

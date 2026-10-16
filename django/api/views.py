@@ -29,6 +29,8 @@ class NullsLastOrderingFilter(_BaseOrderingFilter):
 		return queryset.order_by(*processed)
 from api.serializers import (
 	ArticleSerializer,
+	PatentListSerializer,
+	PatentDetailSerializer,
 	TrialSerializer,
 	TrialDetailSerializer,
 	SourceSerializer,
@@ -46,6 +48,7 @@ from api.serializers import (
 from api.pagination import (
 	CappedPageNumberPagination,
 	FlexiblePagination,
+	PatentPagination,
 	TrialSitePagination,
 	request_bypasses_pagination,
 )
@@ -97,6 +100,10 @@ from gregory.models import (
 	CategoryModality,
 	MLPredictions,
 	Sponsor,
+	Patents,
+	PatentApplicant,
+	PatentCategoryAssignment,
+	PatentPublication,
 )
 from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
@@ -112,8 +119,10 @@ from api.filters import (
 	CategoryFilter,
 	SubjectFilter,
 	SponsorFilter,
+	PatentFilter,
 )
 from rest_framework.response import Response
+from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from django.http import Http404, StreamingHttpResponse
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -127,6 +136,7 @@ from api.schema_serializers import (
 	ArticlesStatsSerializer,
 	ErrorResponseSerializer,
 	GlobalStatsSerializer,
+	PatentsStatsSerializer,
 	TrialSiteRowSerializer,
 	TrialsStatsSerializer,
 	filterset_request_schema,
@@ -140,9 +150,11 @@ from django.utils.timezone import now as tz_now
 
 from api.editorial import (
 	article_site_contents,
+	claims_requested,
 	editorial_org_ids,
 	editorial_requested,
 	editorial_site_ids,
+	patent_site_contents,
 )
 from api.utils.utils import (
 	checkValidAccess,
@@ -152,7 +164,8 @@ from api.utils.utils import (
 )
 from gregory.utils.registry_utils import merge_links
 from gregory.site_resolution import public_sites
-from gregory.visibility import site_id_for_api_scheme
+from gregory.visibility import patent_scope_cache_part, site_id_for_api_scheme
+from api.patent_links import flag_requested, visible_patent_trial_links_queryset
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,
@@ -376,6 +389,10 @@ class SubjectVisibilityMixin:
 	separation avoids.
 	"""
 
+	#: Name of the request attribute holding the visible subject ids. Patents
+	#: read ``visible_patent_subject_ids`` instead: same rules, but only sites
+	#: that show patents count.
+	_visible_ids_attr = "visible_subject_ids"
 	#: ORM path from the model to a Subject PK.
 	_subject_filter_path = "subjects"
 	# Set to False where the path reaches subjects through a single-valued
@@ -387,9 +404,9 @@ class SubjectVisibilityMixin:
 
 	def get_queryset(self):
 		qs = super().get_queryset()
-		if not hasattr(self.request, "visible_subject_ids"):
+		if not hasattr(self.request, self._visible_ids_attr):
 			return qs
-		subject_ids = self.request.visible_subject_ids
+		subject_ids = getattr(self.request, self._visible_ids_attr)
 		if self._subject_filter_distinct:
 			# Correlated Exists() over the subjects M2M through table.
 			#
@@ -520,6 +537,13 @@ class CachedStatsActionMixin:
 			for value in request.query_params.getlist(key)
 		)
 		key_parts = {"subjects": subjects, "params": params}
+		patent_scope = patent_scope_cache_part(
+			request, always=getattr(self, "patent_scoped", False)
+		)
+		if patent_scope is not None:
+			# Two callers with the same subjects can differ in which of their
+			# sites show patents, so the patent scope is a key part of its own.
+			key_parts["patent_subjects"] = patent_scope
 		if "has_takeaways" in request.query_params:
 			# has_takeaways filters on the caller's editorial site(s) (articles)
 			# or organisation(s) (trials), which two callers with the same
@@ -1487,8 +1511,8 @@ _INCLUDE_PARAM = OpenApiParameter(
 	OpenApiParameter.QUERY,
 	enum=["editorial"],
 	description=(
-		"Opt in to extra content. Comma-separated; the only accepted value is "
-		"`editorial`, which adds an `editorial` list of the caller's own "
+		"Opt in to extra content. Comma-separated; `editorial` is the value for "
+		"this endpoint (`claims` is accepted but only patents use it), and it adds an `editorial` list of the caller's own "
 		"`takeaways` and `summary_plain_english`: one entry per site on "
 		"articles, one per organisation on trials (see "
 		"docs/03-api-and-rss-feeds.md). Unknown values return 400. Ignored for "
@@ -2182,6 +2206,13 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 			trials_count_annotated=_category_through_count_subquery(
 				TrialCategoryAssignment, "trials", visible_subject_ids
 			),
+			# Patents are scoped by the patent subject set: only sites with
+			# patents_enabled on contribute.
+			patents_count_annotated=_category_through_count_subquery(
+				PatentCategoryAssignment,
+				"patents",
+				getattr(self.request, "visible_patent_subject_ids", None),
+			),
 		)
 
 		# `authors_count_annotated` is an allowed ordering value but is NOT
@@ -2714,7 +2745,22 @@ class TrialViewSet(
 		# list row would cost a query per page for a field list responses never
 		# render. See TRIAL-GEOGRAPHY-PLAN.md PR G3.
 		if self.action == "retrieve":
-			qs = qs.prefetch_related("trial_sites")
+			qs = qs.prefetch_related(
+				"trial_sites",
+				# Scoped like article_references above: a trial on a site
+				# without patents_enabled must show no patent links, and a
+				# link to a patent the caller cannot see must not disclose it.
+				# See api/patent_links.py.
+				Prefetch(
+					"patent_links",
+					queryset=visible_patent_trial_links_queryset(
+						self.request
+					)
+					.select_related("patent")
+					.order_by("patent_id"),
+					to_attr="_visible_patent_links",
+				),
+			)
 		if editorial_requested(self.request):
 			qs = qs.prefetch_related(
 				Prefetch(
@@ -3133,8 +3179,16 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	  academic_medical, government, nonprofit, other
 	- **subject_id** - restrict to sponsors with >=1 trial in this subject
 	- **subjects_any** - comma-separated subject IDs, OR semantics
+	- **include_patent_applicants** - `true` also lists sponsors that appear only
+	  as applicants on patent families in the caller's patent scope (sites with
+	  `patents_enabled` on); off by default
 	- **ordering** - 'name' (default) or 'trials_count' (add '-' for reverse)
 	- **page_size** - items per page (max 100)
+
+	Each row carries `trials_count` and `patents_count`, both scoped to what
+	the caller may see. `patents_count` counts patent families the sponsor
+	applied for within the caller's patent scope (0 for a caller whose sites do
+	not show patents).
 
 	# Examples:
 	- Filter by type: `/sponsors/?sponsor_type=industry`
@@ -3161,10 +3215,43 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 	def get_queryset(self):
 		qs = super().get_queryset()
 		visible = getattr(self.request, "visible_subject_ids", None)
+		visible_patents = getattr(self.request, "visible_patent_subject_ids", None)
+		if visible_patents is not None and not visible_patents:
+			# No site this caller reaches shows patents: the count is 0 for
+			# every row, so don't pay for a subquery per sponsor to learn
+			# that. Costs the one query that resolves the patent scope.
+			patents_count = Value(0, output_field=IntegerField())
+			visible_patents = frozenset()
+		else:
+			# A correlated count, not a second Count() join next to
+			# trials_count's: two multi-valued joins in one query is the cross
+			# product that _category_through_count_subquery warns about.
+			patents_applied = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
+			if visible_patents is not None:
+				patents_applied = patents_applied.filter(
+					Exists(
+						Patents.objects.filter(
+							pk=OuterRef("patent_id"), subjects__in=visible_patents
+						)
+					)
+				)
+			patents_count = Coalesce(
+				Subquery(
+					patents_applied.order_by()
+					.values("sponsor")
+					.annotate(c=Count("patent", distinct=True))
+					.values("c"),
+					output_field=IntegerField(),
+				),
+				0,
+			)
 		if visible is None:
 			# No middleware (management command, some tests) -- no scoping,
 			# matching every other viewset's fallback.
-			return qs.annotate(trials_count=Count("trials", distinct=True))
+			return qs.annotate(
+				trials_count=Count("trials", distinct=True),
+				patents_count=patents_count,
+			)
 
 		# Exists() over Trials rather than a join + distinct on the outer
 		# query: a sponsor with many in-scope trials must appear once, and
@@ -3176,13 +3263,334 @@ class SponsorViewSet(viewsets.ReadOnlyModelViewSet):
 		# count on a visible sponsor would disclose how many trials the caller
 		# cannot read, and it is an orderable field (?ordering=-trials_count),
 		# so the ranking itself would leak the same information.
-		return qs.filter(Exists(has_a_trial_in_scope)).annotate(
+		in_scope = Exists(has_a_trial_in_scope)
+		if flag_requested(self.request, "include_patent_applicants"):
+			# Also sponsors that only ever applied for patents in scope. Same
+			# Exists() shape, OR-ed in, so a sponsor still appears once.
+			# With an empty patent scope there is nothing to add.
+			if visible_patents is None or visible_patents:
+				applied_in_scope = PatentApplicant.objects.filter(sponsor=OuterRef("pk"))
+				if visible_patents is not None:
+					applied_in_scope = applied_in_scope.filter(
+						Exists(
+							Patents.objects.filter(
+								pk=OuterRef("patent_id"), subjects__in=visible_patents
+							)
+						)
+					)
+				in_scope = in_scope | Exists(applied_in_scope)
+		return qs.filter(in_scope).annotate(
 			trials_count=Count(
 				"trials",
 				filter=Q(trials__subjects__in=visible),
 				distinct=True,
-			)
+			),
+			patents_count=patents_count,
 		)
+
+
+###
+# PATENTS
+###
+
+
+class PatentOrderingFilter(NullsLastOrderingFilter):
+	"""Ordering for ``/patents/``: dates sort NULLS LAST in both directions, and
+	``-patent_id`` is appended as a tiebreaker. Many families share a date (or
+	have none), so without it a page boundary can repeat or skip a family
+	between requests."""
+
+	nulls_last_fields = frozenset({"earliest_priority_date", "earliest_publication_date"})
+
+	def filter_queryset(self, request, queryset, view):
+		queryset = super().filter_queryset(request, queryset, view)
+		return queryset.order_by(*queryset.query.order_by, "-patent_id")
+
+
+_PATENTS_ORDERING_PARAM = _ordering_param(
+	["earliest_priority_date", "earliest_publication_date", "discovery_date", "last_updated"],
+	"Sort field, prefix with `-` for descending (default `-discovery_date`). "
+	"Families without the date always sort last, in both directions. Ties "
+	"break on `-patent_id`.",
+)
+
+_PATENT_EDITORIAL_TEXT = (
+	"`editorial` adds an `editorial` list of the caller's own sites' "
+	"`takeaways` and `summary_plain_english` (one entry per site, as on "
+	"articles; see docs/03-api-and-rss-feeds.md)"
+)
+
+_PATENT_LIST_INCLUDE_PARAM = OpenApiParameter(
+	"include",
+	OpenApiTypes.STR,
+	OpenApiParameter.QUERY,
+	enum=["editorial"],
+	description=(
+		"Opt in to extra content. Comma-separated; " + _PATENT_EDITORIAL_TEXT + ". "
+		"`claims` is detail-only and ignored here. Unknown values return 400."
+	),
+)
+
+_PATENT_INCLUDE_PARAM = OpenApiParameter(
+	"include",
+	OpenApiTypes.STR,
+	OpenApiParameter.QUERY,
+	enum=["claims", "editorial"],
+	description=(
+		"Opt in to extra content. Comma-separated. `claims` adds the family's "
+		"full `claims` text (it averages ~12,000 characters and can run past "
+		"200,000, so it is never in the default response and not available on "
+		"the list); " + _PATENT_EDITORIAL_TEXT + ". Unknown values return 400."
+	),
+)
+
+
+@extend_schema_view(
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[
+			_PATENTS_ORDERING_PARAM,
+			_INCLUDE_PUBLIC_PARAM,
+			_PATENT_LIST_INCLUDE_PARAM,
+		],
+	),
+	retrieve=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_PATENT_INCLUDE_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
+)
+class PatentViewSet(
+	SubjectVisibilityMixin,
+	CachedStatsActionMixin,
+	viewsets.ReadOnlyModelViewSet,
+):
+	"""
+	List patent families (one DOCDB simple family per record), newest discovery first.
+
+	Patents are only visible through sites that have **patents_enabled** on
+	(`CustomSetting.patents_enabled`, off by default). A caller whose sites do
+	not show patents gets an empty list, and a 404 on a single record.
+
+	Every record's `link` points to its Espacenet page. Showing where the data
+	comes from is a condition of the EPO OPS licence it is fetched under, so
+	keep the link wherever you display a patent.
+
+	There is no CSV export and no `all_results`: the licence rules out bulk
+	export of records. `?format=csv` is not a supported format here, and
+	`?all_results=true` is ignored (you get an ordinary page). Page with
+	`page` / `page_size` (max 100).
+
+	# Query Parameters:
+	- **search** - boolean search over title and summary (bare terms AND-ed; uppercase `OR`/`NOT`; `"quoted phrases"`). Claims are not searched
+	- **title** - case-insensitive substring of the title only
+	- **summary** - case-insensitive substring of the summary only
+	- **subject_id** - filter by subject ID
+	- **site_id** - filter by Django Site ID; patents carrying a subject in that site's scope. A site with `patents_enabled` off returns nothing
+	- **category_id** / **category_slug** - filter by category
+	- **category_modality** - filter by the intervention modality of the patent's categories; one of the `CategoryModality` values
+	- **applicant_sponsor_id** / **applicant_sponsor_slug** - patents with an applicant linked to that sponsor (see `/sponsors/`)
+	- **applicant** - case-insensitive substring of an applicant's published name; for applicants not linked to a sponsor
+	- **priority_date_after** / **priority_date_before** - earliest priority date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+	- **publication_date_after** / **publication_date_before** - earliest publication date, inclusive
+	- **has_grant** - `true`/`false`; a heuristic on kind codes, not legal status
+	- **cpc** - CPC class prefix match against any of the family's classes; comma-separated, OR (`?cpc=A61K31,A61P25/28`)
+	- **publication_number** - any member publication, in any common format (`EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`); without a kind code (`EP4123456`) it matches every kind. Comma-separated, OR
+	- **family_id** - exact DOCDB family id
+	- **has_trial_link** - `true`/`false`; at least one visible, unsuppressed link to a clinical trial
+	- **include_subject_links** - `true` also counts and shows links that rest on a shared subject only (see below)
+	- **include** - `editorial` adds the caller's own sites' takeaways and plain-English summary; on the detail only, `claims` adds the full claims text
+	- **page**, **page_size**, **ordering**
+
+	# Ordering:
+	`?ordering=<field>` (prefix with `-` to reverse): `earliest_priority_date`,
+	`earliest_publication_date`, `discovery_date` (default `-discovery_date`),
+	`last_updated`. Families without the date sort last in both directions; ties
+	break on `-patent_id`. Unrecognised values are silently ignored.
+
+	# Fields:
+	The list returns `patent_id`, `family_id`, `title`, `summary`,
+	`representative_publication`, `link`, `earliest_priority_date`,
+	`earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
+	(`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
+	`team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+
+	`GET /patents/{id}/` adds `publications` (every member publication),
+	`inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
+	`claims` only with `?include=claims`.
+
+	# Trial links:
+	`trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
+	not suppressed, its trial is visible to the caller, and its basis is
+	`category`, meaning the patent and the trial share a team category,
+	typically the molecule. Links that rest on a shared subject only (`basis`
+	= `subject`) are 82% of all links and noisy for large sponsors; they appear
+	only with `?include_subject_links=true`. The mirror is `patent_links` on
+	`GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
+
+	# Stats Endpoint:
+	`GET /patents/stats/` returns `total`, `with_grant`, `with_trial_link` and
+	`by_priority_year` (`[{year, count}]`, ascending; a trailing `{year: null}`
+	for families with no priority date) over the filtered queryset. It accepts
+	the same query parameters as the list. Cached server-side.
+
+	# Examples:
+	- Granted EP patents on a molecule: `/patents/?category_slug=ocrelizumab&has_grant=true&publication_number=EP`
+	- By CPC class: `/patents/?cpc=A61K31/70`
+	- A publication number: `/patents/?publication_number=EP4123456`
+	- Filed since 2020 with a trial: `/patents/?priority_date_after=2020-01-01&has_trial_link=true`
+	- With claims: `/patents/123/?include=claims`
+	"""
+
+	queryset = Patents.objects.all().order_by("-discovery_date")
+	serializer_class = PatentListSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = PatentPagination
+	# No CSV: see the docstring. Declared here so the project-wide default
+	# (which includes DirectStreamingCSVRenderer) never applies.
+	renderer_classes = (JSONRenderer, BrowsableAPIRenderer)
+	filter_backends = [
+		django_filters.DjangoFilterBackend,
+		PatentOrderingFilter,
+	]
+	filterset_class = PatentFilter
+	ordering_fields = [
+		"earliest_priority_date",
+		"earliest_publication_date",
+		"discovery_date",
+		"last_updated",
+	]
+	ordering = ["-discovery_date"]
+
+	# Read by CachedCountMixin and CachedStatsActionMixin: the cached counts
+	# and stats of this endpoint depend on the patent scope, not only on the
+	# subject scope.
+	patent_scoped = True
+	_visible_ids_attr = "visible_patent_subject_ids"
+	stats_cache_prefix = "patents_stats"
+
+	def get_serializer_class(self):
+		if self.action == "retrieve":
+			return PatentDetailSerializer
+		return PatentListSerializer
+
+	def get_queryset(self):
+		qs = super().get_queryset()
+		if self.action == "stats":
+			# build_stats_payload aggregates; nothing below is read.
+			return qs
+		links = visible_patent_trial_links_queryset(self.request)
+		# Claims average ~12.5k characters and run past 200k, and only a detail
+		# response with ?include=claims ever serializes them: a page of 100
+		# would otherwise pull over 1 MB of text to throw it away. The other
+		# detail-only columns are not read by the list either.
+		if self.action == "retrieve":
+			if not claims_requested(self.request):
+				qs = qs.defer("claims")
+		else:
+			qs = qs.defer("claims", "inventors", "links", "ipc_classes")
+		qs = qs.annotate(
+			publications_count=Coalesce(
+				Subquery(
+					PatentPublication.objects.filter(patent=OuterRef("pk"))
+					.order_by()
+					.values("patent")
+					.annotate(c=Count("pk"))
+					.values("c"),
+					output_field=IntegerField(),
+				),
+				0,
+			),
+			trial_links_count=Coalesce(
+				Subquery(
+					links.filter(patent=OuterRef("pk"))
+					.order_by()
+					.values("patent")
+					.annotate(c=Count("pk"))
+					.values("c"),
+					output_field=IntegerField(),
+				),
+				0,
+			),
+		).prefetch_related(
+			Prefetch(
+				"patent_applicants",
+				queryset=PatentApplicant.objects.select_related("sponsor"),
+			),
+			"team_categories",
+			# select_related("team"): SubjectsSerializer.team_id reads it.
+			Prefetch("subjects", queryset=Subject.objects.select_related("team")),
+		)
+		if self.action == "retrieve":
+			qs = qs.prefetch_related(
+				"publications",
+				Prefetch(
+					"trial_links",
+					queryset=links.select_related("trial").order_by("trial_id"),
+					to_attr="_visible_trial_links",
+				),
+			)
+		if editorial_requested(self.request):
+			# Only for ?include=editorial: the caller's own sites' text, so the
+			# serializer's editorial field costs no query per patent.
+			qs = qs.prefetch_related(
+				Prefetch(
+					"site_contents",
+					queryset=patent_site_contents(self.request),
+					to_attr="_prefetched_site_contents",
+				)
+			)
+		return qs
+
+	@extend_schema(responses=PatentsStatsSerializer, auth=_OPTIONAL_API_KEY_SECURITY)
+	@action(detail=False, methods=["get"], url_path="stats")
+	def stats(self, request):
+		"""Totals over the filtered patent families: ``total``, ``with_grant``,
+		``with_trial_link`` and ``by_priority_year``.
+
+		Accepts the same query parameters as the list endpoint and the same
+		patent-scope visibility, so the totals match the equivalent list
+		request. Cached server-side; see ``CachedStatsActionMixin``.
+		"""
+		return self._stats_response(request)
+
+	def build_stats_payload(self, filtered_qs):
+		totals = filtered_qs.order_by().aggregate(
+			total=Count("patent_id", distinct=True),
+			with_grant=Count("patent_id", distinct=True, filter=Q(has_grant=True)),
+		)
+		with_trial_link = (
+			filtered_qs.order_by()
+			.filter(
+				Exists(
+					visible_patent_trial_links_queryset(self.request).filter(
+						patent=OuterRef("pk")
+					)
+				)
+			)
+			.count()
+		)
+		rows = (
+			filtered_qs.order_by()
+			.annotate(priority_year=ExtractYear("earliest_priority_date"))
+			.values("priority_year")
+			.annotate(count=Count("patent_id", distinct=True))
+			.order_by("priority_year")
+		)
+		by_year = []
+		no_priority = 0
+		for row in rows:
+			if row["priority_year"] is None:
+				no_priority = row["count"]
+			else:
+				by_year.append({"year": row["priority_year"], "count": row["count"]})
+		if no_priority:
+			by_year.append({"year": None, "count": no_priority})
+		return {
+			"total": totals["total"],
+			"with_grant": totals["with_grant"],
+			"with_trial_link": with_trial_link,
+			"by_priority_year": by_year,
+		}
 
 
 ###
@@ -3998,6 +4406,11 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 				trials_count_annotated=_category_through_count_subquery(
 					TrialCategoryAssignment, "trials", visible_subject_ids
 				),
+				patents_count_annotated=_category_through_count_subquery(
+					PatentCategoryAssignment,
+					"patents",
+					getattr(self.request, "visible_patent_subject_ids", None),
+				),
 			)
 			.order_by("-id")
 		)
@@ -4732,6 +5145,17 @@ class PublicSitesView(APIView):
 		return Response(public_sites())
 
 
+def _tenant_shows_patents(site_id, *, public_only) -> bool:
+	"""Whether patents are reachable through this tenant: some settings row in
+	the same slice of the site that supplies its scope has ``patents_enabled``
+	on and a non-empty scope. Asked of the scope itself (rather than reading a
+	flag off one row) because a site can have a public and a private settings
+	row, and the visibility layer counts rows, not sites."""
+	from gregory.visibility import site_scope_subject_ids
+
+	return bool(site_scope_subject_ids(site_id, public_only=public_only, patents=True))
+
+
 @extend_schema(
 	summary="List MCP tenants",
 	description=(
@@ -4806,7 +5230,11 @@ class McpTenantsView(APIView):
 			seen_site_ids.add(setting.site_id)
 			subject_ids = site_scope_subject_ids(setting.site_id, public_only=True)
 			if subject_ids:
-				tenants[setting.site_id] = (setting, subject_ids)
+				tenants[setting.site_id] = (
+					setting,
+					subject_ids,
+					_tenant_shows_patents(setting.site_id, public_only=True),
+				)
 
 		# --- Every MCP site, private included, for the MCP server's editor
 		# mount (EditorTenantsView). Replaces the public-only list above, and
@@ -4826,7 +5254,11 @@ class McpTenantsView(APIView):
 				seen_site_ids.add(setting.site_id)
 				subject_ids = site_scope_subject_ids(setting.site_id, public_only=False)
 				if subject_ids:
-					tenants[setting.site_id] = (setting, subject_ids)
+					tenants[setting.site_id] = (
+						setting,
+						subject_ids,
+						_tenant_shows_patents(setting.site_id, public_only=False),
+					)
 
 		# --- The caller's own site, if a site-bound key names one. Computed
 		# AFTER the public loop above, so if the site is ALSO a public
@@ -4843,7 +5275,11 @@ class McpTenantsView(APIView):
 			if own_setting is not None:
 				subject_ids = site_scope_subject_ids(own_site_id, public_only=False)
 				if subject_ids:
-					tenants[own_site_id] = (own_setting, subject_ids)
+					tenants[own_site_id] = (
+						own_setting,
+						subject_ids,
+						_tenant_shows_patents(own_site_id, public_only=False),
+					)
 
 		site_ids_sorted = sorted(tenants.keys())
 		sites_by_id = {
@@ -4862,7 +5298,7 @@ class McpTenantsView(APIView):
 
 		payload = []
 		for site_id in site_ids_sorted:
-			setting, subject_ids = tenants[site_id]
+			setting, subject_ids, patents_enabled = tenants[site_id]
 			site = sites_by_id[site_id]
 			payload.append(
 				{
@@ -4872,6 +5308,7 @@ class McpTenantsView(APIView):
 					"title": setting.title,
 					"api_public": setting.api_public,
 					"mcp_description": setting.mcp_description,
+					"patents_enabled": patents_enabled,
 					"subjects": list(
 						Subject.objects.filter(id__in=subject_ids)
 						.order_by("id")

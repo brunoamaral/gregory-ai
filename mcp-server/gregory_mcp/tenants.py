@@ -107,6 +107,12 @@ class Tenant:
 	subjects: tuple[tuple[int, str], ...]
 	prompts: tuple[TenantPrompt, ...]
 	documents: tuple[TenantDocument, ...]
+	# Whether patents are reachable through this site (`patents_enabled` on
+	# GET /tenants/). Off when absent or malformed: an older Django that does
+	# not send it must not break the server, and a tenant with no patents is
+	# exactly what every tenant was before (the patent tools are hidden and the
+	# instructions do not mention patents).
+	patents_enabled: bool = False
 
 
 def _parse_prompt_argument(row: Any) -> TenantPromptArgument | None:
@@ -209,6 +215,10 @@ def _parse_tenant(row: Any) -> Tenant | None:
 	prompts = _parse_child_rows(_parse_prompt, raw_prompts, "prompt", domain)
 	documents = _parse_child_rows(_parse_document, raw_documents, "document", domain)
 
+	patents_enabled = row.get("patents_enabled", False)
+	if not isinstance(patents_enabled, bool):
+		patents_enabled = False
+
 	return Tenant(
 		site_id=site_id,
 		domain=domain,
@@ -219,6 +229,7 @@ def _parse_tenant(row: Any) -> Tenant | None:
 		subjects=subjects,
 		prompts=prompts,
 		documents=documents,
+		patents_enabled=patents_enabled,
 	)
 
 

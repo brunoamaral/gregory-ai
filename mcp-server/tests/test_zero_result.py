@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gregory_mcp.zero_result import (
 	ARTICLE_SEARCH_FIELDS,
+	PATENT_SEARCH_FIELDS,
 	TRIAL_SEARCH_FIELDS,
 	guidance_for,
 )
@@ -179,3 +180,85 @@ def test_registry_id_fields_read_includes_secondary_id_sources():
 			"secondary_id",
 			"ctg_secondary_ids",
 		]
+
+
+def test_patent_search_fields_never_include_claims():
+	assert PATENT_SEARCH_FIELDS == ("title", "summary")
+
+
+def test_patents_fields_read_names_search_and_publication_number():
+	guidance = guidance_for({"search": "x", "publication_number": "ZZ1", "has_grant": True}, "patents")
+	assert guidance["fields_read"] == {
+		"search": ["title", "summary"],
+		"publication_number": ["publications"],
+	}
+
+
+def test_patents_has_no_fields_read_for_filters_that_read_no_text():
+	guidance = guidance_for({"cpc": "A61K", "has_grant": False}, "patents")
+	assert guidance["fields_read"] == {}
+
+
+def test_each_patent_filter_triggers_its_own_suggestion():
+	cases = {
+		"priority_date_after": "date range",
+		"publication_date_before": "date range",
+		"has_grant": "has_grant",
+		"cpc": "cpc",
+		"publication_number": "publication_number",
+		"has_trial_link": "has_trial_link",
+		"applicant": "applicant",
+		"applicant_sponsor_slug": "applicant",
+		"category_slug": "list_categories",
+		"subject_id": "list_subjects",
+		"search": "claims",
+	}
+	for name, hint in cases.items():
+		guidance = guidance_for({name: "x"}, "patents")
+		assert any(hint in s for s in guidance["suggestions"]), (name, guidance["suggestions"])
+
+
+def test_patents_suggestions_never_quote_a_value():
+	guidance = guidance_for({"cpc": "H99Z77", "applicant": "Zorblax", "search": "qwxy"}, "patents")
+	assert not any(v in str(guidance) for v in ("H99Z77", "Zorblax", "qwxy"))
+
+
+def test_patents_with_no_matching_rule_gets_the_fallback():
+	guidance = guidance_for({"family": "x"}, "patents")
+	assert len(guidance["suggestions"]) == 1
+
+
+def test_include_subject_links_alone_is_not_an_applied_filter_or_a_reason():
+	guidance = guidance_for({"search": "x", "include_subject_links": True}, "patents")
+	assert guidance["applied_filters"] == ["search"]
+	assert not any("has_trial_link" in s for s in guidance["suggestions"])
+
+
+def test_trials_ignore_include_subject_links_the_same_way():
+	guidance = guidance_for({"search": "x", "include_subject_links": True}, "trials")
+	assert guidance["applied_filters"] == ["search"]
+	assert not any("has_patent_link" in s for s in guidance["suggestions"])
+
+
+def test_trial_link_suggestion_depends_on_include_subject_links():
+	plain = guidance_for({"has_trial_link": True}, "patents")["suggestions"][0]
+	widened = guidance_for({"has_trial_link": True, "include_subject_links": True}, "patents")["suggestions"][0]
+	assert "unless `include_subject_links` is true" in plain
+	# The wrong explanation ("only category-basis links count") must not be given
+	# to a caller who already asked for subject links.
+	assert "unless" not in widened
+	assert "already counts links on a shared subject" in widened
+
+
+def test_has_trial_link_false_still_gets_the_suggestion():
+	guidance = guidance_for({"has_trial_link": False}, "patents")
+	assert guidance["applied_filters"] == ["has_trial_link"]
+	assert "Drop `has_trial_link`" in guidance["suggestions"][0]
+
+
+def test_has_patent_link_on_trials_has_a_suggestion():
+	guidance = guidance_for({"has_patent_link": True}, "trials")
+	assert guidance["applied_filters"] == ["has_patent_link"]
+	(suggestion,) = guidance["suggestions"]
+	assert "Drop `has_patent_link`" in suggestion
+	assert "no patents it matches nothing" in suggestion

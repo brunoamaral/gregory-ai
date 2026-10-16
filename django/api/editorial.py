@@ -1,17 +1,17 @@
 """
 api/editorial.py
 
-Opt-in editorial content (``?include=editorial``) for article and trial
-responses -- see EDITORIAL-API-SPEC.md.
+Opt-in editorial content (``?include=editorial``) for article, trial and
+patent responses -- see EDITORIAL-API-SPEC.md.
 
-"Editorial" is ``takeaways`` and ``summary_plain_english``. Articles carry it
-per site (``ArticleSiteContent``): two sites of one organisation can say
-different things about the same article. Trials still carry it per
+"Editorial" is ``takeaways`` and ``summary_plain_english``. Articles and
+patents carry it per site (``ArticleSiteContent``, ``PatentSiteContent``): two
+sites of one organisation can say different things about the same record. Trials still carry it per
 organisation (``TrialOrgContent``) until trials are brought into the per-site
 model. Whose content a caller gets is decided by *who the caller is*, never by
 a parameter, so nobody can ask for another site's or organisation's content.
 
-Articles (sites):
+Articles and patents (sites):
 
   - Valid API key         -> the key's site (none if the key's site does not
                              belong to the key's organisation).
@@ -39,13 +39,15 @@ a list endpoint resolves once however many rows it serialises.
 
 from rest_framework.exceptions import ValidationError
 
-#: Values ``?include=`` accepts. Comma-separated, so it can grow.
-INCLUDE_CHOICES = ("editorial",)
+#: Values ``?include=`` accepts. Comma-separated, so it can grow. ``claims`` is
+#: for patents only (``/patents/{id}/``) and is ignored by every other endpoint.
+INCLUDE_CHOICES = ("editorial", "claims")
 
 _INCLUDE_ATTR = "_editorial_requested"
 _ORG_IDS_ATTR = "_editorial_org_ids"
 _ORG_NAMES_ATTR = "_editorial_org_names"
 _SITE_IDS_ATTR = "_editorial_site_ids"
+_PATENT_SITE_IDS_ATTR = "_editorial_patent_site_ids"
 _SITES_ATTR = "_editorial_sites"
 
 
@@ -86,6 +88,14 @@ def editorial_requested(request) -> bool:
 	result = "editorial" in values and not _is_csv(request)
 	setattr(request, _INCLUDE_ATTR, result)
 	return result
+
+
+def claims_requested(request) -> bool:
+	"""True when the caller asked for ``?include=claims`` (patent detail only).
+	Validates ``include`` like ``editorial_requested`` does."""
+	if request is None:
+		return False
+	return "claims" in parse_include(request)
 
 
 def editorial_org_ids(request) -> list:
@@ -216,21 +226,48 @@ def is_editor_request(request) -> bool:
 	return request is not None and editor_auth_of(request) is not None
 
 
-def article_site_contents(request):
-	"""The ``ArticleSiteContent`` rows ``?include=editorial`` may show this caller.
+def patent_editorial_site_ids(request) -> list:
+	"""``editorial_site_ids`` narrowed to sites with ``patents_enabled`` on.
+
+	Patents are shown only through such sites, and the editor API treats every
+	other site as having no patents at all, so ``?include=editorial`` on a
+	patent must not offer (or return) text for a site that never shows it.
+	Cached on the request like the list it narrows.
+	"""
+	if request is None:
+		return []
+	cached = getattr(request, _PATENT_SITE_IDS_ATTR, None)
+	if cached is not None:
+		return cached
+	from sitesettings.models import CustomSetting
+
+	site_ids = editorial_site_ids(request)
+	enabled = set(
+		CustomSetting.objects.filter(site_id__in=site_ids, patents_enabled=True).values_list(
+			"site_id", flat=True
+		)
+	)
+	result = [site_id for site_id in site_ids if site_id in enabled]
+	setattr(request, _PATENT_SITE_IDS_ATTR, result)
+	return result
+
+
+def _site_contents(request, model, site_ids=None):
+	"""The per-site content rows of ``model`` (``ArticleSiteContent`` or
+	``PatentSiteContent``) ``?include=editorial`` may show this caller.
 
 	For an editor each row also carries ``last_editor``: the name recorded on
 	its newest history row (or the API key's label when a key made the change),
-	as one correlated subquery, so a page of articles stays one extra query.
+	as one correlated subquery, so a page of records stays one extra query.
 	"""
 	from django.db.models import OuterRef, Subquery, Value
 	from django.db.models.functions import Coalesce, NullIf
 
-	from gregory.models import ArticleSiteContent
-
-	queryset = ArticleSiteContent.objects.filter(site_id__in=editorial_site_ids(request))
+	if site_ids is None:
+		site_ids = editorial_site_ids(request)
+	queryset = model.objects.filter(site_id__in=site_ids)
 	if is_editor_request(request):
-		newest = ArticleSiteContent.history.filter(id=OuterRef("id")).order_by("-history_date")
+		newest = model.history.filter(id=OuterRef("id")).order_by("-history_date")
 		queryset = queryset.annotate(
 			last_editor=Coalesce(
 				NullIf(Subquery(newest.values("editor_label")[:1]), Value("")),
@@ -238,3 +275,17 @@ def article_site_contents(request):
 			)
 		)
 	return queryset
+
+
+def article_site_contents(request):
+	"""The ``ArticleSiteContent`` rows ``?include=editorial`` may show this caller."""
+	from gregory.models import ArticleSiteContent
+
+	return _site_contents(request, ArticleSiteContent)
+
+
+def patent_site_contents(request):
+	"""The ``PatentSiteContent`` rows ``?include=editorial`` may show this caller."""
+	from gregory.models import PatentSiteContent
+
+	return _site_contents(request, PatentSiteContent, patent_editorial_site_ids(request))

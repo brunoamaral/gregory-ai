@@ -1,4 +1,4 @@
-"""Guidance attached to zero-hit search_articles/search_trials responses.
+"""Guidance attached to zero-hit search_articles/search_trials/search_patents responses.
 
 Phase 3 of MCP-TELEMETRY-PLAN.md. A product change independent of the
 telemetry work: `{"count": 0, "articles": []}` is a dead end for the model
@@ -22,11 +22,17 @@ from typing import Any
 # container and can't import Django, so these are kept in sync by hand.
 ARTICLE_SEARCH_FIELDS = ("title", "summary")
 TRIAL_SEARCH_FIELDS = ("title", "summary", "scientific_title")
+PATENT_SEARCH_FIELDS = ("title", "summary")  # claims are never searched
 
 # Pagination/ordering controls aren't filters that can cause a zero-hit
 # result on their own — excluded from the "applied filters" list so it
 # only ever names things that narrow the result set.
-_NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering"})
+#
+# `include_subject_links` is a display option, not a filter: on its own it
+# narrows nothing (it only widens which links `has_trial_link` /
+# `has_patent_link` count), so it is neither an "applied filter" nor a reason
+# for a suggestion.
+_NON_FILTER_ARGS = frozenset({"page", "page_size", "ordering", "include_subject_links"})
 
 # `fields_read` covers only the text-matching filters: `search` (both
 # tools), and for trials also `acronym` and the registry-ID filters (`nct`,
@@ -56,6 +62,11 @@ _FIELDS_READ_BY_TOOL: dict[str, dict[str, tuple[str, ...]]] = {
 		"euct": _TRIAL_IDENTIFIER_FIELDS,
 		"eudract": _TRIAL_IDENTIFIER_FIELDS,
 		"ctis": _TRIAL_IDENTIFIER_FIELDS,
+	},
+	"patents": {
+		"search": PATENT_SEARCH_FIELDS,
+		# Every member publication of the family, not only the representative one.
+		"publication_number": ("publications",),
 	},
 }
 
@@ -102,6 +113,73 @@ _SPONSOR_RULE = (
 	"returns zero rows rather than an error.",
 )
 
+_PATENT_DATE_RULE = (
+	("priority_date_after", "priority_date_before", "publication_date_after", "publication_date_before"),
+	"Widen or drop the priority/publication date range — a narrow window is the "
+	"most common cause of an empty page. Priority date is when the invention was "
+	"first filed; publication date is usually 18 months later.",
+)
+
+_GRANT_RULE = (
+	("has_grant",),
+	"Drop `has_grant` — it is a heuristic on kind codes, and most families are "
+	"still applications.",
+)
+
+_CPC_RULE = (
+	("cpc",),
+	"`cpc` is a prefix match on a class like A61K31 or A61P25/28, with no spaces. "
+	"Try a shorter prefix (A61K) or drop it.",
+)
+
+_PUBLICATION_NUMBER_RULE = (
+	("publication_number",),
+	"`publication_number` matches any publication of the family. Without a kind "
+	"code (EP4123456) it matches every kind; a number with letters inside it "
+	"(MXPA02011163A) must be given whole. Check the country code and digits.",
+)
+
+def _link_rule_text(name: str):
+	"""The suggestion for a trial-link filter, worded for whether the caller
+	already widened it with `include_subject_links` (a rule's text may be a
+	function of the call's params)."""
+
+	def text(params: dict[str, Any]) -> str:
+		if params.get("include_subject_links"):
+			return (
+				f"Drop `{name}` — with `include_subject_links` it already counts links on a "
+				"shared subject too, so no sponsor-timing link exists for what is left."
+			)
+		return (
+			f"Drop `{name}` — only links on a shared category count unless "
+			"`include_subject_links` is true, so one linked through a shared subject "
+			"alone does not match."
+		)
+
+	return text
+
+
+_TRIAL_LINK_RULE = (("has_trial_link",), _link_rule_text("has_trial_link"))
+
+_PATENT_LINK_RULE = (
+	("has_patent_link",),
+	lambda params: _link_rule_text("has_patent_link")(params)
+	+ " On a site that has no patents it matches nothing.",
+)
+
+_APPLICANT_RULE = (
+	("applicant", "applicant_sponsor_id", "applicant_sponsor_slug"),
+	"`applicant` is a case-insensitive substring of the name as published; "
+	"`applicant_sponsor_id`/`applicant_sponsor_slug` match only applicants linked "
+	"to a canonical sponsor. Try a shorter name, or the other filter.",
+)
+
+_PATENT_SEARCH_RULE = (
+	("search",),
+	"`search` reads title and summary only — never the claims. If the query "
+	"uses AND/parentheses, try loosening it — an OR, or a narrower single term.",
+)
+
 _ARTICLE_SEARCH_RULE = (
 	("search",),
 	"`search` reads title and summary only. If the query uses AND/parentheses, "
@@ -120,7 +198,7 @@ _TRIAL_SEARCH_RULE = (
 # out an otherwise-good search rank first. Every matching rule fires; `search`
 # is last in both because it's the broadest filter, so its suggestion ranks
 # after the narrower ones.
-_RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], str], ...]] = {
+_RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 	"articles": (
 		_RELEVANCE_RULE,
 		_DATE_RULE,
@@ -133,7 +211,18 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], str], ...]] = {
 		_REGISTRY_ID_RULE,
 		_ACRONYM_RULE,
 		_SPONSOR_RULE,
+		_PATENT_LINK_RULE,
 		_TRIAL_SEARCH_RULE,
+	),
+	"patents": (
+		_PATENT_DATE_RULE,
+		_TAXONOMY_RULE,
+		_GRANT_RULE,
+		_CPC_RULE,
+		_PUBLICATION_NUMBER_RULE,
+		_TRIAL_LINK_RULE,
+		_APPLICANT_RULE,
+		_PATENT_SEARCH_RULE,
 	),
 }
 
@@ -145,14 +234,18 @@ def guidance_for(params: dict[str, Any], tool: str) -> dict[str, Any]:
 
 	`params` is the tool's own param dict before None-pruning — only the
 	*names* of the non-None entries matter here, never their values.
-	`tool` is `"articles"` or `"trials"`: it selects which rule set and
-	`fields_read` mapping apply, since `search`'s coverage (and a couple of
-	trials-only filters) differ between the two.
+	`tool` is `"articles"`, `"trials"` or `"patents"`: it selects which rule
+	set and `fields_read` mapping apply, since `search`'s coverage (and the
+	filters specific to each) differ between them.
 	"""
 	applied = sorted(k for k, v in params.items() if v is not None and k not in _NON_FILTER_ARGS)
 	applied_set = set(applied)
 	rules = _RULES_BY_TOOL.get(tool, ())
-	suggestions = [text for arg_names, text in rules if applied_set.intersection(arg_names)]
+	suggestions = [
+		text(params) if callable(text) else text
+		for arg_names, text in rules
+		if applied_set.intersection(arg_names)
+	]
 	if not suggestions:
 		suggestions = [_FALLBACK_SUGGESTION]
 	fields_map = _FIELDS_READ_BY_TOOL.get(tool, {})
