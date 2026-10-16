@@ -26,12 +26,50 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 
 | Feed | URL pattern |
 |:-----|:------------|
+| Research by condition (subject) | `GET /feed/sites/{site_id}/articles/subject/{subject_slug}/` |
+| Research by condition, relevant only | `GET /feed/sites/{site_id}/articles/subject/{subject_slug}/relevant/` |
+| Research by topic (category) | `GET /feed/sites/{site_id}/articles/category/{category_slug}/` |
+| Research by topic, relevant only | `GET /feed/sites/{site_id}/articles/category/{category_slug}/relevant/` |
+| Recruiting clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/recruiting/` |
+| New clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` |
 | Articles by author (ORCID) | `GET /feed/sites/{site_id}/author/{orcid}/` |
-| Clinical trials by subject | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` |
 
-Both feeds return the 50 most recent items, ordered by newest first.
+The variants are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **Any query string is ignored** and does not change the response.
 
-**Feeds are site-scoped, not caller-scoped** — the same design as the [sitemaps](#sitemaps) below, and a deliberate change from how this worked before. A feed serves the *requested site's* `CustomSetting.scope_subjects`: the trials feed 404s when the requested subject is not in that site's scope, and the author feed 404s when none of the author's articles carries a subject in it, otherwise listing only the articles that do. The response never varies by who (or what) is asking — a feed reader has no identity and the response is cached, so there is nothing to key a caller-specific response on. `?include_public=true` and any notion of "the caller's own scope" (API key, signed-in user) do not apply to these URLs at all.
+**Feeds are editorial content.** They follow stricter rules than the API, where the frontend decides how to use what the API returns:
+
+- **Retracted articles are never included** (`retracted=true`), in any article feed.
+- The editorial text in an item (plain-English summary, takeaways) is **the requested site's own** `ArticleSiteContent`; another site's text for the same article never appears.
+- *Relevant only* means an editor's verdict wins for each subject, and the ML models decide only when there is none. That is the same rule as `relevant=true` on `/articles/` (see [`relevant`](#articles-query-parameters)), limited to the feed's subject: the one subject for a subject feed, the category's subjects within the site's scope for a category feed.
+
+**Which items.**
+
+- *Subject feeds*: items tagged with the subject.
+- *Category feeds*: items in the category **and** tagged with at least one subject that is in both the category's subjects and the site's scope. An article that sits in a category only through a subject the site doesn't cover does not appear.
+- *Recruiting trials*: the trials feed narrowed to `recruitment_status_normalized` of `recruiting` or `not_yet_recruiting`. `enrolling_by_invitation` is left out because a patient can't sign up for one of those, and a trial with no normalised status is left out too. A trial is picked up when it is discovered; moving from "not yet recruiting" to "recruiting" later does not bring it back.
+- Trials have no relevance judgement, so there are no relevant-only trial feeds.
+
+**Order, dates and size.** Article and trial feeds are ordered by **discovery date**, newest first, and each item's `<pubDate>` is its discovery date. Ordering by publication date would let a paper published three months ago but found today land below the cut-off and never be delivered; the journal's publication date is in the description instead. The **author feed is the exception**: it is ordered by, and shows, the publication date, because it is low volume (nothing drops off the end) and readers expect it.
+
+| Feed | Items |
+|:-----|:------|
+| Research by subject / category (all and relevant-only) | 100 |
+| Trials (new and recruiting) | 50 |
+| Articles by author | 50 |
+
+A busy condition gets dozens of new articles a day, so a reader that polls less than daily can miss some of the 100 in the unfiltered feed. **For low-volume reading, recommend the relevant-only variant.**
+
+**Item content.** Article items carry the article title, a link to `https://{site.domain}/articles/{article_id}/`, a `guid` of `doi:{doi}` (or `urn:gregory:article:{id}`, not a permalink), the first three authors in `dc:creator` followed by "et al." when there are more (omitted when there are none), and one `<category>` per in-scope subject and per category. The HTML description holds these sections, each left out when empty: *In plain English*, *Key takeaways* (this site's editorial content), a metadata row (journal or publisher · publication date `YYYY-MM-DD` · "Open access"), and the *Abstract*. Every database value is HTML-escaped and line breaks become `<br>`, so editorial or registry text can't inject markup. Authors are listed in the order they were attached to the article (the join table has no position field). Trial items keep the trial description (status, phase, sponsor, countries, condition, intervention, eligibility, …) with every value escaped. Their `<category>` elements are the normalised phase and status labels followed by the in-scope subject names, and their link is the site's own trial page `https://{site.domain}/trials/{trial_id}/` when the site's `CustomSetting.sitemap_include_trials` is on (it means "this frontend publishes trial pages"), the trial registry's page otherwise.
+
+**Channel.** Article feeds are titled `{Subject} research — {site}` (`Relevant {Subject} research — {site}`) and `{Category} — {site}` (`Relevant research: {Category} — {site}`); the trial feeds are `{Subject} clinical trials — {site}` and `Recruiting {Subject} trials — {site}`. The channel `<link>` of the article feeds is the site's homepage; the trial feeds link to `/trials/subject/{slug}/`.
+
+**Empty feed or 404.** A subject or category that is in the site's scope but has nothing to show right now returns an **empty feed (200)**: a new subject, or a recruiting feed with nothing open at the moment, is a valid subscription that will fill up later. The author feed keeps its **404** when none of the author's non-retracted articles carries an in-scope subject, because an author with nothing to show on that site isn't a valid subscription.
+
+**Slug resolution.** A subject slug is looked up *only among the requested site's scope subjects*: `Subject.subject_slug` is unique per team, not globally, so two teams may share a slug. If two subjects in the **same** site's scope share a slug the feed returns 404 and logs a warning, because that is a curation error and the feed doesn't guess which was meant. `TeamCategory.category_slug` is globally unique; a category is in scope when its subjects overlap the site's scope, otherwise 404.
+
+**Caching.** Every site-scoped feed is cached for **one hour** (`cache_page(3600)`, like the sitemaps), so editorial edits and newly found items take up to an hour to show up. The 301 redirects below are not cached.
+
+**Feeds are site-scoped, not caller-scoped** — the same design as the [sitemaps](#sitemaps) below, and a deliberate change from how this worked before. A feed serves the *requested site's* `CustomSetting.scope_subjects`: the subject, category and trials feeds 404 when the requested subject or category is not in that site's scope, and the author feed 404s when none of the author's articles carries a subject in it, otherwise listing only the articles that do. The response never varies by who (or what) is asking — a feed reader has no identity and the response is cached, so there is nothing to key a caller-specific response on. `?include_public=true` and any notion of "the caller's own scope" (API key, signed-in user) do not apply to these URLs at all.
 
 A site's feed is gated by its own `CustomSetting.rss_enabled` alone — 404 when it's off, or when the site has no `CustomSetting` row, or when `site_id` doesn't exist. Unlike the sitemaps, a feed's scope is **not** narrowed to the publicly-visible subject set: `rss_enabled` and `scope_subjects` are the whole gate, whether or not the site is `api_public` — the same rule a site-bound API key follows for its own scope (see [Visibility rules summary](#visibility-rules-summary)). Curation into the site's scope is the whole grant otherwise, so team ownership plays no part: a subject with no team is served once some site's scope names it, exactly as for the API and sitemaps.
 
@@ -460,6 +498,9 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
 | RSS feeds | `GET /feed/sites/{site_id}/author/{orcid}/` | `site_id`, `orcid` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/` | `site_id`, `subject_slug` (path) | Site-scoped — see [RSS feeds](#rss-feeds) |
+| RSS feeds | `GET /feed/sites/{site_id}/trials/subject/{subject_slug}/recruiting/` | `site_id`, `subject_slug` (path) | Recruiting and not-yet-recruiting trials only — see [RSS feeds](#rss-feeds) |
+| RSS feeds | `GET /feed/sites/{site_id}/articles/subject/{subject_slug}/`, `…/relevant/` | `site_id`, `subject_slug` (path) | All articles for a condition / relevant only — see [RSS feeds](#rss-feeds) |
+| RSS feeds | `GET /feed/sites/{site_id}/articles/category/{category_slug}/`, `…/relevant/` | `site_id`, `category_slug` (path) | All articles for a topic / relevant only — see [RSS feeds](#rss-feeds) |
 | RSS feeds (old, no `site_id`) | `GET /feed/author/{orcid}/`, `GET /feed/trials/subject/{subject_slug}/` | `orcid` / `subject_slug` (path) | **301** to the `/feed/sites/3/...` equivalent — see [Old feed URLs](#old-feed-urls--permanent-redirect) |
 | Stats | `GET /stats/` | `team`, `site`, `subject`, `include_public`, `organization` (alias `org`, deprecated) | See [Stats endpoint](#stats-endpoint) below |
 | Sites | `GET /sites/` | None | Publicly readable sites as `{site_id, domain, name}`. **Unscoped by design** — it is the discovery entry point for callers that need a `site_id`, so it cannot require one. Everything returned is already public |
