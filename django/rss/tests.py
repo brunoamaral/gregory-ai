@@ -183,6 +183,7 @@ class FeedSelfLinkTest(TestCase):
 		)
 		# The default Site (SITE_ID) deliberately differs from the requested one.
 		Site.objects.filter(pk=1).update(domain="default-site.example.com")
+		Site.objects.clear_cache()
 		self.site = Site.objects.create(domain="self-link.example.com", name="Self Link")
 		CustomSetting.objects.create(
 			site=self.site, title="Self Link", rss_enabled=True
@@ -205,15 +206,16 @@ class FeedSelfLinkTest(TestCase):
 		)
 		self.assertEqual(response.status_code, 200)
 		content = response.content.decode()
-		# Scheme comes from build_absolute_uri (https once #924 trusts
-		# X-Forwarded-Proto), so match on host + path only.
+		# Host and scheme both come from the request (nginx: Host + X-Forwarded-Proto).
 		self.assertRegex(
 			content,
-			r'<atom:link href="https?://api\.self-link\.example\.com'
+			r'<atom:link href="https://api\.self-link\.example\.com'
 			+ re.escape(url)
 			+ '" rel="self"',
 		)
 		self.assertNotIn("default-site.example.com", content)
+		# Nothing else about the feed changes: channel link stays on the site.
+		self.assertIn("<link>https://self-link.example.com/", content)
 
 	def test_author_feed_self_link_is_the_request_url(self):
 		self._assert_self_link(

@@ -110,7 +110,7 @@ class _SelfLinkMixin:
 		return request.build_absolute_uri(request.path)
 
 	def feed_url(self, obj):
-		return obj._feed_url
+		return getattr(obj, "_feed_url", None)
 
 
 class _ArticleFeedItemMixin:
