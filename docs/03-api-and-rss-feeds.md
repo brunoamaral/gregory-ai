@@ -40,7 +40,7 @@ The variants are fixed path segments, not query parameters, so the set of URLs a
 
 - **Retracted articles are never included** (`retracted=true`), in any article feed.
 - The editorial text in an item (plain-English summary, takeaways) is **the requested site's own** `ArticleSiteContent`; another site's text for the same article never appears.
-- *Relevant only* means an editor's verdict wins for each subject, and the ML models decide only when there is none. That is the same rule as `relevant=true` on `/articles/` (see [`relevant`](#articles-query-parameters)), limited to the feed's subject: the one subject for a subject feed, the category's subjects within the site's scope for a category feed.
+- *Relevant only* means an editor's verdict wins for each subject, and the ML models decide only when there is none. That is the editorial rule the relevant-only sitemaps use, and it is stricter than `relevant=true` on `/articles/` (see [`relevant`](#articles-query-parameters)), where an editor's "not relevant" does not hide an ML "yes". It is limited to the feed's subject: the one subject for a subject feed, the category's subjects within the site's scope for a category feed.
 
 **Which items.**
 

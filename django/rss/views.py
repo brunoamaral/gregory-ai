@@ -271,8 +271,9 @@ class SiteArticlesBySubjectFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
 	def description(self, obj):
 		if self.relevant_only:
 			return (
-				f"New {obj.subject_name} research that an editor marked relevant "
-				"or that our models agree is relevant, newest first."
+				f"New {obj.subject_name} research marked relevant by an editor, "
+				"or that our models agree is relevant and no editor has rejected, "
+				"newest first."
 			)
 		return (
 			f"All new {obj.subject_name} research, newest first. "
@@ -321,8 +322,9 @@ class SiteArticlesByCategoryFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
 	def description(self, obj):
 		if self.relevant_only:
 			return (
-				f"New research on {obj.category_name} that an editor marked relevant "
-				"or that our models agree is relevant, newest first."
+				f"New research on {obj.category_name} marked relevant by an editor, "
+				"or that our models agree is relevant and no editor has rejected, "
+				"newest first."
 			)
 		return (
 			f"All new research on {obj.category_name}, newest first. "
