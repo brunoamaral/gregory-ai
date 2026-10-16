@@ -17,6 +17,7 @@ from gregory.models import (
 	Sponsor,
 	TrialCountry,
 	ArticleSiteContent,
+	ArticleSubjectRelevance,
 	ArticleTrialReference,
 	TrialOrgContent,
 	Patents,
@@ -91,7 +92,7 @@ class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
 	"""
 
 
-def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
+def ml_relevant_articles_q(threshold=0.8, subject_ids=None, *, exclude_manual_irrelevant=False):
 	"""
 	Build a database-level Q matching articles ML-relevant by consensus.
 
@@ -103,6 +104,18 @@ def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
 
 	subject_ids=None checks every auto_predict subject (existing behavior);
 	otherwise consensus is restricted to the given subjects.
+
+	exclude_manual_irrelevant=True drops, subject by subject, any article an
+	editor has marked not relevant (ArticleSubjectRelevance.is_relevant=False)
+	for that subject, so a human "no" overrides the models' "yes" for that
+	subject only. Another subject's consensus can still carry the article.
+	The default (False) is the pure "what ML says" rule that
+	Articles.is_ml_relevant_* and gregory.relevance.recompute_article_relevance
+	also implement; gregory/tests/test_ml_consensus_equivalence.py pins the
+	three together, so don't change it. relevant_articles_q() is the caller
+	that wants the override.
+
+	The returned Q is evaluated against Articles (it matches on article_id).
 	"""
 	from django.db.models import Count, Max, OuterRef, Q, Subquery
 
@@ -156,12 +169,57 @@ def ml_relevant_articles_q(threshold=0.8, subject_ids=None):
 		)
 
 		subject_q = Q(article_id__in=articles_for_subject)
+		if exclude_manual_irrelevant:
+			# OuterRef("article_id") is the outer Articles row this Q is
+			# applied to. Wrapped in Q() so it combines with the Q above.
+			subject_q &= Q(
+				~Exists(
+					ArticleSubjectRelevance.objects.filter(
+						article_id=OuterRef("article_id"),
+						subject_id=subject_id,
+						is_relevant=False,
+					)
+				)
+			)
 		combined_q = subject_q if combined_q is None else combined_q | subject_q
 
 	if combined_q is None:
 		# No auto_predict subjects (or none matching subject_ids): match nothing.
 		return Q(article_id__in=[])
 	return combined_q
+
+
+def relevant_articles_q(subject_ids=None, threshold=0.8):
+	"""
+	Q matching articles that count as "relevant", where an editor's verdict
+	wins over the models for each subject.
+
+	Per subject, in order of authority:
+	  1. An editor marked the article relevant (ArticleSubjectRelevance
+	     is_relevant=True)  -> relevant.
+	  2. An editor marked it not relevant (is_relevant=False) -> NOT relevant
+	     for that subject, however confident the models are.
+	  3. No verdict (no row, or is_relevant NULL = not reviewed) -> the ML
+	     consensus for that subject decides (see ml_relevant_articles_q).
+
+	An article is relevant when it is relevant for at least one of the
+	subjects in play. subject_ids=None means every subject (manual verdicts
+	for any subject, ML consensus across every auto_predict subject); a list
+	restricts both halves to those subjects, so a verdict or consensus
+	reached for an unrelated subject can't leak in.
+
+	Both halves are Exists()/subquery based, so applying this to an Articles
+	queryset adds no join and can't duplicate rows. Negate it with
+	.exclude() to get the exact complement.
+	"""
+	manual_yes = ArticleSubjectRelevance.objects.filter(
+		article_id=OuterRef("article_id"), is_relevant=True
+	)
+	if subject_ids is not None:
+		manual_yes = manual_yes.filter(subject_id__in=subject_ids)
+	return Q(Exists(manual_yes)) | ml_relevant_articles_q(
+		threshold, subject_ids, exclude_manual_irrelevant=True
+	)
 
 
 class SubjectFilterMixin:
@@ -359,14 +417,20 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_relevant",
 		label="Relevant",
 		help_text=(
-			"Filter for relevant articles (true/false). When combined with "
+			"Filter for relevant articles (true/false). For each subject, an "
+			"editor's verdict wins: an article an editor marked relevant is "
+			"relevant, one an editor marked not relevant is not (however "
+			"confident the ML models are), and only when there is no verdict "
+			"does the ML consensus decide (see ml_threshold). An article is "
+			"relevant when it is relevant for at least one subject in play. "
+			"relevant=false is the exact complement. When combined with "
 			"subject_id, subjects, and/or subjects_any, relevance is scoped to "
-			"that subject or subjects — only articles relevant *for one of "
-			"those subjects* (via ML predictions or manual marking) are "
-			"returned. Without any of those, relevance is checked across every "
-			"subject in the database, so a caller that also scopes the query by "
-			"subject should always pass the same subject(s) here to avoid "
-			"picking up relevance decided by an unrelated subject."
+			"that subject or subjects, so only verdicts and ML consensus for "
+			"those subjects count. Without any of those, relevance is checked "
+			"across every subject in the database, so a caller that also "
+			"scopes the query by subject should always pass the same "
+			"subject(s) here to avoid picking up relevance decided by an "
+			"unrelated subject."
 		),
 	)
 	ml_threshold = filters.NumberFilter(
@@ -615,53 +679,23 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 
 	def filter_relevant(self, queryset, name, value):
 		"""
-		Filter for relevant articles (ML predictions with consensus or manual selection)
+		Filter for relevant articles: per subject, an editor's verdict wins
+		(relevant or not relevant) and the ML consensus decides only when
+		there is no verdict. See relevant_articles_q for the exact rule.
 		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
 
 		When subject_id, subjects, and/or subjects_any is provided, only checks
 		relevance for those specific subjects (see _request_subject_ids).
+
+		relevant=false is the exact complement of relevant=true.
 		"""
 		subject_ids = self._request_subject_ids()
+		threshold = self._parse_ml_threshold(0.8)
+		relevant_q = relevant_articles_q(subject_ids, threshold)
 
 		if value:
-			# Get ML threshold from request parameters, default to 0.8
-			threshold = self._parse_ml_threshold(0.8)
-
-			# Get articles that are either:
-			# 1. Manually marked as relevant (scoped to subject(s) if provided)
-			if subject_ids:
-				manually_relevant = models.Q(
-					article_subject_relevances__is_relevant=True,
-					article_subject_relevances__subject_id__in=subject_ids,
-				)
-			else:
-				manually_relevant = models.Q(
-					article_subject_relevances__is_relevant=True
-				)
-
-			# 2. ML-relevant based on subject-specific consensus settings and threshold
-			ml_relevant_q = self._get_ml_relevant_articles_query(
-				threshold, subject_ids
-			)
-
-			return queryset.filter(manually_relevant | ml_relevant_q).distinct()
-		else:
-			# Exclude articles that are either manually relevant or ML-relevant
-			threshold = self._parse_ml_threshold(0.8)
-			if subject_ids:
-				manually_relevant = models.Q(
-					article_subject_relevances__is_relevant=True,
-					article_subject_relevances__subject_id__in=subject_ids,
-				)
-			else:
-				manually_relevant = models.Q(
-					article_subject_relevances__is_relevant=True
-				)
-			ml_relevant_q = self._get_ml_relevant_articles_query(
-				threshold, subject_ids
-			)
-
-			return queryset.exclude(manually_relevant | ml_relevant_q).distinct()
+			return queryset.filter(relevant_q)
+		return queryset.exclude(relevant_q)
 
 	def filter_ml_threshold(self, queryset, name, value):
 		"""
