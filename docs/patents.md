@@ -4,8 +4,9 @@ Gregory tracks patent families for the subjects a team follows, so an editor can
 IP picture next to the trials and papers already collected. Patents appear in the Django
 admin and in the staff-only admin summary email, and leave the system through [XLSX
 exports](#exporting) for staff and partners. Sites that turn on `patents_enabled` also
-serve them through the [`/patents/` API](03-api-and-rss-feeds.md#patents); the switch is off
-by default. They are not in RSS feeds or public newsletters.
+serve them through the [`/patents/` API](03-api-and-rss-feeds.md#patents) and, with
+`rss_enabled` on as well, through [RSS feeds](03-api-and-rss-feeds.md#patent-feeds); the
+switch is off by default. They are not in public newsletters.
 
 ## What a record is
 
@@ -200,12 +201,21 @@ someone turns them on:
 
 - **`patents_enabled`** (Site admin, off by default) is the switch. Turn it on only for a
   site that is part of the product the OPS account covers. A site with it off shows no
-  patents on the API, the MCP server or the editor address, even when its subjects are in
-  scope.
+  patents on the API, the MCP server, the editor address or in RSS feeds, even when its
+  subjects are in scope.
 - **No bulk export.** `/patents/` has no CSV and ignores `all_results`; claims, the bulkiest
   text, come only one family at a time with `?include=claims`.
 - **Keep the Espacenet link.** Every record's `link` points to its Espacenet page; show it
   wherever a patent is displayed.
+- **Feeds carry processed fields only.** The [patent RSS feeds](03-api-and-rss-feeds.md#patent-feeds)
+  need `rss_enabled` as well as `patents_enabled`. A feed is syndicated: aggregators copy
+  items verbatim and keep them, which an API response isn't designed for. So an item holds
+  only what Gregory adds to a record: the site's editorial text, canonical applicant sponsor
+  names, dates, "Grant published", category-basis trial links and the Espacenet link (as the
+  item link and again in the description). The abstract, claims, inventors, CPC/IPC codes and
+  publication numbers are always left out, which keeps feeds on the processed-record side
+  of the OPS terms. The patent search feed may filter on the abstract's text, but never
+  outputs it.
 
 The API itself is described in [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#patents).
 

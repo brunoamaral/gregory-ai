@@ -76,6 +76,11 @@ from rss.views import (
 	redirect_articles_by_author_feed,
 	redirect_trials_by_subject_feed,
 )
+from rss.patent_feeds import (
+	SitePatentsByCategoryFeed,
+	SitePatentsBySubjectFeed,
+	SitePatentsSearchFeed,
+)
 from rss.search_feeds import SiteArticlesSearchFeed, SiteTrialsSearchFeed, robots_txt
 from rss.sitemaps import sitemap_index, sitemap_section
 from subscriptions.views import (
@@ -200,8 +205,21 @@ urlpatterns = (
 			cache_page(FEED_CACHE_SECONDS)(SiteRecruitingTrialsBySubjectFeed()),
 			name="site_recruiting_trials_by_subject_feed",
 		),
-		# Search feeds (rss/search_feeds.py). NOT wrapped in cache_page: they
-		# cache themselves, keyed on the canonical query string, so ?b&a and
+		# Patent feeds (rss/patent_feeds.py). Need rss_enabled AND
+		# patents_enabled on the site; 404 otherwise.
+		path(
+			"feed/sites/<int:site_id>/patents/subject/<str:subject_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SitePatentsBySubjectFeed()),
+			name="site_patents_by_subject_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/patents/category/<str:category_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SitePatentsByCategoryFeed()),
+			name="site_patents_by_category_feed",
+		),
+		# Search feeds (rss/search_feeds.py, and patents/search/ in
+		# rss/patent_feeds.py). NOT wrapped in cache_page: they cache
+		# themselves, keyed on the canonical query string, so ?b&a and
 		# ?a&b -- and utm_* noise -- share one entry.
 		path(
 			"feed/sites/<int:site_id>/articles/search/",
@@ -212,6 +230,11 @@ urlpatterns = (
 			"feed/sites/<int:site_id>/trials/search/",
 			SiteTrialsSearchFeed(),
 			name="site_trials_search_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/patents/search/",
+			SitePatentsSearchFeed(),
+			name="site_patents_search_feed",
 		),
 		# robots.txt for the API host: Disallow the search feeds. nginx has to
 		# proxy /robots.txt to Django (nginx-example-configuration/nginx.conf).
