@@ -346,7 +346,8 @@ class CustomSetting(models.Model):
 		default=False,
 		help_text=(
 			"Show patent families for this site's subjects: on the API "
-			"(/patents/), the MCP server and the editor address. Patents are "
+			"(/patents/), the MCP server, the editor address and the RSS "
+			"patent feeds (which also need rss_enabled). Patents are "
 			"fetched with Brain Regeneration's EPO OPS account; only enable "
 			"this on sites covered by that licence (see \"Licence and the "
 			"API\" in docs/patents.md)."

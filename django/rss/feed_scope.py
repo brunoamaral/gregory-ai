@@ -29,13 +29,13 @@ from django.db.models import Exists, OuterRef
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
-from gregory.models import Articles, Subject, TeamCategory, Trials
+from gregory.models import Articles, Patents, Subject, TeamCategory, Trials
 from sitesettings.models import CustomSetting
 
 logger = logging.getLogger(__name__)
 
 
-def site_feed_scope(site_id):
+def site_feed_scope(site_id, require_patents=False):
 	"""Resolve the Site, its CustomSetting and its RSS-visible subject ids.
 
 	404s exactly like rss/sitemaps.py's _site_sitemaps: unknown site, no
@@ -44,6 +44,12 @@ def site_feed_scope(site_id):
 	scope_subjects regardless of whether that site is api_public, mirroring
 	how a site-bound API key reads its own scope in
 	gregory.visibility.visible_subject_ids.
+
+	require_patents=True (the patent feeds) also needs CustomSetting.patents_enabled:
+	patents come from the EPO's OPS under a licence that only covers some
+	sites, so a site with the switch off serves no patents anywhere -- not on
+	the API, not in the MCP server and not here -- even with rss_enabled on and
+	the subject in scope. See docs/patents.md, "Licence and the API".
 	"""
 	site = get_object_or_404(Site, pk=site_id)
 	# CustomSetting.site is a plain FK (not unique) -- order explicitly so
@@ -51,6 +57,8 @@ def site_feed_scope(site_id):
 	settings_row = CustomSetting.objects.filter(site=site).order_by("setting_id").first()
 	if settings_row is None or not settings_row.rss_enabled:
 		raise Http404("RSS feed not enabled for this site.")
+	if require_patents and not settings_row.patents_enabled:
+		raise Http404("Patents are not enabled for this site.")
 	subject_ids = set(settings_row.scope_subjects.values_list("id", flat=True))
 	return site, settings_row, subject_ids
 
@@ -113,4 +121,23 @@ def trial_base_qs(subject_ids):
 	"""Trials tagged with at least one of subject_ids (trials can't be retracted)."""
 	return Trials.objects.filter(
 		Exists(Trials.objects.filter(pk=OuterRef("pk"), subjects__in=subject_ids))
+	)
+
+
+def patent_base_qs(subject_ids):
+	"""Patent families tagged with at least one of subject_ids and published.
+
+	A family with no earliest_publication_date can't be placed in a feed
+	ordered by publication, so it is left out.
+
+	Feeds order by earliest_publication_date, NOT discovery_date (the one
+	place they don't). The importer backfills history back to 2016 priority
+	dates, so discovery_date says nothing about when a patent is new: on dev
+	all 2,649 families were discovered inside one month, and only 38 of them
+	were published in the last 90 days. A discovery-ordered feed would be 50
+	random old patents, reshuffled by every backfill run.
+	"""
+	return Patents.objects.filter(
+		Exists(Patents.objects.filter(pk=OuterRef("pk"), subjects__in=subject_ids)),
+		earliest_publication_date__isnull=False,
 	)

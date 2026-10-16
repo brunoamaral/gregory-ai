@@ -9,6 +9,9 @@ Site-scoped RSS feeds, all under /feed/sites/<site_id>/:
   trials/subject/<slug>/                        new trials by condition
   trials/subject/<slug>/recruiting/             trials a patient can join
   articles/search/?..., trials/search/?...      search feeds (rss/search_feeds.py)
+  patents/subject/<slug>/, patents/category/<slug>/, patents/search/?...
+                                                new patent families (rss/patent_feeds.py;
+                                                need patents_enabled too)
 
 The module is split three ways: rss/feed_scope.py decides WHO may see a feed
 (site scope, slug resolution, base querysets), rss/feed_items.py decides what

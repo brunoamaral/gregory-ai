@@ -10,19 +10,32 @@ base queryset), then hydrate_articles()/hydrate_trials() load the full rows
 with prefetches, so a 100-item feed costs the same handful of queries as a
 3-item one instead of several per item.
 
+Patent items follow stricter licence rules than articles and trials (see the
+"Patent families" section below): processed fields only, never raw OPS text.
+
 Every piece of database text that ends up inside a description is
 HTML-escaped first. Editorial text is free text and registry/abstract text
 comes from third parties; neither may be able to inject markup into a feed
 that readers render as HTML.
 """
 
+from datetime import datetime, time, timezone
+from types import SimpleNamespace
+
 from django.db.models import Prefetch
+from django.http import QueryDict
 from django.template.defaultfilters import linebreaksbr
 from django.utils.html import escape, format_html, format_html_join
+from django.utils.safestring import mark_safe
+from django.utils.text import Truncator
 
+from api.patent_links import visible_patent_trial_links_queryset
 from gregory.models import (
 	Articles,
 	ArticleSiteContent,
+	PatentApplicant,
+	Patents,
+	PatentSiteContent,
 	Subject,
 	TeamCategory,
 	Trials,
@@ -30,6 +43,13 @@ from gregory.models import (
 
 # dc:creator shows at most this many names, then "et al."
 MAX_FEED_AUTHORS = 3
+
+# A patent item lists at most this many linked trials, then "and N more".
+MAX_FEED_PATENT_TRIALS = 3
+# A linked trial is named by its title (the /patents/ API identifies a linked
+# trial by trial_id + trial_title, there is no registry identifier), cut to
+# this many characters so one long registry title can't swamp the item.
+MAX_FEED_TRIAL_TITLE = 120
 
 
 def trial_url(trial, site, settings_row):
@@ -344,3 +364,227 @@ class TrialFeedItemMixin:
 			categories.append(item.get_recruitment_status_normalized_display())
 		categories.extend(subject.subject_name for subject in item._feed_subjects)
 		return [category for category in categories if category]
+
+
+# ---------------------------------------------------------------------------
+# Patent families
+#
+# LICENCE: patent records come from the EPO's Open Patent Services. Under the
+# OPS terms we may serve PROCESSED records (clause 3.1) but may not make "the
+# data as such" public (clause 3.2). A feed is syndicated: aggregators copy
+# items verbatim and keep them, which an API response isn't designed for. So a
+# patent item is built ONLY from what Gregory adds to a record -- this site's
+# editorial text, canonical sponsor names, dates, "Grant published",
+# category-basis trial links and the Espacenet link the licence requires. It
+# NEVER contains Patents.summary (the abstract), claims, inventors, CPC/IPC
+# codes or publication-number lists, and hydrate_patents() defers those
+# columns so they aren't even loaded. See docs/patents.md, "Licence and the
+# API". Don't add them to a feed without a fresh look at the OPS terms.
+# ---------------------------------------------------------------------------
+
+# Columns that must never reach a feed item (see the licence note above).
+_PATENT_RAW_FIELDS = ("summary", "usummary", "claims", "inventors", "cpc_classes", "ipc_classes")
+
+
+def _http_url(url):
+	"""`url` if it is an http(s) URL, else ''. Registry links are third-party text."""
+	return url if url and url.startswith(("http://", "https://")) else ""
+
+
+def unique_names(names):
+	"""Names in order, without blanks or repeats (two applicants can share a sponsor)."""
+	seen = set()
+	out = []
+	for name in names:
+		if name and name not in seen:
+			seen.add(name)
+			out.append(name)
+	return out
+
+
+def patent_applicant_names(patent):
+	return unique_names(applicant.sponsor.name for applicant in patent._feed_applicants)
+
+
+def _patent_trial_line(link):
+	trial = link.trial
+	title = Truncator(trial.title).chars(MAX_FEED_TRIAL_TITLE)
+	timing = "during" if link.timing == "during" else "after"
+	href = _http_url(trial._feed_link)
+	label = format_html('<a href="{}">{}</a>', href, title) if href else escape(title)
+	return format_html("Filed {} trial: {} ({})", timing, label, link.sponsor.name)
+
+
+def patent_description(patent):
+	"""HTML description for a patent item, sections omitted when empty.
+
+	Order: this site's plain-English summary and takeaways, a facts row, the
+	linked trials, the Espacenet link. Built only from what Gregory adds to
+	the record -- see the licence note above; never the abstract, claims,
+	inventors or classification codes.
+	"""
+	content = patent._feed_site_content[0] if patent._feed_site_content else None
+	sections = []
+
+	if content and content.summary_plain_english:
+		sections.append(_section("In plain English", _text_block(content.summary_plain_english)))
+	if content and content.takeaways:
+		sections.append(_section("Key takeaways", _text_block(content.takeaways)))
+
+	facts = []
+	applicants = patent_applicant_names(patent)
+	if applicants:
+		facts.append(", ".join(applicants))
+	if patent.earliest_priority_date:
+		facts.append(f"Priority {patent.earliest_priority_date:%Y-%m-%d}")
+	if patent.earliest_publication_date:
+		facts.append(f"First published {patent.earliest_publication_date:%Y-%m-%d}")
+	if patent.has_grant:
+		# Exactly this wording, never "Granted": has_grant is a heuristic on
+		# kind codes until legal status is fetched, and "Granted" would claim
+		# more than we know.
+		facts.append("Grant published")
+	if facts:
+		sections.append(format_html("<p>{}</p>", " · ".join(facts)))
+
+	links = patent._feed_trial_links
+	if links:
+		lines = [_patent_trial_line(link) for link in links[:MAX_FEED_PATENT_TRIALS]]
+		if len(links) > MAX_FEED_PATENT_TRIALS:
+			lines.append(f"and {len(links) - MAX_FEED_PATENT_TRIALS} more")
+		sections.append(
+			format_html(
+				"<p>{}</p>",
+				format_html_join(mark_safe("<br>"), "{}", ((line,) for line in lines)),
+			)
+		)
+
+	href = _http_url(patent.link)
+	if href:
+		# Also the item <link>; repeated here so it is present in readers that
+		# hide the item link. The licence requires it wherever a patent is shown.
+		sections.append(format_html('<p><a href="{}">View on Espacenet</a></p>', href))
+
+	return _join_sections(sections)
+
+
+def hydrate_patents(ids, site, settings_row, subject_ids, scope=None):
+	"""Load the patent families in `ids`, in that order, with a fixed number of queries.
+
+	  - in-scope subjects and categories, as for articles (`subject_ids` is the
+	    feed's subject set, so a category feed shows only that category's)
+	  - this site's PatentSiteContent only
+	  - applicants that resolved to a canonical sponsor and aren't individuals
+	  - linked trials, through api.patent_links.visible_patent_trial_links_queryset,
+	    the single rule for which links are visible: not suppressed,
+	    basis="category" (subject-basis links are noisy for large sponsors) and
+	    the trial in the SITE's scope (`scope`, defaulting to subject_ids) --
+	    a link is a fact about the site, not about which feed it appears in.
+	  - raw OPS text is deferred (see the licence note above)
+	"""
+	scope = set(subject_ids if scope is None else scope)
+	patents = list(
+		Patents.objects.filter(pk__in=ids)
+		.defer(*_PATENT_RAW_FIELDS)
+		.prefetch_related(
+			Prefetch(
+				"subjects",
+				queryset=Subject.objects.filter(id__in=subject_ids).order_by("subject_name", "pk"),
+				to_attr="_feed_subjects",
+			),
+			Prefetch(
+				"team_categories",
+				queryset=TeamCategory.objects.filter(subjects__id__in=subject_ids)
+				.distinct()
+				.order_by("category_name", "pk"),
+				to_attr="_feed_categories",
+			),
+			Prefetch(
+				"site_contents",
+				queryset=PatentSiteContent.objects.filter(site=site),
+				to_attr="_feed_site_content",
+			),
+			Prefetch(
+				"patent_applicants",
+				queryset=PatentApplicant.objects.filter(
+					sponsor__isnull=False, is_individual=False
+				)
+				.select_related("sponsor")
+				.order_by("sequence"),
+				to_attr="_feed_applicants",
+			),
+		)
+	)
+
+	# The filter reads attributes off the request, not a real request. Both
+	# sets are the site's scope, so a patent or trial outside it shows no link.
+	shim = SimpleNamespace(
+		GET=QueryDict(), visible_subject_ids=scope, visible_patent_subject_ids=scope
+	)
+	links_by_patent = {}
+	for link in (
+		visible_patent_trial_links_queryset(shim, include_subject_links=False)
+		.filter(patent_id__in=ids)
+		.select_related("trial", "sponsor")
+		# "during" before "after" (the stronger signal), then a stable order.
+		.order_by("-timing", "trial_id")
+	):
+		link.trial._feed_link = trial_url(link.trial, site, settings_row)
+		links_by_patent.setdefault(link.patent_id, []).append(link)
+
+	by_id = {patent.pk: patent for patent in patents}
+	ordered = []
+	for pk in ids:
+		patent = by_id.get(pk)
+		if patent is None:
+			continue
+		patent._feed_trial_links = links_by_patent.get(pk, [])
+		ordered.append(patent)
+	return ordered
+
+
+class PatentFeedItemMixin:
+	"""item_* methods shared by every feed of patent families.
+
+	Items must come from hydrate_patents().
+	"""
+
+	def item_title(self, item):
+		return item.title
+
+	def item_description(self, item):
+		return patent_description(item)
+
+	def item_link(self, item):
+		# The Espacenet page. The licence requires it wherever a patent is
+		# shown, and the item link is the most prominent place for it.
+		return item.link
+
+	def item_guid(self, item):
+		return f"urn:gregory:patent:{item.pk}"
+
+	item_guid_is_permalink = False
+
+	def item_pubdate(self, item):
+		# First publication, not discovery: the importer backfills history, so
+		# discovery_date is meaningless for "new" (see patent_base_qs). A date,
+		# so midnight UTC.
+		return datetime.combine(item.earliest_publication_date, time.min, tzinfo=timezone.utc)
+
+	def item_updateddate(self, item):
+		updated = item.last_updated
+		for content in item._feed_site_content:
+			if content.updated_at and (updated is None or content.updated_at > updated):
+				updated = content.updated_at
+		return updated
+
+	def item_author_name(self, item):
+		# Applicant SPONSOR names only (canonical, our processing). An applicant
+		# that didn't resolve to a sponsor -- an individual -- is left out, and
+		# inventors are never included.
+		return author_label(patent_applicant_names(item))
+
+	def item_categories(self, item):
+		return [subject.subject_name for subject in item._feed_subjects] + [
+			category.category_name for category in item._feed_categories
+		]

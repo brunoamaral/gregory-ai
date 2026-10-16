@@ -5,6 +5,8 @@ Search feeds: "tell me when something new matches what I searched for".
 
   feed/sites/<site_id>/articles/search/?...     SiteArticlesSearchFeed
   feed/sites/<site_id>/trials/search/?...       SiteTrialsSearchFeed
+  feed/sites/<site_id>/patents/search/?...      SitePatentsSearchFeed (rss/patent_feeds.py,
+                                                built on _SearchFeedMixin)
 
 These are the one place the feeds accept a query string, because a search is
 open-ended and can't be a fixed path segment. They reuse the SAME filter
@@ -122,7 +124,10 @@ MAX_TEXT_PARAM_LENGTH = 300
 # unbounded IN (...).
 MAX_PARAM_LENGTH = 300
 
-BOOLEAN_PARAMS = ("relevant", "open_access", "has_takeaways")
+# Every boolean any search feed accepts. canonical_params() only looks at a
+# feed's own allowlist, so listing the patent booleans here neither lets them
+# through the article/trial feeds nor loosens their validation.
+BOOLEAN_PARAMS = ("relevant", "open_access", "has_takeaways", "has_grant", "has_trial_link")
 
 SEARCH_FEED_LIMIT = 50
 
@@ -187,14 +192,16 @@ def _validate(params):
 		raise InvalidSearchFeed("Invalid search feed parameters: " + "; ".join(problems) + ".")
 
 
-def _filter_request(request, params, site, scope):
+def _filter_request(request, params, site, scope, patent_scope=()):
 	"""A shallow copy of `request` that is safe to hand to ArticleFilter/TrialFilter.
 
 	  * GET is only the allowlisted params (minus `relevant`, which the feed
 	    applies itself), because the filters read request.GET, not the data
 	    they are given.
 	  * visible_subject_ids is the site's scope and visible_patent_subject_ids
-	    is empty: no patent link is visible through an article or trial search.
+	    is `patent_scope`, empty by default: no patent link is visible through
+	    an article or trial search. The patent search feed passes the site's
+	    scope so has_trial_link works.
 	  * The editorial owner is the feed's site and its organisations, not
 	    whoever sent the request, so has_takeaways means "this site has
 	    takeaways" for every reader. The filters take these from the cached
@@ -207,7 +214,7 @@ def _filter_request(request, params, site, scope):
 	shim.GET = get
 	shim._editorial_site_ids = [site.pk]
 	shim.visible_subject_ids = set(scope)
-	shim.visible_patent_subject_ids = set()
+	shim.visible_patent_subject_ids = set(patent_scope)
 	shim._editorial_org_ids = sorted(
 		OrganizationSite.objects.filter(site=site).values_list("organization_id", flat=True)
 	)
@@ -246,6 +253,10 @@ class _SearchFeedMixin(_SelfLinkMixin):
 	filter_class = None
 	content_word = ""
 	empty_title = ""
+	title_prefix = "Search"
+	# True for the patent search feed: it needs CustomSetting.patents_enabled
+	# as well as rss_enabled, and patent links are visible to has_trial_link.
+	patents = False
 
 	def __call__(self, request, *args, **kwargs):
 		if request.method not in ("GET", "HEAD"):
@@ -274,7 +285,7 @@ class _SearchFeedMixin(_SelfLinkMixin):
 		return response
 
 	def get_object(self, request, site_id):
-		site, settings_row, scope = site_feed_scope(site_id)
+		site, settings_row, scope = site_feed_scope(site_id, require_patents=self.patents)
 		params, canonical = canonical_params(request, self.params_allowlist)
 		_validate(params)
 
@@ -298,7 +309,9 @@ class _SearchFeedMixin(_SelfLinkMixin):
 			# empty feed, not a 404 (both are in scope).
 			subject_ids = subject_ids & cat_subject_ids
 
-		shim, get = _filter_request(request, params, site, scope)
+		shim, get = _filter_request(
+			request, params, site, scope, patent_scope=scope if self.patents else ()
+		)
 		queryset = self.search_queryset(subject_ids)
 		queryset = _run_filter(self.filter_class, queryset, get, shim)
 		queryset = self.apply_relevance(queryset, params, subject_ids)
@@ -337,7 +350,7 @@ class _SearchFeedMixin(_SelfLinkMixin):
 		labels = self.labels(params, subject, category)
 		if not labels:
 			return f"{self.empty_title} — {site.name}"
-		return f"Search: {' · '.join(labels)} — {site.name}"
+		return f"{self.title_prefix}: {' · '.join(labels)} — {site.name}"
 
 	def labels(self, params, subject, category):
 		"""Channel-title labels in a fixed order. Subclasses add their own."""
@@ -444,8 +457,7 @@ class SiteTrialsSearchFeed(_SearchFeedMixin, TrialFeedItemMixin, Feed):
 
 
 # What crawlers must not follow on the API host: every search URL is a new
-# query for us to run. The patents line is harmless until patent search feeds
-# exist.
+# query for us to run (the patent search feed included).
 ROBOTS_TXT = (
 	"User-agent: *\n"
 	"Disallow: /feed/sites/*/articles/search/\n"
