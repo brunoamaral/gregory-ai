@@ -46,6 +46,7 @@ class PipelineCommandTest(TestCase):
 			"find_doi",
 			"update_articles_info",
 			"get_authors",
+			"refresh_pubmed_records",
 			"rebuild_categories",
 			"get_takeaways",
 		]

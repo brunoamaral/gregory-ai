@@ -1,13 +1,13 @@
 from django.core.management.base import BaseCommand
 from gregory.models import Articles
 from gregory.classes import SciencePaper
+from gregory.utils.text_cleaning import is_summary_truncated
 from gregory.utils.enrichment import clear_marker, due_filter, record_fruitless_attempt
 from django.utils import timezone
 from django.db.models import Q
 import requests
 from datetime import timedelta
 import time
-import re
 
 
 class Command(BaseCommand):
@@ -24,28 +24,8 @@ class Command(BaseCommand):
 
 	@staticmethod
 	def is_summary_truncated(summary):
-		"""
-		Check if a summary appears to be truncated.
-		Returns True if the summary ends with common truncation patterns.
-		"""
-		if not summary:
-			return False
-
-		summary = summary.strip()
-
-		# Check for common truncation patterns at the end
-		truncation_patterns = [
-			r"\.\.\.$",  # Ends with ...
-			r"\[\.\.\.\]$",  # Ends with [...]
-			r"\[…\]$",  # Ends with [...] using ellipsis character
-			r"…$",  # Ends with ellipsis character
-		]
-
-		for pattern in truncation_patterns:
-			if re.search(pattern, summary):
-				return True
-
-		return False
+		"""Check if a summary appears to be truncated (see gregory.utils.text_cleaning)."""
+		return is_summary_truncated(summary)
 
 	def try_refresh_paper(self, paper, retries=3, delay=5):
 		"""Attempt to refresh the paper data with retries and a delay."""

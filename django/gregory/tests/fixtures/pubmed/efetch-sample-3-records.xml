@@ -1,0 +1,990 @@
+<?xml version="1.0" ?>
+<!DOCTYPE PubmedArticleSet
+  PUBLIC '-//NLM//DTD PubMedArticle, 1st January 2025//EN'
+  'https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_250101.dtd'>
+<PubmedArticleSet>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM" IndexingMethod="Automated">
+			<PMID Version="1">42830590</PMID>
+			<DateCompleted>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>05</Day>
+			</DateCompleted>
+			<DateRevised>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>13</Day>
+			</DateRevised>
+			<Article PubModel="Print">
+				<Journal>
+					<ISSN IssnType="Electronic">1839-5252</ISSN>
+					<JournalIssue CitedMedium="Internet">
+						<Volume>27</Volume>
+						<Issue>4</Issue>
+						<PubDate>
+							<Year>2026</Year>
+							<Month>Dec</Month>
+							<Day>18</Day>
+						</PubDate>
+					</JournalIssue>
+					<Title>Brain impairment : a multidisciplinary journal of the Australian Society for the Study of Brain Impairment</Title>
+					<ISOAbbreviation>Brain Impair</ISOAbbreviation>
+				</Journal>
+				<ArticleTitle>'Got to be the right fit, the right connection': a scoping review of the peer support experiences and perspectives of adults with acquired neurological disability.</ArticleTitle>
+				<ELocationID EIdType="pii" ValidYN="Y">IB25113</ELocationID>
+				<ELocationID EIdType="doi" ValidYN="Y">10.1071/IB25113</ELocationID>
+				<Abstract>
+					<AbstractText Label="BACKGROUND">Peer support for people with acquired neurological disability is gaining worldwide popularity, yet it is conceptually unclear what constitutes valuable peer interactions. To build a greater understanding from the lived experience perspective, this scoping review synthesised literature on how adults with acquired neurological disability experience and perceive peer support.</AbstractText>
+					<AbstractText Label="METHODS">Peer-reviewed literature published between 2013 and 2024 was identified through systematic searches of five databases. Thirty-two studies were included, covering a range of disabilities (e.g. acquired brain injury, spinal cord injury, multiple sclerosis) and peer support forms (e.g. one-to-one, group, informal).</AbstractText>
+					<AbstractText Label="RESULTS">Analysis revealed that peer support participants perceive value across three domains: (1) capacity-building, (2) social connection, and (3) psychological adjustment. However, they can also experience frustrations and challenges that directly oppose these benefits. Suitable characteristics of peers and structures of peer programs, including acknowledgement of individual differences in the peer support experience, were identified as key to successful peer interactions.</AbstractText>
+					<AbstractText Label="CONCLUSIONS">Peer support holds multifaceted value for people with acquired neurological disability; however, it is also a complex intervention that carries risks and requires sensitivity to individual variation. Consideration of these dynamics should be embedded in the design of peer programs and pursuit of peer support research.</AbstractText>
+					<CopyrightInformation>© 2026 The Author(s) (or their employer(s)). Published by CSIRO Publishing on behalf of the Australasian Society for the Study of Brain Impairment.</CopyrightInformation>
+				</Abstract>
+				<AuthorList CompleteYN="Y">
+					<Author ValidYN="Y">
+						<LastName>Wellecke</LastName>
+						<ForeName>Cornelia</ForeName>
+						<Initials>C</Initials>
+						<Identifier Source="ORCID">0000-0001-7642-7025</Identifier>
+						<AffiliationInfo>
+							<Affiliation>La Trobe University, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Summer Foundation, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Brown</LastName>
+						<ForeName>Mark</ForeName>
+						<Initials>M</Initials>
+						<AffiliationInfo>
+							<Affiliation>La Trobe University, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Summer Foundation, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Winkler</LastName>
+						<ForeName>Di</ForeName>
+						<Initials>D</Initials>
+						<Identifier Source="ORCID">0000-0003-3899-6248</Identifier>
+						<AffiliationInfo>
+							<Affiliation>La Trobe University, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Summer Foundation, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Douglas</LastName>
+						<ForeName>Jacinta</ForeName>
+						<Initials>J</Initials>
+						<AffiliationInfo>
+							<Affiliation>La Trobe University, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Summer Foundation, Melbourne, Vic, Australia.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+				</AuthorList>
+				<Language>eng</Language>
+				<GrantList CompleteYN="Y">
+					<Grant>
+						<GrantID>La Trobe University Full Fee Research Scholarship</GrantID>
+						<Agency>La Trobe University</Agency>
+						<Country/>
+					</Grant>
+				</GrantList>
+				<PublicationTypeList>
+					<PublicationType UI="D016428">Journal Article</PublicationType>
+					<PublicationType UI="D000098583">Scoping Review</PublicationType>
+					<PublicationType UI="D013485">Research Support, Non-U.S. Gov't</PublicationType>
+				</PublicationTypeList>
+			</Article>
+			<MedlineJournalInfo>
+				<Country>Australia</Country>
+				<MedlineTA>Brain Impair</MedlineTA>
+				<NlmUniqueID>101121542</NlmUniqueID>
+				<ISSNLinking>1839-5252</ISSNLinking>
+			</MedlineJournalInfo>
+			<CitationSubset>IM</CitationSubset>
+			<MeshHeadingList>
+				<MeshHeading>
+					<DescriptorName UI="D006801" MajorTopicYN="N">Humans</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D010379" MajorTopicYN="Y">Peer Group</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D012944" MajorTopicYN="Y">Social Support</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D006233" MajorTopicYN="Y">Persons with Disabilities</DescriptorName>
+					<QualifierName UI="Q000523" MajorTopicYN="N">psychology</QualifierName>
+					<QualifierName UI="Q000534" MajorTopicYN="N">rehabilitation</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D009422" MajorTopicYN="Y">Nervous System Diseases</DescriptorName>
+					<QualifierName UI="Q000523" MajorTopicYN="N">psychology</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D009103" MajorTopicYN="N">Multiple Sclerosis</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D000328" MajorTopicYN="N">Adult</DescriptorName>
+				</MeshHeading>
+			</MeshHeadingList>
+			<KeywordList Owner="NOTNLM">
+				<Keyword MajorTopicYN="N">acquired brain injury</Keyword>
+				<Keyword MajorTopicYN="N">acquired disability</Keyword>
+				<Keyword MajorTopicYN="N">disability</Keyword>
+				<Keyword MajorTopicYN="N">multiple sclerosis</Keyword>
+				<Keyword MajorTopicYN="N">peer mentor</Keyword>
+				<Keyword MajorTopicYN="N">peer support</Keyword>
+				<Keyword MajorTopicYN="N">rehabilitation</Keyword>
+				<Keyword MajorTopicYN="N">spinal cord injury</Keyword>
+			</KeywordList>
+		</MedlineCitation>
+		<PubmedData>
+			<History>
+				<PubMedPubDate PubStatus="received">
+					<Year>2025</Year>
+					<Month>10</Month>
+					<Day>8</Day>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="accepted">
+					<Year>2026</Year>
+					<Month>8</Month>
+					<Day>14</Day>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="medline">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>5</Day>
+					<Hour>5</Hour>
+					<Minute>32</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="pubmed">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>5</Day>
+					<Hour>5</Hour>
+					<Minute>31</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="entrez">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>5</Day>
+					<Hour>1</Hour>
+					<Minute>52</Minute>
+				</PubMedPubDate>
+			</History>
+			<PublicationStatus>ppublish</PublicationStatus>
+			<ArticleIdList>
+				<ArticleId IdType="pubmed">42830590</ArticleId>
+				<ArticleId IdType="doi">10.1071/IB25113</ArticleId>
+				<ArticleId IdType="pii">275815</ArticleId>
+			</ArticleIdList>
+		</PubmedData>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM" IndexingMethod="Curated">
+			<PMID Version="1">42854181</PMID>
+			<DateCompleted>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>09</Day>
+			</DateCompleted>
+			<DateRevised>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>13</Day>
+			</DateRevised>
+			<Article PubModel="Print-Electronic">
+				<Journal>
+					<ISSN IssnType="Electronic">2163-0933</ISSN>
+					<JournalIssue CitedMedium="Internet">
+						<Volume>16</Volume>
+						<Issue>6</Issue>
+						<PubDate>
+							<Year>2026</Year>
+							<Month>Dec</Month>
+						</PubDate>
+					</JournalIssue>
+					<Title>Neurology. Clinical practice</Title>
+					<ISOAbbreviation>Neurol Clin Pract</ISOAbbreviation>
+				</Journal>
+				<ArticleTitle>Infection Risk During Rituximab Therapy in Multiple Sclerosis: Effect of Dosing Interval and Age.</ArticleTitle>
+				<Pagination>
+					<StartPage>e200664</StartPage>
+					<MedlinePgn>e200664</MedlinePgn>
+				</Pagination>
+				<ELocationID EIdType="doi" ValidYN="Y">10.1212/CPJ.0000000000200664</ELocationID>
+				<Abstract>
+					<AbstractText Label="BACKGROUND AND OBJECTIVES" NlmCategory="OBJECTIVE">Rituximab is the most frequently used disease-modifying therapy in multiple sclerosis (MS) in Norway. Extended dosing intervals beyond 6 months may offer the same efficacy, but the impact on infection risk is unclear. We examined how dosing frequency and age affect infection risk in rituximab-treated patients with MS.</AbstractText>
+					<AbstractText Label="METHODS" NlmCategory="METHODS">We conducted a nation-wide observational study linking compulsory Norwegian health registries with the Norwegian MS registry. Registry data captured hospital-treated infections and further infections requiring prescription treatment and/or physician contact with primary practice. Data were analyzed using the Prentice, Williams, and Peterson model with clustering on subject to account for longitudinal design, recurrent rituximab infusions and recurrent infection events while adjusting for relevant explanatory variables. Rituximab interval length was modelled as the number of rituximab infusions within 2 years. Age was grouped into 5-year intervals.</AbstractText>
+					<AbstractText Label="RESULTS" NlmCategory="RESULTS">Among 3,410 patients (13,811 treatment episodes between 2010 and June 2022), 13,774 infections occurred, including 971 hospital-treated events. Compared with 4 infusions over 2 years (6-month intervals), extended dosing was associated with a lower risk of any infection (hazard ratio [HR] 0.90 [95% CI 0.82-0.99]) for 2 infusions; (HR 0.78 [95% CI 0.69-0.88] for 1 infusion). A reduced risk of hospital-treated infections was observed only for 1 infusion per 2 years relative to 4, and this was not robust in sensitivity analyses and not present for the subgroup of infections associated with overnight hospital stay. Patients ≥60 years had a significantly higher risk of hospital-treated infections (HR 1.36 [95% CI 1.07-1.71]).</AbstractText>
+					<AbstractText Label="DISCUSSION" NlmCategory="CONCLUSIONS">Extended rituximab intervals are associated with reduced overall infection risk, but the benefit for hospital-treated infections is limited. Age ≥60 years independently increases the risk of hospital-treated infections. These findings support cautious interval extension and careful risk-benefit assessment in older patients.</AbstractText>
+				</Abstract>
+				<AuthorList CompleteYN="Y">
+					<Author ValidYN="Y">
+						<LastName>Pihl-Jensen</LastName>
+						<ForeName>Gorm</ForeName>
+						<Initials>G</Initials>
+						<Identifier Source="ORCID">0009-0005-4448-4419</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Akershus University Hospital, Norway.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Selle</LastName>
+						<ForeName>Maria Lie</ForeName>
+						<Initials>ML</Initials>
+						<Identifier Source="ORCID">0009-0000-2630-5740</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Health Services Research Unit, Akershus University Hospital, Lørenskog, Norway.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Aarseth</LastName>
+						<ForeName>Jan Harald</ForeName>
+						<Initials>JH</Initials>
+						<Identifier Source="ORCID">0009-0004-8443-2261</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Norwegian MS Registry and Biobank, Departtment of Neurology, Haukeland University Hospital, Bergen, Norway.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Neuro-SysMed, Haukeland University Hospital, Bergen, Norway.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Myhr</LastName>
+						<ForeName>Kjell-Morten</ForeName>
+						<Initials>KM</Initials>
+						<Identifier Source="ORCID">0000-0002-0980-510X</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Neuro-SysMed, Haukeland University Hospital, Bergen, Norway.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Department of Clinical Medicine, University of Bergen, Norway; and.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Torkildsen</LastName>
+						<ForeName>Øivind</ForeName>
+						<Initials>Ø</Initials>
+						<Identifier Source="ORCID">0000-0001-5294-2866</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Neuro-SysMed, Haukeland University Hospital, Bergen, Norway.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Department of Clinical Medicine, University of Bergen, Norway; and.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Nakken</LastName>
+						<ForeName>Ola</ForeName>
+						<Initials>O</Initials>
+						<Identifier Source="ORCID">0000-0003-4765-0636</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Akershus University Hospital, Norway.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Department of Clinical Medicine, University of Oslo, Norway.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Holmøy</LastName>
+						<ForeName>Trygve</ForeName>
+						<Initials>T</Initials>
+						<Identifier Source="ORCID">0000-0002-2529-5664</Identifier>
+						<AffiliationInfo>
+							<Affiliation>Department of Neurology, Akershus University Hospital, Norway.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Department of Clinical Medicine, University of Oslo, Norway.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+				</AuthorList>
+				<Language>eng</Language>
+				<PublicationTypeList>
+					<PublicationType UI="D016428">Journal Article</PublicationType>
+					<PublicationType UI="D064888">Observational Study</PublicationType>
+				</PublicationTypeList>
+				<ArticleDate DateType="Electronic">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>08</Day>
+				</ArticleDate>
+			</Article>
+			<MedlineJournalInfo>
+				<Country>United States</Country>
+				<MedlineTA>Neurol Clin Pract</MedlineTA>
+				<NlmUniqueID>101577149</NlmUniqueID>
+				<ISSNLinking>2163-0402</ISSNLinking>
+			</MedlineJournalInfo>
+			<ChemicalList>
+				<Chemical>
+					<RegistryNumber>4F4X42SYQ6</RegistryNumber>
+					<NameOfSubstance UI="D000069283">Rituximab</NameOfSubstance>
+				</Chemical>
+				<Chemical>
+					<RegistryNumber>0</RegistryNumber>
+					<NameOfSubstance UI="D007155">Immunologic Factors</NameOfSubstance>
+				</Chemical>
+			</ChemicalList>
+			<CitationSubset>IM</CitationSubset>
+			<MeshHeadingList>
+				<MeshHeading>
+					<DescriptorName UI="D006801" MajorTopicYN="N">Humans</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D000069283" MajorTopicYN="Y">Rituximab</DescriptorName>
+					<QualifierName UI="Q000008" MajorTopicYN="N">administration &amp; dosage</QualifierName>
+					<QualifierName UI="Q000009" MajorTopicYN="N">adverse effects</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D009103" MajorTopicYN="Y">Multiple Sclerosis</DescriptorName>
+					<QualifierName UI="Q000188" MajorTopicYN="N">drug therapy</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D005260" MajorTopicYN="N">Female</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D008297" MajorTopicYN="N">Male</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D012042" MajorTopicYN="N">Registries</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D008875" MajorTopicYN="N">Middle Aged</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D007155" MajorTopicYN="Y">Immunologic Factors</DescriptorName>
+					<QualifierName UI="Q000008" MajorTopicYN="N">administration &amp; dosage</QualifierName>
+					<QualifierName UI="Q000009" MajorTopicYN="N">adverse effects</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D000328" MajorTopicYN="N">Adult</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D000367" MajorTopicYN="N">Age Factors</DescriptorName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D007239" MajorTopicYN="Y">Infections</DescriptorName>
+					<QualifierName UI="Q000453" MajorTopicYN="N">epidemiology</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D009664" MajorTopicYN="N" Type="Geographic">Norway</DescriptorName>
+					<QualifierName UI="Q000453" MajorTopicYN="N">epidemiology</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D004334" MajorTopicYN="N">Drug Administration Schedule</DescriptorName>
+				</MeshHeading>
+			</MeshHeadingList>
+		</MedlineCitation>
+		<PubmedData>
+			<History>
+				<PubMedPubDate PubStatus="medline">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>9</Day>
+					<Hour>17</Hour>
+					<Minute>35</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="pubmed">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>9</Day>
+					<Hour>17</Hour>
+					<Minute>34</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="entrez">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>9</Day>
+					<Hour>16</Hour>
+					<Minute>4</Minute>
+				</PubMedPubDate>
+			</History>
+			<PublicationStatus>ppublish</PublicationStatus>
+			<ArticleIdList>
+				<ArticleId IdType="pubmed">42854181</ArticleId>
+				<ArticleId IdType="doi">10.1212/CPJ.0000000000200664</ArticleId>
+			</ArticleIdList>
+		</PubmedData>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="PubMed-not-MEDLINE" Owner="NLM">
+			<PMID Version="1">42834886</PMID>
+			<DateCompleted>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>06</Day>
+			</DateCompleted>
+			<DateRevised>
+				<Year>2026</Year>
+				<Month>10</Month>
+				<Day>07</Day>
+			</DateRevised>
+			<Article PubModel="Electronic-eCollection">
+				<Journal>
+					<ISSN IssnType="Electronic">2667-193X</ISSN>
+					<JournalIssue CitedMedium="Internet">
+						<Volume>64</Volume>
+						<PubDate>
+							<Year>2026</Year>
+							<Month>Dec</Month>
+						</PubDate>
+					</JournalIssue>
+					<Title>Lancet regional health. Americas</Title>
+					<ISOAbbreviation>Lancet Reg Health Am</ISOAbbreviation>
+				</Journal>
+				<ArticleTitle>Risk of infection in ocrelizumab-treated adults with multiple sclerosis aged 55 years and older: a retrospective cohort study.</ArticleTitle>
+				<Pagination>
+					<StartPage>101640</StartPage>
+					<MedlinePgn>101640</MedlinePgn>
+				</Pagination>
+				<ELocationID EIdType="pii" ValidYN="Y">101640</ELocationID>
+				<ELocationID EIdType="doi" ValidYN="Y">10.1016/j.lana.2026.101640</ELocationID>
+				<Abstract>
+					<AbstractText Label="BACKGROUND" NlmCategory="UNASSIGNED">Pivotal trials for ocrelizumab in multiple sclerosis (MS) excluded adults &gt;55 years old. This study aimed to compare rates of infection and infection-related hospitalization between ocrelizumab-treated and unexposed older adults with MS.</AbstractText>
+					<AbstractText Label="METHODS" NlmCategory="UNASSIGNED">A retrospective cohort study was performed, analyzing the electronic medical records, June 2017-January 2026, at the Massachusetts General Hospital, comparing 800 older adults with MS who received at least 600 mg of ocrelizumab IV to 800 older adults who never received B-cell depleting therapies. Infection and related hospitalization rates were modeled using inverse probability of treatment weighting and negative binomial regression with person-time offsets.</AbstractText>
+					<AbstractText Label="FINDINGS" NlmCategory="UNASSIGNED">Among 1600 adults (n = 1111, 69.4% female; n = 1496, 93.5% White; median ages 64 (range 55-88) for ocrelizumab and 67 years (range 55-98) for unexposed), median follow-up was 3.5 vs. 8.2 years. There were 429 infection-related hospitalizations (164 ocrelizumab, 265 unexposed), 10 infection-associated deaths (2 ocrelizumab, 8 unexposed), and 4538 infections (1597 ocrelizumab, 2941 unexposed). After adjustment, ocrelizumab was associated with a higher infection-associated hospitalization rate (IRR 1.67; 95% CI 1.15-2.43; p = 0.008) and infections (IRR 1.42; 95% CI 1.20-1.68; p &lt; 0.001). Higher disability and comorbidity independently increased the risk of both outcomes. Female sex was associated with a higher infection risk (IRR 1.36, 95% CI 1.12-1.64, p = 0.002), driven mostly by urinary tract infections, which accounted for 91.46% of the observed sex difference.</AbstractText>
+					<AbstractText Label="INTERPRETATION" NlmCategory="UNASSIGNED">In adults aged ≥55 years with MS, ocrelizumab was associated with higher rates of infection-related hospitalization and infections. Findings support individualized risk-benefit discussion, especially regarding UTIs in older patients of female sex, dedicated UTI monitoring and prevention protocols for older ocrelizumab-treated patients, and inclusion of this age group in future clinical trials.</AbstractText>
+					<AbstractText Label="FUNDING" NlmCategory="UNASSIGNED">Investigator-initiated grant from Genentech.</AbstractText>
+					<CopyrightInformation>© 2026 The Author(s).</CopyrightInformation>
+				</Abstract>
+				<AuthorList CompleteYN="Y">
+					<Author ValidYN="Y">
+						<LastName>Lee</LastName>
+						<ForeName>Seungwon</ForeName>
+						<Initials>S</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Harvard Medical School, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>University of Cambridge, Cambridge, UK.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Scheu</LastName>
+						<ForeName>Raphael</ForeName>
+						<Initials>R</Initials>
+						<AffiliationInfo>
+							<Affiliation>University of Cambridge, Cambridge, UK.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Institute of Medical Virology, Goethe University, University Hospital Frankfurt, Frankfurt am Main, Germany.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Enkhtsetseg</LastName>
+						<ForeName>Nomin</ForeName>
+						<Initials>N</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Hill</LastName>
+						<ForeName>Justin</ForeName>
+						<Initials>J</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Sadok</LastName>
+						<ForeName>Joseph</ForeName>
+						<Initials>J</Initials>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Mastick</LastName>
+						<ForeName>Maya</ForeName>
+						<Initials>M</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Harvard College, Cambridge, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Satish</LastName>
+						<ForeName>Siddharth</ForeName>
+						<Initials>S</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Harvard College, Cambridge, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+					<Author ValidYN="Y">
+						<LastName>Mateen</LastName>
+						<ForeName>Farrah J</ForeName>
+						<Initials>FJ</Initials>
+						<AffiliationInfo>
+							<Affiliation>Davee Department of Neurology, Northwestern University, Chicago, IL, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Massachusetts General Hospital, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+						<AffiliationInfo>
+							<Affiliation>Harvard Medical School, Boston, MA, USA.</Affiliation>
+						</AffiliationInfo>
+					</Author>
+				</AuthorList>
+				<Language>eng</Language>
+				<PublicationTypeList>
+					<PublicationType UI="D016428">Journal Article</PublicationType>
+				</PublicationTypeList>
+				<ArticleDate DateType="Electronic">
+					<Year>2026</Year>
+					<Month>09</Month>
+					<Day>24</Day>
+				</ArticleDate>
+			</Article>
+			<MedlineJournalInfo>
+				<Country>England</Country>
+				<MedlineTA>Lancet Reg Health Am</MedlineTA>
+				<NlmUniqueID>9918232503006676</NlmUniqueID>
+				<ISSNLinking>2667-193X</ISSNLinking>
+			</MedlineJournalInfo>
+			<KeywordList Owner="NOTNLM">
+				<Keyword MajorTopicYN="N">Aging</Keyword>
+				<Keyword MajorTopicYN="N">Hospitalization</Keyword>
+				<Keyword MajorTopicYN="N">Infection</Keyword>
+				<Keyword MajorTopicYN="N">Multiple sclerosis</Keyword>
+				<Keyword MajorTopicYN="N">Ocrelizumab</Keyword>
+				<Keyword MajorTopicYN="N">Safety</Keyword>
+			</KeywordList>
+			<CoiStatement>FJM has received research funding support from Amgen, Genentech (the manufacturer of ocrelizumab), Novartis, and TG Therapeutics, and consulting fees from Alexion, Amgen, Genentech/Roche, and Novartis. All other authors have nothing to report.</CoiStatement>
+		</MedlineCitation>
+		<PubmedData>
+			<History>
+				<PubMedPubDate PubStatus="received">
+					<Year>2026</Year>
+					<Month>4</Month>
+					<Day>8</Day>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="revised">
+					<Year>2026</Year>
+					<Month>9</Month>
+					<Day>8</Day>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="accepted">
+					<Year>2026</Year>
+					<Month>9</Month>
+					<Day>8</Day>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="medline">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>6</Day>
+					<Hour>5</Hour>
+					<Minute>30</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="pubmed">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>6</Day>
+					<Hour>5</Hour>
+					<Minute>29</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="entrez">
+					<Year>2026</Year>
+					<Month>10</Month>
+					<Day>6</Day>
+					<Hour>4</Hour>
+					<Minute>50</Minute>
+				</PubMedPubDate>
+				<PubMedPubDate PubStatus="pmc-release">
+					<Year>2026</Year>
+					<Month>9</Month>
+					<Day>24</Day>
+				</PubMedPubDate>
+			</History>
+			<PublicationStatus>epublish</PublicationStatus>
+			<ArticleIdList>
+				<ArticleId IdType="pubmed">42834886</ArticleId>
+				<ArticleId IdType="pmc">PMC13634772</ArticleId>
+				<ArticleId IdType="doi">10.1016/j.lana.2026.101640</ArticleId>
+				<ArticleId IdType="pii">S2667-193X(26)00270-X</ArticleId>
+			</ArticleIdList>
+			<ReferenceList>
+				<Reference>
+					<Citation>Mulero P., Midaglia L., Montalban X. Ocrelizumab: a new milestone in multiple sclerosis therapy. Ther Adv Neurol Disord. 2018;11 doi: 10.1177/1756286418773025.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1177/1756286418773025</ArticleId>
+						<ArticleId IdType="pmc">PMC5952271</ArticleId>
+						<ArticleId IdType="pubmed">29774057</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Montalban X., Hauser S.L., Kappos L., et al. Ocrelizumab versus placebo in primary progressive multiple sclerosis. N Engl J Med. 2017;376(3):209–220. doi: 10.1056/NEJMoa1606468.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1056/NEJMoa1606468</ArticleId>
+						<ArticleId IdType="pubmed">28002688</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Hauser S.L., Bar-Or A., Comi G., et al. Ocrelizumab versus interferon beta-1a in relapsing multiple sclerosis. N Engl J Med. 2017;376(3):221–234. doi: 10.1056/NEJMoa1601277.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1056/NEJMoa1601277</ArticleId>
+						<ArticleId IdType="pubmed">28002679</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>DiLillo D.J., Hamaguchi Y., Ueda Y., et al. Maintenance of long-lived plasma cells and serological memory despite mature and memory B cell depletion during CD20 immunotherapy in mice. J Immunol. 2008;180(1):361–371. doi: 10.4049/jimmunol.180.1.361.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.4049/jimmunol.180.1.361</ArticleId>
+						<ArticleId IdType="pubmed">18097037</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Genovese M.C., Kaine J.L., Lowenstein M.B., et al. Ocrelizumab, a humanized anti-CD20 monoclonal antibody, in the treatment of patients with rheumatoid arthritis: a phase I/II randomized, blinded, placebo-controlled, dose-ranging study. Arthritis Rheum. 2008;58(9):2652–2661. doi: 10.1002/art.23732.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1002/art.23732</ArticleId>
+						<ArticleId IdType="pubmed">18759293</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Martin F., Chan A.C. B cell immunobiology in disease: evolving concepts from the clinic. Annu Rev Immunol. 2006;24(1):467–496. doi: 10.1146/annurev.immunol.24.021605.090517.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1146/annurev.immunol.24.021605.090517</ArticleId>
+						<ArticleId IdType="pubmed">16551256</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Roche Provides Update on Phase III OCREVUS High Dose Study in People with Relapsing Multiple Sclerosis. Roche; 2025. https://www.roche.com/investors/updates/inv-update−2025-04-02b#:∼:text=Approximately%2085%25%20of%20people%20with,only%20approved%20treatment%20for%20PPMS.&amp;text=Neuroscience%20is%20a%20major%20focus,difficult%20challenges%20in%20neuroscience%20today</Citation>
+				</Reference>
+				<Reference>
+					<Citation>Sabahi Z., Daei Sorkhabi A., Sarkesh A., Naseri A., Asghar-Rezaei N., Talebi M. A systematic review of the safety and efficacy of monoclonal antibodies for progressive multiple sclerosis. Int Immunopharmacol. 2023;120 doi: 10.1016/j.intimp.2023.110266.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.intimp.2023.110266</ArticleId>
+						<ArticleId IdType="pubmed">37209514</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Kappos L., Fox R.J., Burcklen M., et al. Ponesimod compared with teriflunomide in patients with relapsing multiple sclerosis in the active-comparator phase 3 OPTIMUM Study: a randomized clinical trial. JAMA Neurol. 2021;78(5):558–567. doi: 10.1001/jamaneurol.2021.0405.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1001/jamaneurol.2021.0405</ArticleId>
+						<ArticleId IdType="pmc">PMC8008435</ArticleId>
+						<ArticleId IdType="pubmed">33779698</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Fernández Ó., Sörensen P.S., Comi G., et al. Managing multiple sclerosis in individuals aged 55 and above: a comprehensive review. Front Immunol. 2024;15 doi: 10.3389/fimmu.2024.1379538.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.3389/fimmu.2024.1379538</ArticleId>
+						<ArticleId IdType="pmc">PMC11032020</ArticleId>
+						<ArticleId IdType="pubmed">38646534</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>DiMauro K.A., Swetlik C., Cohen J.A. Management of multiple sclerosis in older adults: review of current evidence and future perspectives. J Neurol. 2024;271(7):3794–3805. doi: 10.1007/s00415-024-12384-3.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s00415-024-12384-3</ArticleId>
+						<ArticleId IdType="pmc">PMC11233312</ArticleId>
+						<ArticleId IdType="pubmed">38689068</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Smoot K., Chen C., Stuchiner T., Lucas L., Grote L., Cohan S. Clinical outcomes of patients with multiple sclerosis treated with ocrelizumab in a US community MS center: an observational study. BMJ Neurol Open. 2021;3(2) doi: 10.1136/bmjno-2020-000108.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1136/bmjno-2020-000108</ArticleId>
+						<ArticleId IdType="pmc">PMC8264886</ArticleId>
+						<ArticleId IdType="pubmed">34308352</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Habek M., Piskač D., Gabelić T., Barun B., Adamec I., Krbot Skorić M. Hypogammaglobulinemia, infections and COVID-19 in people with multiple sclerosis treated with ocrelizumab. Mult Scler Relat Disord. 2022;62 doi: 10.1016/j.msard.2022.103798.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.msard.2022.103798</ArticleId>
+						<ArticleId IdType="pmc">PMC8994678</ArticleId>
+						<ArticleId IdType="pubmed">35429819</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Medeiros Junior W.L.G., Demore C.C., Mazaro L.P., et al. Urinary tract infection in patients with multiple sclerosis: an overview. Mult Scler Relat Disord. 2020;46 doi: 10.1016/j.msard.2020.102462.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.msard.2020.102462</ArticleId>
+						<ArticleId IdType="pubmed">32890816</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Langer-Gould A.M., Smith J.B., Gonzales E.G., Piehl F., Li B.H. Multiple sclerosis, disease-modifying therapies, and infections. Neurol Neuroimmunol Neuroinflamm. 2023;10(6) doi: 10.1212/NXI.0000000000200164.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1212/NXI.0000000000200164</ArticleId>
+						<ArticleId IdType="pmc">PMC10574822</ArticleId>
+						<ArticleId IdType="pubmed">37813594</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Li J., Hutton G.J., Varisco T.J., Lin Y., Essien E.J., Aparasu R.R. Infection risk associated with high-efficacy disease-modifying agents in multiple sclerosis: a retrospective cohort study. Clin Pharmacol Ther. 2025;117(2):561–569. doi: 10.1002/cpt.3492.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1002/cpt.3492</ArticleId>
+						<ArticleId IdType="pubmed">39547934</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Fattahi M.R., Valizadeh A., Azimi A., et al. Infections in patients with multiple sclerosis treated with disease-modifying therapies: a comparative risk assessment cohort study. Curr J Neurol. 2025;24(2):115–126. doi: 10.18502/cjn.v24i2.20684.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.18502/cjn.v24i2.20684</ArticleId>
+						<ArticleId IdType="pmc">PMC13183252</ArticleId>
+						<ArticleId IdType="pubmed">42158302</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Vaughn C.B., Jakimovski D., Kavak K.S., et al. Epidemiology and treatment of multiple sclerosis in elderly populations. Nat Rev Neurol. 2019;15(6):329–342. doi: 10.1038/s41582-019-0183-3.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1038/s41582-019-0183-3</ArticleId>
+						<ArticleId IdType="pubmed">31000816</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Li J., Hutton G.J., Aparasu R.R. Prevalence of multiple sclerosis and disease-modifying therapy use in older adults in the United States, 2011–2021. Mult Scler. 2025;31(13):1595–1599. doi: 10.1177/13524585251368687.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1177/13524585251368687</ArticleId>
+						<ArticleId IdType="pmc">PMC12412907</ArticleId>
+						<ArticleId IdType="pubmed">40898667</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Corboy J.R., Fox R.J., Kister I., et al. Risk of new disease activity in patients with multiple sclerosis who continue or discontinue disease-modifying therapies (DISCOMS): a multicentre, randomised, single-blind, phase 4, non-inferiority trial. Lancet Neurol. 2023;22(7):568–577. doi: 10.1016/S1474-4422(23)00154-0.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/S1474-4422(23)00154-0</ArticleId>
+						<ArticleId IdType="pubmed">37353277</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Brand J.S., Smith K.A., Piehl F., Olsson T., Montgomery S. Risk of serious infections in multiple sclerosis patients by disease course and disability status: results from a Swedish register-based study. Brain Behav Immun Health. 2022;22 doi: 10.1016/j.bbih.2022.100470.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.bbih.2022.100470</ArticleId>
+						<ArticleId IdType="pmc">PMC9123212</ArticleId>
+						<ArticleId IdType="pubmed">35607517</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Thakolwiboon S., Mills E.A., Yang J., et al. Immunosenescence and multiple sclerosis: inflammaging for prognosis and therapeutic consideration. Front Aging. 2023;4 doi: 10.3389/fragi.2023.1234572.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.3389/fragi.2023.1234572</ArticleId>
+						<ArticleId IdType="pmc">PMC10603254</ArticleId>
+						<ArticleId IdType="pubmed">37900152</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Leung M.W.Y., Garde E.M.W.V.D., Uitdehaag B.M.J., Klungel O.H., Bazelier M.T. The relative risk of infection in people with multiple sclerosis using disease-modifying treatment: a systematic review of observational studies. Neurol Sci. 2025;46(6):2555–2569. doi: 10.1007/s10072-025-08018-9.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s10072-025-08018-9</ArticleId>
+						<ArticleId IdType="pmc">PMC12084263</ArticleId>
+						<ArticleId IdType="pubmed">39920457</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Van Der Walt A., Strijbis E.M.M., Bridge F., et al. Advancing multiple sclerosis management in older adults. Nat Rev Neurol. 2025;21(8):432–448. doi: 10.1038/s41582-025-01115-5.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1038/s41582-025-01115-5</ArticleId>
+						<ArticleId IdType="pubmed">40702382</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Einsiedler M., Kremer L., Fleury M., Collongues N., De Sèze J., Bigaut K. Anti-CD20 immunotherapy in progressive multiple sclerosis: 2-year real-world follow-up of 108 patients. J Neurol. 2022;269(9):4846–4852. doi: 10.1007/s00415-022-11124-9.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s00415-022-11124-9</ArticleId>
+						<ArticleId IdType="pubmed">35430690</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Hauser S.L., Kappos L., Montalban X., et al. Safety of ocrelizumab in patients with relapsing and primary progressive multiple sclerosis. Neurology. 2021;97(16):e1546–e1559. doi: 10.1212/WNL.0000000000012700.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1212/WNL.0000000000012700</ArticleId>
+						<ArticleId IdType="pmc">PMC8548959</ArticleId>
+						<ArticleId IdType="pubmed">34475123</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Schweitzer F., Laurent S., Fink G.R., Barnett M.H., Hartung H.P., Warnke C. Effects of disease-modifying therapy on peripheral leukocytes in patients with multiple sclerosis. J Neurol. 2021;268(7):2379–2389. doi: 10.1007/s00415-019-09690-6.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s00415-019-09690-6</ArticleId>
+						<ArticleId IdType="pmc">PMC8217029</ArticleId>
+						<ArticleId IdType="pubmed">32036423</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Barmettler S., Ong M.S., Farmer J.R., Choi H., Walter J. Association of immunoglobulin levels, infectious risk, and mortality with rituximab and hypogammaglobulinemia. JAMA Netw Open. 2018;1(7) doi: 10.1001/jamanetworkopen.2018.4169.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1001/jamanetworkopen.2018.4169</ArticleId>
+						<ArticleId IdType="pmc">PMC6324375</ArticleId>
+						<ArticleId IdType="pubmed">30646343</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Thompson A.J., Banwell B.L., Barkhof F., et al. Diagnosis of multiple sclerosis: 2017 revisions of the McDonald criteria. Lancet Neurol. 2018;17(2):162–173. doi: 10.1016/S1474-4422(17)30470-2.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/S1474-4422(17)30470-2</ArticleId>
+						<ArticleId IdType="pubmed">29275977</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Kurtzke J.F. Rating neurologic impairment in multiple sclerosis: an expanded disability status scale (EDSS) Neurology. 1983;33(11):1444–1452. doi: 10.1212/wnl.33.11.1444.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1212/wnl.33.11.1444</ArticleId>
+						<ArticleId IdType="pubmed">6685237</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Granger E., Sergeant J.C., Lunt M. Avoiding pitfalls when combining multiple imputation and propensity scores. Stat Med. 2019;38(26):5120–5132. doi: 10.1002/sim.8355.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1002/sim.8355</ArticleId>
+						<ArticleId IdType="pmc">PMC6856837</ArticleId>
+						<ArticleId IdType="pubmed">31512265</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Imai K., Ratkovic M. Covariate balancing propensity score. J R Stat Soc Ser B Stat Methodol. 2014;76(1):243–263. doi: 10.1111/rssb.12027.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1111/rssb.12027</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Greifer N., Stuart E.A. Choosing the causal estimand for propensity score analysis of observational studies. arXiv. 2021 doi: 10.48550/ARXIV.2106.10577.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.48550/ARXIV.2106.10577</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Chung W.T., Chung K.C. The use of the E-value for sensitivity analysis. J Clin Epidemiol. 2023;163:92–94. doi: 10.1016/j.jclinepi.2023.09.014.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.jclinepi.2023.09.014</ArticleId>
+						<ArticleId IdType="pubmed">37783401</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Peters J., Longbrake E.E. Infection risk in a real-world cohort of patients treated with long-term B-cell depletion for autoimmune neurologic disease. Mult Scler Relat Disord. 2022;68 doi: 10.1016/j.msard.2022.104400.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.msard.2022.104400</ArticleId>
+						<ArticleId IdType="pmc">PMC10075342</ArticleId>
+						<ArticleId IdType="pubmed">36544307</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Giovannoni G., Airas L., Bove R., et al. Efficacy and safety of ocrelizumab in primary progressive multiple sclerosis, including older patients and those with more advanced disease (ORATORIO-HAND): a multicentre, double-blind, randomised, placebo-controlled, phase 3b study. Lancet. 2026;407(10544):2195–2207. doi: 10.1016/S0140-6736(26)00617-3.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/S0140-6736(26)00617-3</ArticleId>
+						<ArticleId IdType="pubmed">42208561</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Wolitzky-Taylor K.B., Castriotta N., Lenze E.J., Stanley M.A., Craske M.G. Anxiety disorders in older adults: a comprehensive review. Depress Anxiety. 2010;27(2):190–211. doi: 10.1002/da.20653.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1002/da.20653</ArticleId>
+						<ArticleId IdType="pubmed">20099273</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Zenebe Y., Akele B., W/Selassie M., Necho M. Prevalence and determinants of depression among old age: a systematic review and meta-analysis. Ann Gen Psychiatry. 2021;20:55. doi: 10.1186/s12991-021-00375-x.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1186/s12991-021-00375-x</ArticleId>
+						<ArticleId IdType="pmc">PMC8684627</ArticleId>
+						<ArticleId IdType="pubmed">34922595</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Essa M., Malik D., Lu Y., et al. Hypertension prevalence, awareness, and control in US adults before and after the COVID-19 pandemic. J Clin Hypertens. 2025;27(7) doi: 10.1111/jch.70093.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1111/jch.70093</ArticleId>
+						<ArticleId IdType="pmc">PMC12277530</ArticleId>
+						<ArticleId IdType="pubmed">40685707</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Neupane S., Florkowski W.J., Dhakal C. Trends and disparities in diabetes prevalence in the United States from 2012 to 2022. Am J Prev Med. 2024;67(2):299–302. doi: 10.1016/j.amepre.2024.04.010.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.amepre.2024.04.010</ArticleId>
+						<ArticleId IdType="pubmed">38648908</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Seery N., Sharmin S., Li V., et al. Predicting infection risk in multiple sclerosis patients treated with ocrelizumab: a retrospective cohort study. CNS Drugs. 2021;35(8):907–918. doi: 10.1007/s40263-021-00810-3.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s40263-021-00810-3</ArticleId>
+						<ArticleId IdType="pmc">PMC8042832</ArticleId>
+						<ArticleId IdType="pubmed">33847902</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Davies L., Shehadeh R., Watkins W.J., Jolles S., Robertson N.P., Tallantyre E.C. Real-world observational study of infections in people treated with ocrelizumab for multiple sclerosis. J Neurol. 2025;272(6):415. doi: 10.1007/s00415-025-13133-w.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1007/s00415-025-13133-w</ArticleId>
+						<ArticleId IdType="pmc">PMC12098501</ArticleId>
+						<ArticleId IdType="pubmed">40402264</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Barbuti E., Castiello A., Pozzilli V., et al. Comparative effectiveness, safety and persistence of ocrelizumab versus natalizumab in multiple sclerosis: a real-world, multi-center, propensity score-matched study. Neurotherapeutics. 2025;22(2) doi: 10.1016/j.neurot.2025.e00537.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.neurot.2025.e00537</ArticleId>
+						<ArticleId IdType="pmc">PMC12014400</ArticleId>
+						<ArticleId IdType="pubmed">39880749</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Roche provides update on phase III OCREVUS high dose study in people with relapsing multiple sclerosis. https://www.roche.com//media/releases/med-cor-2025-04-02</Citation>
+				</Reference>
+				<Reference>
+					<Citation>Elgenidy A., Abdelhalim N.N., Al-Kurdi M.A., et al. Hypogammaglobulinemia and infections in patients with multiple sclerosis treated with anti-CD20 treatments: a systematic review and meta-analysis of 19,139 multiple sclerosis patients. Front Neurol. 2024;15 doi: 10.3389/fneur.2024.1380654.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.3389/fneur.2024.1380654</ArticleId>
+						<ArticleId IdType="pmc">PMC11063306</ArticleId>
+						<ArticleId IdType="pubmed">38699050</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Barrera J.J.B., Gozálvez B.G., Sanchís J.M.F., et al. Severe neutropenia secondary to ocrelizumab: risk factors (P8-1.015) Neurology. 2025;104(7_Supplement_1):3925. doi: 10.1212/WNL.0000000000211332.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1212/WNL.0000000000211332</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Sartori A., Favero A., Rossi L., et al. Ocrelizumab-induced neutropenia in people with multiple sclerosis: a single-centre study. Mult Scler Relat Disord. 2025;103 doi: 10.1016/j.msard.2025.106692.</Citation>
+					<ArticleIdList>
+						<ArticleId IdType="doi">10.1016/j.msard.2025.106692</ArticleId>
+						<ArticleId IdType="pubmed">40845600</ArticleId>
+					</ArticleIdList>
+				</Reference>
+				<Reference>
+					<Citation>Explore flu vaccination in Massachusetts | AHR. https://www.americashealthrankings.org/explore/measures/flu_vaccine/MA</Citation>
+				</Reference>
+				<Reference>
+					<Citation>Vaccine-preventable diseases | Mass.gov. https://www.mass.gov/info-details/vaccine-preventable-diseases</Citation>
+				</Reference>
+			</ReferenceList>
+		</PubmedData>
+	</PubmedArticle>
+</PubmedArticleSet>
