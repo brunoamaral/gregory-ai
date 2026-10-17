@@ -5,8 +5,9 @@ A source's kind is stored as two fields: `source_for` (what content it produces)
 picks up exactly one pair, and any other pair is saved fine and then never fetched.
 The admin form offers these types instead of the two raw fields, so only working
 pairs can be chosen. Keep this list in step with the importers' source filters
-(feedreader_articles, feedreader_trials, feedreader_trials_ctgov,
-feedreader_trials_ctis, feedreader_patents_ops) and with api.views.post_article,
+(feedreader_articles, feedreader_articles_pubmed, feedreader_trials,
+feedreader_trials_ctgov, feedreader_trials_ctis, feedreader_patents_ops) and with
+api.views.post_article,
 which accepts content for any source whose `source_for` matches.
 """
 
@@ -67,6 +68,13 @@ SOURCE_TYPES = (
 		"using the EPO credentials of the team's organisation.",
 	),
 	SourceType(
+		"pubmed", "PubMed search", "science paper", "pubmed_api", True,
+		("pubmed_query", "excluded_publication_types"), ("pubmed_query",),
+		"Gregory runs this search on PubMed on every pipeline run and keeps the papers "
+		"created since the last run, with their full abstract, authors, publication types "
+		"and MeSH headings.",
+	),
+	SourceType(
 		"scrape_papers", "Science papers sent by an external scraper", "science paper",
 		"scrape", False, RECEIVED_FIELDS, (), RECEIVED_HELP,
 	),
@@ -111,6 +119,29 @@ CTIS_SEARCH_KEYS = ("medicalCondition", "sponsor", "number", "containAll", "stat
 CQL_DATE_CLAUSE = re.compile(
 	r"\b(pd|publicationdate)\s*(==|<=|>=|=|<|>|within\b|any\b|all\b)", re.IGNORECASE
 )
+
+
+# The importer adds the creation-date window itself ([crdt]); any date of the user's
+# own would silently narrow every run. Covers the date field tags (short and long
+# form) and PubMed's relative "last N days" form.
+PUBMED_DATE_CLAUSE = re.compile(
+	r"\[\s*(dp|pdat|crdt|edat|mhda|lr|epdat|ppdat|dcom|mdat|cdat|epdt"
+	r"|date\s*-\s*(publication|create|creation|entry|entrez|mesh|modification"
+	r"|completion|last\s+revision|revised|electronic\s+publication|print\s+publication)"
+	r"|publication\s+date|create\s+date|entrez\s+date|mesh\s+date|modification\s+date)\s*\]"
+	r"|\blast\s+\d+\s+(days?|months?|years?)\b",
+	re.IGNORECASE,
+)
+
+
+_QUOTED = re.compile(r'"[^"]*"')
+
+
+def has_date_clause(query):
+	"""True when a PubMed search carries its own date. Text inside quotes is a phrase, not
+	a date ("last 6 months of life"[tiab] is a legitimate palliative-care term), so it
+	is ignored; a field tag after the quotes still counts."""
+	return bool(PUBMED_DATE_CLAUSE.search(_QUOTED.sub('""', query or "")))
 
 
 def type_for(source_for, method):

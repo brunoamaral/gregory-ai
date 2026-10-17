@@ -453,6 +453,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 
 **PubMed fields.** Each article carries `pmid` and `pmcid` (null when the article is not in PubMed), `keywords` (the authors' keywords, in the order PubMed gives them), `publication_types` (a list of names, e.g. `["Journal Article", "Review"]`) and `mesh` (a list of `{descriptor, qualifier, major_topic}`: one entry per MeSH descriptor with `qualifier: null`, and one per descriptor/qualifier pair). They are filled from PubMed's record, so they stay empty until the article has been matched to one.
 
+**Data from PubMed.** The PMID, PMCID, abstract, keywords, publication types and MeSH headings of an article may come from PubMed, which is produced by the U.S. National Library of Medicine (NLM) and distributed by the National Center for Biotechnology Information (NCBI). See [NCBI's disclaimer and copyright notice](https://www.ncbi.nlm.nih.gov/About/disclaimer.html). Abstracts may be copyrighted by their publishers.
+
 > **Changelog (2026-10-16):** for a few hours `relevant=true` (and the `relevant` count on `/articles/stats/`) hid articles an editor had marked not relevant whenever the ML models liked them. That is reverted: `relevant=` means "relevant by a human or by AI" again. The stricter editorial rule, where an editor's "not relevant" wins, stays on sitemaps with *Relevant only* on.
 
 ### Examples

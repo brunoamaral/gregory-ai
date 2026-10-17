@@ -150,6 +150,12 @@ class NcbiClient:
 		api_key, email, tool = get_ncbi_credentials(organization)
 		return cls(api_key=api_key, email=email or _site_admin_email(), tool=tool)
 
+	@classmethod
+	def for_site(cls, **kwargs):
+		"""A keyless client that still identifies itself with the site's admin email,
+		for callers with no organisation (the admin's search check, a team-less source)."""
+		return cls(email=_site_admin_email(), **kwargs)
+
 	# -- plumbing ---------------------------------------------------------
 
 	def _scrub(self, text):

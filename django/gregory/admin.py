@@ -12,10 +12,18 @@ from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
 import json
+from datetime import timedelta
+from urllib.parse import quote_plus
 import logging
 import re
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from . import source_types
+from .utils.ncbi import NcbiClient, NcbiError, NcbiQueryError
+from .utils.pubmed_search import (
+	PUBMED_VOLUME_WARNING_PER_30_DAYS,
+	build_pubmed_term,
+	unbalanced_query,
+)
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
@@ -2062,6 +2070,8 @@ class SourceAdminForm(forms.ModelForm):
 		"ctgov_search_term": "Other search terms",
 		"ctis_search_criteria": "CTIS search criteria",
 		"ops_cql_query": "EPO search query (CQL)",
+		"pubmed_query": "PubMed search",
+		"excluded_publication_types": "Leave out these publication types",
 		"description": "Notes",
 	}
 	HELP = {
@@ -2098,6 +2108,16 @@ class SourceAdminForm(forms.ModelForm):
 			'For example ta="multiple sclerosis" and cpc=/low A61P25/00. Don\'t add a '
 			"publication-date (pd) clause: Gregory adds the date window itself on every run."
 		),
+		"pubmed_query": (
+			'For example "multiple sclerosis"[MeSH Terms] AND (remyelination OR myelin repair). '
+			"Don't add a date clause ([dp], [crdt], \"last 5 years\", …): Gregory adds the "
+			"creation-date window itself on every run. Test the search on pubmed.ncbi.nlm.nih.gov first."
+		),
+		"excluded_publication_types": (
+			"Records with any of these publication types are left out. Excluding a type also "
+			"excludes the types under it in PubMed's hierarchy: excluding Review also excludes "
+			"Systematic Review."
+		),
 		"name": (
 			"Shown in lists, logs and digests. The convention is where it comes from, then the "
 			'subject, e.g. "CTGov | Multiple Sclerosis".'
@@ -2125,6 +2145,8 @@ class SourceAdminForm(forms.ModelForm):
 			"ctgov_search_term",
 			"ctis_search_criteria",
 			"ops_cql_query",
+			"pubmed_query",
+			"excluded_publication_types",
 			"name",
 			"description",
 			"active",
@@ -2133,6 +2155,9 @@ class SourceAdminForm(forms.ModelForm):
 	def __init__(self, *args, **kwargs):
 		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
+		# What the PubMed check in clean() learned, for SourceAdmin.save_model to report.
+		self.pubmed_check = None
+		self.pubmed_unreachable = False
 
 		# Filter team and subject choices based on user's organization
 		if self.request and "team" in self.fields and "subject" in self.fields:
@@ -2182,6 +2207,12 @@ class SourceAdminForm(forms.ModelForm):
 		for name in ("name", "subject"):
 			if name in self.fields:
 				self.fields[name].required = True
+		if "excluded_publication_types" in self.fields:
+			field = self.fields["excluded_publication_types"]
+			if not PublicationType.objects.exists():
+				field.help_text += (
+					" The list is empty: run `manage.py sync_publication_types` to fill it."
+				)
 
 		if "subject" in self.fields:
 			# The admin wraps the select in RelatedFieldWidgetWrapper; the data
@@ -2244,7 +2275,49 @@ class SourceAdminForm(forms.ModelForm):
 					"Remove the publication-date clause (pd …). Gregory adds the date "
 					"window itself on every run.",
 				)
+		if source_type.key == "pubmed":
+			self._check_pubmed_query(cleaned)
 		return cleaned
+
+	def _check_pubmed_query(self, cleaned):
+		query = (cleaned.get("pubmed_query") or "").strip()
+		if not query:
+			self.add_error(
+				"pubmed_query",
+				'Enter the PubMed search, e.g. "multiple sclerosis"[MeSH Terms] AND remyelination.',
+			)
+			return
+		if source_types.has_date_clause(query):
+			self.add_error(
+				"pubmed_query",
+				"Remove the date clause ([dp], [crdt], last N days …). Gregory adds the "
+				"creation-date window itself on every run.",
+			)
+			return
+		problem = unbalanced_query(query)
+		if problem:
+			self.add_error("pubmed_query", f"Check the brackets and quotes. {problem}")
+			return
+		if self._errors:
+			return  # fix the other fields first; don't spend a PubMed call on a form that can't save
+		search_changed = {"source_type", "pubmed_query", "excluded_publication_types"}
+		if self.instance.pk and not search_changed & set(self.changed_data):
+			return  # a rename or a pause doesn't need the search checked again
+		# Ask PubMed what the importer's first run would find, so a typo or a search
+		# that is far too broad shows up now, not after a month of runs. Short timeout and
+		# one retry: this runs inside an admin request.
+		end = timezone.now().date()
+		excluded = [t.name for t in cleaned.get("excluded_publication_types") or []]
+		term = build_pubmed_term(query, excluded, end - timedelta(days=30), end)
+		try:
+			self.pubmed_check = NcbiClient.for_site(timeout=10, max_retries=1).esearch(
+				term, rettype="count"
+			)
+		except NcbiQueryError as exc:
+			self.add_error("pubmed_query", f"PubMed rejected this search: {exc}")
+		except NcbiError:
+			# An NCBI outage shouldn't block editing; save_model warns that it wasn't checked.
+			self.pubmed_unreachable = True
 
 	def _check_ctis_criteria(self, criteria):
 		if not criteria:
@@ -2369,6 +2442,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		("subject", OrganizationRestrictedFieldListFilter),
 	]
 	search_fields = ["name", "link", "description", "keyword_filter"]
+	filter_horizontal = ("excluded_publication_types",)
 	actions = ["activate_sources", "deactivate_sources", "reassign_to_team_action"]
 	readonly_fields = ["api_submission_note"]
 	fieldsets = (
@@ -2426,7 +2500,15 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 
 	def save_model(self, request, obj, form, change):
 		"""Point out what the saved source still needs before it can work."""
+		if obj.method == "pubmed_api" and not obj.link and obj.pubmed_query:
+			# So editors can open the search on PubMed; the importer never reads it.
+			# Skipped for a search too long for the 2,000-character link column.
+			link = "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(obj.pubmed_query.strip())
+			if len(link) <= Sources._meta.get_field("link").max_length:
+				obj.link = link
 		super().save_model(request, obj, form, change)
+		if obj.method == "pubmed_api":
+			self._report_pubmed_check(request, obj, form)
 		if not obj.team:
 			messages.warning(
 				request,
@@ -2446,12 +2528,55 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 					f"{obj.team.organization} has no EPO credentials yet, so '{obj.name}' is "
 					"skipped until they're added under Organization credentials.",
 				)
+		if obj.method == "pubmed_api":
+			from subscriptions.management.commands.utils.get_credentials import (
+				get_ncbi_credentials,
+			)
+
+			api_key, _email, _tool = get_ncbi_credentials(obj.team.organization)
+			if not api_key:
+				messages.warning(
+					request,
+					f"{obj.team.organization} has no NCBI API key, so '{obj.name}' runs at the "
+					"shared keyless rate (3 requests a second). Add a key under Organization credentials.",
+				)
 		source_type = source_types.type_for(obj.source_for, obj.method)
 		if source_type and not source_type.fetched:
 			messages.info(
 				request,
 				f"'{obj.name}' is source ID {obj.pk}: quote it as \"source_id\" when "
 				"sending content through the API.",
+			)
+
+	def _report_pubmed_check(self, request, obj, form):
+		"""Tell the editor what the 30-day check found, and warn about a broad search."""
+		if getattr(form, "pubmed_unreachable", False):
+			messages.warning(
+				request,
+				f"PubMed could not be reached, so the search for '{obj.name}' was not checked. "
+				"Saved anyway; the first run will show whether it works.",
+			)
+			return
+		check = getattr(form, "pubmed_check", None)
+		if check is None:
+			return
+		messages.info(
+			request,
+			f"PubMed found {check.count} papers created in the last 30 days for this search. "
+			f"PubMed read it as: {check.querytranslation}",
+		)
+		if check.warnings:
+			messages.warning(
+				request,
+				"PubMed warned about this search: " + "; ".join(check.warnings)
+				+ ". It may not be searching what you meant.",
+			)
+		if check.count > PUBMED_VOLUME_WARNING_PER_30_DAYS:
+			messages.warning(
+				request,
+				f"That is more than {PUBMED_VOLUME_WARNING_PER_30_DAYS} new papers in 30 days "
+				"(all the PubMed RSS sources together bring in about 1,400 a month). The search "
+				"may be broader than you meant: narrow it, or leave out publication types.",
 			)
 
 	def last_article_date(self, obj):

@@ -591,6 +591,7 @@ class Sources(models.Model):
 		("ctgov_api", "ClinicalTrials.gov API"),
 		("ctis_api", "CTIS Public API"),
 		("epo_ops", "EPO Open Patent Services"),
+		("pubmed_api", "PubMed API"),
 	]
 	active = models.BooleanField(default=True)
 	source_id = models.AutoField(primary_key=True)
@@ -656,6 +657,26 @@ class Sources(models.Model):
 			'CQL query for EPO Open Patent Services, e.g. ta="multiple sclerosis" and cpc=/low A61P25/00. '
 			"Leave out any publication date (pd) clause: the importer adds the date window itself. "
 			'Only used when method is "EPO Open Patent Services".'
+		),
+	)
+	pubmed_query = models.TextField(
+		blank=True,
+		null=True,
+		verbose_name="PubMed search",
+		help_text=(
+			'PubMed search, e.g. "multiple sclerosis"[MeSH Terms] AND (remyelination OR myelin repair). '
+			"Leave out any date clause: the importer adds the creation-date window itself. "
+			'Only used when method is "PubMed API".'
+		),
+	)
+	excluded_publication_types = models.ManyToManyField(
+		"PublicationType",
+		blank=True,
+		related_name="excluded_by_sources",
+		help_text=(
+			"Records with any of these PubMed publication types are left out. Excluding a "
+			"type also excludes the types under it in PubMed's hierarchy (excluding Review "
+			'also excludes Systematic Review). Only used when method is "PubMed API".'
 		),
 	)
 	last_successful_fetch_at = models.DateTimeField(

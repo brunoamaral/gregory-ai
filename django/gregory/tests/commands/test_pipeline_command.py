@@ -41,6 +41,7 @@ class PipelineCommandTest(TestCase):
 		called_commands = [c[0][0] if c[0] else None for c in mock_call.call_args_list]
 		standard = [
 			"feedreader_articles",
+			"feedreader_articles_pubmed",
 			"feedreader_trials",
 			"feedreader_trials_ctgov",
 			"find_doi",

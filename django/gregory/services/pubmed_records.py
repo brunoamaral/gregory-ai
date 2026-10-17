@@ -172,7 +172,10 @@ def _claim_identifiers(article, record, content, result, *, fill_doi):
 
 def _upsert_terms(model, entries):
 	"""Upsert rows by ``ui`` and return ``{ui: row}``. ``entries`` is ``{ui: fields}``;
-	names are overwritten so NLM's renames flow through."""
+	names are overwritten so NLM's renames flow through, cut to the column's length so a
+	freak long name can't fail the whole record."""
+	limit = model._meta.get_field("name").max_length
+	entries = {ui: {**fields, "name": fields["name"][:limit]} for ui, fields in entries.items()}
 	rows = {r.ui: r for r in model.objects.filter(ui__in=list(entries))}
 	missing = [model(ui=ui, **fields) for ui, fields in entries.items() if ui not in rows]
 	if missing:

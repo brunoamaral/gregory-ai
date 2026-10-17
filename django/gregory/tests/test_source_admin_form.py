@@ -17,9 +17,12 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import RequestFactory, TestCase
 from organizations.models import Organization
 
+from unittest.mock import patch
+
 from gregory import source_types
 from gregory.admin import SourceAdminForm
 from gregory.models import Sources, Subject, Team
+from gregory.utils.ncbi import ESearchResult
 
 User = get_user_model()
 
@@ -30,6 +33,7 @@ SETTINGS = {
 	"ctgov": {"ctgov_search_condition": "multiple sclerosis"},
 	"ctis": {"ctis_search_criteria": '{"medicalCondition": "Multiple Sclerosis"}'},
 	"epo_ops": {"ops_cql_query": 'ta="multiple sclerosis" and cpc=/low A61P25/00'},
+	"pubmed": {"pubmed_query": '"multiple sclerosis"[MeSH Terms] AND remyelination'},
 }
 
 
@@ -49,6 +53,12 @@ class SourceAdminFormTests(TestCase):
 		self.user = User.objects.create_superuser("admin-source-form", "a@example.org", "x")
 		self.request = RequestFactory().get("/admin/gregory/sources/add/")
 		self.request.user = self.user
+		# The PubMed type checks its search on PubMed; tests never reach NCBI.
+		patcher = patch("gregory.admin.NcbiClient")
+		patcher.start().for_site.return_value.esearch.return_value = ESearchResult(
+			count=1, querytranslation="translated"
+		)
+		self.addCleanup(patcher.stop)
 
 	def form(self, source_type, instance=None, **data):
 		payload = {
@@ -215,6 +225,7 @@ class SourceTypesTests(TestCase):
 		fetched = {(t.source_for, t.method) for t in source_types.SOURCE_TYPES if t.fetched}
 		self.assertEqual(fetched, {
 			("science paper", "rss"),  # feedreader_articles
+			("science paper", "pubmed_api"),  # feedreader_articles_pubmed
 			("trials", "rss"),  # feedreader_trials
 			("trials", "ctgov_api"),  # feedreader_trials_ctgov
 			("trials", "ctis_api"),  # feedreader_trials_ctis
