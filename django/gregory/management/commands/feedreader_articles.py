@@ -6,7 +6,7 @@ from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.services.article_merge import assign_doi_or_merge
@@ -790,8 +790,7 @@ class Command(GregoryBaseCommand):
 		if published_date is not None and article.published_date is None:
 			article.published_date = published_date
 			changed_fields.append("published_date")
-		if self._claim_pmid(article, pmid):
-			changed_fields.append("pmid")
+		self._claim_pmid(article, pmid)
 		if changed_fields:
 			article.save(update_fields=changed_fields)
 			self.log(
@@ -901,7 +900,16 @@ class Command(GregoryBaseCommand):
 		"""
 		if pmid:
 			article = Articles.objects.filter(pmid=pmid).first()
-			if article:
+			if article and doi and article.doi and article.doi.lower() != doi.lower():
+				# Same PMID but different DOIs: two records, not one paper (e.g. a
+				# PubMed link on a corrected version). Let the DOI lookup decide
+				# rather than overwriting this row with the other DOI's CrossRef data.
+				self.log(
+					f"  PMID {pmid} belongs to article {article.article_id} with DOI "
+					f"{article.doi}, but the entry's DOI is {doi}; matching by DOI.",
+					level=2,
+				)
+			elif article:
 				# A PMID row with no DOI must not take a DOI that another row holds
 				# (unique_article_doi): fall through to the DOI row instead and let
 				# _claim_pmid report the duplicate pair.
@@ -985,7 +993,6 @@ class Command(GregoryBaseCommand):
 				)
 
 			if self._claim_pmid(science_paper, pmid):
-				science_paper.save(update_fields=["pmid"])
 				self.log(
 					f"  Added PMID {pmid} to existing article: {science_paper.title}",
 					level=2,
@@ -1025,7 +1032,9 @@ class Command(GregoryBaseCommand):
 				"crossref_check": crossref_check,
 				"access": access,
 			}
-			if pmid:
+			# Not when another row holds it (same PMID, different DOI): that is a
+			# duplicate pair to report, and the unique constraint would reject it.
+			if pmid and not Articles.objects.filter(pmid=pmid).exists():
 				article_data["pmid"] = pmid
 			if doi:
 				article_data.update(
@@ -1048,10 +1057,12 @@ class Command(GregoryBaseCommand):
 		return science_paper, created, crossref_was_updated
 
 	def _claim_pmid(self, article: Articles, pmid: Optional[str]) -> bool:
-		"""Set ``pmid`` on ``article`` (in memory; the caller saves) when it has none.
+		"""Set and save ``pmid`` on ``article`` when it has none. True if it was set.
 
 		Skips and logs when another article already holds the PMID: that is a
-		duplicate pair for merge_duplicate_articles, never an overwrite.
+		duplicate pair for merge_duplicate_articles, never an overwrite. The save is
+		in its own savepoint, so a concurrent writer claiming the PMID between the
+		check and the save costs only the PMID, not the rest of the entry.
 		"""
 		if not pmid or article.pmid:
 			return False
@@ -1066,6 +1077,17 @@ class Command(GregoryBaseCommand):
 			)
 			return False
 		article.pmid = pmid
+		try:
+			with transaction.atomic():
+				article.save(update_fields=["pmid"])
+		except IntegrityError:
+			article.pmid = None
+			self.log(
+				f"  PMID {pmid} was claimed by another article meanwhile; "
+				f"not setting it on article {article.article_id}.",
+				level=2,
+			)
+			return False
 		return True
 
 	def article_needs_update(

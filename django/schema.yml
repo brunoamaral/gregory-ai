@@ -7916,8 +7916,6 @@ components:
           type: array
           items:
             type: string
-            description: Overwritten by ID on every sync and ingest, so NLM's renames
-              flow through.
           readOnly: true
         mesh:
           type: array
@@ -7925,7 +7923,10 @@ components:
             $ref: '#/components/schemas/ArticleMeshHeading'
           readOnly: true
         keywords:
-          description: Author keywords from PubMed, in the order given.
+          type: array
+          items:
+            type: string
+          readOnly: true
         access:
           nullable: true
           oneOf:
@@ -7965,6 +7966,7 @@ components:
       - authors
       - clinical_trials
       - discovery_date
+      - keywords
       - link
       - mesh
       - ml_predictions
@@ -8013,6 +8015,7 @@ components:
         qualifier:
           type: string
           readOnly: true
+          nullable: true
         major_topic:
           type: boolean
           description: MajorTopicYN of the descriptor on its own row, of the qualifier

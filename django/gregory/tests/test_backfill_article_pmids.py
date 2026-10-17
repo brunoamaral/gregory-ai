@@ -75,12 +75,13 @@ class BackfillArticlePmidsTests(TestCase):
 		self.assertIn(str(b.article_id), output)
 
 	def test_pmid_already_held_by_another_article_is_not_reused(self):
-		make(7, pmid="777")
+		held = make(7, pmid="777")
 		b = make(8, link="https://pubmed.ncbi.nlm.nih.gov/777/")
 		output = run()
 		b.refresh_from_db()
 		self.assertIsNone(b.pmid)
 		self.assertIn("duplicate PMID 777", output)
+		self.assertIn(f"{held.article_id} already holds it", output)
 
 	def test_article_naming_two_pmids_is_skipped(self):
 		a = make(
@@ -99,3 +100,30 @@ class BackfillArticlePmidsTests(TestCase):
 		a.refresh_from_db()
 		self.assertIsNone(a.pmid)
 		self.assertIn("Would set 1 PMIDs", output)
+
+	def test_ambiguous_article_keeps_other_articles_naming_its_pmids_out(self):
+		x = make(
+			11,
+			link="https://pubmed.ncbi.nlm.nih.gov/1101/",
+			links={"x": "https://pubmed.ncbi.nlm.nih.gov/1102/"},
+		)
+		y = make(12, link="https://pubmed.ncbi.nlm.nih.gov/1101/")
+		output = run()
+		y.refresh_from_db()
+		self.assertIsNone(y.pmid)
+		self.assertIn(f"duplicate PMID 1101: articles [{x.article_id}, {y.article_id}]", output)
+
+	def test_rows_that_changed_since_the_scan_are_skipped_not_overwritten(self):
+		from gregory.management.commands.backfill_article_pmids import Command
+
+		taken = make(13, pmid="1301")
+		changed = make(14, pmid="999")
+		free = make(15)
+		skipped = Command()._write({"1301": free.article_id, "1400": changed.article_id, "1500": free.article_id})
+		changed.refresh_from_db()
+		free.refresh_from_db()
+		self.assertEqual(changed.pmid, "999")
+		self.assertEqual(free.pmid, "1500")
+		self.assertIn(("1301", free.article_id), skipped)
+		self.assertIn(("1400", changed.article_id), skipped)
+		self.assertEqual(taken.pmid, "1301")

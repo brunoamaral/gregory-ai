@@ -139,23 +139,28 @@ class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 		self.assertEqual(survivor.pubmed_status, "Publisher")
 		self.assertEqual(survivor.pubmed_checked_at, keep_checked)
 
-	def test_publication_types_and_mesh_are_unioned(self):
+	def pubmed_pair(self, suffix, keep_pmid, loser_pmid):
 		keep, loser = self.make_dup_pair(
-			"10.1/pm2", links=("https://ex.org/keep2", "https://ex.org/loser2")
+			f"10.1/{suffix}", links=(f"https://ex.org/k{suffix}", f"https://ex.org/l{suffix}")
 		)
-		shared = PublicationType.objects.create(ui="D1", name="Journal Article")
-		extra = PublicationType.objects.create(ui="D2", name="Review")
-		keep.publication_types.add(shared)
-		loser.publication_types.add(shared, extra)
-		term = MeshTerm.objects.create(ui="D100", name="Multiple Sclerosis", kind="descriptor")
-		ArticleMeshHeading.objects.create(article=keep, descriptor=term)
-		ArticleMeshHeading.objects.create(article=loser, descriptor=term)
-		other = MeshTerm.objects.create(ui="D101", name="Humans", kind="descriptor")
-		ArticleMeshHeading.objects.create(article=loser, descriptor=other)
+		Articles.objects.filter(pk=keep.pk).update(pmid=keep_pmid)
+		Articles.objects.filter(pk=loser.pk).update(pmid=loser_pmid)
+		keep.refresh_from_db()
+		loser.refresh_from_db()
+		self.shared_type = PublicationType.objects.get_or_create(ui="D1", defaults={"name": "Journal Article"})[0]
+		self.extra_type = PublicationType.objects.get_or_create(ui="D2", defaults={"name": "Review"})[0]
+		ms = MeshTerm.objects.get_or_create(ui="D100", defaults={"name": "Multiple Sclerosis", "kind": "descriptor"})[0]
+		humans = MeshTerm.objects.get_or_create(ui="D101", defaults={"name": "Humans", "kind": "descriptor"})[0]
+		for article, term, ptype in ((keep, ms, self.shared_type), (loser, humans, self.extra_type)):
+			article.publication_types.add(ptype)
+			ArticleMeshHeading.objects.create(article=article, descriptor=term)
+		return keep, loser
 
+	def test_survivor_without_a_pubmed_record_takes_the_removed_types_and_mesh(self):
+		keep, loser = self.pubmed_pair("pm2", None, "222")
 		with transaction.atomic():
 			survivor = merge_articles(keep, [loser])
-
+		self.assertEqual(survivor.pmid, "222")
 		self.assertEqual(
 			set(survivor.publication_types.values_list("name", flat=True)),
 			{"Journal Article", "Review"},
@@ -164,8 +169,36 @@ class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 			set(survivor.mesh_headings.values_list("descriptor__name", flat=True)),
 			{"Multiple Sclerosis", "Humans"},
 		)
-		self.assertEqual(survivor.mesh_headings.count(), 2)
 
+	def test_survivor_with_a_pubmed_record_keeps_only_its_own_types_and_mesh(self):
+		keep, loser = self.pubmed_pair("pm3", "111", "222")
+		out = StringIO()
+		with transaction.atomic():
+			survivor = merge_articles(keep, [loser], stdout=out)
+		self.assertEqual(survivor.pmid, "111")
+		self.assertEqual(
+			set(survivor.publication_types.values_list("name", flat=True)), {"Journal Article"}
+		)
+		self.assertEqual(
+			list(survivor.mesh_headings.values_list("descriptor__name", flat=True)),
+			["Multiple Sclerosis"],
+		)
+		self.assertIn("PMIDs differ (111 kept, 222 dropped)", out.getvalue())
+		# the removed article's PubMed rows go with it, and the shared reference rows stay
+		self.assertEqual(ArticleMeshHeading.objects.count(), 1)
+		self.assertTrue(PublicationType.objects.filter(ui="D2").exists())
+
+	def test_second_removed_article_does_not_mix_in_after_the_first_set_the_record(self):
+		keep, first = self.pubmed_pair("pm4", None, "222")
+		second = self.make_article(link="https://ex.org/second", doi=None)
+		third_type = PublicationType.objects.create(ui="D3", name="Case Reports")
+		second.publication_types.add(third_type)
+		Articles.objects.filter(pk=second.pk).update(pmid="333")
+		second.refresh_from_db()
+		with transaction.atomic():
+			survivor = merge_articles(keep, [first, second])
+		self.assertEqual(survivor.pmid, "222")
+		self.assertNotIn("Case Reports", survivor.publication_types.values_list("name", flat=True))
 	def test_unions_m2m_and_deletes_loser(self):
 		keep, loser = self.make_dup_pair(
 			"10.1/x", links=("https://ex.org/keep", "https://ex.org/loser")

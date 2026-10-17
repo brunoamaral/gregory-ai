@@ -112,3 +112,36 @@ class FeedreaderPmidTests(TestCase):
 		self.assertEqual(Articles.objects.count(), 2)
 		doi_row.refresh_from_db()
 		self.assertIsNone(doi_row.pmid)
+		self.assertIsNone(Articles.objects.get(pmid="38812345").doi)
+
+	def test_pmid_row_with_a_different_doi_is_not_overwritten(self):
+		other = Articles.objects.create(
+			title="Corrected version", link="https://ex.org/o", doi="10.1000/other",
+			summary="Original summary", pmid="38812345",
+		)
+		self.run_feed([entry()])
+		other.refresh_from_db()
+		self.assertEqual(other.doi, "10.1000/other")
+		self.assertEqual(other.summary, "Original summary")
+		new = Articles.objects.get(doi="10.1000/alpha")
+		self.assertNotEqual(new.pk, other.pk)
+		self.assertIsNone(new.pmid)
+
+	def test_pmid_claimed_meanwhile_costs_only_the_pmid(self):
+		article = Articles.objects.create(title="T", link="https://ex.org/t", doi="10.1000/alpha")
+		cmd = Command()
+
+		real_filter = Articles.objects.filter
+
+		def claimed_after_check(*args, **kwargs):
+			result = real_filter(*args, **kwargs)
+			if kwargs.get("pmid") == "555" and "_raced" not in claimed_after_check.__dict__:
+				claimed_after_check._raced = True
+				# the check sees no holder; then someone else takes the PMID
+				Articles.objects.create(title="Racer", link="https://ex.org/r", pmid="555")
+			return result
+
+		with patch.object(Articles.objects, "filter", side_effect=claimed_after_check):
+			self.assertFalse(cmd._claim_pmid(article, "555"))
+		article.refresh_from_db()
+		self.assertIsNone(article.pmid)

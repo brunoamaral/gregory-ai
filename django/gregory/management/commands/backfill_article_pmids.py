@@ -6,7 +6,11 @@ is set only where the article has none and the PMID is unused. A PMID found on
 two or more articles (or already held by another article) is set on none of
 them: those articles are duplicates, and are listed so ``merge_duplicate_articles``
 can deal with them first. An article whose URLs name two different PMIDs is
-skipped too.
+skipped too, and counts towards the duplicate check of each PMID it names.
+
+Writes use ``update()``, which records no article history rows. Run it outside
+the pipeline window: each row is only set while its pmid is still empty, so a
+concurrent importer cannot be overwritten, but it can make a row get skipped.
 
 Run:
 	docker exec gregory python manage.py backfill_article_pmids --dry-run
@@ -16,11 +20,10 @@ Run:
 from collections import defaultdict
 
 from django.core.management.base import BaseCommand
+from django.db import IntegrityError, transaction
 
 from gregory.models import Articles
 from gregory.utils.doi_utils import extract_pmid_from_url
-
-BATCH_SIZE = 1000
 
 
 def pmids_in_article_urls(link, links):
@@ -50,11 +53,12 @@ class Command(BaseCommand):
 	def handle(self, *args, **options):
 		dry_run = options["dry_run"]
 
-		held = set(
-			Articles.objects.filter(pmid__isnull=False).values_list("pmid", flat=True)
+		held = dict(
+			Articles.objects.filter(pmid__isnull=False).values_list("pmid", "article_id")
 		)
 
 		by_pmid = defaultdict(list)
+		named_by_ambiguous = defaultdict(list)
 		ambiguous = []
 		scanned = 0
 		for article_id, link, links in (
@@ -66,41 +70,58 @@ class Command(BaseCommand):
 			pmids = pmids_in_article_urls(link, links)
 			if len(pmids) > 1:
 				ambiguous.append((article_id, sorted(pmids)))
+				for pmid in pmids:
+					# Never set on this article, but it may be the same paper as another
+					# one naming one of these PMIDs: keep that one out of the backfill too.
+					named_by_ambiguous[pmid].append(article_id)
 			elif pmids:
 				by_pmid[pmids.pop()].append(article_id)
 
 		to_set = {}
 		duplicates = {}
 		for pmid, article_ids in by_pmid.items():
+			article_ids = sorted(article_ids + named_by_ambiguous.get(pmid, []))
 			if pmid in held or len(article_ids) > 1:
 				duplicates[pmid] = article_ids
 			else:
 				to_set[pmid] = article_ids[0]
 
-		if not dry_run:
-			self._write(to_set)
+		skipped = [] if dry_run else self._write(to_set)
+		set_count = len(to_set) - len(skipped)
 
 		verb = "Would set" if dry_run else "Set"
 		self.stdout.write(f"Scanned {scanned} articles without a PMID.")
-		self.stdout.write(f"{verb} {len(to_set)} PMIDs.")
+		self.stdout.write(f"{verb} {set_count if not dry_run else len(to_set)} PMIDs.")
+		if skipped:
+			self.stdout.write(
+				f"Skipped {len(skipped)} rows that changed since the scan: "
+				+ ", ".join(f"article {a} (PMID {p})" for p, a in skipped)
+			)
 		self.stdout.write(
 			f"Left alone: {len(duplicates)} PMIDs shared by several articles or already "
 			f"held by another one, {len(ambiguous)} articles naming several PMIDs."
 		)
 		for pmid, article_ids in sorted(duplicates.items()):
-			holder = " (+ one already holding it)" if pmid in held else ""
-			self.stdout.write(f"  duplicate PMID {pmid}: articles {article_ids}{holder}")
+			ids = ([held[pmid]] if pmid in held else []) + article_ids
+			self.stdout.write(
+				f"  duplicate PMID {pmid}: articles {ids}"
+				+ (f" ({held[pmid]} already holds it)" if pmid in held else "")
+			)
 		for article_id, pmids in ambiguous:
 			self.stdout.write(f"  ambiguous: article {article_id} names PMIDs {pmids}")
 
 	def _write(self, to_set):
-		items = list(to_set.items())
-		for start in range(0, len(items), BATCH_SIZE):
-			chunk = items[start : start + BATCH_SIZE]
-			articles = Articles.objects.in_bulk([article_id for _, article_id in chunk])
-			batch = []
-			for pmid, article_id in chunk:
-				article = articles[article_id]
-				article.pmid = pmid
-				batch.append(article)
-			Articles.objects.bulk_update(batch, ["pmid"])
+		"""Set each PMID where the article still has none. Returns the (pmid, article_id)
+		pairs that could not be set because the row changed since the scan."""
+		skipped = []
+		for pmid, article_id in to_set.items():
+			try:
+				with transaction.atomic():
+					updated = Articles.objects.filter(
+						pk=article_id, pmid__isnull=True
+					).update(pmid=pmid)
+			except IntegrityError:
+				updated = 0
+			if not updated:
+				skipped.append((pmid, article_id))
+		return skipped

@@ -3,7 +3,7 @@
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 
 from gregory.models import PublicationType
@@ -84,3 +84,28 @@ class SyncPublicationTypesTests(TestCase):
 		bad = {"ds_meshterms": ["No UI"], "ds_scopenote": ""}
 		run(fake_client({"1": bad, "68016428": ENTRY_JOURNAL}))
 		self.assertEqual(PublicationType.objects.count(), 1)
+
+	def test_skipped_entries_are_counted(self):
+		output = run(fake_client({"1": {"ds_meshterms": ["No UI"]}, "68016428": ENTRY_JOURNAL}))
+		self.assertIn("1 skipped", output)
+
+	def test_missing_mesh_ui_falls_back_to_the_uid(self):
+		entry = {"ds_meshterms": ["Journal Article"], "ds_scopenote": ""}
+		run(fake_client({"68016428": entry}))
+		self.assertEqual(PublicationType.objects.get(ui="D016428").name, "Journal Article")
+
+	def test_a_type_created_meanwhile_does_not_crash_the_sync(self):
+		client = fake_client({"68016428": ENTRY_JOURNAL})
+		real = client.esummary.side_effect
+
+		def create_first(db, ids):
+			PublicationType.objects.create(ui="D016428", name="Created by ingest")
+			return real(db, ids)
+
+		client.esummary.side_effect = create_first
+		run(client)
+		self.assertEqual(PublicationType.objects.filter(ui="D016428").count(), 1)
+
+	def test_unknown_organization_is_a_clean_error(self):
+		with self.assertRaises(CommandError):
+			call_command("sync_publication_types", organization=999999, stdout=StringIO())

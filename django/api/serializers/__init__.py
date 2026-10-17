@@ -574,7 +574,7 @@ class EditorialFieldMixin(_EditorialIncludeMixin):
 class ArticleMeshHeadingSerializer(serializers.ModelSerializer):
 	descriptor = serializers.CharField(source="descriptor.name", read_only=True)
 	qualifier = serializers.CharField(
-		source="qualifier.name", read_only=True, default=None
+		source="qualifier.name", read_only=True, default=None, allow_null=True
 	)
 
 	class Meta:
@@ -599,9 +599,8 @@ class ArticleSerializer(
 	)
 	clinical_trials = serializers.SerializerMethodField()
 	editorial = serializers.SerializerMethodField()
-	publication_types = serializers.SlugRelatedField(
-		many=True, read_only=True, slug_field="name"
-	)
+	publication_types = serializers.SerializerMethodField()
+	keywords = serializers.ListField(child=serializers.CharField(), read_only=True)
 	mesh = ArticleMeshHeadingSerializer(
 		source="mesh_headings", many=True, read_only=True
 	)
@@ -638,6 +637,11 @@ class ArticleSerializer(
 			"clinical_trials",
 		]
 		read_only_fields = ("discovery_date", "ml_predictions", "ml_score", "clinical_trials")
+
+	@extend_schema_field(serializers.ListField(child=serializers.CharField()))
+	def get_publication_types(self, obj):
+		"""PubMed publication type names, e.g. ``["Journal Article", "Review"]``."""
+		return [t.name for t in obj.publication_types.all()]
 
 	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
