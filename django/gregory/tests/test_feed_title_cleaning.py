@@ -82,6 +82,38 @@ class FeedTitleCleaningTest(TestCase):
 		)
 		self.assertEqual(result, "ABC <sub>x</sub> <sup>2</sup> <i>gene</i>")
 
+	def test_clean_title_keeps_text_after_a_literal_less_than(self):
+		"""A '<' that does not start a tag is kept, not read as markup (#935)."""
+		cases = {
+			"Children aged <or=5 years with fever": "Children aged <or=5 years with fever",
+			"Effect of a<b on x": "Effect of a<b on x",
+			"T cells <in vivo> and more": "T cells <in vivo> and more",
+			"IL-2 >or=3 doses: a trial": "IL-2 >or=3 doses: a trial",
+		}
+		for raw, expected in cases.items():
+			with self.subTest(raw=raw):
+				self.assertEqual(self.processor.clean_title(raw), expected)
+
+	def test_clean_title_keeps_text_after_an_escaped_less_than(self):
+		"""&lt; is unescaped to a literal '<', which must not truncate the title."""
+		result = self.processor.clean_title("Children aged &lt;or=5 years with fever")
+		self.assertEqual(result, "Children aged <or=5 years with fever")
+
+	def test_clean_title_still_parses_escaped_markup(self):
+		"""Double-encoded markup (&lt;i&gt;...&lt;/i&gt;) still becomes a real tag."""
+		result = self.processor.clean_title("Juice from &lt;i&gt;Morinda citrifolia&lt;/i&gt;: a case")
+		self.assertEqual(result, "Juice from <i>Morinda citrifolia</i>: a case")
+
+	def test_clean_title_literal_less_than_beside_markup(self):
+		"""A literal '<' next to real tags keeps both the text and the tags."""
+		result = self.processor.clean_title("<scp>IL</scp>-2 in children <or=5 years: <i>in vivo</i>")
+		self.assertEqual(result, "IL-2 in children <or=5 years: <i>in vivo</i>")
+
+	def test_clean_title_strips_namespaced_tags(self):
+		"""JATS/MathML tags with a namespace prefix are stripped, text kept."""
+		result = self.processor.clean_title("x <jats:italic>y</jats:italic> z")
+		self.assertEqual(result, "x y z")
+
 	def test_keyword_filter_matches_across_markup_and_whitespace(self):
 		"""Keyword phrases match even when the raw feed title has inline tags
 		or pretty-printed newlines (regression for title-based filtering)."""
