@@ -184,6 +184,7 @@ class Command(BaseCommand):
 
 		if update_fields:
 			article.crossref_check = timezone.now()
+			update_fields.append("crossref_check")
 			article.save(update_fields=update_fields)
 
 			# Log the changes using Django Simple History
