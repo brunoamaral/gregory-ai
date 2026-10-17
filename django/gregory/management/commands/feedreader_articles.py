@@ -27,6 +27,16 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 
+def has_pubmed_record(article) -> bool:
+	"""True when a PubMed record has actually been applied to the article.
+
+	``pubmed_checked_at`` alone isn't enough: refresh_pubmed_records also stamps it on
+	PMIDs NCBI didn't return, where there is no PubMed title or abstract to protect.
+	``apply_pubmed_record`` always writes the record's status, which that stamp doesn't.
+	"""
+	return bool(article.pubmed_checked_at and article.pubmed_status)
+
+
 class FeedProcessor(ABC):
 	"""Abstract base class for RSS feed processors."""
 
@@ -703,15 +713,16 @@ class Command(GregoryBaseCommand):
 		The existence check runs BEFORE any CrossRef call: most entries in
 		every feed are already ingested, and refreshing them cost a CrossRef +
 		Unpaywall round-trip per entry per run for nothing. An existing
-		article that already has CrossRef data on file only gets its
-		feed-level facts merged; the full CrossRef path runs for new articles
-		and for existing ones never checked against CrossRef.
+		article that already has CrossRef data on file, or a PubMed record
+		applied, only gets its feed-level facts merged; the full CrossRef path
+		runs for new articles and for existing ones never checked against
+		CrossRef.
 		"""
 		existing = self.find_existing_article(doi, title, link, pmid=pmid)
 		# An article with CrossRef data, or whose PubMed record has been applied, only
 		# gets the feed's URL, gap-filling and relationships: PubMed's title and full
 		# abstract must not be replaced by a feed's shorter text.
-		if existing is not None and (existing.crossref_check or existing.pubmed_checked_at):
+		if existing is not None and (existing.crossref_check or has_pubmed_record(existing)):
 			self.merge_feed_entry_into_article(
 				existing, doi, feed_summary, link, published_date, source, pmid=pmid
 			)
@@ -768,15 +779,15 @@ class Command(GregoryBaseCommand):
 		source: Sources,
 		pmid: Optional[str] = None,
 	):
-		"""Merge feed-level facts into an article whose CrossRef data is on file.
+		"""Merge feed-level facts into an article whose CrossRef data or PubMed record is on file.
 
-		CrossRef-derived fields (title, summary, journal, publisher, access)
+		CrossRef- and PubMed-derived fields (title, summary, journal, publisher, access)
 		are authoritative and left alone; the feed only contributes its URL,
 		a summary/date when none exists yet, and the source relationships.
+		Returns the surviving article (a DOI collision can merge it into another).
 		"""
-		# The DOI-first lookup in find_existing_article matches case-sensitively,
-		# so a case-only variant of an existing DOI can reach here on a row found
-		# by link/title. Route the assignment through the collision guard so it
+		# find_existing_article can return a row found by PMID, link or title whose DOI
+		# differs from this entry's only in case. Route the assignment through the collision guard so it
 		# merges rather than tripping the case-insensitive uniqueness constraint.
 		if doi and not article.doi:
 			with transaction.atomic():
@@ -943,17 +954,24 @@ class Command(GregoryBaseCommand):
 			if article:
 				return article
 
-		article = Articles.objects.filter(title=title).first()
+		# Two PubMed records can share a generic title ("Erratum", "Correction"):
+		# different PMIDs are different papers, so such a candidate is passed over and
+		# the next one with that title (maybe one without a PMID) is considered.
+		article, passed_over = None, None
+		wanted = str(pmid).strip() if pmid else None
+		for candidate in Articles.objects.filter(title=title).iterator(chunk_size=20):
+			if wanted and candidate.pmid and candidate.pmid != wanted:
+				passed_over = passed_over or candidate
+				continue
+			article = candidate
+			break
+		if article is None and passed_over is not None:
+			self.log(
+				f"  Title matches article {passed_over.article_id} but PMIDs differ "
+				f"({passed_over.pmid} vs {wanted}); creating a new article.",
+				level=2,
+			)
 		if article:
-			if pmid and article.pmid and article.pmid != pmid:
-				# Two PubMed records can share a generic title ("Erratum", "Correction"):
-				# different PMIDs are different papers.
-				self.log(
-					f"  Title matches article {article.article_id} but PMIDs differ "
-					f"({article.pmid} vs {pmid}); creating a new article.",
-					level=2,
-				)
-				return None
 			if doi and article.doi and article.doi.lower() != doi.lower():
 				self.log(
 					f"  Title matches article {article.article_id} but DOIs differ "
@@ -991,7 +1009,7 @@ class Command(GregoryBaseCommand):
 
 		crossref_was_updated = False
 
-		if existing_article and existing_article.pubmed_checked_at:
+		if existing_article and has_pubmed_record(existing_article):
 			# PubMed's record is on file: the feed only fills gaps (see
 			# process_article_with_doi).
 			merged = self.merge_feed_entry_into_article(

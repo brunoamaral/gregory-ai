@@ -165,6 +165,7 @@ class RssFillsGapsOnlyAfterPubmedTests(FeedBase):
 			doi="10.1000/alpha",
 			pmid="38812345",
 			pubmed_checked_at=timezone.now(),
+			pubmed_status="MEDLINE",
 		)
 		defaults.update(kwargs)
 		return Articles.objects.create(**defaults)
@@ -182,11 +183,30 @@ class RssFillsGapsOnlyAfterPubmedTests(FeedBase):
 
 	def test_the_feed_still_fills_a_gap(self):
 		article = self.pubmed_article(summary="", published_date=None)
-		self.run_feed([entry(summary="Feed summary fills the gap")])
+		mock_refresh = self.run_feed([entry(summary="Feed summary fills the gap")])
 		article.refresh_from_db()
 		self.assertEqual(article.summary, "Feed summary fills the gap")
 		self.assertIsNotNone(article.published_date)
 		self.assertEqual(article.title, "PubMed title")
+		self.assertIn(PMID_LINK, (article.links or {}).values())
+		mock_refresh.assert_not_called()
+
+	def test_a_pubmed_article_without_a_doi_gains_the_feeds_doi_without_a_crossref_call(self):
+		article = self.pubmed_article(doi=None)
+		mock_refresh = self.run_feed([entry()])
+		article.refresh_from_db()
+		self.assertEqual(article.doi, "10.1000/alpha")
+		self.assertEqual(article.title, "PubMed title")
+		mock_refresh.assert_not_called()
+
+	def test_a_missing_pmid_stamp_is_not_a_pubmed_record(self):
+		# refresh_pubmed_records stamps pubmed_checked_at on PMIDs NCBI didn't return;
+		# there is no PubMed title or abstract on such a row to protect.
+		article = self.pubmed_article(pubmed_status=None)
+		mock_refresh = self.run_feed([entry(title="Feed title")])
+		mock_refresh.assert_called_once()
+		article.refresh_from_db()
+		self.assertEqual(article.title, "Feed title")
 
 	def test_a_doi_less_feed_entry_also_only_fills_gaps(self):
 		article = self.pubmed_article(doi=None)
@@ -215,10 +235,16 @@ class TitleMatchWithDifferentPmidTests(TestCase):
 		Articles.objects.create(title="Erratum", link="https://x.org/1", pmid="111")
 		self.assertIsNone(self.cmd.find_existing_article(None, "Erratum", "https://x.org/2", pmid="222"))
 
-	def test_same_title_same_pmid_is_the_same_paper(self):
+	def test_a_later_candidate_without_a_pmid_is_not_hidden_by_a_rejected_one(self):
+		Articles.objects.create(title="Erratum", link="https://x.org/older")
+		candidate = Articles.objects.get(link="https://x.org/older")
+		Articles.objects.create(title="Erratum", link="https://x.org/newer", pmid="111")  # newer, sorts first
+		found = self.cmd.find_existing_article(None, "Erratum", "https://x.org/new", pmid="222")
+		self.assertEqual(found, candidate)
+
+	def test_an_integer_pmid_is_compared_as_text(self):
 		a = Articles.objects.create(title="Erratum", link="https://x.org/1", pmid="111")
-		found = self.cmd.find_existing_article(None, "Erratum", "https://x.org/2", pmid="111")
-		self.assertEqual(found, a)
+		self.assertEqual(self.cmd.find_existing_article(None, "Erratum", "https://x.org/2", pmid=111), a)
 
 	def test_a_candidate_without_a_pmid_still_matches_by_title(self):
 		a = Articles.objects.create(title="Some title", link="https://x.org/1")
