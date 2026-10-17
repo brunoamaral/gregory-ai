@@ -11,7 +11,7 @@ Responsibilities:
    ``ERROR`` or ``errorlist`` in the body, and caps a result set at 9,999 IDs; a wrong
    or capped result must fail loudly instead of coming back short.
 
-Reference: specs/pubmed-api-refs/PUBMED-API-REFERENCE.md (internal).
+Reference: NCBI's E-utilities documentation, https://www.ncbi.nlm.nih.gov/books/NBK25499/
 """
 
 import fcntl
@@ -36,12 +36,14 @@ RESULT_CAP = 9999
 
 # Above this many IDs, or for a term this long, requests go as POST.
 POST_ID_THRESHOLD = 200
-POST_TERM_LENGTH = 1500
+POST_TERM_LENGTH = 300
 
 KEYLESS_INTERVAL = 1 / 3
 KEYED_INTERVAL = 1 / 10
 REQUEST_TIMEOUT = 30
 RETRY_BACKOFF_SECONDS = (1, 2, 4)
+# 501 and 505 are not transient, so they are not retried.
+RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class NcbiError(Exception):
@@ -66,8 +68,10 @@ class ESearchResult:
 	warnings: list = field(default_factory=list)
 
 
-# Module-level so tests can patch the clock.
-_clock = time.monotonic
+# Module-level so tests can patch the clock. Wall-clock time, not time.monotonic():
+# the timestamp lives in a file that outlives the process, and the monotonic clock
+# restarts when the host reboots, which would leave a "future" stamp behind.
+_clock = time.time
 _sleep = time.sleep
 
 
@@ -86,9 +90,14 @@ def _throttle(bucket, interval):
 		fcntl.flock(f, fcntl.LOCK_EX)
 		try:
 			raw = f.read().strip()
-			last = float(raw) if raw else None
+			try:
+				last = float(raw) if raw else None
+			except ValueError:
+				last = None
 			now = _clock()
-			if last is not None:
+			# A stamp in the future (clock stepped back) is stale, never a reason to
+			# wait: the sleep happens while holding the lock, so it would stall everyone.
+			if last is not None and last <= now:
 				wait = interval - (now - last)
 				if wait > 0:
 					_sleep(wait)
@@ -102,8 +111,7 @@ def _throttle(bucket, interval):
 
 
 def _is_retryable_status(response):
-	code = response.status_code
-	return isinstance(code, int) and (code == 429 or code >= 500)
+	return response.status_code in RETRYABLE_STATUSES
 
 
 def _is_rate_limit_body(data):
@@ -113,10 +121,20 @@ def _is_rate_limit_body(data):
 
 
 class NcbiClient:
-	def __init__(self, api_key=None, email=None, tool=None):
-		self.api_key = api_key or None
-		self.email = email or None
-		self.tool = tool or DEFAULT_TOOL
+	def __init__(
+		self,
+		api_key=None,
+		email=None,
+		tool=None,
+		timeout=REQUEST_TIMEOUT,
+		max_retries=len(RETRY_BACKOFF_SECONDS),
+	):
+		# Stripped: a key pasted into the admin textarea may carry a newline.
+		self.api_key = (api_key or "").strip() or None
+		self.email = (email or "").strip() or None
+		self.tool = (tool or "").strip() or DEFAULT_TOOL
+		self.timeout = timeout
+		self.max_retries = min(max_retries, len(RETRY_BACKOFF_SECONDS))
 
 	@classmethod
 	def for_organization(cls, organization):
@@ -156,38 +174,50 @@ class NcbiClient:
 		return merged
 
 	def _request(self, endpoint, params, *, post=False, expect_json=True):
-		"""Send one throttled request, retrying 429, 5xx and the rate-limit body."""
+		"""Send one throttled request, retrying transient failures.
+
+		Retries 429, 5xx, NCBI's rate-limit body and a non-JSON 200 body.
+		"""
 		url = EUTILS_BASE + endpoint
 		payload = self._params(params)
-		attempts = len(RETRY_BACKOFF_SECONDS) + 1
+		# A keyed request always goes as POST, so the key stays out of the query
+		# string that urllib3 logs at DEBUG.
+		post = post or bool(self.api_key)
+		attempts = self.max_retries + 1
+		problem = ""
 		for attempt in range(attempts):
 			self._throttle()
+			failure = None
 			try:
 				if post:
-					response = requests.post(url, data=payload, timeout=REQUEST_TIMEOUT)
+					response = requests.post(url, data=payload, timeout=self.timeout)
 				else:
-					response = requests.get(url, params=payload, timeout=REQUEST_TIMEOUT)
-				retry = _is_retryable_status(response)
-				if not retry:
+					response = requests.get(url, params=payload, timeout=self.timeout)
+				if _is_retryable_status(response):
+					problem = f"HTTP {response.status_code}"
+				else:
 					response.raise_for_status()
 					if not expect_json:
 						return response.content
 					data = response.json()
-					retry = _is_rate_limit_body(data)
-					if not retry:
+					if _is_rate_limit_body(data):
+						problem = "rate limit exceeded"
+					else:
 						return data
+			except requests.exceptions.JSONDecodeError:
+				problem = "response was not JSON"
 			except requests.RequestException as exc:
-				# The message of a GET failure can carry the full URL, key included.
-				raise NcbiError(
-					f"{endpoint} request failed: {self._scrub(exc)}"
-				) from None
+				# The message of a failure can carry the full URL, key included.
+				failure = f"{endpoint} request failed: {self._scrub(exc)}"
+			if failure:
+				raise NcbiError(failure) from None
 			if attempt < attempts - 1:
 				delay = RETRY_BACKOFF_SECONDS[attempt]
 				logger.warning(
-					"NCBI %s rate limited or unavailable; retrying in %ss", endpoint, delay
+					"NCBI %s: %s; retrying in %ss", endpoint, problem, delay
 				)
 				_sleep(delay)
-		raise NcbiError(f"{endpoint}: still rate limited or unavailable after retries")
+		raise NcbiError(f"{endpoint}: still failing after retries ({problem})")
 
 	# -- E-utilities ------------------------------------------------------
 
@@ -204,7 +234,8 @@ class NcbiClient:
 		)
 		result = data.get("esearchresult") if isinstance(data, dict) else None
 		if not isinstance(result, dict):
-			raise NcbiError("esearch: unexpected response shape")
+			message = data.get("error") if isinstance(data, dict) else None
+			raise NcbiError(f"esearch: {message or 'unexpected response shape'}")
 		if result.get("ERROR"):
 			raise NcbiQueryError(str(result["ERROR"]))
 		errorlist = result.get("errorlist") or {}
@@ -219,7 +250,9 @@ class NcbiClient:
 			count = int(result.get("count", 0))
 		except (TypeError, ValueError):
 			raise NcbiError("esearch: count is not a number") from None
-		wants_ids = params.get("rettype") != "count" and str(params.get("retmax")) != "0"
+		# Only a count search is exempt: a retmax=0 search with usehistory still
+		# leaves a capped set behind for the EFetch that follows.
+		wants_ids = params.get("rettype") != "count"
 		if wants_ids and count >= RESULT_CAP:
 			raise NcbiResultCapError(
 				f"{count} results reach PubMed's {RESULT_CAP} ID cap"

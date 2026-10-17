@@ -16,7 +16,7 @@ import logging
 import re
 from urllib.parse import urlparse
 
-import requests  # noqa: F401  (tests patch gregory.utils.doi_utils.requests.get)
+import requests  # noqa: F401  (kept for tests that patch doi_utils.requests)
 
 from gregory.utils.ncbi import NcbiClient
 
@@ -116,8 +116,10 @@ def resolve_doi_from_pmid(pmid: str) -> str | None:
 	if not pmid:
 		return None
 	try:
-		# Keyless: there is no organisation in this context.
-		data = NcbiClient().esummary("pubmed", [pmid])
+		# Keyless (there is no organisation in this context), with a short leash:
+		# a feed run does one of these per PubMed link, so an NCBI outage must not
+		# cost seconds of retries each.
+		data = NcbiClient(timeout=10, max_retries=1).esummary("pubmed", [pmid])
 		article_ids = data.get("result", {}).get(pmid, {}).get("articleids", [])
 		for article_id in article_ids:
 			if article_id.get("idtype") == "doi":

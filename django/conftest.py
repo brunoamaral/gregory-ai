@@ -28,6 +28,16 @@ from django.db.models.signals import post_migrate, pre_migrate
 
 
 @pytest.fixture(autouse=True)
+def _no_ncbi_throttle(request, monkeypatch):
+	"""Skip the NCBI request throttle, so tests that reach NcbiClient through
+	mocked requests (DOI resolution) neither sleep nor write throttle files to
+	the shared temp dir. test_ncbi_client exercises the throttle itself."""
+	if request.module.__name__.endswith("test_ncbi_client"):
+		return
+	monkeypatch.setattr("gregory.utils.ncbi.NcbiClient._throttle", lambda self: None)
+
+
+@pytest.fixture(autouse=True)
 def _reset_cache_between_tests():
 	"""Clear the Django cache before every test.
 

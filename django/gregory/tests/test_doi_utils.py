@@ -227,6 +227,16 @@ class ResolveDoiFromPmidTests(TestCase):
 			doi = resolve_doi_from_pmid("38812345")
 		self.assertIsNone(doi)
 
+	def test_ncbi_error_returns_none(self):
+		# A real 503 through NcbiClient (retries patched out), not a mocked helper
+		response = MagicMock()
+		response.status_code = 503
+		with patch("gregory.utils.doi_utils.requests.get", return_value=response), patch(
+			"gregory.utils.ncbi._sleep"
+		):
+			doi = resolve_doi_from_pmid("38812345")
+		self.assertIsNone(doi)
+
 	def test_http_error_returns_none(self):
 		with patch(
 			"gregory.utils.doi_utils.requests.get",

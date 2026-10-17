@@ -85,9 +85,9 @@ def get_ncbi_credentials(organization):
 	try:
 		org_creds = organization.credentials
 		return (
-			org_creds.ncbi_api_key or None,
-			org_creds.ncbi_email or None,
-			org_creds.ncbi_tool or None,
+			(org_creds.ncbi_api_key or "").strip() or None,
+			(org_creds.ncbi_email or "").strip() or None,
+			(org_creds.ncbi_tool or "").strip() or None,
 		)
 	except OrganizationCredentials.DoesNotExist:
 		pass

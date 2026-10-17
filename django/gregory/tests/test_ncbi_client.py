@@ -90,6 +90,21 @@ class ThrottleTests(SimpleTestCase):
 		ncbi._throttle("b", 0.5)
 		self.assertEqual(self.sleeps, [])
 
+	def test_future_stamp_does_not_stall(self):
+		# e.g. a stamp from before a reboot or a clock step back
+		path = os.path.join(self.tmp.name, "bucket.throttle")
+		with open(path, "w") as f:
+			f.write(str(self.now + 3_000_000))
+		ncbi._throttle("bucket", 0.5)
+		self.assertEqual(self.sleeps, [])
+
+	def test_corrupt_stamp_does_not_break_requests(self):
+		path = os.path.join(self.tmp.name, "bucket.throttle")
+		with open(path, "w") as f:
+			f.write("not a number")
+		ncbi._throttle("bucket", 0.5)
+		self.assertEqual(self.sleeps, [])
+
 	def test_bucket_file_name_never_contains_the_key(self):
 		client = NcbiClient(api_key="SECRETKEY123")
 		client._throttle()
@@ -108,9 +123,9 @@ class ThrottleTests(SimpleTestCase):
 class ClientRequestTests(SimpleTestCase):
 	def test_every_request_is_identified(self, _throttle):
 		client = NcbiClient(api_key="K", email="a@b.org", tool="mytool")
-		with patch("gregory.utils.ncbi.requests.get", return_value=_response({})) as get:
+		with patch("gregory.utils.ncbi.requests.post", return_value=_response({})) as post:
 			client.esummary("pubmed", ["1"])
-		params = get.call_args.kwargs["params"]
+		params = post.call_args.kwargs["data"]
 		self.assertEqual(params["tool"], "mytool")
 		self.assertEqual(params["email"], "a@b.org")
 		self.assertEqual(params["api_key"], "K")
@@ -123,8 +138,22 @@ class ClientRequestTests(SimpleTestCase):
 		self.assertNotIn("api_key", params)
 		self.assertNotIn("email", params)
 
+	def test_keyed_requests_post_so_the_key_stays_out_of_the_url(self, _throttle):
+		with patch("gregory.utils.ncbi.requests.get") as get, patch(
+			"gregory.utils.ncbi.requests.post", return_value=_response({})
+		) as post:
+			NcbiClient(api_key="K").esummary("pubmed", ["1"])
+		get.assert_not_called()
+		post.assert_called_once()
+
+	def test_key_and_email_are_stripped(self, _throttle):
+		client = NcbiClient(api_key=" K\n", email=" a@b.org ")
+		self.assertEqual((client.api_key, client.email), ("K", "a@b.org"))
+
 	def test_keyed_client_throttles_per_key_bucket(self, throttle):
-		with patch("gregory.utils.ncbi.requests.get", return_value=_response({})):
+		with patch("gregory.utils.ncbi.requests.get", return_value=_response({})), patch(
+			"gregory.utils.ncbi.requests.post", return_value=_response({})
+		):
 			NcbiClient(api_key="K").esummary("pubmed", ["1"])
 			NcbiClient().esummary("pubmed", ["1"])
 		(keyed_bucket, keyed_interval), _ = throttle.call_args_list[0]
@@ -154,7 +183,7 @@ class ClientRequestTests(SimpleTestCase):
 
 	def test_long_term_goes_as_post(self, _throttle):
 		with patch("gregory.utils.ncbi.requests.post", return_value=_response(_esearch_payload())) as post:
-			NcbiClient().esearch("a" * 2000)
+			NcbiClient().esearch("a" * 400)
 		post.assert_called_once()
 
 	def test_retries_429_then_succeeds(self, _throttle):
@@ -176,6 +205,34 @@ class ClientRequestTests(SimpleTestCase):
 		self.assertEqual(data, {"ok": 1})
 		self.assertEqual(get.call_count, 2)
 
+	def test_non_transient_5xx_is_not_retried(self, _throttle):
+		with patch(
+			"gregory.utils.ncbi.requests.get", return_value=_response(status=501)
+		) as get:
+			with self.assertRaises(NcbiError):
+				NcbiClient().esummary("pubmed", ["1"])
+		self.assertEqual(get.call_count, 1)
+
+	def test_non_json_body_is_retried(self, _throttle):
+		bad = _response()
+		bad.json.side_effect = requests.exceptions.JSONDecodeError("x", "", 0)
+		with patch(
+			"gregory.utils.ncbi.requests.get", side_effect=[bad, _response({"ok": 1})]
+		) as get, patch("gregory.utils.ncbi._sleep"):
+			self.assertEqual(NcbiClient().esummary("pubmed", ["1"]), {"ok": 1})
+		self.assertEqual(get.call_count, 2)
+
+	def test_retries_and_timeout_can_be_overridden(self, _throttle):
+		with patch(
+			"gregory.utils.ncbi.requests.get", return_value=_response(status=503)
+		) as get, patch("gregory.utils.ncbi._sleep") as sleep:
+			with self.assertRaises(NcbiError) as ctx:
+				NcbiClient(timeout=10, max_retries=1).esummary("pubmed", ["1"])
+		self.assertEqual(get.call_count, 2)
+		self.assertEqual(get.call_args.kwargs["timeout"], 10)
+		self.assertEqual([c.args[0] for c in sleep.call_args_list], [1])
+		self.assertIn("HTTP 503", str(ctx.exception))
+
 	def test_gives_up_after_three_retries(self, _throttle):
 		with patch(
 			"gregory.utils.ncbi.requests.get", return_value=_response(status=429)
@@ -196,7 +253,7 @@ class ClientRequestTests(SimpleTestCase):
 	def test_errors_never_leak_the_api_key(self, _throttle):
 		url_with_key = "https://eutils.ncbi.nlm.nih.gov/x?api_key=SECRETKEY123"
 		with patch(
-			"gregory.utils.ncbi.requests.get",
+			"gregory.utils.ncbi.requests.post",
 			side_effect=requests.ConnectionError(f"failed for {url_with_key}"),
 		):
 			with self.assertRaises(NcbiError) as ctx:
@@ -207,7 +264,7 @@ class ClientRequestTests(SimpleTestCase):
 
 	def test_logs_never_contain_the_api_key(self, _throttle):
 		with patch(
-			"gregory.utils.ncbi.requests.get", side_effect=[_response(status=429), _response({})]
+			"gregory.utils.ncbi.requests.post", side_effect=[_response(status=429), _response({})]
 		), patch("gregory.utils.ncbi._sleep"):
 			with self.assertLogs("gregory.utils.ncbi", level=logging.DEBUG) as logs:
 				NcbiClient(api_key="SECRETKEY123").esummary("pubmed", ["1"])
@@ -250,6 +307,15 @@ class ESearchTests(SimpleTestCase):
 		with self.assertRaises(NcbiResultCapError):
 			self._search(_esearch_payload(count="9999"), retmax=9999)
 
+	def test_capped_result_raises_for_a_history_search_with_retmax_zero(self, _throttle):
+		with self.assertRaises(NcbiResultCapError):
+			self._search(_esearch_payload(count="12000", idlist=[]), retmax=0, usehistory="y")
+
+	def test_top_level_error_message_is_kept(self, _throttle):
+		with self.assertRaises(NcbiError) as ctx:
+			self._search({"error": "Something broke"})
+		self.assertIn("Something broke", str(ctx.exception))
+
 	def test_capped_count_is_fine_for_a_count_only_search(self, _throttle):
 		result = self._search(_esearch_payload(count="12000", idlist=[]), rettype="count")
 		self.assertEqual(result.count, 12000)
@@ -278,6 +344,10 @@ class GetNcbiCredentialsTests(TestCase):
 			organization=self.org, ncbi_api_key="K", ncbi_email="a@b.org", ncbi_tool="t"
 		)
 		self.assertEqual(get_ncbi_credentials(self.org), ("K", "a@b.org", "t"))
+
+	def test_whitespace_in_the_key_is_stripped(self):
+		OrganizationCredentials.objects.create(organization=self.org, ncbi_api_key=" K\n")
+		self.assertEqual(get_ncbi_credentials(self.org)[0], "K")
 
 	def test_for_organization_builds_a_client(self):
 		OrganizationCredentials.objects.create(
