@@ -286,3 +286,13 @@ class BookkeepingHistoryTests(TestCase):
 		before = a.history.count()
 		apply_pubmed_record(a, SAMPLE["42830590"], is_new=False)
 		self.assertEqual(a.history.count(), before)
+
+
+class HistoryExclusionTests(SimpleTestCase):
+	def test_pubmed_bookkeeping_columns_are_not_in_the_history_table(self):
+		names = {f.name for f in Articles.history.model._meta.get_fields()}
+		for field in ("pubmed_checked_at", "pubmed_status", "keywords", "language"):
+			self.assertNotIn(field, names)
+		# content fields stay tracked
+		for field in ("pmid", "pmcid", "summary"):
+			self.assertIn(field, names)
