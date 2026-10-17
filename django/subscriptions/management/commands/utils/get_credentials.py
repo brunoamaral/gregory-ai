@@ -75,6 +75,26 @@ def get_epo_ops_credentials(organization):
 	return (None, None)
 
 
+def get_ncbi_credentials(organization):
+	"""
+	Resolve NCBI E-utilities credentials for the given organisation.
+
+	Unlike the all-or-nothing EPO helper, each value stands alone: NCBI works keyless,
+	so returns (api_key, email, tool) with any of them None.
+	"""
+	try:
+		org_creds = organization.credentials
+		return (
+			org_creds.ncbi_api_key or None,
+			org_creds.ncbi_email or None,
+			org_creds.ncbi_tool or None,
+		)
+	except OrganizationCredentials.DoesNotExist:
+		pass
+
+	return (None, None, None)
+
+
 def get_postmark_credentials(custom_settings=None, organization=None):
 	"""
 	Resolve Postmark credentials using the fallback chain:
