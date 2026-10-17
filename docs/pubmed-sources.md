@@ -98,6 +98,33 @@ docker exec gregory python manage.py feedreader_articles_pubmed --source-id 12 -
 earlier run looks, and `--dry-run` searches and reports without writing anything or moving
 the start date. It also runs as part of `manage.py pipeline`.
 
+## PubMed data for articles that already exist
+
+Articles that came in some other way (RSS feeds, DOI imports) get their PubMed data in three
+steps, all safe to re-run:
+
+- `backfill_article_pmids` reads PMIDs from the PubMed links an article already has, with no
+  API calls. A PMID found on two articles is set on neither and listed: those are duplicates
+  for `merge_duplicate_articles`. Use `--dry-run` first.
+- `find_pmids` looks up articles that have a DOI and no PMID: 50 DOIs per PubMed search, then
+  the matching records. A record is attached only when its DOI is exactly the article's DOI
+  (after normalising case and trailing punctuation), never a near-miss. An article PubMed has
+  no record for is asked about again after 2 days, then 4, 8, 16 and every 30. The pipeline
+  runs it for articles discovered in the last 30 days; `--all` covers the whole archive
+  (`--limit` caps a run, `--dry-run` only counts).
+- `refresh_pubmed_records` fetches PubMed's record for every article with a PMID (abstract,
+  publication types, MeSH headings, keywords, retractions) and keeps it fresh afterwards.
+
+On an install that has none of this yet, run, in order:
+
+1. `manage.py sync_publication_types` (fills the list of publication types).
+2. `manage.py backfill_article_pmids --dry-run`, then without `--dry-run`. Merge the
+   duplicates it lists.
+3. `manage.py refresh_pubmed_records --limit 50000`, repeated until it reports nothing due.
+4. `manage.py find_pmids --all --limit 50000`.
+5. Add NCBI credentials per organisation (see above), then create the first PubMed source next
+   to its RSS twin and compare the two for a few runs.
+
 ## Data from PubMed
 
 PubMed data comes from the U.S. National Library of Medicine (NLM) at the National Center
