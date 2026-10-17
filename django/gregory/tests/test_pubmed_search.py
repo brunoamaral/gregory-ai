@@ -4,8 +4,8 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from gregory.source_types import PUBMED_DATE_CLAUSE
-from gregory.utils.pubmed_search import build_pubmed_term
+from gregory.source_types import PUBMED_DATE_CLAUSE, has_date_clause
+from gregory.utils.pubmed_search import build_pubmed_term, unbalanced_query
 
 START, END = date(2026, 9, 1), date(2026, 10, 1)
 
@@ -62,3 +62,47 @@ class DateClauseTests(SimpleTestCase):
 			"cladribine[Title/Abstract] AND lr[tiab]",
 		):
 			self.assertFalse(PUBMED_DATE_CLAUSE.search(query), query)
+
+	def test_more_date_tags_are_found(self):
+		for query in (
+			"ms AND 2020[dcom]",
+			"ms AND 2020[mdat]",
+			"ms AND 2020[cdat]",
+			"ms AND 2020[epdt]",
+			"ms AND 2020[Date - Completion]",
+			"ms AND 2020[Date - Last Revision]",
+		):
+			self.assertTrue(has_date_clause(query), query)
+
+	def test_a_quoted_phrase_is_not_a_date(self):
+		self.assertFalse(has_date_clause('"last 6 months of life"[tiab] AND palliative'))
+		self.assertFalse(has_date_clause('"last 2 years of life"'))
+
+	def test_a_tag_after_a_quoted_date_still_counts(self):
+		self.assertTrue(has_date_clause('"2020/01/01"[dp]'))
+
+	def test_an_unquoted_relative_date_still_counts(self):
+		self.assertTrue(has_date_clause("ms AND last 6 months"))
+		self.assertFalse(has_date_clause(None))
+
+
+class UnbalancedQueryTests(SimpleTestCase):
+	def test_balanced_searches_pass(self):
+		for query in (
+			'"multiple sclerosis"[MeSH Terms] AND (remyelination OR "myelin (repair)")',
+			"((a OR b) AND (c))",
+			'"a [b" AND c',  # brackets inside a quoted phrase don't count
+			"plain words",
+		):
+			self.assertIsNone(unbalanced_query(query), query)
+
+	def test_unclosed_or_stray_characters_are_reported(self):
+		for query, fragment in (
+			("a OR (b", '"(" is never closed'),
+			("a OR b)", 'stray ")"'),
+			('a AND "b', "quotation mark"),
+			("a[tiab AND b", '"[" is never closed'),
+			("a]", 'stray "]"'),
+			("(a]", 'stray "]"'),
+		):
+			self.assertIn(fragment, unbalanced_query(query) or "", query)

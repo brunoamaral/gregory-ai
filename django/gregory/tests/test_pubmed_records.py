@@ -296,3 +296,19 @@ class HistoryExclusionTests(SimpleTestCase):
 		# content fields stay tracked
 		for field in ("pmid", "pmcid", "summary"):
 			self.assertIn(field, names)
+
+
+class LongNameTests(TestCase):
+	def test_names_longer_than_the_column_are_cut_not_fatal(self):
+		from gregory.utils.pubmed_xml import MeshHeading, PubmedRecord
+
+		record = PubmedRecord(
+			pmid="777",
+			publication_types=[("D999", "T" * 500)],
+			mesh=[MeshHeading(descriptor_ui="D888", descriptor_name="M" * 600)],
+		)
+		a = article()
+		apply_pubmed_record(a, record, is_new=False)
+		self.assertEqual(len(PublicationType.objects.get(ui="D999").name), 200)
+		self.assertEqual(len(MeshTerm.objects.get(ui="D888").name), 255)
+		self.assertEqual(a.mesh_headings.count(), 1)

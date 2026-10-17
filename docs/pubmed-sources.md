@@ -44,7 +44,10 @@ Write it as you would on pubmed.ncbi.nlm.nih.gov, and try it there first:
 Gregory wraps your search in brackets and adds the date itself, so **don't add a date
 clause**: `[dp]`, `[pdat]`, `[crdt]`, `[edat]`, `[mhda]`, `[lr]`, `[Date - Publication]`
 and similar tags, or "last 5 years". The form refuses a search that has one, because it
-would narrow every run without anyone seeing it.
+would narrow every run without anyone seeing it. A phrase in quotes, such as
+`"last 6 months of life"[tiab]`, is not mistaken for a date. The form also refuses a search
+with an unclosed bracket or quotation mark, because the date would then attach to only part
+of it.
 
 The window is on the date a record was **created in PubMed**, not the date the paper was
 published. Recently published papers can still arrive weeks late, and a paper is kept when
@@ -52,15 +55,17 @@ it first appears in PubMed.
 
 PubMed does not warn about a misspelled field tag, such as `[Titel/Abstract]`; it quietly
 searches something broader. The check on saving shows PubMed's own reading of the search
-("PubMed read it as: …"), so look at that line.
+("PubMed read it as: …"), so look at that line. If PubMed returns warnings about the
+search, they are shown too.
 
 ## Leaving out publication types
 
 The **Leave out these publication types** list removes records of those types, for example
 Comment, Letter or Editorial. Excluding a type also excludes the types under it in PubMed's
-hierarchy: excluding **Review** also excludes Systematic Review and Meta-Analysis if they
-sit below it. Check a type's definition at
-[MeSH publication types](https://www.nlm.nih.gov/mesh/pubtypes.html) before relying on it.
+hierarchy: excluding **Review** also excludes every type that sits under Review in the MeSH
+tree, such as Systematic Review. Look a type up at
+[MeSH publication types](https://www.nlm.nih.gov/mesh/pubtypes.html) to see what sits under
+it before relying on it.
 
 If the list is empty, an administrator has to run `manage.py sync_publication_types` once.
 
@@ -73,7 +78,7 @@ that needs narrowing. Narrow it, or leave out publication types.
 
 PubMed returns at most 9,999 results for one search. When a window reaches that, the
 importer splits it in halves until each part fits. If a single day alone reaches it, the
-source fails that run and logs the reason.
+source fails on every run until the search is narrowed, and the log says why.
 
 ## NCBI credentials
 

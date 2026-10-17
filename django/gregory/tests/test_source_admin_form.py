@@ -55,7 +55,7 @@ class SourceAdminFormTests(TestCase):
 		self.request.user = self.user
 		# The PubMed type checks its search on PubMed; tests never reach NCBI.
 		patcher = patch("gregory.admin.NcbiClient")
-		patcher.start().return_value.esearch.return_value = ESearchResult(
+		patcher.start().for_site.return_value.esearch.return_value = ESearchResult(
 			count=1, querytranslation="translated"
 		)
 		self.addCleanup(patcher.stop)

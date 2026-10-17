@@ -26,12 +26,14 @@ from datetime import date, timedelta
 from django.db import transaction
 from django.utils import timezone
 
+from django.core.management.base import CommandError
+
 from gregory.classes import SciencePaper
 from gregory.management.base import GregoryBaseCommand
 from gregory.management.commands.feedreader_articles import Command as RssCommand
 from gregory.models import Articles, Sources
 from gregory.services.pubmed_records import apply_pubmed_record, pubmed_link
-from gregory.utils.ncbi import NcbiClient, NcbiResultCapError
+from gregory.utils.ncbi import NcbiClient, NcbiError, NcbiResultCapError
 from gregory.utils.pubmed_search import build_pubmed_term
 from gregory.utils.pubmed_xml import parse_pubmed_xml
 from gregory.utils.registry_utils import merge_links
@@ -78,6 +80,12 @@ class Command(GregoryBaseCommand):
 		).select_related("team__organization")
 		if options.get("source_id"):
 			sources = sources.filter(pk=options["source_id"])
+			if not sources.exists():
+				self.log(
+					f"No active PubMed source with id {options['source_id']}.",
+					level=1,
+					style_func=self.style.WARNING,
+				)
 		for source in sources:
 			self.log(f"# Processing PubMed source {source}", level=1)
 			# One broken source must not stop the ones after it.
@@ -90,6 +98,9 @@ class Command(GregoryBaseCommand):
 					level=1,
 					style_func=self.style.ERROR,
 				)
+		if self.fetch_errors:
+			# Non-zero exit, so the pipeline logs it instead of reporting a clean run.
+			raise CommandError("PubMed import problems: " + "; ".join(self.fetch_errors))
 
 	# -- one source -------------------------------------------------------
 
@@ -106,14 +117,16 @@ class Command(GregoryBaseCommand):
 			start = today - timedelta(days=first_run_days)
 
 		client = (
-			NcbiClient.for_organization(source.team.organization) if source.team else NcbiClient()
+			NcbiClient.for_organization(source.team.organization)
+			if source.team
+			else NcbiClient.for_site()
 		)
 		excluded = list(source.excluded_publication_types.all())
 		excluded_names = [t.name for t in excluded]
 		excluded_uis = {t.ui for t in excluded}
 
-		translations = []
-		pmids = self._search(client, query, excluded_names, start, today, translations)
+		translations, warnings = [], []
+		pmids = self._search(client, query, excluded_names, start, today, translations, warnings)
 		on_source = set(
 			Articles.objects.filter(sources=source, pmid__in=pmids).values_list("pmid", flat=True)
 		)
@@ -124,16 +137,16 @@ class Command(GregoryBaseCommand):
 			f"{len(on_source)} already on this source.",
 			level=1,
 		)
+		for warning in dict.fromkeys(warnings):
+			self.log(f"  PubMed warned: {warning}", level=1, style_func=self.style.WARNING)
 		if dry_run:
 			self.log(f"  Dry run: would fetch {len(todo)} records; nothing written.", level=1)
 			return
 
-		counts = dict(new=0, merged=0, excluded=0, books=0, failed=0)
+		counts = dict(new=0, merged=0, excluded=0, books=0, failed=0, missing=0)
 		for index in range(0, len(todo), FETCH_BATCH_SIZE):
 			batch = todo[index : index + FETCH_BATCH_SIZE]
-			parsed = parse_pubmed_xml(client.efetch_pubmed(batch))
-			counts["books"] += parsed.books_skipped
-			for record in parsed.records:
+			for record in self._fetch_records(client, batch, counts):
 				# Safety net behind the NOT clause in the search term.
 				if excluded_uis and any(ui in excluded_uis for ui, _ in record.publication_types):
 					counts["excluded"] += 1
@@ -147,6 +160,7 @@ class Command(GregoryBaseCommand):
 					)
 
 		if counts["failed"]:
+			self.fetch_errors.append(f"{source.name}: {counts['failed']} record(s) failed")
 			self.log(
 				f"  {counts['failed']} record(s) failed; not moving the anchor.",
 				level=1,
@@ -158,14 +172,40 @@ class Command(GregoryBaseCommand):
 		self.log(
 			f"Finished {source.name}: {counts['new']} new, {counts['merged']} merged, "
 			f"{len(on_source)} skipped (already on the source), {counts['excluded']} excluded, "
-			f"{counts['failed']} failed.",
+			f"{counts['missing']} not returned by NCBI, {counts['failed']} failed.",
 			level=1,
 			style_func=self.style.SUCCESS,
 		)
 
 	# -- search -----------------------------------------------------------
 
-	def _search(self, client, query, excluded_names, start: date, end: date, translations):
+	def _fetch_records(self, client, batch, counts, first=True):
+		"""The records for ``batch``. A response with fewer records than PMIDs asked for
+		(a partial answer under load) gets one more request for the rest; whatever is
+		still absent is logged, not retried forever, and does not hold the anchor back."""
+		parsed = parse_pubmed_xml(client.efetch_pubmed(batch))
+		if first:
+			counts["books"] += parsed.books_skipped
+		records = list(parsed.records)
+		returned = {r.pmid for r in records}
+		missing = [p for p in batch if p not in returned]
+		if not missing:
+			return records
+		if first:
+			return records + self._fetch_records(client, missing, counts, first=False)
+		unexplained = missing[: max(0, len(missing) - parsed.books_skipped)]
+		if unexplained:
+			counts["missing"] += len(unexplained)
+			self.log(
+				f"  NCBI did not return PMID(s) {', '.join(unexplained)}.",
+				level=1,
+				style_func=self.style.WARNING,
+			)
+		return records
+
+	def _search(
+		self, client, query, excluded_names, start: date, end: date, translations, warnings
+	):
 		"""IDs of papers created from ``start`` to ``end`` (inclusive), halving the window
 		whenever PubMed's result cap is reached. Raises WindowTooBroad for a single day."""
 		term = build_pubmed_term(query, excluded_names, start, end)
@@ -177,13 +217,23 @@ class Command(GregoryBaseCommand):
 					f"{start} alone has 9,999 or more results; narrow the search"
 				)
 			middle = start + (end - start) // 2
-			first = self._search(client, query, excluded_names, start, middle, translations)
+			first = self._search(
+				client, query, excluded_names, start, middle, translations, warnings
+			)
 			second = self._search(
-				client, query, excluded_names, middle + timedelta(days=1), end, translations
+				client, query, excluded_names, middle + timedelta(days=1), end,
+				translations, warnings,
 			)
 			return list(dict.fromkeys(first + second))
+		if len(result.ids) != result.count:
+			# Below the cap the list must be complete; a short one would lose papers
+			# and still move the anchor.
+			raise NcbiError(
+				f"PubMed counted {result.count} results but listed {len(result.ids)} IDs for {start} to {end}"
+			)
 		if result.querytranslation:
 			translations.append(result.querytranslation)
+		warnings.extend(result.warnings)
 		return result.ids
 
 	# -- one record -------------------------------------------------------
@@ -191,8 +241,9 @@ class Command(GregoryBaseCommand):
 	def process_record(self, source, record):
 		"""Apply a record to its article, creating it if needed. True when created."""
 		link = pubmed_link(record.pmid)
+		# An empty title would match any stored article that also has none.
 		existing = self.rss.find_existing_article(
-			record.doi, record.title, link, pmid=record.pmid
+			record.doi, record.title or None, link, pmid=record.pmid
 		)
 		if existing is not None:
 			with transaction.atomic():

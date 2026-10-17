@@ -8,7 +8,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
 from organizations.models import Organization
@@ -24,6 +24,16 @@ COMMAND = "gregory.management.commands.feedreader_articles_pubmed"
 
 def crossref_failed(paper_self):
 	return "DOI not found"
+
+
+def echo_xml(pmids, books=0):
+	"""A minimal PubmedArticleSet with one record per PMID, plus ``books`` book articles."""
+	records = "".join(
+		f"<PubmedArticle><MedlineCitation Status='MEDLINE'><PMID>{p}</PMID>"
+		f"<Article><ArticleTitle>Title {p}</ArticleTitle></Article></MedlineCitation></PubmedArticle>"
+		for p in pmids
+	)
+	return f"<PubmedArticleSet>{records}{'<PubmedBookArticle/>' * books}</PubmedArticleSet>".encode()
 
 
 def fake_client(ids=PMIDS, xml=SAMPLE_XML):
@@ -59,10 +69,15 @@ class PubmedImporterBase(TestCase):
 	def run_command(self, client=None, *args):
 		client = client or fake_client()
 		out = StringIO()
+		self.command_error = None
 		with patch(f"{COMMAND}.NcbiClient") as klass:
 			klass.return_value = client
 			klass.for_organization.return_value = client
-			call_command("feedreader_articles_pubmed", *args, stdout=out)
+			klass.for_site.return_value = client
+			try:
+				call_command("feedreader_articles_pubmed", *args, stdout=out)
+			except CommandError as exc:
+				self.command_error = exc
 		self.client_class = klass
 		return out.getvalue()
 
@@ -228,6 +243,8 @@ class WindowTests(PubmedImporterBase):
 		self.assertTrue(all(w <= 15 for w in widths[1:]))
 		# windows tile the range with no gap or overlap
 		leaves = sorted((s, e) for s, e in calls if (e - s).days < 8)
+		self.assertEqual(leaves[0][0], timezone.now().date() - timedelta(days=30))
+		self.assertEqual(leaves[-1][1], timezone.now().date())
 		for (_, previous_end), (next_start, _) in zip(leaves, leaves[1:]):
 			self.assertEqual(next_start, previous_end + timedelta(days=1))
 		self.assertEqual(Articles.objects.count(), 3)
@@ -240,7 +257,9 @@ class WindowTests(PubmedImporterBase):
 		output = self.run_command(client)
 		self.source.refresh_from_db()
 		self.assertIsNone(self.source.last_successful_fetch_at)
-		self.assertIn("failed", output)
+		self.assertIn("alone has 9,999 or more results", output)
+		self.assertIn("Anchor not moved", output)
+		self.assertIn("PubMed | MS", str(self.command_error))
 		self.assertEqual(Articles.objects.count(), 0)
 
 	def test_a_fetch_failure_keeps_the_anchor(self):
@@ -268,6 +287,7 @@ class WindowTests(PubmedImporterBase):
 		self.assertIsNone(self.source.last_successful_fetch_at)
 		self.assertEqual(Articles.objects.count(), 2)  # the failed record's placeholder row rolled back
 		self.assertIn("1 failed", output)
+		self.assertIn("1 record(s) failed", str(self.command_error))
 
 	def test_one_failing_source_does_not_stop_the_next(self):
 		self.source.delete()
@@ -307,3 +327,62 @@ class WindowTests(PubmedImporterBase):
 	def test_the_organizations_ncbi_credentials_are_used(self):
 		self.run_command()
 		self.client_class.for_organization.assert_called_with(self.org)
+
+	# -- review follow-ups --------------------------------------------------
+
+	def test_a_clean_run_exits_without_an_error(self):
+		self.run_command()
+		self.assertIsNone(self.command_error)
+
+	def test_records_missing_from_a_partial_answer_are_asked_for_again(self):
+		client = fake_client()
+		client.efetch_pubmed.side_effect = [echo_xml(["42830590"]), echo_xml(["42854181", "42834886"])]
+		self.run_command(client)
+		self.assertEqual(client.efetch_pubmed.call_count, 2)
+		self.assertEqual(sorted(client.efetch_pubmed.call_args_list[1].args[0]), ["42834886", "42854181"])
+		self.assertEqual(Articles.objects.count(), 3)
+
+	def test_ids_still_missing_after_the_second_ask_are_logged_and_do_not_hold_the_anchor(self):
+		client = fake_client()
+		client.efetch_pubmed.side_effect = [echo_xml(["42830590"]), echo_xml([])]
+		output = self.run_command(client)
+		self.assertIn("NCBI did not return PMID(s)", output)
+		self.assertIn("2 not returned by NCBI", output)
+		self.assertEqual(Articles.objects.count(), 1)
+		self.source.refresh_from_db()
+		self.assertIsNotNone(self.source.last_successful_fetch_at)
+
+	def test_book_articles_explain_missing_ids(self):
+		client = fake_client(ids=["42830590", "42854181"])
+		client.efetch_pubmed.side_effect = [echo_xml(["42830590"], books=1), echo_xml([], books=1)]
+		output = self.run_command(client)
+		self.assertNotIn("did not return", output)
+		self.assertIn("0 not returned by NCBI", output)
+
+	def test_a_short_id_list_fails_the_source(self):
+		client = fake_client()
+		client.esearch.return_value = ESearchResult(count=5, ids=PMIDS, querytranslation="t")
+		self.run_command(client)
+		self.source.refresh_from_db()
+		self.assertIsNone(self.source.last_successful_fetch_at)
+		self.assertEqual(Articles.objects.count(), 0)
+		self.assertIn("counted 5 results but listed 3", str(self.command_error))
+
+	def test_pubmeds_search_warnings_are_logged(self):
+		client = fake_client()
+		client.esearch.return_value = ESearchResult(
+			count=3, ids=PMIDS, querytranslation="t", warnings=["phrasesignored: foo"]
+		)
+		output = self.run_command(client)
+		self.assertIn("PubMed warned: phrasesignored: foo", output)
+
+	def test_a_source_without_a_team_still_identifies_itself_with_the_site_email(self):
+		self.source.delete()
+		self.make_source(team=None)
+		self.run_command()
+		self.client_class.for_site.assert_called()
+		self.client_class.for_organization.assert_not_called()
+
+	def test_source_id_for_nothing_says_so(self):
+		output = self.run_command(fake_client(), "--source-id", "99999")
+		self.assertIn("No active PubMed source with id 99999", output)

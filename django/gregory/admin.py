@@ -19,7 +19,11 @@ import re
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
 from . import source_types
 from .utils.ncbi import NcbiClient, NcbiError, NcbiQueryError
-from .utils.pubmed_search import PUBMED_VOLUME_WARNING_PER_30_DAYS, build_pubmed_term
+from .utils.pubmed_search import (
+	PUBMED_VOLUME_WARNING_PER_30_DAYS,
+	build_pubmed_term,
+	unbalanced_query,
+)
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
@@ -2283,20 +2287,32 @@ class SourceAdminForm(forms.ModelForm):
 				'Enter the PubMed search, e.g. "multiple sclerosis"[MeSH Terms] AND remyelination.',
 			)
 			return
-		if source_types.PUBMED_DATE_CLAUSE.search(query):
+		if source_types.has_date_clause(query):
 			self.add_error(
 				"pubmed_query",
-				"Remove the date clause ([dp], [crdt], \"last N days\" …). Gregory adds the "
+				"Remove the date clause ([dp], [crdt], last N days …). Gregory adds the "
 				"creation-date window itself on every run.",
 			)
 			return
+		problem = unbalanced_query(query)
+		if problem:
+			self.add_error("pubmed_query", f"Check the brackets and quotes. {problem}")
+			return
+		if self._errors:
+			return  # fix the other fields first; don't spend a PubMed call on a form that can't save
+		search_changed = {"source_type", "pubmed_query", "excluded_publication_types"}
+		if self.instance.pk and not search_changed & set(self.changed_data):
+			return  # a rename or a pause doesn't need the search checked again
 		# Ask PubMed what the importer's first run would find, so a typo or a search
-		# that is far too broad shows up now, not after a month of runs.
+		# that is far too broad shows up now, not after a month of runs. Short timeout and
+		# one retry: this runs inside an admin request.
 		end = timezone.now().date()
 		excluded = [t.name for t in cleaned.get("excluded_publication_types") or []]
 		term = build_pubmed_term(query, excluded, end - timedelta(days=30), end)
 		try:
-			self.pubmed_check = NcbiClient().esearch(term, rettype="count")
+			self.pubmed_check = NcbiClient.for_site(timeout=10, max_retries=1).esearch(
+				term, rettype="count"
+			)
 		except NcbiQueryError as exc:
 			self.add_error("pubmed_query", f"PubMed rejected this search: {exc}")
 		except NcbiError:
@@ -2486,7 +2502,10 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 		"""Point out what the saved source still needs before it can work."""
 		if obj.method == "pubmed_api" and not obj.link and obj.pubmed_query:
 			# So editors can open the search on PubMed; the importer never reads it.
-			obj.link = "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(obj.pubmed_query.strip())
+			# Skipped for a search too long for the 2,000-character link column.
+			link = "https://pubmed.ncbi.nlm.nih.gov/?term=" + quote_plus(obj.pubmed_query.strip())
+			if len(link) <= Sources._meta.get_field("link").max_length:
+				obj.link = link
 		super().save_model(request, obj, form, change)
 		if obj.method == "pubmed_api":
 			self._report_pubmed_check(request, obj, form)
@@ -2546,6 +2565,12 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 			f"PubMed found {check.count} papers created in the last 30 days for this search. "
 			f"PubMed read it as: {check.querytranslation}",
 		)
+		if check.warnings:
+			messages.warning(
+				request,
+				"PubMed warned about this search: " + "; ".join(check.warnings)
+				+ ". It may not be searching what you meant.",
+			)
 		if check.count > PUBMED_VOLUME_WARNING_PER_30_DAYS:
 			messages.warning(
 				request,

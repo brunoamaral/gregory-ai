@@ -125,13 +125,23 @@ CQL_DATE_CLAUSE = re.compile(
 # own would silently narrow every run. Covers the date field tags (short and long
 # form) and PubMed's relative "last N days" form.
 PUBMED_DATE_CLAUSE = re.compile(
-	r"\[\s*(dp|pdat|crdt|edat|mhda|lr|epdat|ppdat"
+	r"\[\s*(dp|pdat|crdt|edat|mhda|lr|epdat|ppdat|dcom|mdat|cdat|epdt"
 	r"|date\s*-\s*(publication|create|creation|entry|entrez|mesh|modification"
-	r"|electronic\s+publication|print\s+publication)"
+	r"|completion|last\s+revision|revised|electronic\s+publication|print\s+publication)"
 	r"|publication\s+date|create\s+date|entrez\s+date|mesh\s+date|modification\s+date)\s*\]"
 	r"|\blast\s+\d+\s+(days?|months?|years?)\b",
 	re.IGNORECASE,
 )
+
+
+_QUOTED = re.compile(r'"[^"]*"')
+
+
+def has_date_clause(query):
+	"""True when a PubMed search carries its own date. Text inside quotes is a phrase, not
+	a date ("last 6 months of life"[tiab] is a legitimate palliative-care term), so it
+	is ignored; a field tag after the quotes still counts."""
+	return bool(PUBMED_DATE_CLAUSE.search(_QUOTED.sub('""', query or "")))
 
 
 def type_for(source_for, method):

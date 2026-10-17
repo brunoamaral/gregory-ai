@@ -24,7 +24,7 @@ class PubmedSourceAdminTests(TestCase):
 		self.subject = Subject.objects.create(team=self.team, subject_name="MS", subject_slug="ms")
 		self.url = reverse("admin:gregory_sources_add")
 
-	def post(self, search_result=None, search_error=None, **overrides):
+	def post(self, search_result=None, search_error=None, url=None, **overrides):
 		data = {
 			"source_type": "pubmed",
 			"team": self.team.pk,
@@ -37,13 +37,14 @@ class PubmedSourceAdminTests(TestCase):
 		data = {k: v for k, v in data.items() if v is not None}
 		fake = patch("gregory.admin.NcbiClient")
 		with fake as client_class:
+			self.esearch = client_class.for_site.return_value.esearch
 			if search_error is not None:
-				client_class.return_value.esearch.side_effect = search_error
+				self.esearch.side_effect = search_error
 			else:
-				client_class.return_value.esearch.return_value = search_result or ESearchResult(
+				self.esearch.return_value = search_result or ESearchResult(
 					count=42, querytranslation='"multiple sclerosis"[MeSH Terms]'
 				)
-			response = self.client.post(self.url, data, follow=True)
+			response = self.client.post(url or self.url, data, follow=True)
 		self.last_client = client_class
 		return response
 
@@ -72,7 +73,7 @@ class PubmedSourceAdminTests(TestCase):
 		response = self.post(pubmed_query="ms AND 2024[dp]")
 		self.assertContains(response, "Remove the date clause")
 		self.assertFalse(Sources.objects.exists())
-		self.last_client.return_value.esearch.assert_not_called()
+		self.esearch.assert_not_called()
 
 	def test_pubmed_error_becomes_a_field_error_quoting_its_message(self):
 		response = self.post(search_error=NcbiQueryError("fieldsnotfound: bogus"))
@@ -81,16 +82,16 @@ class PubmedSourceAdminTests(TestCase):
 
 	def test_the_check_counts_the_thirty_day_window_keyless(self):
 		self.post()
-		args, kwargs = self.last_client.return_value.esearch.call_args
+		args, kwargs = self.esearch.call_args
 		self.assertTrue(args[0].startswith(f"({QUERY}) AND "))
 		self.assertTrue(args[0].endswith("[crdt]"))
 		self.assertEqual(kwargs, {"rettype": "count"})
-		self.last_client.assert_called_once_with()
+		self.last_client.for_site.assert_called_once_with(timeout=10, max_retries=1)
 
 	def test_the_check_applies_the_excluded_types(self):
 		review = PublicationType.objects.create(ui="D016454", name="Review")
 		self.post(excluded_publication_types=[review.pk])
-		term = self.last_client.return_value.esearch.call_args.args[0]
+		term = self.esearch.call_args.args[0]
 		self.assertIn('NOT ("Review"[pt])', term)
 
 	def test_unreachable_ncbi_saves_with_a_warning(self):
@@ -157,3 +158,49 @@ class PubmedSourceAdminTests(TestCase):
 		PublicationType.objects.create(ui="D016454", name="Review")
 		response = self.client.get(self.url)
 		self.assertNotContains(response, "sync_publication_types")
+
+	# -- review follow-ups --------------------------------------------------
+
+	def test_unbalanced_brackets_or_quotes_are_rejected_without_calling_pubmed(self):
+		for query in ("a OR (b", 'a AND "b'):
+			response = self.post(pubmed_query=query)
+			self.assertContains(response, "Check the brackets and quotes")
+			self.esearch.assert_not_called()
+		self.assertFalse(Sources.objects.exists())
+
+	def test_a_quoted_relative_date_phrase_is_allowed(self):
+		self.post(pubmed_query='"last 6 months of life"[tiab] AND palliative')
+		self.assertTrue(Sources.objects.exists())
+
+	def test_pubmed_is_not_called_when_another_field_is_invalid(self):
+		response = self.post(name="")
+		self.assertContains(response, "required")
+		self.esearch.assert_not_called()
+
+	def test_renaming_a_saved_source_does_not_check_the_search_again(self):
+		self.post()
+		source = Sources.objects.get()
+		change = reverse("admin:gregory_sources_change", args=[source.pk])
+		self.post(url=change, name="Renamed", link=source.link)
+		self.esearch.assert_not_called()
+		self.assertEqual(Sources.objects.get().name, "Renamed")
+
+	def test_changing_the_search_checks_it_again(self):
+		self.post()
+		source = Sources.objects.get()
+		change = reverse("admin:gregory_sources_change", args=[source.pk])
+		self.post(url=change, pubmed_query=QUERY + " AND myelin", link=source.link)
+		self.esearch.assert_called_once()
+
+	def test_pubmeds_warnings_are_shown(self):
+		result = ESearchResult(count=3, querytranslation="x", warnings=["phrasesignored: foo bar"])
+		response = self.post(search_result=result)
+		warnings = " ".join(t for level, t in self.messages(response) if level == "warning")
+		self.assertIn("PubMed warned about this search: phrasesignored: foo bar", warnings)
+
+	def test_a_search_too_long_for_the_link_column_saves_without_a_link(self):
+		long_query = " OR ".join(f"term{n}" for n in range(400))
+		self.post(pubmed_query=long_query)
+		source = Sources.objects.get()
+		self.assertFalse(source.link)
+		self.assertEqual(source.pubmed_query, long_query)
