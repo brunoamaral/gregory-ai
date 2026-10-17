@@ -67,6 +67,8 @@ class PubmedRecord:
 	title: str = ""
 	abstract: str = ""
 	doi: Optional[str] = None
+	# Every DOI the record carries (ArticleIdList and ELocationID can differ).
+	dois: list = field(default_factory=list)
 	pmcid: Optional[str] = None
 	journal: Optional[str] = None
 	published_date: Optional[datetime] = None
@@ -138,6 +140,7 @@ def parse_article(article):
 		record.publication_types = _publication_types(body)
 		record.published_date = _published_date(body, pubmed_data)
 	record.doi = _doi(body, pubmed_data)
+	record.dois = _all_dois(body, pubmed_data)
 	record.pmcid = _article_id(pubmed_data, "pmc")
 	record.mesh = _mesh(citation.find("MeshHeadingList"))
 	record.keywords = _keywords(citation)
@@ -187,6 +190,17 @@ def _hyphenate_orcid(orcid):
 	if orcid and _BARE_ORCID_RE.match(orcid):
 		return "-".join(orcid[i : i + 4] for i in range(0, 16, 4))
 	return orcid
+
+
+def _all_dois(body, pubmed_data):
+	found = []
+	if pubmed_data is not None:
+		found += [
+			_text(e) for e in pubmed_data.findall("ArticleIdList/ArticleId") if e.get("IdType") == "doi"
+		]
+	if body is not None:
+		found += [_text(e) for e in body.findall("ELocationID") if e.get("EIdType") == "doi"]
+	return list(dict.fromkeys(d for d in (normalize_doi(x) for x in found) if d))
 
 
 def _authors(author_list):

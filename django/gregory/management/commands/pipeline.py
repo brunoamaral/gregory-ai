@@ -53,6 +53,10 @@ class Command(BaseCommand):
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors
 			(
+				"find_pmids",
+				{"days": 30},
+			),  # 6a. PMIDs for recent articles with a DOI and no PMID (PubMed's record is applied)
+			(
 				"refresh_pubmed_records",
 				{},
 			),  # 6b. PubMed's record (abstract, publication types, MeSH, retractions) for articles with a PMID

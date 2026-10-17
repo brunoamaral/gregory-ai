@@ -890,6 +890,10 @@ class Articles(models.Model):
 	authors_attempts = models.PositiveSmallIntegerField(default=0)
 	details_next_check = models.DateTimeField(blank=True, null=True)
 	details_attempts = models.PositiveSmallIntegerField(default=0)
+	# Same contract for the DOI -> PMID lookup (find_pmids): an article PubMed has no
+	# record for isn't asked about again every run. Not tracked in article history.
+	pmid_lookup_next_check = models.DateTimeField(blank=True, null=True)
+	pmid_lookup_attempts = models.PositiveSmallIntegerField(default=0)
 	kind = models.CharField(choices=KINDS, max_length=50, default="science paper")
 	access = models.CharField(
 		choices=ACCESS_OPTIONS, max_length=50, default=None, null=True
@@ -941,6 +945,8 @@ class Articles(models.Model):
 			# PubMed bookkeeping, rewritten on every refresh with update() (which skips
 			# history); tracking these columns would make history attribute their
 			# changes to whichever unrelated save came next.
+			"pmid_lookup_next_check",
+			"pmid_lookup_attempts",
 			"pubmed_checked_at",
 			"pubmed_status",
 			"keywords",
