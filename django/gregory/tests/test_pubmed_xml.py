@@ -167,6 +167,13 @@ class EdgeCaseTests(SimpleTestCase):
 	def test_bare_orcid_gets_its_hyphens(self):
 		self.assertEqual(self.records["90000008"].authors[0].orcid, "0000-0002-1825-0097")
 
+	def test_every_doi_of_a_record_is_kept(self):
+		record = self.records["90000009"]
+		self.assertEqual(record.doi, "10.7777/first.doi")
+		self.assertEqual(record.dois, ["10.7777/first.doi", "10.7777/second.doi"])
+		self.assertEqual(self.records["90000001"].dois, ["10.1234/elocation.only"])
+		self.assertEqual(self.records["90000006"].dois, [])
+
 	def test_article_date_without_a_date_type_is_electronic(self):
 		self.assertEqual(self.records["90000008"].published_date, utc(2021, 4, 2))
 

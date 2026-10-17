@@ -110,8 +110,10 @@ steps, all safe to re-run:
   the matching records. A record is attached only when its DOI is exactly the article's DOI
   (after normalising case and trailing punctuation), never a near-miss. An article PubMed has
   no record for is asked about again after 2 days, then 4, 8, 16 and every 30. The pipeline
-  runs it for articles discovered in the last 30 days; `--all` covers the whole archive
-  (`--limit` caps a run, `--dry-run` only counts).
+  runs it for articles discovered in the last 30 days, so within that window a paper is
+  tried about when it is found and again after roughly 2, 6 and 14 days; `--all` covers the
+  whole archive and carries on with the longer gaps (`--limit` caps a run, `--dry-run` only
+  counts). If PubMed starts rejecting every search, the run stops and moves nothing.
 - `refresh_pubmed_records` fetches PubMed's record for every article with a PMID (abstract,
   publication types, MeSH headings, keywords, retractions) and keeps it fresh afterwards.
 

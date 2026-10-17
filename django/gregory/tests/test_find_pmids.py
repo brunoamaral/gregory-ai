@@ -8,9 +8,20 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase
 from django.utils import timezone
 
-from gregory.management.commands.find_pmids import articles_needing_pmid, build_doi_term
+from gregory.management.commands.find_pmids import (
+	ABORT_AFTER_CONSECUTIVE_REJECTIONS,
+	articles_needing_pmid,
+	build_doi_term,
+	search_form,
+)
 from gregory.models import Articles
-from gregory.utils.ncbi import ESearchResult, NcbiError, NcbiQueryError
+from gregory.utils.ncbi import (
+	ESearchResult,
+	NcbiClient,
+	NcbiError,
+	NcbiQueryError,
+	NcbiResultCapError,
+)
 
 COMMAND = "gregory.management.commands.find_pmids"
 NOW = timezone.now()
@@ -130,15 +141,17 @@ class MatchingTests(TestCase):
 		output = run(client)
 		a.refresh_from_db()
 		self.assertIsNone(a.pmid)
-		self.assertIn("1 near-miss DOIs rejected", output)
+		self.assertIn("1 near-miss records rejected", output)
 		self.assertEqual(a.pmid_lookup_attempts, 1)
 		self.assertGreater(a.pmid_lookup_next_check, timezone.now() + timedelta(days=1))
 
 	def test_a_record_without_a_doi_is_rejected(self):
 		a = make("10.1/abc")
-		run(fake_client(ids=["111"], xml=record_xml(("111", None))))
+		output = run(fake_client(ids=["111"], xml=record_xml(("111", None))))
 		a.refresh_from_db()
 		self.assertIsNone(a.pmid)
+		self.assertEqual(a.pmid_lookup_attempts, 1)
+		self.assertIn("1 near-miss records rejected", output)
 
 	def test_each_record_goes_to_its_own_article(self):
 		a, b = make("10.1/a"), make("10.1/b")
@@ -156,6 +169,11 @@ class MatchingTests(TestCase):
 		self.assertIsNone(a.pmid)
 		self.assertIn("1 PMIDs already on another article", output)
 		self.assertEqual(a.pmid_lookup_attempts, 1)  # not retried every run
+
+	def test_the_markers_are_not_columns_of_the_article_history(self):
+		names = {f.name for f in Articles.history.model._meta.get_fields()}
+		self.assertNotIn("pmid_lookup_next_check", names)
+		self.assertNotIn("pmid_lookup_attempts", names)
 
 	def test_the_run_writes_no_article_history_for_the_markers(self):
 		a = make("10.1/abc")
@@ -257,8 +275,8 @@ class BatchingTests(TestCase):
 
 class OptionTests(TestCase):
 	def test_days_and_all_decide_which_articles_are_looked_at(self):
-		recent = make("10.1/recent", discovered_days_ago=2)
-		old = make("10.1/old", discovered_days_ago=400)
+		make("10.1/recent", discovered_days_ago=2)
+		make("10.1/old", discovered_days_ago=400)
 		client = fake_client(ids=[])
 		run(client)
 		self.assertIn('"10.1/recent"[doi]', client.esearch.call_args.args[0])
@@ -269,7 +287,6 @@ class OptionTests(TestCase):
 		terms = " ".join(c.args[0] for c in everything.esearch.call_args_list)
 		self.assertIn("10.1/old", terms)
 		self.assertIn("10.1/recent", terms)
-		self.assertTrue(recent.pk and old.pk)
 
 	def test_limit_takes_the_newest_first(self):
 		make("10.1/old", discovered_days_ago=20)
@@ -308,3 +325,165 @@ class OptionTests(TestCase):
 			output = run(client)
 		client.esearch.assert_not_called()
 		self.assertIn("Another find_pmids run is in progress", output)
+
+
+class SearchFormTests(TestCase):
+	def test_resolver_prefixes_are_removed_and_the_doi_lowercased(self):
+		for stored in (
+			"10.1/ABC",
+			"https://doi.org/10.1/abc",
+			"http://dx.doi.org/10.1/ABC",
+			"doi:10.1/abc",
+			"doi: 10.1/abc",
+			"doi/10.1/abc",
+			"  10.1/abc ",
+		):
+			self.assertEqual(search_form(stored), "10.1/abc", stored)
+
+	def test_a_closing_bracket_that_belongs_to_the_doi_is_kept(self):
+		self.assertEqual(search_form("10.25259/JNRP-2022-4-25-(2542)"), "10.25259/jnrp-2022-4-25-(2542)")
+
+	def test_values_that_are_not_dois_give_none(self):
+		for stored in ("pmid:12345", "PMC:PMC123", "pmcid: PMC1", "", None, "not-a-doi", "/"):
+			self.assertIsNone(search_form(stored), stored)
+
+	def test_an_article_stored_with_a_resolver_prefix_is_searched_without_it(self):
+		a = make("https://doi.org/10.1/ABC")
+		client = fake_client(ids=["1"], xml=record_xml(("1", "10.1/abc")))
+		run(client)
+		self.assertEqual(client.esearch.call_args.args[0], '"10.1/abc"[doi]')
+		a.refresh_from_db()
+		self.assertEqual(a.pmid, "1")
+
+	def test_a_pmid_style_doi_is_backed_off_without_asking_pubmed(self):
+		a = make("pmid:12345")
+		client = fake_client()
+		run(client)
+		client.esearch.assert_not_called()
+		a.refresh_from_db()
+		self.assertEqual(a.pmid_lookup_attempts, 1)
+
+
+class RecordWithTwoDoisTests(TestCase):
+	def test_a_match_on_the_records_second_doi_is_accepted(self):
+		a = make("10.7777/second.doi")
+		xml = (
+			b"<PubmedArticleSet><PubmedArticle><MedlineCitation Status='MEDLINE'><PMID>9</PMID>"
+			b"<Article><ArticleTitle>T</ArticleTitle>"
+			b"<ELocationID EIdType='doi'>10.7777/Second.Doi</ELocationID></Article></MedlineCitation>"
+			b"<PubmedData><ArticleIdList><ArticleId IdType='doi'>10.7777/first.doi</ArticleId>"
+			b"</ArticleIdList></PubmedData></PubmedArticle></PubmedArticleSet>"
+		)
+		run(fake_client(ids=["9"], xml=xml))
+		a.refresh_from_db()
+		self.assertEqual(a.pmid, "9")
+
+
+class RejectionTests(TestCase):
+	def test_a_run_wide_pubmed_error_stops_the_run_and_moves_nothing(self):
+		articles = [make(f"10.1/{n:03d}") for n in range(60)]
+		client = fake_client()
+		client.esearch.side_effect = NcbiQueryError("Search Backend failed: timed out")
+		output = run(client)
+		self.assertLessEqual(client.esearch.call_count, ABORT_AFTER_CONSECUTIVE_REJECTIONS)
+		self.assertIn("stopping", output)
+		self.assertEqual(Articles.objects.filter(pmid_lookup_attempts__gt=0).count(), 0)
+		self.assertEqual(
+			Articles.objects.filter(pmid_lookup_next_check__isnull=False).count(), 0
+		)
+		self.assertEqual(len(articles), 60)
+
+	def test_a_single_rejected_doi_is_not_blamed_when_no_search_has_worked_yet(self):
+		a = make("10.1/abc")
+		client = fake_client()
+		client.esearch.side_effect = NcbiQueryError("Search Backend failed")
+		run(client)
+		a.refresh_from_db()
+		self.assertEqual(a.pmid_lookup_attempts, 0)
+
+	def test_a_short_id_list_is_halved_not_read_as_no_record(self):
+		a, b = make("10.1/a"), make("10.1/b")
+		pmid_of = {"10.1/a": "1", "10.1/b": "2"}
+
+		def esearch(term, **kwargs):
+			ids = [p for d, p in pmid_of.items() if d in term]
+			if len(ids) == 2:
+				return ESearchResult(count=2, ids=ids[:1])  # cut short
+			return ESearchResult(count=1, ids=ids)
+
+		client = fake_client()
+		client.esearch.side_effect = esearch
+		client.efetch_pubmed.side_effect = lambda pmids: record_xml(*[(p, d) for d, p in pmid_of.items() if p in pmids])
+		run(client)
+		a.refresh_from_db()
+		b.refresh_from_db()
+		self.assertEqual((a.pmid, b.pmid), ("1", "2"))
+
+	def test_the_result_cap_halves_the_batch_instead_of_stalling_it(self):
+		a, b = make("10.1/a"), make("10.1/b")
+		calls = []
+
+		def esearch(term, **kwargs):
+			calls.append(term)
+			if term.count("[doi]") > 1:
+				raise NcbiResultCapError("capped")
+			return ESearchResult(count=0, ids=[])
+
+		client = fake_client()
+		client.esearch.side_effect = esearch
+		run(client)
+		self.assertEqual(len(calls), 3)
+		a.refresh_from_db()
+		self.assertEqual(a.pmid_lookup_attempts, 1)  # backed off only after a search worked
+
+
+class PartialAnswerTests(TestCase):
+	def test_fewer_records_than_found_pmids_does_not_back_anything_off(self):
+		a, b = make("10.1/a"), make("10.1/b")
+		client = fake_client(ids=["1", "2"], xml=record_xml(("1", "10.1/a")))
+		output = run(client)
+		a.refresh_from_db()
+		b.refresh_from_db()
+		self.assertEqual(a.pmid, "1")  # the record that did arrive is applied
+		self.assertEqual(b.pmid_lookup_attempts, 0)  # b is retried next run, not written off
+		self.assertIn("1 failed", output)
+
+
+class RealClientTests(TestCase):
+	"""The real NcbiClient.esearch parsing, with requests mocked underneath it."""
+
+	def test_unknown_dois_in_an_or_search_are_warnings_not_errors(self):
+		found, missing = make("10.1/abc"), make("10.9/missing")
+
+		def respond(url, **kwargs):
+			response = MagicMock()
+			response.status_code = 200
+			if "esearch" in url:
+				response.json.return_value = {
+					"esearchresult": {
+						"count": "1",
+						"idlist": ["111"],
+						"querytranslation": "x",
+						"errorlist": {},
+						"warninglist": {"quotedphrasesnotfound": ["10.9/missing"]},
+					}
+				}
+			else:
+				response.content = record_xml(("111", "10.1/abc"))
+			return response
+
+		out = StringIO()
+		with patch("gregory.utils.ncbi.requests.get", side_effect=respond) as get, patch(
+			"gregory.utils.ncbi.requests.post", side_effect=respond
+		) as post, patch(f"{COMMAND}.NcbiClient.for_site", return_value=NcbiClient()):
+			call_command("find_pmids", stdout=out)
+		searches = [
+			c for c in get.call_args_list + post.call_args_list if "esearch" in c.args[0]
+		]
+		self.assertEqual(len(searches), 1)  # one search for both DOIs: no halving
+		found.refresh_from_db()
+		missing.refresh_from_db()
+		self.assertEqual(found.pmid, "111")
+		self.assertIsNone(missing.pmid)
+		self.assertEqual(missing.pmid_lookup_attempts, 1)
+		self.assertEqual(found.pmid_lookup_attempts, 0)

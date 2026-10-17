@@ -21,6 +21,7 @@ Run:
 
 import fcntl
 import os
+import re
 import tempfile
 from datetime import timedelta
 
@@ -33,7 +34,7 @@ from gregory.models import Articles
 from gregory.services.pubmed_records import apply_pubmed_record
 from gregory.utils.doi_utils import normalize_doi
 from gregory.utils.enrichment import backoff_delta, due_filter
-from gregory.utils.ncbi import NcbiClient, NcbiError, NcbiQueryError
+from gregory.utils.ncbi import NcbiClient, NcbiError, NcbiQueryError, NcbiResultCapError
 from gregory.utils.pubmed_xml import parse_pubmed_xml
 
 DOIS_PER_SEARCH = 50
@@ -41,6 +42,22 @@ FETCH_BATCH_SIZE = 200
 DEFAULT_DAYS = 30
 DEFAULT_LIMIT = 2000
 LOCK_PATH = os.path.join(tempfile.gettempdir(), "find_pmids.lock")
+# This many searches in a row that PubMed rejects, with none accepted in between, means
+# PubMed is having trouble, not that fifty DOIs are all unreadable: stop, move nothing.
+ABORT_AFTER_CONSECUTIVE_REJECTIONS = 5
+
+_RESOLVER_PREFIX = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*|doi/)", re.IGNORECASE)
+_NOT_A_DOI = re.compile(r"^(?:pmid|pmc|pmcid)\s*:", re.IGNORECASE)
+
+
+def search_form(stored_doi):
+	"""The DOI as it should be put to PubMed: resolver prefixes removed, lowercased, but not
+	stripped of closing brackets that belong to it. None for a value that isn't a DOI."""
+	doi = (stored_doi or "").strip()
+	if not doi or _NOT_A_DOI.match(doi):
+		return None
+	doi = _RESOLVER_PREFIX.sub("", doi).strip().lower()
+	return doi if doi.startswith("10.") else None
 
 
 def build_doi_term(dois):
@@ -107,16 +124,28 @@ class Command(GregoryBaseCommand):
 				return
 			client = self._client(options.get("organization"))
 			totals = dict(
-				matched=0, no_match=0, rejected=0, conflicts=0, failed=0, summaries_replaced=0
+				matched=0, no_match=0, rejected=0, conflicts=0, failed=0, summaries_replaced=0,
+				unreadable=0, searches_ok=0, rejections_in_a_row=0, aborted=False,
 			)
 			for start in range(0, len(pks), DOIS_PER_SEARCH):
+				if totals["aborted"]:
+					break
 				batch = list(Articles.objects.filter(pk__in=pks[start : start + DOIS_PER_SEARCH]))
 				self._process(client, batch, totals)
+			if totals["aborted"]:
+				self.log(
+					"PubMed rejected "
+					f"{ABORT_AFTER_CONSECUTIVE_REJECTIONS} searches in a row; stopping. Nothing "
+					"further was backed off, so the next run retries.",
+					level=1,
+					style_func=self.style.WARNING,
+				)
 
 		self.log(
 			"find_pmids: {matched} matched, {no_match} with no PubMed record (backed off), "
-			"{rejected} near-miss DOIs rejected, {conflicts} PMIDs already on another article, "
-			"{failed} failed, {summaries_replaced} summaries replaced.".format(**totals),
+			"{rejected} near-miss records rejected, {unreadable} DOIs PubMed would not read, "
+			"{conflicts} PMIDs already on another article, {failed} failed, "
+			"{summaries_replaced} summaries replaced.".format(**totals),
 			level=1,
 		)
 
@@ -132,37 +161,39 @@ class Command(GregoryBaseCommand):
 	# -- one batch of up to 50 articles ----------------------------------------
 
 	def _process(self, client, batch, totals):
-		by_doi, unusable = {}, []
+		if totals["aborted"]:
+			return
+		by_doi, terms, unusable = {}, [], []
 		for article in batch:
-			doi = normalize_doi(article.doi)
+			asked = search_form(article.doi)
+			doi = normalize_doi(asked) if asked else None
 			if doi:
 				by_doi[doi] = article
+				terms.append(asked)
 			else:
-				unusable.append(article)  # e.g. a bare prefix; nothing to ask PubMed about
+				unusable.append(article)  # empty once normalised, or a pmid:/pmc: value
 		if unusable:
 			self._back_off(unusable, totals)
 		if not by_doi:
 			return
 		batch = list(by_doi.values())
 		try:
-			pmids = client.esearch(build_doi_term(list(by_doi)), retmax=DOIS_PER_SEARCH * 4).ids
-		except NcbiQueryError as exc:
-			# PubMed couldn't read a DOI in this batch. Halve to find the one it chokes
-			# on; a single DOI it rejects is a completed (fruitless) attempt.
-			if len(batch) > 1:
-				middle = len(batch) // 2
-				self._process(client, batch[:middle], totals)
-				self._process(client, batch[middle:], totals)
-			else:
-				self.log(f"PubMed rejected DOI {batch[0].doi}: {exc}", level=1, style_func=self.style.WARNING)
-				self._back_off([batch[0]], totals)
+			result = client.esearch(build_doi_term(terms), retmax=DOIS_PER_SEARCH * 4)
+			if len(result.ids) < result.count:
+				# The list was cut short: the PMIDs that fell off would look like "no record".
+				raise NcbiQueryError(f"{result.count} results but {len(result.ids)} IDs listed")
+		except (NcbiQueryError, NcbiResultCapError) as exc:
+			self._rejected(client, batch, totals, exc)
 			return
 		except NcbiError as exc:
 			totals["failed"] += len(batch)
 			self.log(f"Search for {len(batch)} DOIs failed: {exc}", level=1, style_func=self.style.WARNING)
 			return
+		totals["searches_ok"] += 1
+		totals["rejections_in_a_row"] = 0
+		pmids = result.ids
 
-		matched = set()
+		matched, returned = set(), set()
 		for start in range(0, len(pmids), FETCH_BATCH_SIZE):
 			try:
 				parsed = parse_pubmed_xml(client.efetch_pubmed(pmids[start : start + FETCH_BATCH_SIZE]))
@@ -171,7 +202,10 @@ class Command(GregoryBaseCommand):
 				self.log(f"Fetching records failed: {exc}", level=1, style_func=self.style.WARNING)
 				return  # nothing moves: the whole batch is retried next run
 			for record in parsed.records:
-				article = by_doi.get(record.doi) if record.doi else None
+				returned.add(record.pmid)
+				article = next(
+					(by_doi[d] for d in (record.dois or [record.doi]) if d and d in by_doi), None
+				)
 				if article is None:
 					# PubMed's DOI isn't one of ours (or it has none): never attach a near-miss.
 					totals["rejected"] += 1
@@ -181,7 +215,31 @@ class Command(GregoryBaseCommand):
 				matched.add(article.pk)
 				self._apply(article, record, totals)
 
-		self._back_off([a for a in batch if a.pk not in matched], totals)
+		rest = [a for a in batch if a.pk not in matched]
+		if set(pmids) - returned:
+			# EFetch gave back fewer records than the search found (a PMID merged or deleted
+			# between the two calls, or a partial answer): don't read that as "no record".
+			totals["failed"] += len(rest)
+			return
+		self._back_off(rest, totals)
+
+	def _rejected(self, client, batch, totals, exc):
+		"""PubMed wouldn't take this search. Halve to find the DOI it chokes on, unless it is
+		rejecting everything, which means PubMed is struggling and nothing should move."""
+		totals["rejections_in_a_row"] += 1
+		if totals["rejections_in_a_row"] >= ABORT_AFTER_CONSECUTIVE_REJECTIONS:
+			totals["aborted"] = True
+			return
+		if len(batch) > 1:
+			middle = len(batch) // 2
+			self._process(client, batch[:middle], totals)
+			self._process(client, batch[middle:], totals)
+		elif totals["searches_ok"]:
+			self.log(f"PubMed rejected DOI {batch[0].doi}: {exc}", level=1, style_func=self.style.WARNING)
+			totals["unreadable"] += 1
+			self._back_off([batch[0]], totals, count=False)
+		else:
+			totals["failed"] += 1  # no search has worked yet this run: not evidence about this DOI
 
 	def _apply(self, article, record, totals):
 		try:

@@ -153,6 +153,19 @@
 			</CommentsCorrectionsList>
 		</MedlineCitation>
 	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM">
+			<PMID Version="1">90000009</PMID>
+			<Article>
+				<Journal><Title>Two DOI Journal</Title></Journal>
+				<ArticleTitle>Record whose two DOIs differ</ArticleTitle>
+				<ELocationID EIdType="doi" ValidYN="Y">10.7777/Second.Doi</ELocationID>
+			</Article>
+		</MedlineCitation>
+		<PubmedData>
+			<ArticleIdList><ArticleId IdType="doi">10.7777/first.doi</ArticleId></ArticleIdList>
+		</PubmedData>
+	</PubmedArticle>
 	<PubmedBookArticle>
 		<BookDocument>
 			<PMID Version="1">90000007</PMID>
