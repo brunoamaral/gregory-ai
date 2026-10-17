@@ -35,6 +35,7 @@ class Command(BaseCommand):
 		# standard commands to run in the pipeline
 		commands_to_run = [
 			("feedreader_articles", {}),  # 1. Feedreader. Get articles
+			("feedreader_articles_pubmed", {}),  # 1b. PubMed API sources (incremental window)
 			("feedreader_trials", {}),  # 2. Feedreader. Get trials
 			(
 				"feedreader_trials_ctgov",

@@ -29,6 +29,7 @@ The kind is one *Source type* choice. Each stores a `source_for`/`method` pair (
 | RSS feed of clinical trials | `trials` / `rss` | `feedreader_trials` reads the feed |
 | ClinicalTrials.gov search | `trials` / `ctgov_api` | `feedreader_trials_ctgov` runs the search |
 | EU CTIS search | `trials` / `ctis_api` | `feedreader_trials_ctis` runs the search |
+| PubMed search | `science paper` / `pubmed_api` | `feedreader_articles_pubmed` runs the search on every pipeline run; see [pubmed-sources.md](pubmed-sources.md) |
 | EPO patent search | `patents` / `epo_ops` | `feedreader_patents_ops` runs the search on every pipeline run; see [patents.md](patents.md) |
 | Science papers, clinical trials or news articles sent by an external scraper | `…` / `scrape` | Never fetched. Content arrives through `POST /articles/post/` with this source's ID |
 | Science papers, clinical trials or news articles added by hand or through the API | `…` / `manual` | Never fetched. Added in the admin or through `POST /articles/post/` |
