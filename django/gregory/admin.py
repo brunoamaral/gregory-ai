@@ -28,6 +28,9 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
 from .models import (
 	Articles,
+	ArticleMeshHeading,
+	MeshTerm,
+	PublicationType,
 	CategoryModality,
 	Trials,
 	Sources,
@@ -1091,6 +1094,52 @@ class DoiAssignedFilter(admin.SimpleListFilter):
 		return queryset
 
 
+class ReadOnlyInlineMixin:
+	"""Inline that only displays rows (PubMed data is managed by ingest)."""
+
+	extra = 0
+	can_delete = False
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+class ArticlePublicationTypeInline(ReadOnlyInlineMixin, admin.TabularInline):
+	model = Articles.publication_types.through
+	verbose_name = "publication type"
+	verbose_name_plural = "PubMed publication types"
+	fields = ("publication_type_name",)
+	readonly_fields = ("publication_type_name",)
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("publicationtype")
+
+	@admin.display(description="Publication type")
+	def publication_type_name(self, obj):
+		return obj.publicationtype.name
+
+
+class ArticleMeshHeadingInline(ReadOnlyInlineMixin, admin.TabularInline):
+	model = ArticleMeshHeading
+	verbose_name_plural = "MeSH headings"
+	fields = ("descriptor", "qualifier", "major_topic", "auto_indexed")
+	readonly_fields = fields
+
+	def get_queryset(self, request):
+		return (
+			super()
+			.get_queryset(request)
+			.select_related("descriptor", "qualifier")
+			.order_by("id")
+		)
+
+
 class ArticleAdmin(
 	OrganizationFilterMixin, SourceBulkActionMixin, RequestFormMixin, SimpleHistoryAdmin
 ):
@@ -1102,6 +1151,8 @@ class ArticleAdmin(
 		ArticleSubjectRelevanceInline,
 		ArticleTrialReferenceInline,
 		ArticleCategoryAssignmentInline,
+		ArticlePublicationTypeInline,
+		ArticleMeshHeadingInline,
 	]
 	fieldsets = (
 		(
@@ -1131,6 +1182,20 @@ class ArticleAdmin(
 					"crossref_refresh_button",
 				),
 				"description": "This section contains general information about the article",
+			},
+		),
+		(
+			"PubMed",
+			{
+				"fields": (
+					"pmid_link",
+					"pmcid",
+					"pubmed_status",
+					"pubmed_checked_at",
+					"language",
+					"keywords",
+				),
+				"description": "Read-only: filled from PubMed's record by the PubMed source and the PubMed refresh.",
 			},
 		),
 		(
@@ -1167,8 +1232,28 @@ class ArticleAdmin(
 
 	crossref_refresh_button.short_description = "Refresh from CrossRef"
 
-	readonly_fields = ["entities", "discovery_date", "links", "crossref_refresh_button"]
-	search_fields = ["article_id", "title", "doi"]
+	@admin.display(description="PMID")
+	def pmid_link(self, obj):
+		if not obj.pmid:
+			return "-"
+		return format_html(
+			'<a href="https://pubmed.ncbi.nlm.nih.gov/{pmid}/" target="_blank" rel="noopener">{pmid}</a>',
+			pmid=obj.pmid,
+		)
+
+	readonly_fields = [
+		"entities",
+		"discovery_date",
+		"links",
+		"crossref_refresh_button",
+		"pmid_link",
+		"pmcid",
+		"pubmed_status",
+		"pubmed_checked_at",
+		"language",
+		"keywords",
+	]
+	search_fields = ["article_id", "title", "doi", "pmid"]
 	list_filter = [
 		ArticleOrganizationFilter,
 		SiteScopeFilter,
@@ -4631,6 +4716,34 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 
 
 admin.site.register(Articles, ArticleAdmin)
+
+
+class ReadOnlyReferenceAdmin(admin.ModelAdmin):
+	"""Global PubMed reference data: browsable and searchable, never edited by hand."""
+
+	search_fields = ["name", "ui"]
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+@admin.register(PublicationType)
+class PublicationTypeAdmin(ReadOnlyReferenceAdmin):
+	list_display = ["name", "ui"]
+
+
+@admin.register(MeshTerm)
+class MeshTermAdmin(ReadOnlyReferenceAdmin):
+	list_display = ["name", "ui", "kind"]
+	list_filter = ["kind"]
+
+
 admin.site.register(Authors, AuthorsAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)

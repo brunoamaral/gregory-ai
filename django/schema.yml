@@ -106,6 +106,9 @@ paths:
         STATS_CACHE_TTL seconds (default 600).
 
         # Response Fields:
+        Each article includes **pmid**, **pmcid**, **keywords**, **publication_types** and **mesh** when PubMed
+        has a record for it (empty or `null` otherwise). Filter on PubMed ID with `?pmid=`.
+
         Each article includes a **ml_score** field: the average ML probability score across the most recent
         prediction per (algorithm, subject) pair. `null` when no predictions exist yet. Because it averages
         every subject the article was scored for, it is not scoped by `subject_id`.
@@ -295,6 +298,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: pmid
+        schema:
+          type: string
+        description: Filter by PubMed ID (digits only), exact match, e.g. ?pmid=38812345.
+      - in: query
         name: published_date_after
         schema:
           type: string
@@ -470,6 +478,9 @@ paths:
         STATS_CACHE_TTL seconds (default 600).
 
         # Response Fields:
+        Each article includes **pmid**, **pmcid**, **keywords**, **publication_types** and **mesh** when PubMed
+        has a record for it (empty or `null` otherwise). Filter on PubMed ID with `?pmid=`.
+
         Each article includes a **ml_score** field: the average ML probability score across the most recent
         prediction per (algorithm, subject) pair. `null` when no predictions exist yet. Because it averages
         every subject the article was scored for, it is not scoped by `subject_id`.
@@ -935,6 +946,11 @@ paths:
         schema:
           type: integer
       - in: query
+        name: pmid
+        schema:
+          type: string
+        description: Filter by PubMed ID (digits only), exact match, e.g. ?pmid=38812345.
+      - in: query
         name: published_date_after
         schema:
           type: string
@@ -1128,6 +1144,10 @@ paths:
                   type: string
                   description: Filter by DOI, case-insensitive. Accepts a single value
                     or a comma-separated list, e.g. ?doi=10.1/a,10.2/b.
+                pmid:
+                  type: string
+                  description: Filter by PubMed ID (digits only), exact match, e.g.
+                    ?pmid=38812345.
                 category_slug:
                   type: string
                   description: Filter by category slug (see /categories/).
@@ -7882,6 +7902,30 @@ components:
           type: string
           nullable: true
           maxLength: 280
+        pmid:
+          type: string
+          nullable: true
+          description: PubMed ID, digits only. The first dedup key.
+          maxLength: 20
+        pmcid:
+          type: string
+          nullable: true
+          description: PubMed Central ID, with its PMC prefix.
+          maxLength: 20
+        publication_types:
+          type: array
+          items:
+            type: string
+            description: Overwritten by ID on every sync and ingest, so NLM's renames
+              flow through.
+          readOnly: true
+        mesh:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArticleMeshHeading'
+          readOnly: true
+        keywords:
+          description: Author keywords from PubMed, in the order given.
         access:
           nullable: true
           oneOf:
@@ -7922,8 +7966,10 @@ components:
       - clinical_trials
       - discovery_date
       - link
+      - mesh
       - ml_predictions
       - ml_score
+      - publication_types
       - sources
       - subjects
       - team_categories
@@ -7958,6 +8004,22 @@ components:
       - family_name
       - full_name
       - given_name
+    ArticleMeshHeading:
+      type: object
+      properties:
+        descriptor:
+          type: string
+          readOnly: true
+        qualifier:
+          type: string
+          readOnly: true
+        major_topic:
+          type: boolean
+          description: MajorTopicYN of the descriptor on its own row, of the qualifier
+            on a pair row.
+      required:
+      - descriptor
+      - qualifier
     ArticleSubjectRelevance:
       type: object
       properties:

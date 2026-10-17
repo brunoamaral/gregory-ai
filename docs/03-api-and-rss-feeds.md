@@ -426,6 +426,7 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `subject_id` | integer | Filter by subject |
 | `author_id` | integer | Filter by author |
 | `doi` | string | Exact DOI match (case-insensitive) |
+| `pmid` | string | Exact PubMed ID match (digits only), e.g. `?pmid=38812345` |
 | `category_slug` | string | Filter by category slug |
 | `category_id` | integer | Filter by category ID |
 | `category_modality` | string | Filter by a category's curated intervention modality (`small_molecule`, `biologic_antibody`, `cell_gene_therapy`, `rehabilitation`, `device_neuromodulation`, `natural_product`, `research_topic`, `other`). Matches if *any* of the article's categories carry that modality |
@@ -449,6 +450,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `page_size` | integer | Items per page (max 100) |
 | `all_results` | boolean | Bypass pagination (useful for CSV export) |
 | `format` | string | `json` (default) or `csv` |
+
+**PubMed fields.** Each article carries `pmid` and `pmcid` (null when the article is not in PubMed), `keywords` (the authors' keywords, in the order PubMed gives them), `publication_types` (a list of names, e.g. `["Journal Article", "Review"]`) and `mesh` (a list of `{descriptor, qualifier, major_topic}`: one entry per MeSH descriptor with `qualifier: null`, and one per descriptor/qualifier pair). They are filled from PubMed's record, so they stay empty until the article has been matched to one.
 
 > **Changelog (2026-10-16):** for a few hours `relevant=true` (and the `relevant` count on `/articles/stats/`) hid articles an editor had marked not relevant whenever the ML models liked them. That is reverted: `relevant=` means "relevant by a human or by AI" again. The stricter editorial rule, where an editor's "not relevant" wins, stays on sitemaps with *Relevant only* on.
 

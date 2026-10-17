@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from gregory.models import (
 	Articles,
+	ArticleMeshHeading,
 	Trials,
 	Sources,
 	Authors,
@@ -570,6 +571,17 @@ class EditorialFieldMixin(_EditorialIncludeMixin):
 		return entries
 
 
+class ArticleMeshHeadingSerializer(serializers.ModelSerializer):
+	descriptor = serializers.CharField(source="descriptor.name", read_only=True)
+	qualifier = serializers.CharField(
+		source="qualifier.name", read_only=True, default=None
+	)
+
+	class Meta:
+		model = ArticleMeshHeading
+		fields = ["descriptor", "qualifier", "major_topic"]
+
+
 class ArticleSerializer(
 	SiteEditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
@@ -587,6 +599,12 @@ class ArticleSerializer(
 	)
 	clinical_trials = serializers.SerializerMethodField()
 	editorial = serializers.SerializerMethodField()
+	publication_types = serializers.SlugRelatedField(
+		many=True, read_only=True, slug_field="name"
+	)
+	mesh = ArticleMeshHeadingSerializer(
+		source="mesh_headings", many=True, read_only=True
+	)
 
 	class Meta:
 		model = Articles
@@ -607,6 +625,11 @@ class ArticleSerializer(
 			"discovery_date",
 			"article_subject_relevances",
 			"doi",
+			"pmid",
+			"pmcid",
+			"publication_types",
+			"mesh",
+			"keywords",
 			"access",
 			"editorial",
 			"team_categories",

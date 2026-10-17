@@ -755,6 +755,59 @@ class Sources(models.Model):
 		db_table = "sources"
 
 
+class PublicationType(models.Model):
+	"""A MeSH publication type (e.g. "Journal Article"). Global reference data,
+	seeded by sync_publication_types and extended by ingest."""
+
+	ui = models.CharField(
+		max_length=20,
+		unique=True,
+		help_text="MeSH unique ID, e.g. D016428. The stable key.",
+	)
+	name = models.CharField(
+		max_length=200,
+		help_text="Overwritten by ID on every sync and ingest, so NLM's renames flow through.",
+	)
+	scope_note = models.TextField(blank=True, help_text="NLM's definition.")
+
+	def __str__(self):
+		return self.name
+
+	class Meta:
+		db_table = "publication_types"
+		ordering = ["name"]
+
+
+class MeshTerm(models.Model):
+	"""A MeSH descriptor or qualifier. Only ever created by ingest."""
+
+	KIND_DESCRIPTOR = "descriptor"
+	KIND_QUALIFIER = "qualifier"
+	KINDS = [(KIND_DESCRIPTOR, "Descriptor"), (KIND_QUALIFIER, "Qualifier")]
+
+	ui = models.CharField(
+		max_length=20, unique=True, help_text="D... for a descriptor, Q... for a qualifier."
+	)
+	name = models.CharField(max_length=255, help_text="Overwritten by ID on ingest.")
+	kind = models.CharField(max_length=10, choices=KINDS)
+
+	def __str__(self):
+		return self.name
+
+	class Meta:
+		db_table = "mesh_terms"
+		ordering = ["name"]
+
+
+class PubmedStatus(models.TextChoices):
+	MEDLINE = "MEDLINE", "MEDLINE"
+	PUBMED_NOT_MEDLINE = "PubMed-not-MEDLINE", "PubMed-not-MEDLINE"
+	IN_DATA_REVIEW = "In-Data-Review", "In-Data-Review"
+	IN_PROCESS = "In-Process", "In-Process"
+	PUBLISHER = "Publisher", "Publisher"
+	OLDMEDLINE = "OLDMEDLINE", "OLDMEDLINE"
+
+
 class Articles(models.Model):
 	KINDS = [("science paper", "Science Paper"), ("news article", "News Article")]
 	ACCESS_OPTIONS = [
@@ -826,8 +879,45 @@ class Articles(models.Model):
 	)
 	crossref_check = models.DateTimeField(blank=True, null=True)
 	pdf_link = models.URLField(max_length=2000, blank=True, null=True)
+	pmid = models.CharField(
+		max_length=20,
+		unique=True,
+		blank=True,
+		null=True,
+		help_text="PubMed ID, digits only. The first dedup key.",
+	)
+	pmcid = models.CharField(
+		max_length=20,
+		blank=True,
+		null=True,
+		db_index=True,
+		help_text="PubMed Central ID, with its PMC prefix.",
+	)
+	publication_types = models.ManyToManyField(
+		PublicationType, blank=True, related_name="articles"
+	)
+	keywords = models.JSONField(
+		default=list, blank=True, help_text="Author keywords from PubMed, in the order given."
+	)
+	language = models.CharField(
+		max_length=3, blank=True, null=True, help_text="ISO 639-2 code, from PubMed."
+	)
+	pubmed_status = models.CharField(
+		max_length=20,
+		choices=PubmedStatus.choices,
+		blank=True,
+		null=True,
+		help_text="PubMed's indexing status for the record.",
+	)
+	pubmed_checked_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		db_index=True,
+		help_text="When the PubMed record was last fetched and applied.",
+	)
 	history = HistoricalRecords(
 		excluded_fields=[
+			"pubmed_checked_at",
 			"crossref_check",
 			"crossref_retraction_check",
 			"utitle",
@@ -995,6 +1085,48 @@ class Articles(models.Model):
 		verbose_name_plural = "articles"
 		db_table = "articles"
 		ordering = ["-discovery_date"]
+
+
+class ArticleMeshHeading(models.Model):
+	"""One MeSH descriptor on an article, or one descriptor/qualifier pair (the
+	MEDLINE flattening). Replaced in full each time the article's record is fetched."""
+
+	article = models.ForeignKey(
+		Articles, on_delete=models.CASCADE, related_name="mesh_headings"
+	)
+	descriptor = models.ForeignKey(
+		MeshTerm, on_delete=models.PROTECT, related_name="+"
+	)
+	qualifier = models.ForeignKey(
+		MeshTerm,
+		on_delete=models.PROTECT,
+		null=True,
+		blank=True,
+		related_name="+",
+		help_text="Empty on the descriptor's own row.",
+	)
+	major_topic = models.BooleanField(
+		default=False,
+		help_text="MajorTopicYN of the descriptor on its own row, of the qualifier on a pair row.",
+	)
+	auto_indexed = models.BooleanField(
+		default=False, help_text="Assigned by NLM's indexer without review (AutoHM)."
+	)
+
+	def __str__(self):
+		if self.qualifier_id:
+			return f"{self.descriptor}/{self.qualifier}"
+		return str(self.descriptor)
+
+	class Meta:
+		db_table = "article_mesh_headings"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["article", "descriptor", "qualifier"],
+				name="unique_article_mesh",
+				nulls_distinct=False,
+			)
+		]
 
 
 class Sponsor(models.Model):

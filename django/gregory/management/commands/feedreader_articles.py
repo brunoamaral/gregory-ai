@@ -10,7 +10,11 @@ from django.db import transaction
 from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.services.article_merge import assign_doi_or_merge
-from gregory.utils.doi_utils import extract_doi_from_url, resolve_doi_from_pubmed_url
+from gregory.utils.doi_utils import (
+	extract_doi_from_url,
+	extract_pmid_from_url,
+	resolve_doi_from_pubmed_url,
+)
 from gregory.utils.registry_utils import merge_links
 from sitesettings.models import CustomSetting
 import feedparser
@@ -52,6 +56,10 @@ class FeedProcessor(ABC):
 	def extract_doi(self, entry: dict) -> str:
 		"""Extract DOI from feed entry."""
 		pass
+
+	def extract_pmid(self, entry: dict) -> Optional[str]:
+		"""PubMed ID of the entry, when the feed is a PubMed one. Default: none."""
+		return None
 
 	def extract_doi_with_fallback(self, entry: dict) -> Optional[str]:
 		"""Resolve the DOI for an entry, falling back to the article URL.
@@ -176,6 +184,9 @@ class PubMedFeedProcessor(FeedProcessor):
 		if dc_identifier.startswith("doi:"):
 			return dc_identifier.replace("doi:", "")
 		return resolve_doi_from_pubmed_url(entry.get("link"))
+
+	def extract_pmid(self, entry: dict) -> Optional[str]:
+		return extract_pmid_from_url(entry.get("link"))
 
 
 class FasebFeedProcessor(FeedProcessor):
@@ -653,6 +664,7 @@ class Command(GregoryBaseCommand):
 		# Extract feed-specific fields
 		raw_summary = processor.extract_summary(entry)
 		doi = processor.extract_doi_with_fallback(entry)
+		pmid = processor.extract_pmid(entry)
 
 		# Clean and store the original feed summary
 		feed_summary = (
@@ -668,10 +680,11 @@ class Command(GregoryBaseCommand):
 				published_date,
 				source,
 				prefetched=prefetched,
+				pmid=pmid,
 			)
 		else:
 			self.process_article_without_doi(
-				title, feed_summary, link, published_date, source
+				title, feed_summary, link, published_date, source, pmid=pmid
 			)
 
 	def process_article_with_doi(
@@ -683,6 +696,7 @@ class Command(GregoryBaseCommand):
 		published_date,
 		source: Sources,
 		prefetched=None,
+		pmid: Optional[str] = None,
 	):
 		"""Process an article that has a DOI.
 
@@ -693,10 +707,10 @@ class Command(GregoryBaseCommand):
 		feed-level facts merged; the full CrossRef path runs for new articles
 		and for existing ones never checked against CrossRef.
 		"""
-		existing = self.find_existing_article(doi, title, link)
+		existing = self.find_existing_article(doi, title, link, pmid=pmid)
 		if existing is not None and existing.crossref_check:
 			self.merge_feed_entry_into_article(
-				existing, doi, feed_summary, link, published_date, source
+				existing, doi, feed_summary, link, published_date, source, pmid=pmid
 			)
 			return
 
@@ -726,6 +740,7 @@ class Command(GregoryBaseCommand):
 			access=article_data["access"],
 			crossref_check=article_data["crossref_check"],
 			pdf_link=article_data["pdf_link"],
+			pmid=pmid,
 		)
 
 		# Process authors if:
@@ -741,7 +756,14 @@ class Command(GregoryBaseCommand):
 			self.process_authors(crossref_paper, science_paper)
 
 	def merge_feed_entry_into_article(
-		self, article: Articles, doi: str, feed_summary: str, link: str, published_date, source: Sources
+		self,
+		article: Articles,
+		doi: str,
+		feed_summary: str,
+		link: str,
+		published_date,
+		source: Sources,
+		pmid: Optional[str] = None,
 	):
 		"""Merge feed-level facts into an article whose CrossRef data is on file.
 
@@ -768,6 +790,8 @@ class Command(GregoryBaseCommand):
 		if published_date is not None and article.published_date is None:
 			article.published_date = published_date
 			changed_fields.append("published_date")
+		if self._claim_pmid(article, pmid):
+			changed_fields.append("pmid")
 		if changed_fields:
 			article.save(update_fields=changed_fields)
 			self.log(
@@ -777,7 +801,13 @@ class Command(GregoryBaseCommand):
 		self.add_article_relationships(article, source)
 
 	def process_article_without_doi(
-		self, title: str, feed_summary: str, link: str, published_date, source: Sources
+		self,
+		title: str,
+		feed_summary: str,
+		link: str,
+		published_date,
+		source: Sources,
+		pmid: Optional[str] = None,
 	):
 		"""Process an article that doesn't have a DOI."""
 		self.log("No DOI, trying to create article", level=2)
@@ -798,6 +828,7 @@ class Command(GregoryBaseCommand):
 			published_date=published_date,
 			source=source,
 			crossref_check=None,
+			pmid=pmid,
 		)
 
 	def get_article_data_with_crossref(
@@ -849,10 +880,14 @@ class Command(GregoryBaseCommand):
 				"pdf_link": crossref_paper.pdf_link,
 			}
 
-	def find_existing_article(self, doi: str, title: str, link: str):
-		"""Locate the article this feed entry refers to, DOI-first.
+	def find_existing_article(
+		self, doi: str, title: str, link: str, pmid: Optional[str] = None
+	):
+		"""Locate the article this feed entry refers to, PMID- then DOI-first.
 
 		Lookup order:
+		0. PMID — unique too, and the only key a DOI-less PubMed entry can carry
+		   before CrossRef has been asked about it.
 		1. DOI — the only globally unique key we have. Matched case-insensitively
 		   to line up with the unique_article_doi constraint, so a case-only DOI
 		   variant resolves to the existing row instead of creating a collision.
@@ -864,6 +899,28 @@ class Command(GregoryBaseCommand):
 		   published all collide on title) and a new article must be created
 		   instead of absorbing the entry into the wrong row.
 		"""
+		if pmid:
+			article = Articles.objects.filter(pmid=pmid).first()
+			if article:
+				# A PMID row with no DOI must not take a DOI that another row holds
+				# (unique_article_doi): fall through to the DOI row instead and let
+				# _claim_pmid report the duplicate pair.
+				if doi and not article.doi:
+					doi_owner = (
+						Articles.objects.filter(doi__iexact=doi)
+						.exclude(pk=article.pk)
+						.first()
+					)
+					if doi_owner:
+						self.log(
+							f"  PMID {pmid} (article {article.article_id}) and DOI {doi} "
+							f"(article {doi_owner.article_id}) point at different rows; "
+							"using the DOI row.",
+							level=2,
+						)
+						return doi_owner
+				return article
+
 		if doi:
 			article = Articles.objects.filter(doi__iexact=doi).first()
 			if article:
@@ -900,6 +957,7 @@ class Command(GregoryBaseCommand):
 		access=None,
 		crossref_check=None,
 		pdf_link=None,
+		pmid: Optional[str] = None,
 	) -> tuple[Articles, bool, bool]:
 		"""Create a new article or update existing one. Returns (article, created, crossref_updated)."""
 		# NULL and "unknown" are the same semantic state (access was never
@@ -908,7 +966,7 @@ class Command(GregoryBaseCommand):
 		# already folds NULL into at read time.
 		access = access or "unknown"
 
-		existing_article = self.find_existing_article(doi, title, link)
+		existing_article = self.find_existing_article(doi, title, link, pmid=pmid)
 
 		crossref_was_updated = False
 
@@ -923,6 +981,13 @@ class Command(GregoryBaseCommand):
 				science_paper.save(update_fields=["doi"])
 				self.log(
 					f"  Added DOI {doi} to existing article: {science_paper.title}",
+					level=2,
+				)
+
+			if self._claim_pmid(science_paper, pmid):
+				science_paper.save(update_fields=["pmid"])
+				self.log(
+					f"  Added PMID {pmid} to existing article: {science_paper.title}",
 					level=2,
 				)
 
@@ -960,6 +1025,8 @@ class Command(GregoryBaseCommand):
 				"crossref_check": crossref_check,
 				"access": access,
 			}
+			if pmid:
+				article_data["pmid"] = pmid
 			if doi:
 				article_data.update(
 					{
@@ -979,6 +1046,27 @@ class Command(GregoryBaseCommand):
 		self.add_article_relationships(science_paper, source)
 
 		return science_paper, created, crossref_was_updated
+
+	def _claim_pmid(self, article: Articles, pmid: Optional[str]) -> bool:
+		"""Set ``pmid`` on ``article`` (in memory; the caller saves) when it has none.
+
+		Skips and logs when another article already holds the PMID: that is a
+		duplicate pair for merge_duplicate_articles, never an overwrite.
+		"""
+		if not pmid or article.pmid:
+			return False
+		holder = (
+			Articles.objects.filter(pmid=pmid).exclude(pk=article.pk).values_list("pk", flat=True).first()
+		)
+		if holder is not None:
+			self.log(
+				f"  PMID {pmid} already belongs to article {holder}; not setting it on "
+				f"article {article.article_id} (duplicate pair).",
+				level=2,
+			)
+			return False
+		article.pmid = pmid
+		return True
 
 	def article_needs_update(
 		self, article: Articles, title: str, summary: str, link: str, published_date
