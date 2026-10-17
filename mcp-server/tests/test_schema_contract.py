@@ -104,6 +104,10 @@ KNOWN_UNEXPOSED_PARAMS = {
 		# gregory_mcp/tenants.py. Absent from every tool's signature by design.
 		"site_id",
 		"source_id",  # niche — callers don't know source IDs
+		# Exact PubMed ID lookup (PubMed API source, PR 2). Deliberately not a
+		# tool parameter yet: `search` and `doi` already cover finding a paper,
+		# and the tool responses don't carry PMIDs. Revisit when they do.
+		"pmid",
 		"subjects",
 		"subjects_any",  # multi-subject AND/OR; subject_id covers the common case
 		"week",
