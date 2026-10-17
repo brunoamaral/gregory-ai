@@ -917,7 +917,13 @@ class Articles(models.Model):
 	)
 	history = HistoricalRecords(
 		excluded_fields=[
+			# PubMed bookkeeping, rewritten on every refresh with update() (which skips
+			# history); tracking these columns would make history attribute their
+			# changes to whichever unrelated save came next.
 			"pubmed_checked_at",
+			"pubmed_status",
+			"keywords",
+			"language",
 			"crossref_check",
 			"crossref_retraction_check",
 			"utitle",

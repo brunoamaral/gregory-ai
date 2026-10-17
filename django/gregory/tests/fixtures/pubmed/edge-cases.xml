@@ -1,0 +1,162 @@
+<?xml version="1.0" ?>
+<PubmedArticleSet>
+	<PubmedArticle>
+		<MedlineCitation Status="PubMed-not-MEDLINE" Owner="NLM">
+			<PMID Version="1">90000001</PMID>
+			<Article PubModel="Print-Electronic">
+				<Journal>
+					<JournalIssue CitedMedium="Internet">
+						<PubDate><Year>2025</Year><Month>03</Month></PubDate>
+					</JournalIssue>
+					<Title>Journal of Markup</Title>
+				</Journal>
+				<ArticleTitle>Effects of CO<sub>2</sub> on <i>in vitro</i> myelination in
+					<sup>7</sup>T imaging.</ArticleTitle>
+				<Abstract>
+					<AbstractText>Unstructured text with <i>italic</i> and x<sup>2</sup> inline.</AbstractText>
+					<CopyrightInformation>(c) 2025 Somebody.</CopyrightInformation>
+				</Abstract>
+				<AuthorList>
+					<Author><LastName>Rossi</LastName><ForeName>Anna</ForeName>
+						<Identifier Source="ORCID">https://orcid.org/0000-0002-1825-0097</Identifier></Author>
+					<Author><CollectiveName>The Group Study Consortium</CollectiveName></Author>
+					<Author><LastName>Nameless</LastName></Author>
+					<Author><LastName>Kowalski</LastName><ForeName>Jan</ForeName></Author>
+				</AuthorList>
+				<Language>eng</Language>
+				<Language>fre</Language>
+				<PublicationTypeList>
+					<PublicationType UI="D016428">Journal Article</PublicationType>
+				</PublicationTypeList>
+				<ELocationID EIdType="doi" ValidYN="Y">10.1234/ELocation.Only</ELocationID>
+			</Article>
+			<KeywordList Owner="NOTNLM">
+				<Keyword>alpha</Keyword><Keyword>beta</Keyword><Keyword>alpha</Keyword>
+			</KeywordList>
+		</MedlineCitation>
+		<PubmedData>
+			<History>
+				<PubMedPubDate PubStatus="entrez"><Year>2025</Year><Month>2</Month><Day>10</Day></PubMedPubDate>
+			</History>
+			<ArticleIdList>
+				<ArticleId IdType="pubmed">90000001</ArticleId>
+				<ArticleId IdType="pmc">PMC9000001</ArticleId>
+			</ArticleIdList>
+		</PubmedData>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM">
+			<PMID Version="1">90000002</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><MedlineDate>1998 Dec-1999 Jan</MedlineDate></PubDate></JournalIssue>
+					<Title>Old Journal</Title>
+				</Journal>
+				<ArticleTitle>Medline date record</ArticleTitle>
+				<Abstract>
+					<AbstractText Label="BACKGROUND" NlmCategory="BACKGROUND">Why.</AbstractText>
+					<AbstractText Label="METHODS" NlmCategory="METHODS">How.</AbstractText>
+					<AbstractText NlmCategory="UNASSIGNED">Loose paragraph.</AbstractText>
+				</Abstract>
+				<PublicationTypeList>
+					<PublicationType UI="D016428">Journal Article</PublicationType>
+					<PublicationType UI="D016441">Retracted Publication</PublicationType>
+				</PublicationTypeList>
+			</Article>
+			<MeshHeadingList>
+				<MeshHeading>
+					<DescriptorName UI="D008881" MajorTopicYN="Y">Migraine Disorders</DescriptorName>
+					<QualifierName UI="Q000209" MajorTopicYN="N">etiology</QualifierName>
+					<QualifierName UI="Q000601" MajorTopicYN="Y" AutoHM="Y">surgery</QualifierName>
+				</MeshHeading>
+				<MeshHeading>
+					<DescriptorName UI="D006801" MajorTopicYN="N" AutoHM="Y">Humans</DescriptorName>
+				</MeshHeading>
+			</MeshHeadingList>
+		</MedlineCitation>
+		<PubmedData>
+			<ArticleIdList><ArticleId IdType="doi">10.5555/MixedCase.DOI</ArticleId></ArticleIdList>
+		</PubmedData>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM">
+			<PMID Version="1">90000003</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><Year>2024</Year><Season>Spring</Season></PubDate></JournalIssue>
+					<Title>Seasonal Journal</Title>
+				</Journal>
+				<ArticleTitle>Season record with e-pub date</ArticleTitle>
+				<ArticleDate DateType="Electronic"><Year>2024</Year><Month>01</Month><Day>31</Day></ArticleDate>
+			</Article>
+			<CommentsCorrectionsList>
+				<CommentsCorrections RefType="RetractionIn"><RefSource>Some J. 2025</RefSource><PMID Version="1">90000099</PMID></CommentsCorrections>
+				<CommentsCorrections RefType="ErratumIn"><RefSource>Other J. 2025</RefSource></CommentsCorrections>
+			</CommentsCorrectionsList>
+		</MedlineCitation>
+		<PubmedData><ArticleIdList><ArticleId IdType="pubmed">90000003</ArticleId></ArticleIdList></PubmedData>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="Publisher" Owner="PUBLISHER">
+			<PMID Version="1">90000004</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><Year>2023</Year><Season>Winter</Season></PubDate></JournalIssue>
+					<Title>Winter Journal</Title>
+				</Journal>
+				<ArticleTitle>Winter record</ArticleTitle>
+			</Article>
+		</MedlineCitation>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="Publisher" Owner="PUBLISHER">
+			<PMID Version="1">90000005</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><Year>2022</Year><Month>Feb</Month><Day>31</Day></PubDate></JournalIssue>
+					<Title>Impossible Day Journal</Title>
+				</Journal>
+				<ArticleTitle>Day 31 of February</ArticleTitle>
+			</Article>
+		</MedlineCitation>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="Publisher" Owner="PUBLISHER">
+			<PMID Version="1">90000006</PMID>
+			<Article>
+				<Journal><Title>No Date Journal</Title></Journal>
+				<ArticleTitle>No dates at all</ArticleTitle>
+			</Article>
+		</MedlineCitation>
+	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM">
+			<PMID Version="1">90000008</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><Year>2021</Year></PubDate></JournalIssue>
+					<Title>Notation Journal</Title>
+				</Journal>
+				<ArticleTitle>Children aged &lt;or=5 years with fever and a&lt;b in &gt;or=2 cohorts: IL-2 &#8805; 3</ArticleTitle>
+				<ArticleDate><Year>2021</Year><Month>04</Month><Day>02</Day></ArticleDate>
+				<AuthorList>
+					<Author><LastName>Bare</LastName><ForeName>Orcid</ForeName>
+						<Identifier Source="ORCID">0000000218250097</Identifier></Author>
+				</AuthorList>
+				<Language>eng</Language>
+			</Article>
+			<OtherAbstract Type="Publisher" Language="spa">
+				<AbstractText>Solo un resumen en espa&#241;ol.</AbstractText>
+			</OtherAbstract>
+			<CommentsCorrectionsList>
+				<CommentsCorrections RefType="ErratumIn"><RefSource>Other J. 2022</RefSource></CommentsCorrections>
+			</CommentsCorrectionsList>
+		</MedlineCitation>
+	</PubmedArticle>
+	<PubmedBookArticle>
+		<BookDocument>
+			<PMID Version="1">90000007</PMID>
+			<Book><BookTitle>A Book</BookTitle></Book>
+		</BookDocument>
+	</PubmedBookArticle>
+</PubmedArticleSet>

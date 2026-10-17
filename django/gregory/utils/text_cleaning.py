@@ -2,6 +2,7 @@
 when reviewing upstream (CrossRef) metadata in the admin.
 """
 
+import re
 from typing import Optional
 
 # Inline tags whose markup carries meaning and should be preserved in titles
@@ -33,3 +34,20 @@ def clean_title(title: Optional[str]) -> Optional[str]:
 	# formatter=None keeps entities unescaped (e.g. bare &) so the stored
 	# title matches the human-readable form; str(soup) would re-encode & -> &amp;.
 	return " ".join(soup.decode(formatter=None).split())
+
+
+_TRUNCATION_ENDINGS = (
+	re.compile(r"\.\.\.$"),  # ...
+	re.compile(r"\[\.\.\.\]$"),  # [...]
+	re.compile(r"\[…\]$"),  # [...] with the ellipsis character
+	re.compile(r"…$"),  # ellipsis character
+)
+
+
+def is_summary_truncated(summary):
+	"""True when a summary ends with a common truncation marker (``...``, ``[...]``,
+	``…``). Feeds cut long abstracts off this way."""
+	if not summary:
+		return False
+	summary = summary.strip()
+	return any(pattern.search(summary) for pattern in _TRUNCATION_ENDINGS)

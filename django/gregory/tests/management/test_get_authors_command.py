@@ -14,9 +14,8 @@ class GetAuthorsCommandTest(TestCase):
 	@patch("gregory.management.commands.get_authors.Works")
 	@patch("gregory.management.commands.get_authors.CustomSetting")
 	@patch("gregory.management.commands.get_authors.Articles")
-	@patch("gregory.management.commands.get_authors.Authors")
 	def test_handle_updates_authors(
-		self, mock_authors, mock_articles, mock_setting, mock_works, mock_load
+		self, mock_articles, mock_setting, mock_works, mock_load
 	):
 		mock_setting.objects.get.return_value = MagicMock(
 			site=MagicMock(domain="example.com"),

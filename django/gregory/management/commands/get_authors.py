@@ -3,8 +3,9 @@ from django.db.models import Q
 from crossref.restful import Works, Etiquette
 from dotenv import load_dotenv
 import os
-from gregory.models import Articles, Authors
+from gregory.models import Articles
 from gregory.functions import normalize_orcid
+from gregory.utils.authors import AMBIGUOUS, CREATED, UPDATED, get_or_create_author
 from gregory.utils.enrichment import clear_marker, due_filter, record_fruitless_attempt
 from sitesettings.models import CustomSetting
 
@@ -59,54 +60,28 @@ class Command(BaseCommand):
 						)
 						continue
 
-					# First, attempt to match or create by ORCID
-					if orcid:
-						author_obj, created = Authors.objects.get_or_create(
-							ORCID=orcid,
-							defaults={
-								"given_name": given_name,
-								"family_name": family_name,
-							},
+					author_obj, status = get_or_create_author(
+						given_name, family_name, orcid
+					)
+					if status == AMBIGUOUS:
+						self.stderr.write(
+							self.style.WARNING(
+								f"Multiple authors found for {given_name} {family_name}, unable to uniquely identify. Skipping."
+							)
 						)
-						if not created:
-							# Update the author name if it's different
-							if (
-								author_obj.given_name != given_name
-								or author_obj.family_name != family_name
-							):
-								author_obj.given_name = given_name
-								author_obj.family_name = family_name
-								author_obj.save()
-								self.stdout.write(
-									self.style.SUCCESS(
-										f"Updated author {author_obj.full_name} with ORCID: {orcid}."
-									)
-								)
-					else:
-						# Handle authors without ORCID or when ORCID isn't provided
-						try:
-							author_obj = Authors.objects.get(
-								given_name=given_name, family_name=family_name
+						continue
+					if status == UPDATED:
+						self.stdout.write(
+							self.style.SUCCESS(
+								f"Updated author {author_obj.full_name} with ORCID: {orcid}."
 							)
-						except Authors.DoesNotExist:
-							# Create a new author if none found
-							self.stdout.write(
-								self.style.SUCCESS(
-									f"Creating author: {given_name} {family_name} with ORCID: {orcid}"
-								)
+						)
+					elif status == CREATED and not orcid:
+						self.stdout.write(
+							self.style.SUCCESS(
+								f"Creating author: {given_name} {family_name} with ORCID: {orcid}"
 							)
-							author_obj = Authors.objects.create(
-								given_name=given_name,
-								family_name=family_name,
-								ORCID=orcid,
-							)
-						except Authors.MultipleObjectsReturned:
-							self.stderr.write(
-								self.style.WARNING(
-									f"Multiple authors found for {given_name} {family_name}, unable to uniquely identify. Skipping."
-								)
-							)
-							continue
+						)
 
 					# Add author to article if an author object was successfully created or retrieved
 					if author_obj:

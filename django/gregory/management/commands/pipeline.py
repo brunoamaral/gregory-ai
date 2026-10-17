@@ -52,6 +52,10 @@ class Command(BaseCommand):
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors
 			(
+				"refresh_pubmed_records",
+				{},
+			),  # 6b. PubMed's record (abstract, publication types, MeSH, retractions) for articles with a PMID
+			(
 				"rebuild_categories",
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
