@@ -25,6 +25,9 @@ from django.utils import timezone
 from organizations.models import Organization
 
 from gregory.models import (
+	ArticleMeshHeading,
+	MeshTerm,
+	PublicationType,
 	ArticleCategoryAssignment,
 	ArticleOrgContent,
 	ArticleSiteContent,
@@ -84,6 +87,84 @@ class MergeFixtureMixin:
 class MergeArticlesServiceTests(MergeFixtureMixin, TestCase):
 	def setUp(self):
 		self.build_common()
+
+	def merge_pair(self, keep_kwargs, loser_kwargs):
+		keep, loser = self.make_dup_pair(
+			"10.1/pm", links=("https://ex.org/keep", "https://ex.org/loser")
+		)
+		Articles.objects.filter(pk=keep.pk).update(**keep_kwargs)
+		Articles.objects.filter(pk=loser.pk).update(**loser_kwargs)
+		keep.refresh_from_db()
+		loser.refresh_from_db()
+		with transaction.atomic():
+			return merge_articles(keep, [loser])
+
+	def test_carries_pubmed_fields_the_survivor_lacks(self):
+		checked = timezone.now()
+		survivor = self.merge_pair(
+			{},
+			{
+				"pmid": "111",
+				"pmcid": "PMC1",
+				"language": "eng",
+				"keywords": ["a", "b"],
+				"pubmed_status": "MEDLINE",
+				"pubmed_checked_at": checked,
+			},
+		)
+		self.assertEqual(survivor.pmid, "111")
+		self.assertEqual(survivor.pmcid, "PMC1")
+		self.assertEqual(survivor.language, "eng")
+		self.assertEqual(survivor.keywords, ["a", "b"])
+		self.assertEqual(survivor.pubmed_status, "MEDLINE")
+		self.assertEqual(survivor.pubmed_checked_at, checked)
+		self.assertEqual(Articles.objects.filter(pmid="111").count(), 1)
+
+	def test_survivor_pubmed_fields_win(self):
+		survivor = self.merge_pair(
+			{"pmid": "111", "pmcid": "PMC1", "language": "eng", "keywords": ["keep"]},
+			{"pmid": "222", "pmcid": "PMC2", "language": "fre", "keywords": ["lose"]},
+		)
+		self.assertEqual(
+			(survivor.pmid, survivor.pmcid, survivor.language, survivor.keywords),
+			("111", "PMC1", "eng", ["keep"]),
+		)
+
+	def test_status_and_check_time_move_together(self):
+		keep_checked = timezone.now()
+		survivor = self.merge_pair(
+			{"pubmed_status": "Publisher", "pubmed_checked_at": keep_checked},
+			{"pubmed_status": "MEDLINE", "pubmed_checked_at": timezone.now()},
+		)
+		self.assertEqual(survivor.pubmed_status, "Publisher")
+		self.assertEqual(survivor.pubmed_checked_at, keep_checked)
+
+	def test_publication_types_and_mesh_are_unioned(self):
+		keep, loser = self.make_dup_pair(
+			"10.1/pm2", links=("https://ex.org/keep2", "https://ex.org/loser2")
+		)
+		shared = PublicationType.objects.create(ui="D1", name="Journal Article")
+		extra = PublicationType.objects.create(ui="D2", name="Review")
+		keep.publication_types.add(shared)
+		loser.publication_types.add(shared, extra)
+		term = MeshTerm.objects.create(ui="D100", name="Multiple Sclerosis", kind="descriptor")
+		ArticleMeshHeading.objects.create(article=keep, descriptor=term)
+		ArticleMeshHeading.objects.create(article=loser, descriptor=term)
+		other = MeshTerm.objects.create(ui="D101", name="Humans", kind="descriptor")
+		ArticleMeshHeading.objects.create(article=loser, descriptor=other)
+
+		with transaction.atomic():
+			survivor = merge_articles(keep, [loser])
+
+		self.assertEqual(
+			set(survivor.publication_types.values_list("name", flat=True)),
+			{"Journal Article", "Review"},
+		)
+		self.assertEqual(
+			set(survivor.mesh_headings.values_list("descriptor__name", flat=True)),
+			{"Multiple Sclerosis", "Humans"},
+		)
+		self.assertEqual(survivor.mesh_headings.count(), 2)
 
 	def test_unions_m2m_and_deletes_loser(self):
 		keep, loser = self.make_dup_pair(

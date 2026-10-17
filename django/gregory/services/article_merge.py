@@ -20,6 +20,7 @@ The merge, per removed article:
   * repoints every other reverse-FK child (category assignments, trial
     references, org content, sent notifications) to the survivor, dropping a
     child only when the survivor already holds the equivalent unique row,
+  * carries PubMed data the survivor lacks (PMID, PMCID, keywords, language, status),
   * deletes the removed article,
   * recomputes the survivor's denormalized ``relevant`` flag rather than copying
     it blindly.
@@ -150,6 +151,39 @@ def _merge_editorial_contents(keep, rem, accessor, owner_field, stdout=None):
 		rem_content.delete()
 
 
+def _carry_pubmed_fields(keep, rem, stdout=None):
+	"""Fill the survivor's empty PubMed fields from the removed article.
+
+	Only fills gaps: whatever the survivor already has wins. ``pmid`` is unique, so
+	it is released from the removed row before the survivor takes it. The status
+	and its check time move together, keyed on the check time, so they never
+	describe two different fetches.
+	"""
+	carried = {}
+	if not keep.pmcid and rem.pmcid:
+		carried["pmcid"] = rem.pmcid
+	if not keep.language and rem.language:
+		carried["language"] = rem.language
+	if not keep.keywords and rem.keywords:
+		carried["keywords"] = rem.keywords
+	if keep.pubmed_checked_at is None and rem.pubmed_checked_at is not None:
+		carried["pubmed_checked_at"] = rem.pubmed_checked_at
+		carried["pubmed_status"] = rem.pubmed_status
+	if not keep.pmid and rem.pmid:
+		Articles.objects.filter(pk=rem.pk).update(pmid=None)
+		carried["pmid"] = rem.pmid
+	elif keep.pmid and rem.pmid and keep.pmid != rem.pmid:
+		_log(
+			stdout,
+			f"   PMIDs differ ({keep.pmid} kept, {rem.pmid} dropped); check these are one paper.",
+		)
+	if carried:
+		for name, value in carried.items():
+			setattr(keep, name, value)
+		keep.save(update_fields=list(carried))
+		_log(stdout, f"   carried PubMed fields: {', '.join(sorted(carried))}")
+
+
 def merge_articles(keep, remove, *, stdout=None, recompute=True):
 	"""Merge every article in ``remove`` into ``keep`` and delete them.
 
@@ -219,6 +253,8 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 						f"   dropped duplicate {rel.related_model.__name__} "
 						f"#{dropped_pk} (survivor already has the equivalent row)",
 					)
+
+		_carry_pubmed_fields(keep, rem, stdout=stdout)
 
 		removed_id = rem.article_id
 		removed_doi = rem.doi
