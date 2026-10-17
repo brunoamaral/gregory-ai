@@ -84,6 +84,7 @@ from gregory.utils.trial_field_normalizers import (
 )
 from gregory.models import (
 	Articles,
+	ArticleMeshHeading,
 	ArticleCategoryAssignment,
 	ArticleSiteContent,
 	ArticleSubjectRelevance,
@@ -333,6 +334,12 @@ class BodyParamsAsQueryParamsMixin:
 				merged[key] = str(value)
 		merged._mutable = False
 		request._request.GET = merged
+
+
+def _mesh_headings_queryset():
+	"""MeSH headings for the article serializer's ``mesh`` field, with both terms
+	joined so a page costs one query."""
+	return ArticleMeshHeading.objects.select_related("descriptor", "qualifier").order_by("id")
 
 
 def _latest_ml_predictions_queryset():
@@ -1665,6 +1672,9 @@ class ArticleViewSet(
 	STATS_CACHE_TTL seconds (default 600).
 
 	# Response Fields:
+	Each article includes **pmid**, **pmcid**, **keywords**, **publication_types** and **mesh** when PubMed
+	has a record for it (empty or `null` otherwise). Filter on PubMed ID with `?pmid=`.
+
 	Each article includes a **ml_score** field: the average ML probability score across the most recent
 	prediction per (algorithm, subject) pair. `null` when no predictions exist yet. Because it averages
 	every subject the article was scored for, it is not scoped by `subject_id`.
@@ -1704,6 +1714,8 @@ class ArticleViewSet(
 		Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 		"sources",
 		"team_categories",
+		"publication_types",
+		Prefetch("mesh_headings", queryset=_mesh_headings_queryset()),
 		Prefetch(
 			"article_subject_relevances",
 			queryset=ArticleSubjectRelevance.objects.select_related("subject__team"),
@@ -4546,6 +4558,8 @@ class ArticleSearchView(
 				Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 				"sources",
 				"team_categories",
+				"publication_types",
+				Prefetch("mesh_headings", queryset=_mesh_headings_queryset()),
 				Prefetch(
 					"article_subject_relevances",
 					queryset=ArticleSubjectRelevance.objects.select_related("subject__team"),

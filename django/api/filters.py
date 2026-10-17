@@ -350,6 +350,12 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"comma-separated list, e.g. ?doi=10.1/a,10.2/b."
 		),
 	)
+	pmid = filters.CharFilter(
+		field_name="pmid",
+		lookup_expr="exact",
+		label="PMID",
+		help_text="Filter by PubMed ID (digits only), exact match, e.g. ?pmid=38812345.",
+	)
 	category_slug = filters.CharFilter(
 		field_name="team_categories__category_slug",
 		lookup_expr="exact",
@@ -534,6 +540,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"search",
 			"author_id",
 			"doi",
+			"pmid",
 			"category_slug",
 			"category_id",
 			"category_modality",

@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from gregory.models import (
 	Articles,
+	ArticleMeshHeading,
 	Trials,
 	Sources,
 	Authors,
@@ -570,6 +571,17 @@ class EditorialFieldMixin(_EditorialIncludeMixin):
 		return entries
 
 
+class ArticleMeshHeadingSerializer(serializers.ModelSerializer):
+	descriptor = serializers.CharField(source="descriptor.name", read_only=True)
+	qualifier = serializers.CharField(
+		source="qualifier.name", read_only=True, default=None, allow_null=True
+	)
+
+	class Meta:
+		model = ArticleMeshHeading
+		fields = ["descriptor", "qualifier", "major_topic"]
+
+
 class ArticleSerializer(
 	SiteEditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
@@ -587,6 +599,11 @@ class ArticleSerializer(
 	)
 	clinical_trials = serializers.SerializerMethodField()
 	editorial = serializers.SerializerMethodField()
+	publication_types = serializers.SerializerMethodField()
+	keywords = serializers.ListField(child=serializers.CharField(), read_only=True)
+	mesh = ArticleMeshHeadingSerializer(
+		source="mesh_headings", many=True, read_only=True
+	)
 
 	class Meta:
 		model = Articles
@@ -607,6 +624,11 @@ class ArticleSerializer(
 			"discovery_date",
 			"article_subject_relevances",
 			"doi",
+			"pmid",
+			"pmcid",
+			"publication_types",
+			"mesh",
+			"keywords",
 			"access",
 			"editorial",
 			"team_categories",
@@ -615,6 +637,11 @@ class ArticleSerializer(
 			"clinical_trials",
 		]
 		read_only_fields = ("discovery_date", "ml_predictions", "ml_score", "clinical_trials")
+
+	@extend_schema_field(serializers.ListField(child=serializers.CharField()))
+	def get_publication_types(self, obj):
+		"""PubMed publication type names, e.g. ``["Journal Article", "Review"]``."""
+		return [t.name for t in obj.publication_types.all()]
 
 	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
