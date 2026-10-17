@@ -14,7 +14,7 @@ limits.
 | Setup | Paste a feed URL | Write a search (below) |
 
 Both kinds can run side by side. A paper found by both is stored once: the PubMed source
-matches it by PMID, then DOI, then link, then title, and fills in what the feed left out.
+matches it by PMID, then DOI, then link, then title, and fills in what the feed left out. From then on the RSS source only fills gaps in that article (its URL, a missing summary or date, the source link): it never replaces the title or abstract that PubMed supplied. Two papers that share a generic title but have different PMIDs ("Erratum", "Correction") are kept apart.
 
 ## Add a source
 

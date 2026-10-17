@@ -708,7 +708,10 @@ class Command(GregoryBaseCommand):
 		and for existing ones never checked against CrossRef.
 		"""
 		existing = self.find_existing_article(doi, title, link, pmid=pmid)
-		if existing is not None and existing.crossref_check:
+		# An article with CrossRef data, or whose PubMed record has been applied, only
+		# gets the feed's URL, gap-filling and relationships: PubMed's title and full
+		# abstract must not be replaced by a feed's shorter text.
+		if existing is not None and (existing.crossref_check or existing.pubmed_checked_at):
 			self.merge_feed_entry_into_article(
 				existing, doi, feed_summary, link, published_date, source, pmid=pmid
 			)
@@ -798,6 +801,7 @@ class Command(GregoryBaseCommand):
 				level=2,
 			)
 		self.add_article_relationships(article, source)
+		return article
 
 	def process_article_without_doi(
 		self,
@@ -941,6 +945,15 @@ class Command(GregoryBaseCommand):
 
 		article = Articles.objects.filter(title=title).first()
 		if article:
+			if pmid and article.pmid and article.pmid != pmid:
+				# Two PubMed records can share a generic title ("Erratum", "Correction"):
+				# different PMIDs are different papers.
+				self.log(
+					f"  Title matches article {article.article_id} but PMIDs differ "
+					f"({article.pmid} vs {pmid}); creating a new article.",
+					level=2,
+				)
+				return None
 			if doi and article.doi and article.doi.lower() != doi.lower():
 				self.log(
 					f"  Title matches article {article.article_id} but DOIs differ "
@@ -977,6 +990,14 @@ class Command(GregoryBaseCommand):
 		existing_article = self.find_existing_article(doi, title, link, pmid=pmid)
 
 		crossref_was_updated = False
+
+		if existing_article and existing_article.pubmed_checked_at:
+			# PubMed's record is on file: the feed only fills gaps (see
+			# process_article_with_doi).
+			merged = self.merge_feed_entry_into_article(
+				existing_article, doi, summary, link, published_date, source, pmid=pmid
+			)
+			return merged, False, False
 
 		if existing_article:
 			science_paper = existing_article

@@ -386,3 +386,14 @@ class WindowTests(PubmedImporterBase):
 	def test_source_id_for_nothing_says_so(self):
 		output = self.run_command(fake_client(), "--source-id", "99999")
 		self.assertIn("No active PubMed source with id 99999", output)
+
+	def test_a_generic_title_shared_with_a_different_pmid_creates_a_new_article(self):
+		other = Articles.objects.create(title="Title 42830590", link="https://x.org/e", pmid="999")
+		client = fake_client(ids=["42830590"])
+		client.efetch_pubmed.return_value = echo_xml(["42830590"])
+		output = self.run_command(client)
+		other.refresh_from_db()
+		self.assertEqual(other.pmid, "999")
+		self.assertEqual(Articles.objects.count(), 2)
+		self.assertTrue(Articles.objects.filter(pmid="42830590").exclude(pk=other.pk).exists())
+		self.assertIn("1 new, 0 merged", output)

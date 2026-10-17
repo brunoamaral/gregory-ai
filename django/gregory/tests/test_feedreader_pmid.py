@@ -39,7 +39,9 @@ class ExtractPmidTests(TestCase):
 		self.assertIsNone(DefaultFeedProcessor(MagicMock()).extract_pmid({"link": PMID_LINK}))
 
 
-class FeedreaderPmidTests(TestCase):
+class FeedBase(TestCase):
+	"""A PubMed RSS source and a way to run one feed through the importer."""
+
 	def setUp(self):
 		self.source = Sources.objects.create(
 			name="PubMed feed",
@@ -58,9 +60,14 @@ class FeedreaderPmidTests(TestCase):
 
 		with patch.object(
 			Command, "fetch_feed", return_value={"entries": entries}
-		), patch.object(SciencePaper, "refresh", autospec=True, side_effect=refresh):
+		), patch.object(
+			SciencePaper, "refresh", autospec=True, side_effect=refresh
+		) as mock_refresh:
 			self.cmd.update_articles_from_feeds()
+		return mock_refresh
 
+
+class FeedreaderPmidTests(FeedBase):
 	def test_new_article_gets_the_pmid(self):
 		self.run_feed([entry()])
 		self.assertEqual(Articles.objects.get(doi="10.1000/alpha").pmid, "38812345")
@@ -145,3 +152,80 @@ class FeedreaderPmidTests(TestCase):
 			self.assertFalse(cmd._claim_pmid(article, "555"))
 		article.refresh_from_db()
 		self.assertIsNone(article.pmid)
+
+
+class RssFillsGapsOnlyAfterPubmedTests(FeedBase):
+	"""Once an article carries PubMed's record, the RSS feed may only fill gaps."""
+
+	def pubmed_article(self, **kwargs):
+		defaults = dict(
+			title="PubMed title",
+			link="https://pubmed.ncbi.nlm.nih.gov/38812345/",
+			summary="A complete structured abstract from PubMed. " * 10,
+			doi="10.1000/alpha",
+			pmid="38812345",
+			pubmed_checked_at=timezone.now(),
+		)
+		defaults.update(kwargs)
+		return Articles.objects.create(**defaults)
+
+	def test_the_feed_does_not_replace_pubmeds_title_or_abstract(self):
+		article = self.pubmed_article()
+		full_summary = article.summary
+		mock_refresh = self.run_feed([entry(title="Feed title", summary="Short feed text...")])
+		article.refresh_from_db()
+		self.assertEqual(article.title, "PubMed title")
+		self.assertEqual(article.summary, full_summary)
+		mock_refresh.assert_not_called()  # no CrossRef round-trip either
+		self.assertIn(self.source, article.sources.all())
+		self.assertEqual(Articles.objects.count(), 1)
+
+	def test_the_feed_still_fills_a_gap(self):
+		article = self.pubmed_article(summary="", published_date=None)
+		self.run_feed([entry(summary="Feed summary fills the gap")])
+		article.refresh_from_db()
+		self.assertEqual(article.summary, "Feed summary fills the gap")
+		self.assertIsNotNone(article.published_date)
+		self.assertEqual(article.title, "PubMed title")
+
+	def test_a_doi_less_feed_entry_also_only_fills_gaps(self):
+		article = self.pubmed_article(doi=None)
+		full_summary = article.summary
+		with patch("gregory.utils.doi_utils.requests.get", side_effect=ConnectionError("down")):
+			self.run_feed([entry(dc_identifier="", title="Feed title", summary="Short feed text")])
+		article.refresh_from_db()
+		self.assertEqual(article.title, "PubMed title")
+		self.assertEqual(article.summary, full_summary)
+		self.assertIn(self.source, article.sources.all())
+		self.assertEqual(Articles.objects.count(), 1)
+
+	def test_an_article_without_a_pubmed_record_still_takes_the_full_path(self):
+		article = self.pubmed_article(pubmed_checked_at=None)
+		mock_refresh = self.run_feed([entry(title="Feed title")])
+		mock_refresh.assert_called_once()
+		article.refresh_from_db()
+		self.assertEqual(article.title, "Feed title")
+
+
+class TitleMatchWithDifferentPmidTests(TestCase):
+	def setUp(self):
+		self.cmd = Command()
+
+	def test_same_title_different_pmids_are_different_papers(self):
+		Articles.objects.create(title="Erratum", link="https://x.org/1", pmid="111")
+		self.assertIsNone(self.cmd.find_existing_article(None, "Erratum", "https://x.org/2", pmid="222"))
+
+	def test_same_title_same_pmid_is_the_same_paper(self):
+		a = Articles.objects.create(title="Erratum", link="https://x.org/1", pmid="111")
+		found = self.cmd.find_existing_article(None, "Erratum", "https://x.org/2", pmid="111")
+		self.assertEqual(found, a)
+
+	def test_a_candidate_without_a_pmid_still_matches_by_title(self):
+		a = Articles.objects.create(title="Some title", link="https://x.org/1")
+		found = self.cmd.find_existing_article(None, "Some title", "https://x.org/2", pmid="222")
+		self.assertEqual(found, a)
+
+	def test_a_feed_without_a_pmid_still_matches_by_title(self):
+		a = Articles.objects.create(title="Some title", link="https://x.org/1", pmid="111")
+		found = self.cmd.find_existing_article(None, "Some title", "https://x.org/2", pmid=None)
+		self.assertEqual(found, a)
