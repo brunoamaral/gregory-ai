@@ -16,7 +16,9 @@ import logging
 import re
 from urllib.parse import urlparse
 
-import requests
+import requests  # noqa: F401  (kept for tests that patch doi_utils.requests)
+
+from gregory.utils.ncbi import NcbiClient
 
 # A DOI prefix is "10." followed by a 4-9 digit registrant code, then a slash
 # and a suffix. The suffix is greedy up to whitespace/quote/angle-bracket/
@@ -25,8 +27,6 @@ _DOI_PATTERN = re.compile(r"10\.\d{4,9}/[^\s?#\"'<>]+")
 
 # e.g. https://pubmed.ncbi.nlm.nih.gov/38812345/
 _PMID_LINK_PATTERN = re.compile(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)")
-
-_ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 
 # Trailing characters that are almost always URL/markup noise rather than
 # part of the DOI suffix itself.
@@ -116,13 +116,10 @@ def resolve_doi_from_pmid(pmid: str) -> str | None:
 	if not pmid:
 		return None
 	try:
-		response = requests.get(
-			_ESUMMARY_URL,
-			params={"db": "pubmed", "id": pmid, "retmode": "json"},
-			timeout=10,
-		)
-		response.raise_for_status()
-		data = response.json()
+		# Keyless (there is no organisation in this context), with a short leash:
+		# a feed run does one of these per PubMed link, so an NCBI outage must not
+		# cost seconds of retries each.
+		data = NcbiClient(timeout=10, max_retries=1).esummary("pubmed", [pmid])
 		article_ids = data.get("result", {}).get(pmid, {}).get("articleids", [])
 		for article_id in article_ids:
 			if article_id.get("idtype") == "doi":

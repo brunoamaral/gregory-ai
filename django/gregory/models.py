@@ -2008,6 +2008,21 @@ class OrganizationCredentials(models.Model):
 		null=True,
 		help_text="EPO Open Patent Services consumer secret for this organization.",
 	)
+	ncbi_api_key = EncryptedTextField(
+		blank=True,
+		null=True,
+		help_text="NCBI E-utilities API key for this organization. Without one, PubMed requests run at the shared keyless rate (3 a second).",
+	)
+	ncbi_email = models.EmailField(
+		blank=True,
+		null=True,
+		help_text="Contact email sent to NCBI with every request. Falls back to the site's admin email.",
+	)
+	ncbi_tool = models.CharField(
+		max_length=50,
+		default="gregory-ai",
+		help_text="Tool name sent to NCBI. NCBI says it names the software; leave the default unless NCBI asks otherwise.",
+	)
 	postmark_api_token = EncryptedTextField(
 		blank=True, null=True, help_text="Postmark API Token for this organization."
 	)

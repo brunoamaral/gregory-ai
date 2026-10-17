@@ -3407,6 +3407,9 @@ class OrganizationCredentialsInline(admin.StackedInline):
 		"orcid_client_secret",
 		"epo_ops_consumer_key",
 		"epo_ops_consumer_secret",
+		"ncbi_api_key",
+		"ncbi_email",
+		"ncbi_tool",
 	)
 	verbose_name = "Credentials"
 	verbose_name_plural = "Credentials"
