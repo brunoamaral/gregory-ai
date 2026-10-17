@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from gregory.utils.pubmed_xml import parse_pubmed_xml
+from gregory.utils.pubmed_xml import PubmedXmlError, parse_pubmed_xml
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pubmed"
 
@@ -150,8 +150,25 @@ class EdgeCaseTests(SimpleTestCase):
 		self.assertFalse(self.records["90000001"].retracted)
 
 	def test_erratum_alone_is_not_a_retraction(self):
-		# 90000003 has both an erratum and a retraction notice; the retraction decides
-		self.assertTrue(self.records["90000003"].retracted)
+		self.assertFalse(self.records["90000008"].retracted)
+
+	def test_escaped_angle_brackets_in_a_title_are_kept(self):
+		self.assertEqual(
+			self.records["90000008"].title,
+			"Children aged <or=5 years with fever and a<b in >or=2 cohorts: IL-2 \u2265 3",
+		)
+
+	def test_non_ascii_text_survives(self):
+		self.assertIn("\u2265", self.records["90000008"].title)
+
+	def test_other_abstract_is_not_the_abstract(self):
+		self.assertEqual(self.records["90000008"].abstract, "")
+
+	def test_bare_orcid_gets_its_hyphens(self):
+		self.assertEqual(self.records["90000008"].authors[0].orcid, "0000-0002-1825-0097")
+
+	def test_article_date_without_a_date_type_is_electronic(self):
+		self.assertEqual(self.records["90000008"].published_date, utc(2021, 4, 2))
 
 	def test_mesh_qualifiers_and_auto_indexing(self):
 		migraine, humans = self.records["90000002"].mesh
@@ -168,3 +185,12 @@ class EdgeCaseTests(SimpleTestCase):
 	def test_record_without_a_pmid_is_dropped(self):
 		xml = b"<PubmedArticleSet><PubmedArticle><MedlineCitation><Article/></MedlineCitation></PubmedArticle></PubmedArticleSet>"
 		self.assertEqual(parse_pubmed_xml(xml).records, [])
+
+
+class NotAPubmedSetTests(SimpleTestCase):
+	def test_error_body_is_rejected(self):
+		with self.assertRaises(PubmedXmlError):
+			parse_pubmed_xml(b"<eFetchResult><ERROR>Unable to obtain query</ERROR></eFetchResult>")
+
+	def test_empty_set_parses_to_no_records(self):
+		self.assertEqual(parse_pubmed_xml(b"<PubmedArticleSet/>").records, [])

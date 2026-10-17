@@ -129,6 +129,30 @@
 			</Article>
 		</MedlineCitation>
 	</PubmedArticle>
+	<PubmedArticle>
+		<MedlineCitation Status="MEDLINE" Owner="NLM">
+			<PMID Version="1">90000008</PMID>
+			<Article>
+				<Journal>
+					<JournalIssue><PubDate><Year>2021</Year></PubDate></JournalIssue>
+					<Title>Notation Journal</Title>
+				</Journal>
+				<ArticleTitle>Children aged &lt;or=5 years with fever and a&lt;b in &gt;or=2 cohorts: IL-2 &#8805; 3</ArticleTitle>
+				<ArticleDate><Year>2021</Year><Month>04</Month><Day>02</Day></ArticleDate>
+				<AuthorList>
+					<Author><LastName>Bare</LastName><ForeName>Orcid</ForeName>
+						<Identifier Source="ORCID">0000000218250097</Identifier></Author>
+				</AuthorList>
+				<Language>eng</Language>
+			</Article>
+			<OtherAbstract Type="Publisher" Language="spa">
+				<AbstractText>Solo un resumen en espa&#241;ol.</AbstractText>
+			</OtherAbstract>
+			<CommentsCorrectionsList>
+				<CommentsCorrections RefType="ErratumIn"><RefSource>Other J. 2022</RefSource></CommentsCorrections>
+			</CommentsCorrectionsList>
+		</MedlineCitation>
+	</PubmedArticle>
 	<PubmedBookArticle>
 		<BookDocument>
 			<PMID Version="1">90000007</PMID>

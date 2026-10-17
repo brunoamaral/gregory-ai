@@ -16,7 +16,6 @@ from typing import Optional
 
 from gregory.functions import normalize_orcid
 from gregory.utils.doi_utils import normalize_doi
-from gregory.utils.text_cleaning import clean_title
 
 RETRACTED_PUBLICATION_UI = "D016441"
 RETRACTED_PUBLICATION_NAME = "Retracted Publication"
@@ -32,6 +31,10 @@ _MONTHS = {
 # "Winter 2025" issues are filed under the year they carry.
 _SEASONS = {"winter": 1, "spring": 3, "summer": 6, "autumn": 9, "fall": 9}
 _YEAR_RE = re.compile(r"\b(1[5-9]\d\d|20\d\d)\b")
+
+
+class PubmedXmlError(ValueError):
+	"""The document isn't a PubmedArticleSet (an error body, an empty response)."""
 
 
 @dataclass
@@ -85,6 +88,9 @@ class ParseResult:
 def parse_pubmed_xml(xml_bytes):
 	"""Parse an EFetch ``PubmedArticleSet`` document into a :class:`ParseResult`."""
 	root = ET.fromstring(xml_bytes)
+	if root.tag != "PubmedArticleSet":
+		# e.g. <eFetchResult><ERROR>...</ERROR></eFetchResult>, served as HTTP 200
+		raise PubmedXmlError(f"expected a PubmedArticleSet, got <{root.tag}>")
 	result = ParseResult()
 	for element in root:
 		if element.tag == "PubmedArticle":
@@ -122,7 +128,9 @@ def parse_article(article):
 
 	record = PubmedRecord(pmid=pmid, status=citation.get("Status"))
 	if body is not None:
-		record.title = clean_title(_text(body.find("ArticleTitle"))) or ""
+		# Plain text only. itertext() has already decoded &lt; to "<", so running the
+		# result through an HTML cleaner would read "aged <or=5 years" as a tag and cut it.
+		record.title = _text(body.find("ArticleTitle"))
 		record.abstract = _abstract(body.find("Abstract"))
 		record.journal = _first_text(body, "Journal/Title")
 		record.language = _first_text(body, "Language")
@@ -171,6 +179,16 @@ def _doi(body, pubmed_data):
 	return normalize_doi(doi) if doi else None
 
 
+_BARE_ORCID_RE = re.compile(r"^\d{15}[\dX]$")
+
+
+def _hyphenate_orcid(orcid):
+	"""Some records write an ORCID without hyphens; stored ones always have them."""
+	if orcid and _BARE_ORCID_RE.match(orcid):
+		return "-".join(orcid[i : i + 4] for i in range(0, 16, 4))
+	return orcid
+
+
 def _authors(author_list):
 	authors = []
 	if author_list is None:
@@ -185,7 +203,7 @@ def _authors(author_list):
 		orcid = None
 		for identifier in author.findall("Identifier"):
 			if identifier.get("Source") == "ORCID":
-				orcid = normalize_orcid(_text(identifier))
+				orcid = _hyphenate_orcid(normalize_orcid(_text(identifier)))
 				break
 		authors.append(PubmedAuthor(given_name=given, family_name=family, orcid=orcid))
 	return authors
@@ -289,7 +307,8 @@ def _ymd(element):
 def _published_date(body, pubmed_data):
 	"""Electronic ArticleDate, else the journal issue's PubDate, else the entrez date."""
 	for element in body.findall("ArticleDate"):
-		if element.get("DateType") == "Electronic":
+		# DateType is #FIXED "Electronic" in the DTD, so it may be omitted
+		if element.get("DateType", "Electronic") == "Electronic":
 			year, month, day = _ymd(element)
 			if year:
 				return _utc_date(year, month, day)

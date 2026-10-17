@@ -65,6 +65,16 @@ class SelectionTests(TestCase):
 		self.assertEqual(due_pmids(), ["never", "older", "old"])
 
 
+def echo_xml(pmids):
+	"""A minimal PubmedArticleSet with one record per requested PMID."""
+	records = "".join(
+		f"<PubmedArticle><MedlineCitation Status='MEDLINE'><PMID>{p}</PMID>"
+		"<Article><ArticleTitle>t</ArticleTitle></Article></MedlineCitation></PubmedArticle>"
+		for p in pmids
+	)
+	return f"<PubmedArticleSet>{records}</PubmedArticleSet>".encode()
+
+
 def fake_client(xml=SAMPLE_XML, side_effect=None):
 	client = MagicMock()
 	if side_effect is not None:
@@ -88,7 +98,6 @@ class RefreshCommandTests(TestCase):
 		output = run(fake_client())
 		a.refresh_from_db()
 		b.refresh_from_db()
-		self.assertEqual(a.summary, a.__class__.objects.get(pk=a.pk).summary)
 		self.assertTrue(a.summary.startswith("BACKGROUND: Peer support"))
 		self.assertEqual(b.summary, "A full summary kept.")
 		self.assertIsNotNone(a.pubmed_checked_at)
@@ -122,7 +131,8 @@ class RefreshCommandTests(TestCase):
 	def test_batches_hold_at_most_200_pmids(self):
 		for n in range(205):
 			make(str(50000000 + n))
-		client = fake_client(xml=b"<PubmedArticleSet/>")
+		client = fake_client()
+		client.efetch_pubmed.side_effect = lambda pmids: echo_xml(pmids)
 		run(client, "--limit", "1000")
 		sizes = [len(c.args[0]) for c in client.efetch_pubmed.call_args_list]
 		self.assertEqual(sizes, [200, 5])
@@ -161,3 +171,62 @@ class RefreshCommandTests(TestCase):
 		with patch("gregory.management.commands.refresh_pubmed_records.apply_pubmed_record", side_effect=flaky):
 			output = run(fake_client())
 		self.assertIn("1 updated", output)
+
+	def test_an_error_body_is_halved_down_to_single_failures_and_nothing_is_marked_missing(self):
+		for n in range(4):
+			make(str(60000000 + n))
+		client = fake_client(xml=b"<eFetchResult><ERROR>Unable to obtain query</ERROR></eFetchResult>")
+		output = run(client)
+		self.assertIn("4 failed batches", output)
+		self.assertIn("0 missing", output)
+		self.assertEqual(Articles.objects.filter(pubmed_checked_at__isnull=False).count(), 0)
+		self.assertEqual(sorted(len(c.args[0]) for c in client.efetch_pubmed.call_args_list), [1, 1, 1, 1, 2, 2, 4])
+
+	def test_an_empty_response_is_only_believed_for_single_pmids(self):
+		for n in range(3):
+			make(str(61000000 + n))
+		client = fake_client(xml=b"<PubmedArticleSet/>")
+		output = run(client)
+		self.assertIn("3 missing", output)
+		self.assertEqual(Articles.objects.filter(pubmed_checked_at__isnull=False).count(), 3)
+
+	def test_a_good_record_in_a_batch_saves_it_from_being_split(self):
+		a, b = make("42830590"), make("62000000")
+		client = fake_client()
+		output = run(client)
+		self.assertIn("1 fetched", output)
+		self.assertIn("1 missing", output)
+		# first call for both, then one confirming call for the straggler alone
+		self.assertEqual(
+			[sorted(c.args[0]) for c in client.efetch_pubmed.call_args_list],
+			[["42830590", "62000000"], ["62000000"]],
+		)
+		b.refresh_from_db()
+		self.assertIsNotNone(b.pubmed_checked_at)
+
+	def test_a_straggler_found_on_the_second_ask_is_applied_not_missed(self):
+		a, b = make("42830590"), make("42854181")
+		first = echo_xml(["42830590"])
+		client = fake_client(side_effect=[first, SAMPLE_XML])
+		output = run(client)
+		self.assertIn("2 fetched", output)
+		self.assertIn("0 missing", output)
+
+	def test_a_second_run_does_not_start_while_one_is_running(self):
+		import fcntl
+
+		from gregory.management.commands import refresh_pubmed_records as module
+
+		make("42830590")
+		client = fake_client()
+		with open(module.LOCK_PATH, "a") as held:
+			fcntl.flock(held, fcntl.LOCK_EX)
+			output = run(client)
+		client.efetch_pubmed.assert_not_called()
+		self.assertIn("Another refresh_pubmed_records run is in progress", output)
+
+	def test_a_non_positive_limit_is_an_error(self):
+		from django.core.management import CommandError
+
+		with self.assertRaises(CommandError):
+			run(fake_client(), "--limit", "0")

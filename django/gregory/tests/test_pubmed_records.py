@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from unittest.mock import patch
+
 from django.test import SimpleTestCase, TestCase
 
 from gregory.models import (
@@ -87,6 +89,13 @@ class ApplyNewArticleTests(TestCase):
 		self.assertEqual(result.authors_added, len(record.authors))
 		self.assertEqual(new.authors.count(), len(record.authors))
 
+	def test_the_callers_placeholder_link_becomes_the_pubmed_page(self):
+		record = SAMPLE["42834886"]
+		new = Articles.objects.create(title="placeholder", link="https://elsewhere.org/x")
+		apply_pubmed_record(new, record, is_new=True)
+		new.refresh_from_db()
+		self.assertEqual(new.link, "https://pubmed.ncbi.nlm.nih.gov/42834886/")
+
 	def test_a_doi_held_by_another_article_is_not_taken(self):
 		article(doi="10.1016/j.lana.2026.101640")
 		record = SAMPLE["42834886"]
@@ -112,6 +121,37 @@ class ApplyExistingArticleTests(TestCase):
 		apply_pubmed_record(a, self.record, is_new=False)
 		a.refresh_from_db()
 		self.assertEqual(a.summary, self.record.abstract)
+
+	def test_last_updated_moves_when_content_changes_and_not_otherwise(self):
+		a = article(summary="")
+		before = a.last_updated
+		apply_pubmed_record(a, self.record, is_new=False)
+		a.refresh_from_db()
+		self.assertGreater(a.last_updated, before)
+		settled = a.last_updated
+		apply_pubmed_record(a, self.record, is_new=False)  # nothing left to fill
+		a.refresh_from_db()
+		self.assertEqual(a.last_updated, settled)
+
+	def test_a_failure_part_way_rolls_the_whole_record_back(self):
+		a = article(summary="")
+		with patch("gregory.services.pubmed_records._replace_mesh", side_effect=RuntimeError("boom")):
+			with self.assertRaises(RuntimeError):
+				apply_pubmed_record(a, self.record, is_new=False)
+		a.refresh_from_db()
+		self.assertEqual(a.summary, "")
+		self.assertIsNone(a.pmid)
+		self.assertIsNone(a.pubmed_checked_at)
+		self.assertEqual(a.publication_types.count(), 0)
+
+	def test_a_stale_instance_is_re_read_before_deciding(self):
+		a = article(summary="")
+		stale = Articles.objects.get(pk=a.pk)
+		Articles.objects.filter(pk=a.pk).update(summary="Written meanwhile by CrossRef.")
+		result = apply_pubmed_record(stale, self.record, is_new=False)
+		a.refresh_from_db()
+		self.assertEqual(a.summary, "Written meanwhile by CrossRef.")
+		self.assertFalse(result.summary_replaced)
 
 	def test_a_full_summary_is_kept(self):
 		a = article(summary="A complete abstract from CrossRef.")

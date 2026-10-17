@@ -45,6 +45,8 @@ def pubmed_link(pmid):
 def apply_pubmed_record(article, record, *, is_new):
 	"""Apply ``record`` (a PubmedRecord) to ``article`` and return an :class:`ApplyResult`.
 
+	``article`` must be saved: the row is locked and re-read before anything is decided.
+
 	``is_new``: the article was just created for this record, so PubMed's title,
 	abstract, DOI, PMID, PMCID and date are authoritative. Otherwise PubMed only
 	fills what the article lacks (see the module docstring).
@@ -53,6 +55,10 @@ def apply_pubmed_record(article, record, *, is_new):
 	content = []  # fields saved through save(), so they reach the article history
 
 	with transaction.atomic():
+		# Lock the row and re-read it: the summary and title decisions below must see
+		# what a concurrent run (or the feedreader) wrote, not a snapshot from earlier.
+		list(Articles.objects.select_for_update().filter(pk=article.pk).values_list("pk"))
+		article.refresh_from_db()
 		if is_new:
 			_apply_new(article, record, content, result)
 		else:
@@ -64,13 +70,14 @@ def apply_pubmed_record(article, record, *, is_new):
 			result.retracted_set = True
 
 		if content:
-			article.save(update_fields=sorted(set(content)))
+			# last_updated is auto_now, which only fires when it is in update_fields
+			article.save(update_fields=sorted(set(content) | {"last_updated"}))
 
 		# Bookkeeping that changes on every fetch goes through update(): the history
 		# would otherwise gain a row per article per refresh for no information.
 		bookkeeping = {
 			"keywords": record.keywords,
-			"language": record.language or article.language,
+			"language": (record.language or article.language or "")[:3] or None,
 			"pubmed_status": record.status,
 			"pubmed_checked_at": timezone.now(),
 		}
@@ -93,9 +100,10 @@ def _apply_new(article, record, content, result):
 	if record.published_date:
 		article.published_date = record.published_date
 		content.append("published_date")
-	if not article.link:
-		article.link = pubmed_link(record.pmid)
-		content.append("link")
+	# The caller's placeholder link is replaced: a PubMed-sourced article's canonical
+	# link is its PubMed page, the same form the RSS sources store.
+	article.link = pubmed_link(record.pmid)
+	content.append("link")
 	merged = merge_links(article.links, pubmed_link(record.pmid))
 	if merged != (article.links or {}):
 		article.links = merged
@@ -150,7 +158,7 @@ def _claim_identifiers(article, record, content, result, *, fill_doi):
 			.values_list("pk", flat=True)
 			.first()
 		)
-		if holder is None and article.pk is not None:
+		if holder is None:
 			article.doi = record.doi
 			content.append("doi")
 		elif holder is not None:
