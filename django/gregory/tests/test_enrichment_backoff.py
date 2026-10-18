@@ -232,6 +232,27 @@ class UpdateArticlesInfoBackoffTests(TestCase):
 		self.assertEqual(article.details_attempts, 0)
 		self.assertIsNone(article.details_next_check)
 
+	def test_successful_refresh_saves_crossref_check_and_is_not_reselected(self):
+		"""crossref_check is written to the database on success (#937), so an
+		article that is now complete drops out of the next run's selection."""
+		article = self.make_article(
+			summary="complete summary",
+			access=None,
+			publisher="Publisher",
+			published_date=timezone.now(),
+			pdf_link="https://ex.org/paper.pdf",
+		)
+		self.assertIsNone(article.crossref_check)
+		self.run_command(refresh_ok=True, paper_fields={"access": "open"})
+		article.refresh_from_db()
+		self.assertEqual(article.access, "open")
+		assert_close(self, article.crossref_check, timezone.now())
+		self.assertIsNone(article.details_next_check)
+
+		with patch("gregory.classes.SciencePaper.refresh", autospec=True) as mock_refresh:
+			call_command("update_articles_info")
+		mock_refresh.assert_not_called()
+
 	def test_future_marker_is_not_selected(self):
 		article = self.make_article(
 			summary="complete summary",
