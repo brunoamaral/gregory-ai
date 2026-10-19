@@ -27,6 +27,7 @@ from django.db import IntegrityError
 from django.utils import timezone
 from gregory.classes import ClinicalTrialsGovAPI, ClinicalTrial
 from gregory.models import Trials, Sources
+from gregory.utils import ctgov_search
 from gregory.utils.registry_utils import (
 	identifiers_conflict,
 	merge_links,
@@ -287,49 +288,27 @@ class Command(GregoryBaseCommand):
 				style_func=self.style.SUCCESS,
 			)
 
-	# Source field -> ClinicalTrials.gov API query parameter. ClinicalTrials.gov
-	# combines the parameters with AND, so a trial must match every one that is set.
-	SEARCH_FIELDS = (
-		("ctgov_search_condition", "query_cond"),
-		("ctgov_search_intervention", "query_intr"),
-		("ctgov_search_term", "query_term"),
-	)
+	def _search_values(self, source):
+		return {field: getattr(source, field) for field, _param in ctgov_search.SEARCH_FIELDS}
 
 	def _search_query_params(self, source):
 		"""The query parameters a source sets; empty when it sets none."""
-		params = {}
-		for field, param in self.SEARCH_FIELDS:
-			value = (getattr(source, field) or "").strip()
-			if value:
-				params[param] = value
-		return params
+		return ctgov_search.query_params(self._search_values(source))
 
 	def _build_search_params(self, source):
 		"""Build API search parameters from the source's three search fields.
 
 		The source's description is notes for people and is never read here.
 		"""
-		params = {
-			"page_size": 100,
-			"sort": ["LastUpdatePostDate:desc"],  # Get newest updates first
-			**self._search_query_params(source),
-		}
-
 		# Incremental window: only ask CTGov for studies updated since the last
 		# fully successful fetch (minus a 2-day overlap for clock skew and CTGov
 		# indexing lag). Without an anchor we fetch unfiltered (backfill mode).
+		window_start = None
 		if source.last_successful_fetch_at:
-			window_start = (source.last_successful_fetch_at - timedelta(days=2)).strftime(
-				"%Y-%m-%d"
-			)
-			params["filter_advanced"] = (
-				f"AREA[LastUpdatePostDate]RANGE[{window_start},MAX]"
-			)
-
+			window_start = source.last_successful_fetch_at - timedelta(days=2)
 		# Note: We don't specify fields to get the full study data
 		# The API returns all fields by default
-
-		return params
+		return ctgov_search.build_search_params(self._search_values(source), window_start)
 
 	# Real registry keys whose shared value corroborates an org_study_id match.
 	# Cross-registry identifiers legitimately coexist on one trial (nct + euct
