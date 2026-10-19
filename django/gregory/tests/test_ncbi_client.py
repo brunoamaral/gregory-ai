@@ -307,6 +307,13 @@ class ESearchTests(SimpleTestCase):
 		with self.assertRaises(NcbiResultCapError):
 			self._search(_esearch_payload(count="9999"), retmax=9999)
 
+	def test_the_cap_error_carries_the_count_and_translation(self, _throttle):
+		with self.assertRaises(NcbiResultCapError) as ctx:
+			self._search(_esearch_payload(count="12000", idlist=["9"]), retmax=5)
+		self.assertEqual(ctx.exception.result.count, 12000)
+		self.assertEqual(ctx.exception.result.ids, ["9"])
+		self.assertEqual(ctx.exception.result.querytranslation, "ms[All Fields]")
+
 	def test_capped_result_raises_for_a_history_search_with_retmax_zero(self, _throttle):
 		with self.assertRaises(NcbiResultCapError):
 			self._search(_esearch_payload(count="12000", idlist=[]), retmax=0, usehistory="y")
