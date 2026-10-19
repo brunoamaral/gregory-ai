@@ -40,7 +40,6 @@ from api.serializers import (
 	CategoryTopAuthorSerializer,
 	TeamSerializer,
 	SubjectsSerializer,
-	OrganizationSerializer,
 	SponsorSerializer,
 	PublicSiteSerializer,
 	McpTenantSerializer,
@@ -106,7 +105,6 @@ from gregory.models import (
 	PatentCategoryAssignment,
 	PatentPublication,
 )
-from organizations.models import Organization
 from rest_framework import permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from rest_framework.exceptions import ValidationError
@@ -388,10 +386,9 @@ class SubjectVisibilityMixin:
 	  - Sources:           ``subject_id``        (FK)
 	  - TeamCategory:      ``subjects``          (M2M)
 
-	Note what is NOT here: ``/teams/`` and ``/organizations/`` are not
-	content and carry no subject, so they do not use this mixin. Teams are
-	gated by the explicit ``Team.api_listed`` flag and organisations still
-	read ``visible_org_ids`` -- see their viewsets. Conflating "which rows of
+	Note what is NOT here: ``/teams/`` is not content and carries no
+	subject, so it does not use this mixin. Teams are gated by the explicit
+	``Team.api_listed`` flag -- see TeamsViewSet. Conflating "which rows of
 	data may I read" with "whose name may I see listed" is the mistake this
 	separation avoids.
 	"""
@@ -4303,33 +4300,6 @@ class TeamsViewSet(viewsets.ReadOnlyModelViewSet):
 		# Exists() rather than a join on subjects, so the OR cannot duplicate
 		# a team that owns several in-scope subjects and no DISTINCT is needed.
 		return qs.filter(Q(api_listed=True) | Q(Exists(owns_a_visible_subject)))
-
-
-###
-# ORGANISATIONS
-###
-
-
-class OrganizationsViewSet(viewsets.ReadOnlyModelViewSet):
-	"""
-	List organisations visible to the caller.
-
-	Anonymous callers see only organisations where ``make_api_public=True``.
-	Authenticated users and API-key holders see their own org; add
-	``?include_public=true`` to also see public orgs.
-
-	Detail endpoint (``/organizations/<id>/``) returns 404 rather than 403
-	when the organisation is not visible (hide-existence rule).
-	"""
-
-	serializer_class = OrganizationSerializer
-	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
-	def get_queryset(self):
-		qs = Organization.objects.all().order_by("id")
-		if not hasattr(self.request, "visible_org_ids"):
-			return qs
-		return qs.filter(id__in=self.request.visible_org_ids)
 
 
 ###
