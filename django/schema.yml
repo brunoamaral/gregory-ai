@@ -9154,7 +9154,9 @@ components:
           nullable: true
           description: '`rss_papers`: keep only papers whose title or summary contains
             one of these keywords. Comma-separated; quote phrases: "multiple sclerosis",
-            alzheimer.'
+            alzheimer. A keyword matches anywhere in a word; end it with `*` to match
+            only words that start with it (`oligodendro*` finds "oligodendrocyte",
+            not "preoligodendrocyte").'
           maxLength: 2000
         pubmed_query:
           type: string

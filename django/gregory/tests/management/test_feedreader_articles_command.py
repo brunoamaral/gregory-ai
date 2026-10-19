@@ -73,3 +73,51 @@ class FeedreaderArticlesCommandTest(TestCase):
 		)
 		self.assertTrue(processor.should_include_article(entry_match, source))
 		self.assertFalse(processor.should_include_article(entry_no_match, source))
+
+	def included(self, keyword_filter, title, summary=""):
+		processor = DefaultFeedProcessor(Command())
+		source = MagicMock(keyword_filter=keyword_filter)
+		return processor.should_include_article({"title": title, "summary": summary}, source)
+
+	def test_a_trailing_star_matches_words_that_start_with_the_keyword(self):
+		for title in (
+			"Oligodendrocyte precursors",
+			"Oligodendroglia in repair",
+			"New oligodendrocytes",
+			"The (oligodendrocyte) lineage",
+			"OLIGODENDRO",
+		):
+			with self.subTest(title):
+				self.assertTrue(self.included("oligodendro*", title))
+
+	def test_a_trailing_star_does_not_match_inside_a_word(self):
+		self.assertFalse(self.included("oligodendro*", "Preoligodendrocyte signalling"))
+		self.assertFalse(self.included("ms*", "Treatment of terms"))
+
+	def test_a_starred_keyword_is_matched_in_the_summary_too(self):
+		self.assertTrue(self.included("remyelinat*", "A paper", "Drives remyelination in mice"))
+
+	def test_a_plain_keyword_still_matches_inside_a_word(self):
+		self.assertTrue(self.included("oligodendro", "Preoligodendrocyte signalling"))
+		self.assertFalse(self.included("oligodendro", "Nothing relevant"))
+
+	def test_the_filter_from_production_sources_164_and_165_now_matches(self):
+		keyword_filter = "oligodendro*, remyelinat*, NG2 glia, myelin"
+		self.assertTrue(self.included(keyword_filter, "Oligodendrocyte maturation"))
+		self.assertTrue(self.included(keyword_filter, "Promoting remyelination"))
+		self.assertTrue(self.included(keyword_filter, "NG2 glia in the cortex"))
+		self.assertFalse(self.included(keyword_filter, "Cardiac fibrosis"))
+
+	def test_a_star_that_is_not_trailing_is_literal_and_a_lone_star_matches_nothing(self):
+		self.assertFalse(self.included("oligo*dendro", "oligodendrocyte"))
+		self.assertTrue(self.included("oligo*dendro", "the oligo*dendro case"))
+		self.assertFalse(self.included("*", "anything at all"))
+		self.assertFalse(self.included("**", "anything at all"))
+
+	def test_a_quoted_phrase_can_end_in_a_star(self):
+		self.assertTrue(self.included('"gene therap*"', "Gene therapies for ALS"))
+		self.assertFalse(self.included('"gene therap*"', "Gene and therapy"))
+
+	def test_keyword_in_text_is_shared_by_every_processor(self):
+		for processor_class in (PubMedFeedProcessor, FasebFeedProcessor, BioRxivFeedProcessor, DefaultFeedProcessor):
+			self.assertTrue(processor_class.keyword_in_text("myelin*", "a myelinating cell"))

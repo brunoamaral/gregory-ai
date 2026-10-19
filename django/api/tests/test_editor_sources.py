@@ -68,7 +68,7 @@ def dns(table):
 
 
 def pubmed_client(count=42, ids=("111", "222"), reject=None, down=False):
-	"""A stand-in ``NcbiClient``: the count search, then the sample ids, then summaries."""
+	"""A stand-in ``NcbiClient``: one search (count, translation, sample ids), then summaries."""
 	client = MagicMock()
 
 	def esearch(term, **params):
@@ -77,10 +77,14 @@ def pubmed_client(count=42, ids=("111", "222"), reject=None, down=False):
 		if down:
 			raise NcbiError("down")
 		if params.get("rettype") == "count":
-			return ESearchResult(
-				count=count, querytranslation=f"translated: {term}", warnings=["Phrase not found: zzz"]
-			)
-		return ESearchResult(count=count, ids=list(ids))
+			# What NCBI really does: a count-only answer has no translation.
+			return ESearchResult(count=count)
+		return ESearchResult(
+			count=count,
+			ids=list(ids)[: params.get("retmax", 0)],
+			querytranslation=f"translated: {term}",
+			warnings=["Phrase not found: zzz"],
+		)
 
 	client.esearch.side_effect = esearch
 	client.esummary.return_value = {
@@ -413,6 +417,18 @@ class PreviewTest(SourceFixture):
 		self.assertIsNone(body["duplicate_of"])
 		self.assertIsNone(body["pubmed"])
 
+	def test_a_trailing_star_in_the_keyword_filter_matches_words_that_start_with_it(self):
+		counts = lambda keyword_filter: {
+			c["key"]: c["value"] for c in self.preview(keyword_filter=keyword_filter).json()["counts"]
+		}
+		self.assertEqual(counts("remyelinat*")["entries_passing_keyword_filter"], 1)
+		self.assertEqual(counts("parkin*, remyelinat*")["entries_passing_keyword_filter"], 2)
+		# Inside a word, so a starred keyword does not match it; a plain one does.
+		self.assertEqual(counts("yelinat*")["entries_passing_keyword_filter"], 0)
+		self.assertEqual(counts("yelinat")["entries_passing_keyword_filter"], 1)
+		# Nothing in the feed has the literal text with the star.
+		self.assertEqual(counts("remyelinat*")["entries_in_feed"], 3)
+
 	def test_the_keyword_filter_uses_the_processor_of_the_given_link_not_the_redirect_target(self):
 		from gregory.management.commands.feedreader_articles import Command as RssCommand
 
@@ -448,17 +464,32 @@ class PreviewTest(SourceFixture):
 			],
 		)
 
-	def test_pubmed_samples_are_left_out_when_it_will_not_list_them(self):
+	def test_a_pubmed_preview_is_one_search(self):
+		self.preview(self.pubmed_body())
+		self.ncbi.esearch.assert_called_once()
+		params = self.ncbi.esearch.call_args.kwargs
+		self.assertEqual(params, {"retmax": 5, "sort": "pub_date"})
+
+	def test_a_pubmed_preview_over_the_id_cap_still_has_count_translation_and_samples(self):
 		from gregory.utils.ncbi import NcbiResultCapError
 
 		original = self.ncbi.esearch.side_effect
 
 		def esearch(term, **params):
-			if params.get("rettype") != "count":
-				raise NcbiResultCapError("capped")
-			return original(term, **params)
+			capped = original(term, **params)
+			capped.count = 12000
+			raise NcbiResultCapError("capped", result=capped)
 
 		self.ncbi.esearch.side_effect = esearch
+		body = self.preview(self.pubmed_body()).json()
+		self.assertEqual(body["counts"][0]["value"], 12000)
+		self.assertIn("translated:", body["pubmed"]["querytranslation"])
+		self.assertEqual(len(body["samples"]), 2)
+
+	def test_pubmed_samples_are_left_out_when_their_titles_cannot_be_fetched(self):
+		from gregory.utils.ncbi import NcbiError
+
+		self.ncbi.esummary.side_effect = NcbiError("down")
 		body = self.preview(self.pubmed_body()).json()
 		self.assertEqual(body["counts"][0]["value"], 42)
 		self.assertEqual(body["samples"], [])

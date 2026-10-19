@@ -9,7 +9,7 @@ from organizations.models import Organization
 
 from gregory import source_types
 from gregory.models import OrganizationCredentials, PublicationType, Sources, Subject, Team
-from gregory.utils.ncbi import ESearchResult, NcbiError, NcbiQueryError
+from gregory.utils.ncbi import ESearchResult, NcbiError, NcbiQueryError, NcbiResultCapError
 
 User = get_user_model()
 QUERY = '"multiple sclerosis"[MeSH Terms] AND remyelination'
@@ -85,7 +85,8 @@ class PubmedSourceAdminTests(TestCase):
 		args, kwargs = self.esearch.call_args
 		self.assertTrue(args[0].startswith(f"({QUERY}) AND "))
 		self.assertTrue(args[0].endswith("[crdt]"))
-		self.assertEqual(kwargs, {"rettype": "count"})
+		# Not rettype=count: a count-only answer carries no querytranslation.
+		self.assertEqual(kwargs, {"retmax": 0})
 		self.last_client.for_site.assert_called_once_with(timeout=10, max_retries=1)
 
 	def test_the_check_applies_the_excluded_types(self):
@@ -107,6 +108,18 @@ class PubmedSourceAdminTests(TestCase):
 		response = self.post()
 		infos = [text for level, text in self.messages(response) if level == "info"]
 		self.assertTrue(any("42 papers" in t and "PubMed read it as" in t for t in infos))
+
+	def test_the_message_quotes_pubmeds_reading(self):
+		response = self.post()
+		infos = [text for level, text in self.messages(response) if level == "info"]
+		self.assertTrue(any('PubMed read it as: "multiple sclerosis"[MeSH Terms]' in t for t in infos))
+
+	def test_a_search_over_the_id_cap_still_reports_its_count_and_reading(self):
+		capped = ESearchResult(count=12000, querytranslation="the reading")
+		response = self.post(search_error=NcbiResultCapError("capped", result=capped))
+		infos = [text for level, text in self.messages(response) if level == "info"]
+		self.assertTrue(any("12000 papers" in t and "PubMed read it as: the reading" in t for t in infos))
+		self.assertTrue(Sources.objects.exists())
 
 	def test_no_volume_warning_at_the_threshold(self):
 		response = self.post(search_result=ESearchResult(count=500, querytranslation="x"))

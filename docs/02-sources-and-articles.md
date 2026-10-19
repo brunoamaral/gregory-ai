@@ -44,6 +44,10 @@ subject. The *Notes* field (`description`) is for people and is never read by an
 The *Keyword filter* is meant for broad RSS paper feeds that cover many topics, such as
 bioRxiv, medRxiv or PNAS: only entries whose title or summary mentions one of the keywords
 are kept. Separate keywords with commas and quote phrases: `"multiple sclerosis", alzheimer`.
+A keyword matches anywhere in the text, even inside a longer word. End a keyword with `*` to
+match only words that start with it: `oligodendro*` finds "oligodendrocyte" and
+"oligodendroglia" but not "preoligodendrocyte". Only a trailing `*` is special; a `*` anywhere
+else is matched literally, and a lone `*` matches nothing.
 
 ### Sources added over MCP
 

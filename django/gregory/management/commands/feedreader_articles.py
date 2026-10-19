@@ -137,10 +137,26 @@ class FeedProcessor(ABC):
 
 		# Check if any keyword matches
 		for keyword in keywords:
-			if keyword.lower() in search_text:
+			if self.keyword_in_text(keyword, search_text):
 				return True
 
 		return False
+
+	@staticmethod
+	def keyword_in_text(keyword: str, text: str) -> bool:
+		"""Whether a keyword from the filter occurs in `text` (already lower-cased).
+
+		A plain keyword matches anywhere in the text. A keyword ending in `*` matches
+		words that start with it: `oligodendro*` finds "oligodendrocyte" but not
+		"preoligodendro...". Only a trailing `*` is special, and a lone `*` matches nothing.
+		"""
+		keyword = keyword.lower()
+		if not keyword.endswith("*"):
+			return keyword in text
+		stem = keyword.rstrip("*").strip()
+		if not stem:
+			return False
+		return re.search(r"(?<!\w)" + re.escape(stem), text) is not None
 
 	def _parse_keyword_filter(self, keyword_filter: str) -> list:
 		"""Parse keyword filter string into individual keywords and phrases."""
@@ -648,7 +664,7 @@ class Command(GregoryBaseCommand):
 		title = " ".join(re.sub(r"<[^>]+>", " ", raw_title).split())
 		search_text = f"{title} {abstract}".lower()
 		for keyword in processor._parse_keyword_filter(source.keyword_filter):
-			if keyword.lower() in search_text:
+			if processor.keyword_in_text(keyword, search_text):
 				self.log(
 					f"  Keyword matched via CrossRef abstract for DOI {doi}: "
 					f"{entry.get('title', 'Unknown')}",

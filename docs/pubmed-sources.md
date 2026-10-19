@@ -56,7 +56,9 @@ it first appears in PubMed.
 PubMed does not warn about a misspelled field tag, such as `[Titel/Abstract]`; it quietly
 searches something broader. The check on saving shows PubMed's own reading of the search
 ("PubMed read it as: …"), so look at that line. If PubMed returns warnings about the
-search, they are shown too.
+search, they are shown too. The check is one ESearch call that returns the count and
+PubMed's reading together (a count-only call leaves the reading out); a search with
+9,999 or more results still reports its count and reading.
 
 ## Leaving out publication types
 

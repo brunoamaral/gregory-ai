@@ -55,7 +55,15 @@ class NcbiQueryError(NcbiError):
 
 
 class NcbiResultCapError(NcbiError):
-	"""The result set reached PubMed's 9,999 ID cap, so the ID list is incomplete."""
+	"""The result set reached PubMed's 9,999 ID cap, so the ID list is incomplete.
+
+	`result` is the parsed search (true count, translation, the IDs NCBI did return)
+	for callers that only want the count or the translation and not the full ID list.
+	"""
+
+	def __init__(self, message, result=None):
+		super().__init__(message)
+		self.result = result
 
 
 @dataclass
@@ -256,15 +264,8 @@ class NcbiClient:
 			count = int(result.get("count", 0))
 		except (TypeError, ValueError):
 			raise NcbiError("esearch: count is not a number") from None
-		# Only a count search is exempt: a retmax=0 search with usehistory still
-		# leaves a capped set behind for the EFetch that follows.
-		wants_ids = params.get("rettype") != "count"
-		if wants_ids and count >= RESULT_CAP:
-			raise NcbiResultCapError(
-				f"{count} results reach PubMed's {RESULT_CAP} ID cap"
-			)
 		warnings = result.get("warninglist") or {}
-		return ESearchResult(
+		parsed = ESearchResult(
 			count=count,
 			ids=list(result.get("idlist") or []),
 			querytranslation=result.get("querytranslation", ""),
@@ -276,6 +277,14 @@ class NcbiClient:
 				if items
 			],
 		)
+		# Only a count search is exempt: a retmax=0 search with usehistory still
+		# leaves a capped set behind for the EFetch that follows.
+		wants_ids = params.get("rettype") != "count"
+		if wants_ids and count >= RESULT_CAP:
+			raise NcbiResultCapError(
+				f"{count} results reach PubMed's {RESULT_CAP} ID cap", result=parsed
+			)
+		return parsed
 
 	def efetch_pubmed(self, pmids):
 		"""Fetch PubMed records as raw XML bytes. PubMed EFetch has no JSON output."""

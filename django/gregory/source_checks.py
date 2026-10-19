@@ -31,7 +31,7 @@ from . import source_types
 from .classes import ClinicalTrialsGovAPI
 from .models import Sources
 from .utils import ctgov_search
-from .utils.ncbi import ESearchResult, NcbiClient, NcbiError, NcbiQueryError
+from .utils.ncbi import ESearchResult, NcbiClient, NcbiError, NcbiQueryError, NcbiResultCapError
 from .utils.pubmed_search import build_pubmed_term, unbalanced_query
 
 logger = logging.getLogger(__name__)
@@ -144,15 +144,28 @@ class PubmedSearchCheck:
 	unreachable: bool = False
 
 
-def check_pubmed_search(query, excluded_names, client=None):
+def check_pubmed_search(query, excluded_names, client=None, sample=0):
 	"""Ask PubMed what the importer's first run would find, so a typo or a search that
 	is far too broad shows up now, not after a month of runs. Short timeout and one
-	retry by default: callers run this inside a web request."""
+	retry by default: callers run this inside a web request.
+
+	One ESearch gives the count, PubMed's reading of the search (`querytranslation`;
+	a count-only answer leaves it out) and, with `sample`, that many of the newest IDs
+	in `result.ids`. A search that reaches PubMed's 9,999 ID cap still reports its count.
+	"""
 	end = timezone.now().date()
 	term = build_pubmed_term(query.strip(), excluded_names, end - timedelta(days=30), end)
 	client = client or NcbiClient.for_site(timeout=10, max_retries=1)
+	params = {"retmax": sample}
+	if sample:
+		params["sort"] = "pub_date"
 	try:
-		result = client.esearch(term, rettype="count")
+		result = client.esearch(term, **params)
+	except NcbiResultCapError as exc:
+		# The count and translation are right; only the ID list is incomplete.
+		if exc.result is None:
+			return PubmedSearchCheck(term=term, unreachable=True)
+		result = exc.result
 	except NcbiQueryError as exc:
 		return PubmedSearchCheck(term=term, rejection=f"PubMed rejected this search: {exc}")
 	except NcbiError:
@@ -405,17 +418,17 @@ def pubmed_preview(query, excluded_names):
 
 	Raises SourceRefused when PubMed rejects the search and ServiceUnreachable when it
 	cannot be reached. There is no volume limit: a big count is reported, not refused.
-	The samples are best effort and left out when PubMed will not list them.
+	The samples are best effort and left out when their titles cannot be fetched.
 	"""
 	client = NcbiClient.for_site(timeout=10, max_retries=1)
-	check = check_pubmed_search(query, excluded_names, client=client)
+	check = check_pubmed_search(query, excluded_names, client=client, sample=SAMPLE_SIZE)
 	if check.rejection:
 		raise SourceRefused("pubmed_query", check.rejection)
 	if check.unreachable:
 		raise ServiceUnreachable("PubMed")
 	samples = []
 	try:
-		ids = client.esearch(check.term, retmax=SAMPLE_SIZE, sort="pub_date").ids
+		ids = check.result.ids[:SAMPLE_SIZE]
 		summaries = client.esummary("pubmed", ids).get("result", {}) if ids else {}
 		for pmid in ids:
 			record = summaries.get(str(pmid)) or {}

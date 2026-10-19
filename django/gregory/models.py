@@ -609,7 +609,7 @@ class Sources(models.Model):
 	keyword_filter = models.TextField(
 		blank=True,
 		null=True,
-		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). Applies to supported feed sources like bioRxiv and PNAS.',
+		help_text='Keywords to filter articles. Use comma-separated values for multiple keywords, or quoted strings for exact phrases (e.g., "multiple sclerosis", alzheimer, parkinson). A keyword matches anywhere in a word; end it with * to match only words that start with it (e.g., oligodendro* finds "oligodendrocyte"). Applies to supported feed sources like bioRxiv and PNAS.',
 	)
 	ctgov_search_condition = models.TextField(
 		blank=True,

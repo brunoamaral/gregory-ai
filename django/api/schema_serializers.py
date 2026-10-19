@@ -672,7 +672,9 @@ class EditorSourceInputSerializer(serializers.Serializer):
 		allow_null=True,
 		help_text=(
 			"`rss_papers`: keep only papers whose title or summary contains one of these "
-			'keywords. Comma-separated; quote phrases: "multiple sclerosis", alzheimer.'
+			'keywords. Comma-separated; quote phrases: "multiple sclerosis", alzheimer. A keyword '
+			"matches anywhere in a word; end it with `*` to match only words that start with it "
+			'(`oligodendro*` finds "oligodendrocyte", not "preoligodendrocyte").'
 		),
 	)
 	pubmed_query = serializers.CharField(
