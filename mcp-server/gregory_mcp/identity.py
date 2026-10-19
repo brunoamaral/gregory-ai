@@ -52,6 +52,16 @@ _EDIT_TOOLS_WITH_PATENTS = (
 	"set_category_assignment (put an article or a patent in a category by hand, or take it out)"
 )
 
+# Added for a sign-in with the sources scope only; every other session's text is
+# unchanged. Names the three tools and the preview-then-confirm rule, because a new
+# source is live at once and feeds every site that covers its subject.
+_SOURCE_TOOLS_NOTE = (
+	"You can also add sources with list_sources (what already feeds a subject), preview_source (check an RSS feed, "
+	"a PubMed search or a ClinicalTrials.gov search and see what it would bring in) and create_source (add it): a "
+	"new source is live immediately and feeds every site that covers its subject, so always run preview_source "
+	"first, show the counts and sample titles, and get confirmation before calling create_source."
+)
+
 
 def _behavior_paragraph(session: EditorSession | None, patents: bool = False) -> str:
 	"""How the tools behave, for the caller's tier.
@@ -81,11 +91,12 @@ def _behavior_paragraph(session: EditorSession | None, patents: bool = False) ->
 		return f"You have read-only editor access to this site. {scope} {history} Editing is not available with this sign-in."
 	content = "article and patent content" if patents else "article content"
 	tools = _EDIT_TOOLS_WITH_PATENTS if patents else _EDIT_TOOLS
+	sources = f" {_SOURCE_TOOLS_NOTE}" if session.can_manage_sources else ""
 	return (
 		f"You are signed in as an editor of this site and can change its {content} with: {tools}. "
 		"Edits are live immediately and recorded under the signed-in person's name, so show the proposed text "
 		"and get confirmation before writing it. Relevance belongs to the article and the subject, not the "
-		"site: a change applies to every site that covers that subject. "
+		f"site: a change applies to every site that covers that subject.{sources} "
 		f"{history} {scope}"
 	)
 

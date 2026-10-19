@@ -23,6 +23,10 @@ class Settings:
 	service_key: str = ""
 	oauth_issuer: str = ""
 	editor_scheme: str = "https"
+	# The two source POSTs (preview, create) reach out to a feed, PubMed or
+	# ClinicalTrials.gov from Django, which can take far longer than an ordinary
+	# call (see `GREGORY_SOURCE_REQUEST_TIMEOUT` in `load_settings`).
+	source_request_timeout: float = 75.0
 
 	@property
 	def api_base(self) -> str:
@@ -56,6 +60,12 @@ def load_settings() -> Settings:
 		service_key=os.environ.get("GREGORY_MCP_SERVICE_KEY", "").strip(),
 		oauth_issuer=os.environ.get("GREGORY_OAUTH_ISSUER", "").strip().rstrip("/"),
 		editor_scheme=_load_editor_scheme(),
+		# Django's worst case for a source check: an RSS address follows up to 3
+		# redirects at 10 s each plus a 10 s body read, and a PubMed check makes up
+		# to 3 NCBI calls of 10 s with a retry. Gunicorn gives it 300 s. A client
+		# that gave up earlier would report a failure for a source Django then
+		# saved, and the person's second try would be refused as a duplicate.
+		source_request_timeout=float(os.environ.get("GREGORY_SOURCE_REQUEST_TIMEOUT", "75")),
 	)
 
 

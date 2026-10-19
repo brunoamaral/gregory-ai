@@ -9,6 +9,7 @@ editor address") and on the site it is for:
 | Anonymous, or public tier        | the ten read tools, exactly as on `/mcp`     |
 | Editor, read-only grant          | the ten read tools plus `get_history`        |
 | Editor with the edit scope       | all of those plus the six write tools        |
+| Editor with the sources scope    | all of those plus the three source tools     |
 
 On top of that, `search_patents` and `get_patent` are offered only when the
 resolved tenant has patents (`Tenant.patents_enabled`, from `GET /tenants/`).
@@ -20,7 +21,10 @@ this reason.
 is answered exactly as a tool that doesn't exist is: a client that sends a
 write tool's (or a patent tool's) name anyway learns nothing and writes
 nothing. The client's own refusal to write without the edit scope (`client.py`)
-is the second lock.
+is the second lock. The source tools (`list_sources`, `preview_source`,
+`create_source`) follow the same rule for the sources scope, which only a grant
+with "can add sources" is given: without it they do not exist, and the client
+refuses a source request all the same.
 """
 
 from __future__ import annotations
@@ -59,6 +63,8 @@ WRITE_TOOLS = frozenset(
 		"set_category_assignment",
 	}
 )
+#: Offered only with the sources scope (`EditorSession.can_manage_sources`).
+SOURCE_TOOLS = frozenset({"list_sources", "preview_source", "create_source"})
 
 
 def allowed_tools(session: EditorSession | None, tenant: Any = None) -> frozenset[str]:
@@ -69,6 +75,8 @@ def allowed_tools(session: EditorSession | None, tenant: Any = None) -> frozense
 		tools = tools | {HISTORY_TOOL}
 		if session.can_edit:
 			tools = tools | WRITE_TOOLS
+		if session.can_manage_sources:
+			tools = tools | SOURCE_TOOLS
 	if tenant is not None and getattr(tenant, "patents_enabled", False):
 		tools = tools | PATENT_TOOLS
 	return tools
