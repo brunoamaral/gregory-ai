@@ -688,6 +688,16 @@ class Sources(models.Model):
 			"window; a failed or capped run must not advance it."
 		),
 	)
+	# Who added or changed a source, and through which door (admin, an MCP
+	# editor, an API key). `excluded_publication_types` is tracked too, so a
+	# change of exclusions is its own history row. The fetch anchor is the
+	# importers' bookkeeping, not an edit, so it is left out; they write it with
+	# a queryset update, which records no history row at all.
+	history = HistoricalRecords(
+		excluded_fields=["last_successful_fetch_at"],
+		bases=[ApiKeyHistoryMixin, EditorHistoryMixin],
+		m2m_fields=["excluded_publication_types"],
+	)
 
 	def get_latest_article_date(self):
 		"""

@@ -221,9 +221,12 @@ class WindowTests(PubmedImporterBase):
 
 	def test_a_successful_run_moves_the_anchor(self):
 		before = timezone.now()
+		history_before = self.source.history.count()
 		self.run_command()
 		self.source.refresh_from_db()
 		self.assertGreaterEqual(self.source.last_successful_fetch_at, before)
+		# The anchor is bookkeeping: moving it must not write a Sources history row.
+		self.assertEqual(self.source.history.count(), history_before)
 
 	def test_a_capped_window_is_halved_and_the_halves_are_merged_without_duplicates(self):
 		calls = []

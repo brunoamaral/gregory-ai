@@ -96,12 +96,15 @@ class AnchorAdvanceTests(TestCase):
 		cmd = make_command(api)
 
 		before = timezone.now()
+		history_before = self.source.history.count()
 		cmd.process_sources(max_results=2000)
 		anchor = self.refreshed_anchor()
 
 		self.assertIsNotNone(anchor)
 		self.assertGreaterEqual(anchor, before)
 		self.assertEqual(Trials.objects.count(), 1)
+		# The anchor is bookkeeping: moving it must not write a Sources history row.
+		self.assertEqual(self.source.history.count(), history_before)
 
 	def test_fetch_error_does_not_advance_anchor(self):
 		api = MagicMock()

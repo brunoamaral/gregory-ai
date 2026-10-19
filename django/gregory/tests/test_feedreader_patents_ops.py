@@ -262,9 +262,12 @@ class SearchPagingTests(PatentImporterTestCase):
 
 class AnchorTests(PatentImporterTestCase):
 	def test_complete_run_advances_the_anchor(self):
+		history_before = self.source.history.count()
 		self.run_command(since="2024-01-01")
 		self.source.refresh_from_db()
 		self.assertIsNotNone(self.source.last_successful_fetch_at)
+		# The anchor is bookkeeping: moving it must not write a Sources history row.
+		self.assertEqual(self.source.history.count(), history_before)
 
 	def test_capped_run_does_not_advance_the_anchor(self):
 		self.ops.search_handler = lambda cql, begin, end: SearchPage(total=5000, hits=[])
