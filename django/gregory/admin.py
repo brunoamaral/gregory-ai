@@ -1,13 +1,19 @@
 from io import BytesIO, StringIO
 
 from django.contrib import admin, messages
+from django.contrib.admin.utils import unquote
 from django.apps import apps
 from django.core.management import call_command
-from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist, PermissionDenied
+from django.core.exceptions import (
+	FieldDoesNotExist,
+	ObjectDoesNotExist,
+	PermissionDenied,
+	ValidationError,
+)
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
 from django.contrib.sites.models import Site
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
@@ -2421,7 +2427,7 @@ class ReassignToTeamMixin:
 		self.message_user(request, f"{count} object(s) reassigned to '{to_team}'.")
 
 
-class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
+class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdmin):
 	form = SourceAdminForm
 	list_display = [
 		"name",
@@ -2460,6 +2466,23 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
 
 	class Media:
 		js = ("admin/js/source_type_toggle.js",)
+
+	def history_view(self, request, object_id, extra_context=None):
+		"""Only show the history of a source the user may see.
+
+		simple-history looks the history rows up by primary key and uses the admin
+		queryset only to name the page, falling back to the last historical copy when
+		the live row is not in it. Without this check a staff user could read another
+		organisation's source history by its ID.
+		"""
+		if not request.user.is_superuser:
+			try:
+				visible = self.get_queryset(request).filter(pk=unquote(object_id)).exists()
+			except (ValueError, ValidationError):
+				visible = False
+			if not visible:
+				raise Http404
+		return super().history_view(request, object_id, extra_context)
 
 	@admin.display(description="Type")
 	def source_type_label(self, obj):

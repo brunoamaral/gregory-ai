@@ -167,8 +167,10 @@ class Command(GregoryBaseCommand):
 				style_func=self.style.WARNING,
 			)
 		else:
+			# A queryset update, not save(): the anchor is bookkeeping, and a save would write a
+			# Sources history row on every run.
+			Sources.objects.filter(pk=source.pk).update(last_successful_fetch_at=fetch_started)
 			source.last_successful_fetch_at = fetch_started
-			source.save(update_fields=["last_successful_fetch_at"])
 		self.log(
 			f"Finished {source.name}: {counts['new']} new, {counts['merged']} merged, "
 			f"{len(on_source)} skipped (already on the source), {counts['excluded']} excluded, "

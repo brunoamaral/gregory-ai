@@ -281,8 +281,10 @@ class Command(GregoryBaseCommand):
 			self.ops_totals["throttle_states"] |= self.ops.throttle_states
 
 		if self.source_complete and not self.dry_run:
+			# A queryset update, not save(): the anchor is bookkeeping, and a save would write a
+			# Sources history row on every run.
+			Sources.objects.filter(pk=source.pk).update(last_successful_fetch_at=fetch_started)
 			source.last_successful_fetch_at = fetch_started
-			source.save(update_fields=["last_successful_fetch_at"])
 		else:
 			self.log(
 				f"  Run for '{source.name}' was not complete; not advancing the incremental anchor.",
