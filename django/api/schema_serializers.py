@@ -11,6 +11,7 @@ from django.utils.text import slugify
 from django_filters import rest_framework as filters
 from rest_framework import serializers
 
+from gregory import source_types
 from gregory.models import CategoryMatchScope, CategoryModality, CategoryType
 
 
@@ -624,3 +625,222 @@ class EditorCategoryUnassignResponseSerializer(serializers.Serializer):
 	article_id = serializers.IntegerField()
 	category_id = serializers.IntegerField()
 	removed = serializers.CharField(help_text="Always `manual`: only a hand assignment can be removed.")
+
+
+# --- Editor sources (/editor/sources/) ---------------------------------------
+
+_SOURCE_COMMON_FIELDS = ("source_type", "subject_id", "name", "description")
+
+
+class EditorSourceInputSerializer(serializers.Serializer):
+	"""The body of ``POST /editor/sources/`` and ``POST /editor/sources/preview/``.
+
+	Which settings apply depends on `source_type`: a setting that belongs to another
+	type is refused (400), and so is any field not listed here, so a stray `ignore_ssl`
+	or `team_id` is never silently ignored. Empty values of another type's settings
+	are tolerated.
+	"""
+
+	source_type = serializers.ChoiceField(
+		choices=[(key, source_types.BY_KEY[key].label) for key in source_types.EDITOR_TYPES],
+		help_text=(
+			"`rss_papers`: an RSS feed of science papers. `rss_trials`: an RSS feed of "
+			"clinical trials. `pubmed`: a PubMed search. `ctgov`: a ClinicalTrials.gov search."
+		),
+	)
+	subject_id = serializers.IntegerField(
+		min_value=1,
+		help_text=(
+			"The subject everything this source brings in is tagged with. Must be in "
+			"the editor's site scope (else 404). The source belongs to the subject's team."
+		),
+	)
+	link = serializers.CharField(
+		max_length=2000,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text=(
+			"`rss_papers`, `rss_trials`: the feed's address (required). Must be http or "
+			"https and resolve to public addresses only."
+		),
+	)
+	keyword_filter = serializers.CharField(
+		max_length=2000,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text=(
+			"`rss_papers`: keep only papers whose title or summary contains one of these "
+			'keywords. Comma-separated; quote phrases: "multiple sclerosis", alzheimer.'
+		),
+	)
+	pubmed_query = serializers.CharField(
+		max_length=4000,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text=(
+			"`pubmed` (required): the PubMed search. No date clause: Gregory adds the "
+			"creation-date window itself."
+		),
+	)
+	excluded_publication_types = serializers.ListField(
+		child=serializers.CharField(max_length=200),
+		required=False,
+		allow_null=True,
+		help_text=(
+			"`pubmed`: publication type names to leave out, e.g. `Review`. Excluding a "
+			"type also excludes the types under it. An unknown name is a 400."
+		),
+	)
+	ctgov_search_condition = serializers.CharField(
+		max_length=500,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text="`ctgov`: searched in each trial's conditions. Fill in at least one of the three.",
+	)
+	ctgov_search_intervention = serializers.CharField(
+		max_length=500,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text="`ctgov`: searched in each trial's interventions.",
+	)
+	ctgov_search_term = serializers.CharField(
+		max_length=500,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text="`ctgov`: searched anywhere in a trial's record.",
+	)
+	name = serializers.CharField(
+		max_length=255,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text=(
+			"Create only (the preview ignores it). Defaults to `RSS | <subject>`, "
+			"`PubMed | <subject>` or `CTGov | <subject>`."
+		),
+	)
+	description = serializers.CharField(
+		max_length=5000,
+		required=False,
+		allow_blank=True,
+		allow_null=True,
+		help_text="Create only (the preview ignores it). Notes for people; Gregory never reads them.",
+	)
+
+	def validate(self, attrs):
+		errors = {}
+		for key in self.initial_data:
+			if key not in self.fields:
+				errors[key] = ["Unknown field."]
+		allowed = set(_SOURCE_COMMON_FIELDS) | set(source_types.editor_fields(attrs["source_type"]))
+		for key, value in attrs.items():
+			if key not in allowed and value not in ("", None, []):
+				errors[key] = [f"Not used by source type {attrs['source_type']}."]
+		if errors:
+			raise serializers.ValidationError(errors)
+		# Trimmed; a blank setting counts as not given.
+		out = {}
+		for key, value in attrs.items():
+			if key not in allowed:
+				continue
+			if isinstance(value, str):
+				value = value.strip()
+			out[key] = value
+		return out
+
+
+class EditorSourceSerializer(serializers.Serializer):
+	"""A source as the editor API lists it."""
+
+	id = serializers.IntegerField(help_text="The source's ID.")
+	name = serializers.CharField(allow_null=True)
+	source_type = serializers.CharField(
+		help_text=(
+			"Type key: `rss_papers`, `rss_trials`, `pubmed`, `ctgov`, `ctis`, `epo_ops`, "
+			"`scrape_*`, `manual_*`, or `legacy` for a combination no importer fetches."
+		),
+	)
+	source_for = serializers.CharField(help_text="What the source produces: science paper, trials, news article or patents.")
+	method = serializers.CharField(help_text="How the content arrives: rss, pubmed_api, ctgov_api, …")
+	subject_id = serializers.IntegerField(allow_null=True)
+	subject_name = serializers.CharField(allow_null=True)
+	team_id = serializers.IntegerField(allow_null=True)
+	team_name = serializers.CharField(allow_null=True)
+	active = serializers.BooleanField()
+	settings = serializers.DictField(
+		help_text=(
+			"The type's settings: `link` and `keyword_filter` (`rss_papers`), `link` "
+			"(`rss_trials`), `pubmed_query` and `excluded_publication_types` (`pubmed`), "
+			"`ctgov_search_condition`, `ctgov_search_intervention` and `ctgov_search_term` "
+			"(`ctgov`). Empty for other types."
+		),
+	)
+	last_successful_fetch_at = serializers.DateTimeField(
+		allow_null=True,
+		help_text="Start of the last fetch that completed fully. Null for RSS sources, which keep no anchor.",
+	)
+
+
+class EditorSourceListResponseSerializer(serializers.Serializer):
+	count = serializers.IntegerField()
+	results = EditorSourceSerializer(many=True)
+
+
+class EditorSourceCountSerializer(serializers.Serializer):
+	key = serializers.CharField()
+	value = serializers.IntegerField()
+	label = serializers.CharField(help_text="What the number counts.")
+
+
+class EditorSourceSampleSerializer(serializers.Serializer):
+	title = serializers.CharField()
+	date = serializers.CharField(allow_null=True)
+	link = serializers.CharField(allow_null=True)
+
+
+class EditorSourcePubmedSerializer(serializers.Serializer):
+	querytranslation = serializers.CharField(help_text="How PubMed read the search.")
+	warnings = serializers.ListField(child=serializers.CharField(), help_text="Warnings PubMed gave about the search.")
+
+
+class EditorSourceDuplicateSerializer(serializers.Serializer):
+	source_id = serializers.IntegerField()
+	name = serializers.CharField(allow_null=True)
+	subject_id = serializers.IntegerField(allow_null=True)
+	subject_name = serializers.CharField(allow_null=True)
+
+
+class EditorSourcePreviewResponseSerializer(serializers.Serializer):
+	source_type = serializers.CharField()
+	subject_id = serializers.IntegerField()
+	counts = EditorSourceCountSerializer(many=True, help_text="Empty when the preview was refused before anything was counted.")
+	samples = EditorSourceSampleSerializer(many=True, help_text="Up to 5.")
+	first_run = serializers.CharField(allow_blank=True, help_text="What the first pipeline run would bring in.")
+	pubmed = EditorSourcePubmedSerializer(allow_null=True, help_text="PubMed sources only.")
+	refused = serializers.CharField(
+		allow_null=True,
+		help_text="The reason create would refuse this source, or null when it would accept it.",
+	)
+	duplicate_of = EditorSourceDuplicateSerializer(
+		allow_null=True, help_text="The active source of the same team that already does this, if any."
+	)
+
+
+class EditorSourceCreateResponseSerializer(serializers.Serializer):
+	source = EditorSourceSerializer()
+	counts = EditorSourceCountSerializer(many=True)
+	samples = EditorSourceSampleSerializer(many=True)
+	first_run = serializers.CharField(allow_blank=True)
+	pubmed = EditorSourcePubmedSerializer(allow_null=True)
+	first_fetch = serializers.CharField(help_text="When the source is first fetched.")
+
+
+class EditorSourceConflictSerializer(serializers.Serializer):
+	detail = serializers.CharField()
+	duplicate_of = EditorSourceDuplicateSerializer()

@@ -18,18 +18,13 @@ from django.shortcuts import render, redirect
 from django.urls import path, reverse
 import csv
 import json
-from datetime import timedelta
 from urllib.parse import quote_plus
 import logging
 import re
 from simple_history.admin import SimpleHistoryAdmin  # Import SimpleHistoryAdmin
-from . import source_types
-from .utils.ncbi import NcbiClient, NcbiError, NcbiQueryError
-from .utils.pubmed_search import (
-	PUBMED_VOLUME_WARNING_PER_30_DAYS,
-	build_pubmed_term,
-	unbalanced_query,
-)
+from . import source_checks, source_types
+from .utils.ncbi import NcbiClient
+from .utils.pubmed_search import PUBMED_VOLUME_WARNING_PER_30_DAYS
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
@@ -2254,98 +2249,45 @@ class SourceAdminForm(forms.ModelForm):
 		self.instance.source_for = source_type.source_for
 		self.instance.method = source_type.method
 
-		def filled(field):
-			value = cleaned.get(field)
-			return bool(value.strip()) if isinstance(value, str) else bool(value)
-
-		if "link" in source_type.required and not filled("link"):
-			self.add_error("link", "Enter the feed's URL.")
-		if source_type.key == "ctgov" and not any(filled(f) for f in source_type.fields):
-			self.add_error(
+		values = {
+			field: cleaned.get(field)
+			for field in (
+				"link",
 				"ctgov_search_condition",
-				"Fill in at least one of condition, intervention or other terms. With all "
-				"three empty, ClinicalTrials.gov would return every trial in its registry.",
+				"ctgov_search_intervention",
+				"ctgov_search_term",
+				"ctis_search_criteria",
+				"ops_cql_query",
+				"pubmed_query",
 			)
-		if source_type.key == "ctis":
-			self._check_ctis_criteria(cleaned.get("ctis_search_criteria"))
-		if source_type.key == "epo_ops":
-			query = (cleaned.get("ops_cql_query") or "").strip()
-			if not query:
-				self.add_error(
-					"ops_cql_query",
-					'Enter the EPO search, e.g. ta="multiple sclerosis" and cpc=/low A61P25/00.',
-				)
-			elif source_types.CQL_DATE_CLAUSE.search(query):
-				self.add_error(
-					"ops_cql_query",
-					"Remove the publication-date clause (pd …). Gregory adds the date "
-					"window itself on every run.",
-				)
+		}
+		problems = source_checks.check_settings(source_type.key, values)
+		for field, messages in problems.items():
+			for message in messages:
+				self.add_error(field, message)
 		if source_type.key == "pubmed":
-			self._check_pubmed_query(cleaned)
+			self._check_pubmed_search(cleaned, problems)
 		return cleaned
 
-	def _check_pubmed_query(self, cleaned):
-		query = (cleaned.get("pubmed_query") or "").strip()
-		if not query:
-			self.add_error(
-				"pubmed_query",
-				'Enter the PubMed search, e.g. "multiple sclerosis"[MeSH Terms] AND remyelination.',
-			)
-			return
-		if source_types.has_date_clause(query):
-			self.add_error(
-				"pubmed_query",
-				"Remove the date clause ([dp], [crdt], last N days …). Gregory adds the "
-				"creation-date window itself on every run.",
-			)
-			return
-		problem = unbalanced_query(query)
-		if problem:
-			self.add_error("pubmed_query", f"Check the brackets and quotes. {problem}")
-			return
-		if self._errors:
+	def _check_pubmed_search(self, cleaned, problems):
+		if problems or self._errors:
 			return  # fix the other fields first; don't spend a PubMed call on a form that can't save
 		search_changed = {"source_type", "pubmed_query", "excluded_publication_types"}
 		if self.instance.pk and not search_changed & set(self.changed_data):
 			return  # a rename or a pause doesn't need the search checked again
-		# Ask PubMed what the importer's first run would find, so a typo or a search
-		# that is far too broad shows up now, not after a month of runs. Short timeout and
-		# one retry: this runs inside an admin request.
-		end = timezone.now().date()
 		excluded = [t.name for t in cleaned.get("excluded_publication_types") or []]
-		term = build_pubmed_term(query, excluded, end - timedelta(days=30), end)
-		try:
-			self.pubmed_check = NcbiClient.for_site(timeout=10, max_retries=1).esearch(
-				term, rettype="count"
-			)
-		except NcbiQueryError as exc:
-			self.add_error("pubmed_query", f"PubMed rejected this search: {exc}")
-		except NcbiError:
+		check = source_checks.check_pubmed_search(
+			cleaned["pubmed_query"],
+			excluded,
+			client=NcbiClient.for_site(timeout=10, max_retries=1),
+		)
+		if check.rejection:
+			self.add_error("pubmed_query", check.rejection)
+		elif check.unreachable:
 			# An NCBI outage shouldn't block editing; save_model warns that it wasn't checked.
 			self.pubmed_unreachable = True
-
-	def _check_ctis_criteria(self, criteria):
-		if not criteria:
-			self.add_error(
-				"ctis_search_criteria",
-				'Enter the search criteria, e.g. {"medicalCondition": "Multiple Sclerosis"}. '
-				"Without them this source is never fetched.",
-			)
-		elif not isinstance(criteria, dict):
-			self.add_error(
-				"ctis_search_criteria",
-				'Enter a JSON object such as {"medicalCondition": "Multiple Sclerosis"}, '
-				"not a list or a single value.",
-			)
 		else:
-			unknown = sorted(set(criteria) - set(source_types.CTIS_SEARCH_KEYS))
-			if unknown:
-				self.add_error(
-					"ctis_search_criteria",
-					f"Unknown key(s): {', '.join(unknown)}. CTIS accepts "
-					f"{', '.join(source_types.CTIS_SEARCH_KEYS)} (case-sensitive).",
-				)
+			self.pubmed_check = check.result
 
 
 class ReassignToTeamForm(forms.Form):

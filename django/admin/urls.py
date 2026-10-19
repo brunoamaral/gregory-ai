@@ -63,6 +63,8 @@ from api.editor_views import (
 	EditorPatentHistoryView,
 	EditorPatentResolveView,
 	EditorPatentTrialDetailView,
+	EditorSourcePreviewView,
+	EditorSourcesView,
 	EditorStatsView,
 	EditorTenantsView,
 )
@@ -386,6 +388,8 @@ urlpatterns = (
 			EditorPatentHistoryView.as_view(),
 			name="editor-patent-history",
 		),
+		path("editor/sources/preview/", EditorSourcePreviewView.as_view(), name="editor-source-preview"),
+		path("editor/sources/", EditorSourcesView.as_view(), name="editor-sources"),
 		path("editor/tenants/", EditorTenantsView.as_view(), name="editor-tenants"),
 		path("editor/stats/", EditorStatsView.as_view(), name="editor-stats"),
 		path("editor/", include(editor_router.urls)),

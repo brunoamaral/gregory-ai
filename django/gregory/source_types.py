@@ -103,6 +103,17 @@ SOURCE_TYPES = (
 BY_KEY = {source_type.key: source_type for source_type in SOURCE_TYPES}
 BY_PAIR = {(source_type.source_for, source_type.method): source_type for source_type in SOURCE_TYPES}
 
+# The types a source manager can add through the MCP editor API (see
+# api/editor_views.py), and the settings they can give. `ignore_ssl` stays an admin-only
+# setting; so do the team and the subject's team, which the server sets.
+EDITOR_TYPES = ("rss_papers", "rss_trials", "pubmed", "ctgov")
+
+
+def editor_fields(key):
+	"""The settings a source of this type takes through the editor API."""
+	return tuple(f for f in BY_KEY[key].fields if f != "ignore_ssl")
+
+
 # Every connection field any type shows, in display order.
 CONNECTION_FIELDS = tuple(
 	dict.fromkeys(field for source_type in SOURCE_TYPES for field in source_type.fields)

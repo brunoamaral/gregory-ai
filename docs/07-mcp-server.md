@@ -705,8 +705,24 @@ Unticking it deletes the person's tokens for the site, as removing *Can edit* do
 does not change existing sessions: a refresh never widens a token, so the person disconnects and
 reconnects the connector to get the scope. The consent screen lists the scope and adds that sources
 are live immediately and feed every site that covers the subject. Django reads the flag from the
-live grant on every `/editor/` request (`EditorAuth.can_manage_sources`). No MCP tool or
-`/editor/` route uses the scope yet.
+live grant on every `/editor/` request (`EditorAuth.can_manage_sources`).
+
+Django has the routes for it, `GET /editor/sources/`, `POST /editor/sources/preview/` and
+`POST /editor/sources/` (see [Source routes](03-api-and-rss-feeds.md#source-routes)); each needs the
+flag, reads included. No MCP tool calls them yet. What they check before a source is saved:
+
+- the admin's checks (a feed needs a link, a ClinicalTrials.gov source needs a search field, a
+  PubMed search has no date clause and balanced brackets, and PubMed or ClinicalTrials.gov accepts
+  the search);
+- for RSS, the address: `http` or `https`, a host that resolves only to public addresses, at most
+  3 redirects each checked the same way, a 10-second timeout and a 5 MB limit, and a body that
+  parses as a feed with entries;
+- duplicates: an active source of the same team, type and address or search is refused (409) and
+  named; other teams' sources are never revealed.
+
+A source added this way is live at once, recorded under the editor's name, and starts from the day
+it is added (no backfill). Creating is limited to 30 a day and previewing to 30 an hour per editor
+and site (`MCP_SOURCE_CREATES_PER_DAY`, `MCP_SOURCE_PREVIEWS_PER_HOUR`), apart from the edit limits.
 
 ### What each sign-in can do
 
