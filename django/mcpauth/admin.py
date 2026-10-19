@@ -26,7 +26,7 @@ class SiteEditorForm(forms.ModelForm):
 
 	class Meta:
 		model = SiteEditor
-		fields = ["user", "can_edit"]
+		fields = ["user", "can_edit", "can_manage_sources"]
 
 	def save(self, commit=True):
 		instance = super().save(commit=False)
@@ -42,7 +42,7 @@ class SiteEditorInline(admin.TabularInline):
 	form = SiteEditorForm
 	extra = 0
 	autocomplete_fields = ["user"]
-	fields = ["user", "can_edit", "granted_by", "created_at", "revoked_at", "revoke"]
+	fields = ["user", "can_edit", "can_manage_sources", "granted_by", "created_at", "revoked_at", "revoke"]
 	readonly_fields = ["granted_by", "created_at", "revoked_at"]
 	verbose_name = "MCP editor"
 	verbose_name_plural = "MCP editors"

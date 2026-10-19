@@ -80,9 +80,11 @@ class EditorOAuth2Validator(OAuth2Validator):
 			grant = active_grant(request.user, site)
 			if grant is None:
 				raise errors.InvalidGrantError(description="Editor access to this site has ended.", request=request)
-			return SiteAccess(site, TIER_EDITOR, grant.can_edit, email)
+			return SiteAccess(
+				site, TIER_EDITOR, grant.can_edit, can_manage_sources=grant.can_manage_sources, contact_email=email
+			)
 		if prior.tier == TIER_PUBLIC and site_has_public_data(site):
-			return SiteAccess(site, TIER_PUBLIC, False, email)
+			return SiteAccess(site, TIER_PUBLIC, False, contact_email=email)
 		raise errors.InvalidGrantError(description="This site no longer offers public access.", request=request)
 
 	@staticmethod

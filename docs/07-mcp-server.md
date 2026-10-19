@@ -685,6 +685,29 @@ SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
 - Private sites (`api_public` off) get an editor address too; only the anonymous `/mcp` is
   refused for them.
 
+### Grants and scopes
+
+A grant (`SiteEditor`, managed from the **MCP editors** inline on the Site admin page) decides
+what a sign-in may do on one site. Django clamps every token to the grant when it issues one, on
+every refresh and on every introspection, so a stale token never keeps a scope the grant no
+longer has.
+
+| Scope | Given when |
+|:---|:---|
+| `articles:read` | Always |
+| `articles:edit` | The grant has *Can edit* |
+| `sources:add` | The grant has *Can edit* and *Can add sources*, and the sign-in asked for the scope |
+
+*Can add sources* (`SiteEditor.can_manage_sources`) is a separate power from editing, and only a
+superuser can tick it: the inline is superuser-only. Regular editors never get `sources:add`, and
+the grant refuses the flag without *Can edit* (in the form, and with a database constraint).
+Unticking it deletes the person's tokens for the site, as removing *Can edit* does. Ticking it
+does not change existing sessions: a refresh never widens a token, so the person disconnects and
+reconnects the connector to get the scope. The consent screen lists the scope and adds that sources
+are live immediately and feed every site that covers the subject. Django reads the flag from the
+live grant on every `/editor/` request (`EditorAuth.can_manage_sources`). No MCP tool or
+`/editor/` route uses the scope yet.
+
 ### What each sign-in can do
 
 | Sign-in | Tools |

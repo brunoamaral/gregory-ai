@@ -43,6 +43,7 @@ class EditorAuth:
 	user_id: int
 	site_id: int
 	can_edit: bool
+	can_manage_sources: bool = False
 
 
 def has_editor_headers(request) -> bool:
@@ -76,7 +77,12 @@ def authenticate_editor(request):
 	grant = active_grant(user, site)
 	if grant is None:
 		raise EditorAuthError(403, "No editor access to this site.")
-	return user, EditorAuth(user_id=user.pk, site_id=site.pk, can_edit=grant.can_edit)
+	return user, EditorAuth(
+		user_id=user.pk,
+		site_id=site.pk,
+		can_edit=grant.can_edit,
+		can_manage_sources=grant.can_edit and grant.can_manage_sources,
+	)
 
 
 def editor_auth_of(request):

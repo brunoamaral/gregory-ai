@@ -148,6 +148,9 @@ class EditorAuthorizationView(AuthorizationView):
 				"access": access,
 				"is_editor": access is not None and access.tier == TIER_EDITOR,
 				"can_edit": access is not None and access.can_edit and access.tier == TIER_EDITOR,
+				"can_manage_sources": access is not None
+				and access.can_manage_sources
+				and access.tier == TIER_EDITOR,
 				"contact_email": access.contact_email if access else contact_email(self.site),
 				"scopes_descriptions": [all_scopes[s] for s in shown if s in all_scopes],
 				"signed_in_as": self.request.user.get_username(),
@@ -244,7 +247,7 @@ class IntrospectView(View):
 			grant = active_grant(token.user, token.site)
 			if grant is None:
 				return inactive
-			access = SiteAccess(token.site, TIER_EDITOR, grant.can_edit)
+			access = SiteAccess(token.site, TIER_EDITOR, grant.can_edit, can_manage_sources=grant.can_manage_sources)
 		elif token.tier == TIER_PUBLIC and site_has_public_data(token.site):
 			access = SiteAccess(token.site, TIER_PUBLIC, False)
 		else:

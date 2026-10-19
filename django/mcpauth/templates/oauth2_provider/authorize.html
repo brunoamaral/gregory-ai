@@ -28,7 +28,10 @@
 	{% elif not can_edit %}
 		<div class="note">You have read-only editor access on this site.</div>
 	{% else %}
-		<div class="note">Edits made through this connection are live immediately and recorded under your name.</div>
+		<div class="note">
+			Edits made through this connection are live immediately and recorded under your name.
+			{% if can_manage_sources %}Sources you add are live immediately and feed every site that covers the subject.{% endif %}
+		</div>
 	{% endif %}
 
 	<dl>

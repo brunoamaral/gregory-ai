@@ -5,6 +5,10 @@ The OAuth side of MCP editor access: who may edit which site (``SiteEditor``)
 and the access token that carries one site and one access tier
 (``AccessToken``, swapped in for django-oauth-toolkit's own through
 ``OAUTH2_PROVIDER_ACCESS_TOKEN_MODEL``). See MCP-AUTH-PLAN.md.
+
+Two scopes beyond reading: ``articles:edit`` for editing records, and
+``sources:add`` for adding sources, which only a grant that a superuser has
+ticked "can add sources" on ever carries.
 """
 
 from django.conf import settings
@@ -16,6 +20,7 @@ from oauth2_provider.models import AbstractAccessToken, AbstractIDToken, Abstrac
 
 SCOPE_READ = "articles:read"
 SCOPE_EDIT = "articles:edit"
+SCOPE_SOURCES = "sources:add"
 
 TIER_EDITOR = "editor"
 TIER_PUBLIC = "public"
@@ -26,6 +31,9 @@ class SiteEditor(models.Model):
 
 	One row per (user, site) while active; a revoked row is kept as the record
 	of who had access and when it ended, and a new grant is a new row.
+
+	``can_manage_sources`` is a separate, superuser-only power on top of
+	``can_edit``: it adds the ``sources:add`` scope to the person's tokens.
 	"""
 
 	user = models.ForeignKey(
@@ -39,6 +47,17 @@ class SiteEditor(models.Model):
 		help_text=(
 			"Untick for read-only access: the editor read scope without the "
 			"edit tools. Saving this unticked ends the person's existing edit "
+			"sessions on this site."
+		),
+	)
+	can_manage_sources = models.BooleanField(
+		default=False,
+		verbose_name="can add sources",
+		help_text=(
+			"Lets this person add RSS feeds and PubMed or ClinicalTrials.gov "
+			"searches for this site's subjects from their MCP client. New "
+			"sources are live at once and feed every site that covers the "
+			"subject. Needs \"can edit\". Unticking it ends the person's "
 			"sessions on this site."
 		),
 	)
@@ -58,7 +77,11 @@ class SiteEditor(models.Model):
 				fields=["user", "site"],
 				condition=models.Q(revoked_at__isnull=True),
 				name="unique_active_site_editor",
-			)
+			),
+			models.CheckConstraint(
+				condition=~models.Q(can_manage_sources=True, can_edit=False),
+				name="siteeditor_sources_need_edit",
+			),
 		]
 		verbose_name = "site editor"
 		verbose_name_plural = "site editors"
@@ -73,6 +96,10 @@ class SiteEditor(models.Model):
 
 	def clean(self):
 		super().clean()
+		if self.can_manage_sources and not self.can_edit:
+			raise ValidationError(
+				{"can_manage_sources": "Adding sources needs edit access too. Tick can edit as well."}
+			)
 		if self.user_id and self.site_id and self.revoked_at is None:
 			if not grant_allowed(self.user, self.site):
 				raise ValidationError(
@@ -91,7 +118,10 @@ class SiteEditor(models.Model):
 			previous = SiteEditor.objects.filter(pk=self.pk).first()
 		super().save(*args, **kwargs)
 		revoked_now = self.revoked_at is not None and (previous is None or previous.revoked_at is None)
-		downgraded = previous is not None and previous.can_edit and not self.can_edit
+		downgraded = previous is not None and (
+			(previous.can_edit and not self.can_edit)
+			or (previous.can_manage_sources and not self.can_manage_sources)
+		)
 		if revoked_now or downgraded:
 			revoke_tokens(self.user_id, self.site_id)
 
