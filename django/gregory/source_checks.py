@@ -371,7 +371,9 @@ def rss_preview(source_for, link, keyword_filter):
 	if source_for == "science paper" and keyword_filter:
 		from gregory.management.commands.feedreader_articles import Command as RssCommand
 
-		processor = RssCommand().get_feed_processor(feed.final_url)
+		# The importer picks its processor from the stored address, which is the one given,
+		# not where the feed redirects to.
+		processor = RssCommand().get_feed_processor(link)
 		stand_in = SimpleNamespace(keyword_filter=keyword_filter)
 		passing = []
 		for entry in feed.entries:

@@ -413,6 +413,16 @@ class PreviewTest(SourceFixture):
 		self.assertIsNone(body["duplicate_of"])
 		self.assertIsNone(body["pubmed"])
 
+	def test_the_keyword_filter_uses_the_processor_of_the_given_link_not_the_redirect_target(self):
+		from gregory.management.commands.feedreader_articles import Command as RssCommand
+
+		self.http.side_effect = [redirect("https://publisher.example.net/feed.xml"), FakeResponse()]
+		with patch.object(RssCommand, "get_feed_processor", autospec=True, side_effect=RssCommand.get_feed_processor) as pick:
+			response = self.preview(link="https://www.biorxiv.org/rss/ms.xml", keyword_filter="multiple sclerosis")
+		self.assertEqual(response.status_code, 200, response.content)
+		pick.assert_called_once()
+		self.assertEqual(pick.call_args.args[1], "https://www.biorxiv.org/rss/ms.xml")
+
 	def test_an_rss_preview_without_a_filter_samples_the_first_entries(self):
 		body = self.preview().json()
 		self.assertEqual([c["key"] for c in body["counts"]], ["entries_in_feed"])
