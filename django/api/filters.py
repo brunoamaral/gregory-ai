@@ -333,7 +333,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		help_text=(
 			"Boolean search across title and summary. Bare terms are AND-ed; "
 			'uppercase OR/NOT and "quoted phrases" are supported, e.g. '
-			"?search=stem OR cells. Not combinable with title/summary-only search."
+			"?search=stem OR cells. Combines (AND) with title and summary."
 		),
 	)
 	author_id = filters.NumberFilter(

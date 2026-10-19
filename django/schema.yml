@@ -334,7 +334,7 @@ paths:
           type: string
         description: Boolean search across title and summary. Bare terms are AND-ed;
           uppercase OR/NOT and "quoted phrases" are supported, e.g. ?search=stem OR
-          cells. Not combinable with title/summary-only search.
+          cells. Combines (AND) with title and summary.
       - in: query
         name: site_id
         schema:
@@ -982,7 +982,7 @@ paths:
           type: string
         description: Boolean search across title and summary. Bare terms are AND-ed;
           uppercase OR/NOT and "quoted phrases" are supported, e.g. ?search=stem OR
-          cells. Not combinable with title/summary-only search.
+          cells. Combines (AND) with title and summary.
       - in: query
         name: site_id
         schema:
@@ -1135,8 +1135,7 @@ paths:
                   type: string
                   description: Boolean search across title and summary. Bare terms
                     are AND-ed; uppercase OR/NOT and "quoted phrases" are supported,
-                    e.g. ?search=stem OR cells. Not combinable with title/summary-only
-                    search.
+                    e.g. ?search=stem OR cells. Combines (AND) with title and summary.
                 author_id:
                   type: number
                   description: Filter by author ID (see /authors/).

@@ -2,7 +2,7 @@
 
 > Audience: developers and operators exporting GregoryAI data.
 
-All list endpoints that accept `format=csv` stream their results as a CSV file. This works for `/articles/`, `/trials/`, and the dedicated search endpoints.
+All list endpoints that accept `format=csv` stream their results as a CSV file. This works for `/articles/`, `/trials/`, and the dedicated search endpoints (`/articles/search/`, `/trials/search/`, `/authors/search/`). `/patents/` has no CSV (`?format=csv` is `404`; see [Patents](03-api-and-rss-feeds.md#patents)), and `/authors/` and `/trials/sites/` don't accept `all_results`.
 
 ## Query parameters
 
@@ -26,19 +26,19 @@ All list endpoints that accept `format=csv` stream their results as a CSV file. 
 curl "https://api.example.com/articles/?team_id=1&subject_id=2&search=covid&format=csv&all_results=true"
 
 # Export all recruiting trials
-curl "https://api.example.com/trials/?team_id=1&subject_id=2&status=Recruiting&format=csv&all_results=true"
+curl "https://api.example.com/trials/?team_id=1&subject_id=2&recruitment_status_normalized=recruiting&format=csv&all_results=true"
 
 # Export article search results (POST)
 curl -X POST \
-  "https://api.example.com/api/articles/search/?format=csv&all_results=true" \
+  "https://api.example.com/articles/search/?format=csv&all_results=true" \
   -H "Content-Type: application/json" \
   -d '{"team_id":1,"subject_id":2,"search":"COVID"}'
 
 # Export trial search results (GET)
-curl "https://api.example.com/api/trials/search/?team_id=1&subject_id=2&status=Recruiting&format=csv&all_results=true"
+curl "https://api.example.com/trials/search/?team_id=1&subject_id=2&recruitment_status_normalized=recruiting&format=csv&all_results=true"
 
 # Export all articles for a site, across every subject in its scope
-curl "https://api.example.com/articles/?site_id=1&format=csv&all_results=true"
+curl "https://api.example.com/articles/?site_id=3&format=csv&all_results=true"
 ```
 
 ## Rate limiting

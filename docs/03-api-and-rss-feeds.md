@@ -184,8 +184,11 @@ This prevents open-redirect attacks — only explicitly whitelisted domains are 
 
 | Endpoint | Description |
 |:---------|:------------|
-| `POST /api/token/` | Obtain JWT token |
+| `POST /api/token/` | Obtain a JWT pair (`username`, `password` → `access`, `refresh`) |
 | `GET /protected_endpoint/` | Test protected endpoint (requires auth header) |
+| `/api-auth/login/`, `/api-auth/logout/` | Session login for the browsable API (Django REST framework's own pages) |
+
+The API key used by `POST /articles/post/`, `POST /articles/edit/` and `POST /trials/edit/`, and for [private site data](#accessing-private-organisation-data), is a different credential: an `APIAccessScheme` key sent as the raw `Authorization` header value.
 
 ### OAuth 2.1 authorization server (MCP editor access)
 
@@ -399,7 +402,7 @@ The MCP server fetches this endpoint the way it already fetches `GET /sites/` �
 
 ## Accessing private organisation data
 
-Content visibility (articles, trials, RSS) is **subject-scoped**, not organisation-scoped — see [Visibility rules summary](#visibility-rules-summary) below. `OrganizationApiSettings.make_api_public` plays no part in it; that flag now governs only `/organizations/` and the `?team_id=`/`?organization=` scope validations (org-keyed surfaces kept deliberately organisation-scoped — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#api-visibility-for-organisation-keyed-surfaces)). Callers that need to read a **private** site's data must identify themselves in one of two ways.
+Content visibility (articles, trials, RSS) is **subject-scoped**, not organisation-scoped — see [Visibility rules summary](#visibility-rules-summary) below. `OrganizationApiSettings.make_api_public` plays no part in it; that flag now governs only the `?team_id=`/`?organization=` scope validations (org-keyed checks kept deliberately organisation-scoped — see [06-organisations-teams-and-sites.md](06-organisations-teams-and-sites.md#api-visibility-for-organisation-keyed-surfaces)). Callers that need to read a **private** site's data must identify themselves in one of two ways.
 
 ### Option 1 — API key bound to a site
 
@@ -445,10 +448,11 @@ Content visibility is **subject-scoped**: a caller sees a row when one of its su
 
 > **Note:** An expired key or a key used from a non-allowed IP is treated as anonymous.
 
-Two endpoints are not content and do not follow this rule:
+One endpoint is not content and does not follow this rule:
 
 - **`/teams/`** lists a team when `Team.api_listed` is on, **or** when the team owns a subject already in the caller's scope. The flag is the publication switch; the second clause exists so a private site's own authenticated frontend can list its own teams. It gates *listing*, not access — an unlisted team's articles and trials are governed by subject scope like everything else. The same rule decides whether a team appears nested inside an article or trial.
-- **`/organizations/`** remains organisation-keyed.
+
+There is no `/organizations/` endpoint: it was removed from the URL configuration (the `OrganizationsViewSet` class is still in `api/views.py`, unrouted).
 
 **`/sponsors/`** is scoped indirectly: a sponsor carries no subject and is visible when at least one of its trials is in scope. Its `trials_count` counts only in-scope trials, so neither the number nor `?ordering=-trials_count` discloses trials the caller cannot read.
 
@@ -463,7 +467,10 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | Parameter | Type | Description |
 |:----------|:-----|:------------|
 | `team_id` | integer | Filter by team |
+| `site_id` | integer | Articles carrying a subject in that site's `scope_subjects`. A content filter; the same parameter is also read for anonymous site resolution (see [Resolving a site](#resolving-a-site-for-an-anonymous-caller)) |
 | `subject_id` | integer | Filter by subject |
+| `subjects` | comma-separated integers | Articles tagged with **all** the listed subjects (AND), e.g. `?subjects=1,3` |
+| `subjects_any` | comma-separated integers | Articles tagged with **any** of the listed subjects (OR), e.g. `?subjects_any=1,3` |
 | `author_id` | integer | Filter by author |
 | `doi` | string | Exact DOI match (case-insensitive) |
 | `pmid` | string | Exact PubMed ID match (digits only), e.g. `?pmid=38812345` |
@@ -472,7 +479,9 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `category_modality` | string | Filter by a category's curated intervention modality (`small_molecule`, `biologic_antibody`, `cell_gene_therapy`, `rehabilitation`, `device_neuromodulation`, `natural_product`, `research_topic`, `other`). Matches if *any* of the article's categories carry that modality |
 | `journal_slug` | string | Filter by journal (spaces → dashes) |
 | `source_id` | integer | Filter by source |
-| `search` | string | Search in title and summary |
+| `search` | string | Boolean search over title and summary: bare terms are AND-ed, uppercase `OR` / `NOT` and `"quoted phrases"` are supported, e.g. `?search=stem OR cells` |
+| `title` | string | Case-insensitive substring of the title only |
+| `summary` | string | Case-insensitive substring of the summary (abstract) only |
 | `relevant` | boolean | `true`: articles relevant by a human *or* by AI, meaning an editor marked them relevant or the ML consensus says so (see `ml_threshold`); `false`: the exact complement. An editor's "not relevant" does **not** hide an ML "yes" here. That is deliberate: the frontend decides how to use these results. Relevant-only sitemaps apply the stricter editorial rule instead (see [Sitemaps](#sitemaps)). Scoped to `subject_id` (or `subjects` / `subjects_any`) when provided. |
 | `ml_threshold` | float 0–1 | The consensus rule behind `relevant=true`, with a custom confidence: enough models (per the subject's ML consensus setting) must have classed the article relevant at this probability or higher. Models only do so at or above the cutoff their prediction run used (0.8 by default), so values below that cutoff act as the cutoff. Subjects with ML predictions turned off never match. Scoped to `subject_id` when provided. For the score shown on each article, use `ml_score_min` |
 | `ml_score_min` | float 0–1 | Only articles whose `ml_score` is at least this value (inclusive). Articles without an `ml_score` are left out. Applies no consensus rule and is not scoped by `subject_id`, because `ml_score` averages every subject the article was scored for. Out-of-range or non-numeric values return 400 |
@@ -557,33 +566,34 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `subject_id`, `author_id`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `ordering`, `relevant`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `author_id`, `doi`, `pmid`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `title`, `summary`, `ordering`, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `POST /articles/edit/` | `doi` *(req)*, `takeaways`, `summary_plain_english`, `access`, `retracted`, `kind` | Edit an existing article, API key required — see [below](#post-articlesedit) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results`, plus every `GET /articles/` filter (`published_date_after`, `published_date_before`, `relevant`, `subjects`, …) | See [Search endpoints](#search-endpoints) below |
 | Articles | `POST /articles/search/` | Request **body** accepts the same fields as `GET /articles/search/`: `team_id`, `subject_id`, `title`, `summary`, `search`, `ordering`, `page`, `page_size`, `all_results`, plus every `GET /articles/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints) |
-| Authors | `GET /authors/` | `author_id`, `full_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `category_slug`, `date_from`, `date_to`, `timeframe`, `page`, `page_size` | `page * page_size` above 10,000 returns 400, same as `/articles/` and `/trials/` — but there is **no** `all_results` bypass here (see [authors-api.md](authors-api.md#pagination-limits)); use `/authors/search/` for bulk/team-scoped reads |
+| Authors | `GET /authors/` | `author_id`, `full_name`, `given_name`, `family_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `subjects_any`, `category_slug`, `category_id`, `date_from`, `date_to`, `timeframe`, `page`, `page_size` | `page * page_size` above 10,000 returns 400, same as `/articles/` and `/trials/` — but there is **no** `all_results` bypass here (see [authors-api.md](authors-api.md#pagination-limits)); use `/authors/search/` for bulk/team-scoped reads |
 | Authors | `GET /authors/{id}/` | `id` (path) | |
 | Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results`, plus every `GET /authors/` filter (`author_id`, `orcid`, `country`, `given_name`, `family_name`) | See [Search endpoints](#search-endpoints) below |
 | Authors | `POST /authors/search/` | Request **body** accepts the same fields as `GET /authors/search/`: `team_id`, `subject_id`, `full_name`, `page`, `page_size`, `all_results`, plus every `GET /authors/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints). Results are always ordered by `author_id`; this endpoint has no `ordering` support |
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
-| Categories | `GET /categories/` | `team_id`, `subject_id`, `category_id`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents) |
+| Categories | `GET /categories/` | `team_id`, `subject_id`, `subjects_any`, `category_id`, `category_terms`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents) |
 | Categories | `GET /categories/{id}/` | `id` (path) | Includes `category_terms` and `category_exclude_terms` |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
-| Sources | `GET /sources/` | `team_id`, `subject_id`, `source_for`, `search`, `ordering`, pagination | `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
+| Sources | `GET /sources/` | `source_id`, `team_id`, `subject_id`, `active`, `source_for`, `link`, `search`, `ordering` (`name`, `source_id`), pagination | `search` matches name and description; `link` is a case-insensitive substring of the feed or search URL; `active=true\|false` filters on whether the pipeline polls it. `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
-| Sponsors | `GET /sponsors/` | `sponsor_type`, `include_patent_applicants`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below. Each row carries `trials_count` and `patents_count`; `include_patent_applicants=true` also lists sponsors that only applied for patents ([Patents](#patents)) |
+| Sponsors | `GET /sponsors/` | `sponsor_type`, `subject_id`, `subjects_any`, `include_patent_applicants`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below. Each row carries `trials_count` and `patents_count`; `include_patent_applicants=true` also lists sponsors that only applied for patents ([Patents](#patents)). `subject_id` / `subjects_any` keep sponsors with at least one trial in the subject(s) |
 | Sponsors | `GET /sponsors/{id}/` | `id` (path) | |
 | Subjects | `GET /subjects/` | `team_id`, `search`, `ordering`, pagination | |
 | Subjects | `GET /subjects/{id}/` | `id` (path) | |
 | Teams | `GET /teams/` | Standard pagination | |
 | Teams | `GET /teams/{id}/` | `id` (path) | |
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
-| Trials | `GET /trials/` | `team_id`, `subject_id`, `category_id`, `category_modality`, `source_id`, `status`, `search`, `ordering`, `has_patent_link`, `include_subject_links`, trial-specific filters, pagination | See parameter details below |
+| Trials | `GET /trials/` | `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `category_id`, `category_slug`, `category_modality`, `source_id`, `status`, `search`, `title`, `summary`, `ordering`, `has_patent_link`, `include_subject_links`, trial-specific filters, pagination | See parameter details below |
+| Trials | `POST /trials/edit/` | `identifiers` *(req)*, `takeaways`, `summary_plain_english` | Edit a trial's editorial content for the key's organisation, API key required — see [below](#post-trialsedit) |
 | Trials | `GET /trials/{id}/` | `id` (path), `include_subject_links` | Adds `trial_sites` and `patent_links` ([Patents](#patents)) |
 | Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), `by_modality` (per `CategoryModality` + `no_modality`, joined over `team_categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality"), `by_study_type` (per `TrialStudyType` + `no_study_type`; `no_study_type` is large — ~13.2k globally — mostly legacy rows with no `source_register` rather than a normalization gap), and `by_sex` (per `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is large — ~46% globally — same legacy-rows caveat as `no_study_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results`, plus every `GET /trials/` filter (`date_registration_after`, `date_registration_before`, `phase_normalized`, `country`, …) | See [Search endpoints](#search-endpoints) below |
@@ -592,9 +602,11 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
-| Email templates | `GET /emails/` | None | Template preview dashboard |
-| Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | |
-| Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | |
+| Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
+| Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | Rendered template |
+| Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | The template's context as JSON |
+| Email templates | `GET /emails/lists/` | `email_type` (`weekly_summary`, `admin_summary`, `trial_notification`, `author_outreach`) | JSON `{lists: [...]}` for the dashboard's list picker; for `author_outreach` it lists outreach campaigns instead |
+| Email templates | `GET /emails/subscribers/` | `q` (search), `list_id` | JSON list of subscribers for the dashboard's preview picker |
 | RSS feeds | `GET /feed/sites/{site_id}/articles/search/` | `site_id` (path); `search`, `title`, `summary`, `subject_id`, `category_slug`, `relevant`, `open_access`, `has_takeaways` | Search feed; other parameters ignored, invalid values 400 — see [Search feeds](#search-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/trials/search/` | `site_id` (path); `search`, `title`, `summary`, `subject_id`, `category_slug`, `recruitment_status_normalized`, `phase_normalized`, `region`, `country`, `sponsor_slug`, `age_eligible`, `inclusion_gender_normalized` | Search feed; other parameters ignored, invalid values 400 — see [Search feeds](#search-feeds) |
 | RSS feeds | `GET /feed/sites/{site_id}/patents/search/` | `site_id` (path); `search`, `title`, `summary`, `subject_id`, `category_slug`, `applicant_sponsor_slug`, `has_grant`, `has_trial_link` | Patent search feed; needs `rss_enabled` and `patents_enabled`; other parameters ignored, invalid values 400 — see [Patent feeds](#patent-feeds) |
@@ -610,6 +622,10 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Sites | `GET /sites/` | None | Publicly readable sites as `{site_id, domain, name}`. **Unscoped by design** — it is the discovery entry point for callers that need a `site_id`, so it cannot require one. Everything returned is already public |
 | Tenants | `GET /tenants/` | None | MCP tenants — see [Discovering MCP tenants](#discovering-mcp-tenants) above. Never gated by site resolution; carries `Vary: Authorization` |
 | Subscriptions | `POST /subscriptions/new/` | `first_name`, `last_name`, `email`, `profile`, `list` | POST-only; `GET` returns `405` with `Allow: POST` |
+| Subscriptions | `GET`/`POST /subscriptions/unsubscribe/{token}/list/{list_id}/`, `…/site/{site_id}/`, `…/all/` | `token` (path, the subscriber's unsubscribe token) | Unsubscribe links in emails. `GET` shows a confirmation page and changes nothing (so a link scanner can't unsubscribe anyone); the `POST` from that page does it — see [subscriptions.md](subscriptions.md) |
+| Subscriptions | `GET`/`POST /subscriptions/author-optout/{token}/` | `token` (path, `AuthorOutreach.opt_out_token`) | Author outreach opt-out, same confirm-then-`POST` pattern — see [author-outreach.md](author-outreach.md) |
+| Webhooks | `POST /webhooks/` | Postmark payload | Postmark suppression and reactivation events — see [subscriptions.md](subscriptions.md) |
+| Robots | `GET /robots.txt` | None | The API host's `robots.txt`; disallows the search feeds — see [Search feeds](#search-feeds) |
 
 ### Search endpoints
 
@@ -822,6 +838,11 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | Parameter | Description |
 |:----------|:------------|
 | `trial_id` | Filter by specific trial ID |
+| `site_id` | Trials carrying a subject in that site's `scope_subjects` (a content filter, as on `/articles/`) |
+| `subjects` / `subjects_any` | Comma-separated subject ids: tagged with **all** of them (AND) / with **any** of them (OR) |
+| `search` | Boolean search (bare terms AND-ed, uppercase `OR` / `NOT`, `"quoted phrases"`) over title, summary and scientific title — see [Search endpoints](#search-endpoints) for why the scientific title is included |
+| `title`, `summary` | Case-insensitive substring of that one field |
+| `acronym` | Trial acronym(s), comma-separated, matches any, case-insensitive, e.g. `?acronym=ReCOVER,MODIF-MS` |
 | `has_takeaways` | `true`/`false`: whether the caller's own organisation has written takeaways for the trial (see [Editorial content](#editorial-content)) |
 | `include` | `editorial` adds the `editorial` list to each trial (see [Editorial content](#editorial-content)) |
 | `has_patent_link` | `true`/`false`: at least one visible, unsuppressed link to a patent family (see [Patents](#patents)). Category-basis links only unless `include_subject_links=true`. A caller whose sites don't show patents matches nothing |
@@ -829,6 +850,7 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `internal_number` | Filter by WHO internal number |
 | `phase` | Filter by trial phase (e.g., `Phase III`) |
 | `phase_normalized` | Exact match against the canonical phase: `early_phase_1`, `phase_1`, `phase_1_2`, `phase_2`, `phase_2_3`, `phase_3`, `phase_3_4`, `phase_4`, `post_market`, `not_applicable`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?phase_normalized=phase_2,phase_3` |
+| `recruitment_status`, `status` | Legacy: case-insensitive exact match on the registry's raw status string (`Recruiting` matches `RECRUITING`, not `Not Recruiting`). `status` is an alias. Misses spelling variants across registries — prefer `recruitment_status_normalized` |
 | `recruitment_status_normalized` | Exact match against the canonical recruitment status: `not_yet_recruiting`, `recruiting`, `enrolling_by_invitation`, `active_not_recruiting`, `not_recruiting`, `suspended`, `completed`, `terminated`, `withdrawn`, `unknown`, `other`. Accepts a single value or a comma-separated list matched with OR, e.g. `?recruitment_status_normalized=recruiting,active_not_recruiting` |
 | `study_type` | Legacy free-text `icontains` filter on the raw registry study-type string — prefer `study_type_normalized` |
 | `study_type_normalized` | Exact match against the canonical study type: `interventional`, `observational`, `expanded_access`, `basic_science`, `other` |
@@ -836,15 +858,18 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `sponsor_id` | Exact match against a canonical sponsor's id (see [Sponsor canonicalization](#sponsor-canonicalization)) |
 | `sponsor_slug` | Exact match against a canonical sponsor's slug |
 | `source_register` | Filter by source registry (e.g., `ClinicalTrials.gov`) |
-| `countries` | Filter by trial countries |
+| `countries` | Legacy: case-insensitive substring of the registry's raw countries string — prefer `country` |
+| `country` | Normalised ISO 3166-1 alpha-2 code(s), comma-separated, OR: `?country=DE` or `?country=DE,FR`. Derived from every source's country data |
+| `region` | Normalised region derived from the trial's countries: `africa`, `asia`, `europe`, `north_america`, `south_america`, `oceania` |
 | `condition` | Filter by medical condition |
 | `intervention` | Filter by intervention type |
 | `therapeutic_areas` | Filter by therapeutic areas |
 | `inclusion_agemin` / `inclusion_agemax` | Legacy exact-match filter on the raw registry age strings (e.g., `18 Years`) — prefer `age_eligible` |
 | `age_eligible` | Numeric age in years (e.g. `?age_eligible=40`). Returns trials whose canonical eligible age range (`inclusion_age_min_years`/`inclusion_age_max_years`) includes this age; a trial with no stated bound on either side is treated as open on that side. Both fields are also exposed on `TrialSerializer` for direct use. |
 | `inclusion_gender_normalized` | Exact match against canonical sex eligibility: `all`, `female`, `male`. **Breaking change (2026-07-20):** replaces the removed legacy `inclusion_gender` substring filter, which returned confidently wrong results (`?inclusion_gender=Female` matched "Female, Male", a both-sexes trial — 82% false positives). `?inclusion_gender=...` is no longer a recognised parameter; requests using it are silently unfiltered rather than rejected. |
-| `date_registration_after` | date (YYYY-MM-DD) | Trials registered on or after this date (inclusive). Returns 400 for invalid dates. |
-| `date_registration_before` | date (YYYY-MM-DD) | Trials registered on or before this date (inclusive). Returns 400 for invalid dates. |
+| `has_results` | `true`/`false`: results posted, by any of the registry signals (`results_posted`, a results completion date, a results link, or results-available = `Yes`) |
+| `date_registration_after` | Date (`YYYY-MM-DD`): trials registered on or after this date (inclusive). Returns 400 for invalid dates |
+| `date_registration_before` | Date (`YYYY-MM-DD`): trials registered on or before this date (inclusive). Returns 400 for invalid dates |
 
 ### Registry identifier filters
 
@@ -1069,6 +1094,24 @@ Edits an existing article, looked up by `doi` (case-insensitive). Requires an `A
 
 > **Breaking change.** Before per-site editorial content, `takeaways` and `summary_plain_english` were written for the key's organisation, and the response had no `site_id`. A key with no site can no longer edit these fields: bind it to a site in the admin (**API access schemes**).
 
+### `POST /trials/edit/`
+
+Edits a trial's editorial content for the API key's **organisation** (trials still carry editorial content per organisation, see [Editorial content](#editorial-content)). Requires an `APIAccessScheme` API key with an organisation. Registry data is never editable here: it comes from the registries.
+
+| Field | Description |
+|:------|:------------|
+| `identifiers` | **Required.** A JSON object with any of `nct`, `euct`, `eudract`; a trial matching any of them is found. Exact match on the stored registry identifier (unlike the `?nct=` filters, no format normalisation) |
+| `takeaways`, `summary_plain_english` | Upserted into the trial's `TrialOrgContent` row for the key's organisation. An empty string clears the field (stored as `NULL`). Fields absent from the payload are left alone |
+
+| HTTP status | Condition |
+|:------------|:----------|
+| `200 OK` | Edited. The body carries `trial_id`, `organization_id` and `updated_fields` |
+| `400 Bad Request` | Body is not JSON, or `identifiers` missing |
+| `401 Unauthorized` | No API key, key invalid, or the request IP is not in the key's allowlist |
+| `403 Forbidden` | The key has no organisation, or the trial belongs to no team of the key's organisation |
+| `404 Not Found` | No trial matches the identifiers |
+| `409 Conflict` | More than one trial matches (`trial_ids` lists them); resolve the duplicates first |
+
 ---
 
 ## Planned endpoints (not yet implemented)
@@ -1126,12 +1169,14 @@ Note: `GET /teams/{id}/subjects/{subject_id}/categories/` is unaffected and cont
 
 ## Data formats
 
-All endpoints support three formats. Specify via the `format` query parameter or `Accept` header.
+The REST endpoints support three formats. Specify via the `format` query parameter or `Accept` header.
 
 | Format | `format=` value | `Accept` header |
 |:-------|:----------------|:----------------|
 | JSON (default) | `json` | `application/json` |
 | Browsable API | `html` | `text/html` |
 | CSV | `csv` | `text/csv` |
+
+Exceptions: `/patents/` and its detail and stats are JSON and browsable API only (`?format=csv` is `404`, a condition of the EPO licence, see [Patents](#patents)). RSS feeds, sitemaps, `robots.txt`, the `/emails/` previews and the `/subscriptions/` and `/webhooks/` routes are plain Django views with a fixed content type and ignore `format`.
 
 For CSV export details and streaming behaviour, see [csv-export.md](csv-export.md).

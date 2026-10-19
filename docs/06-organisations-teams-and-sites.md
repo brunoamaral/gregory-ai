@@ -26,11 +26,11 @@ GregoryAI supports a multi-tenant structure where content, credentials, and emai
 
 The flag survives for one organisation-keyed surface that the site project kept organisation-scoped on purpose, because it answers an organisation-shaped question rather than a content-shaped one:
 
-- **`/organizations/`**, and every `?team_id=`/`?organization=` scope validation elsewhere in the API (`gregory.visibility.visible_org_ids()`).
+- Every `?team_id=`/`?organization=` scope validation in the API (`gregory.visibility.visible_org_ids()`). (The `/organizations/` listing used to be governed by the flag too; that endpoint has since been removed.)
 
 Editorial content (`takeaways`, `summary_plain_english`) no longer reads this flag. It is opt-in with `?include=editorial` and follows the caller's site instead; see [Editorial content](#editorial-content-includeeditorial) below.
 
-- When `make_api_public = True`, anonymous callers can see the organisation in `/organizations/` and validate `?team_id=`/`?organization=` against it.
+- When `make_api_public = True`, anonymous callers can validate `?team_id=`/`?organization=` against the organisation.
 - When `make_api_public = False` (the default), only callers granted access — an API key or a member account — get through those checks for that organisation.
 
 ### Granting access to a private organisation, for these org-keyed surfaces

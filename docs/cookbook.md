@@ -37,7 +37,7 @@ curl "https://api.example.com/articles/?team_id=1&format=csv&all_results=true"
 curl "https://api.example.com/articles/?team_id=1&subject_id=2&search=stem+cells&format=csv&all_results=true"
 
 # Export via the search endpoint
-curl "https://api.example.com/api/articles/search/?team_id=1&subject_id=2&search=COVID&format=csv&all_results=true"
+curl "https://api.example.com/articles/search/?team_id=1&subject_id=2&search=COVID&format=csv&all_results=true"
 ```
 
 Add `all_results=true` to bypass pagination. Without it you get only the first page.

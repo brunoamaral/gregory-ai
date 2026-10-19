@@ -25,10 +25,18 @@ GET /authors/
 
 ### Filtering
 
-#### Team and Subject Filtering
-- `team_id`: Filter authors by team ID (**required** when using `category_slug` or `subject_id`)
-- `subject_id`: Filter authors by subject ID (must be used with `team_id`)
-- `category_slug`: Filter authors by team category slug (must be used with `team_id`)
+#### Identity
+- `author_id`: A specific author
+- `full_name`, `given_name`, `family_name`: Case-insensitive substring of the name
+- `orcid`: Case-insensitive substring of the ORCID
+- `country`: Exact country code
+- `search`: Substring of the full name or ORCID
+
+#### Team, Subject and Category Filtering
+- `team_id`: Filter authors by team ID (**required** with `category_slug` or `category_id`)
+- `subject_id`: Authors with an article in this subject. Does **not** need `team_id`: a subject id belongs to exactly one team
+- `subjects_any`: Comma-separated subject IDs, OR semantics (`?subjects_any=1,10`)
+- `category_slug`, `category_id`: Filter authors by team category (must be used with `team_id`; without it the response is an empty list, not an error)
 
 #### Time-based Filtering
 - `date_from`: Start date for article filtering (YYYY-MM-DD format)
@@ -48,9 +56,10 @@ GET /authors/?sort_by=article_count&timeframe=year
 GET /authors/?sort_by=article_count&date_from=2024-01-01&date_to=2024-12-31
 GET /authors/?team_id=1&category_slug=neuroscience&sort_by=article_count&order=desc
 GET /authors/?team_id=2&subject_id=3&sort_by=article_count&timeframe=month
+GET /authors/?subject_id=3&sort_by=article_count
 ```
 
-**Important Note:** When filtering by `category_slug` or `subject_id`, you **must** also specify `team_id` because multiple teams may have categories or subjects with identical slugs/IDs.
+**Important Note:** When filtering by `category_slug` or `category_id`, you **must** also specify `team_id`. It is not there to disambiguate the category (both are unique on their own): the count then covers articles that are both tagged to the team **and** in the category. `subject_id` and `subjects_any` need no `team_id`.
 
 **Example Response:**
 ```json
@@ -76,32 +85,31 @@ GET /authors/?team_id=2&subject_id=3&sort_by=article_count&timeframe=month
 ### 2. Authors by Team and Subject
 
 ```
-GET /teams/{team_id}/subjects/{subject_id}/authors/
+GET /authors/by_team_subject/?team_id={team_id}&subject_id={subject_id}
 ```
 
-**Query Parameters:**
-- All standard filtering parameters apply
-- `team_id` and `subject_id` are extracted from URL path
+The same as `GET /authors/` with both parameters made **required**: either one missing is `400` (`{"error": "Both team_id and subject_id are required"}`). Every other `/authors/` parameter applies.
 
 **Example:**
 ```
-GET /teams/1/subjects/5/authors/?sort_by=article_count&timeframe=month
+GET /authors/by_team_subject/?team_id=1&subject_id=5&sort_by=article_count&timeframe=month
 ```
 
 ### 3. Authors by Team and Category
 
 ```
-GET /teams/{team_id}/categories/{category_slug}/authors/
+GET /authors/by_team_category/?team_id={team_id}&category_slug={category_slug}
+GET /authors/by_team_category/?team_id={team_id}&category_id={category_id}
 ```
 
-**Query Parameters:**
-- All standard filtering parameters apply
-- `team_id` and `category_slug` are extracted from URL path
+`team_id` and one of `category_slug` / `category_id` are **required**; otherwise `400` (`{"error": "team_id and either category_slug or category_id are required"}`). Every other `/authors/` parameter applies.
 
 **Example:**
 ```
-GET /teams/1/categories/neuroscience/authors/?sort_by=article_count&date_from=2024-01-01
+GET /authors/by_team_category/?team_id=1&category_slug=neuroscience&sort_by=article_count&date_from=2024-01-01
 ```
+
+There are no `/teams/{id}/subjects/{id}/authors/` or `/teams/{id}/categories/{slug}/authors/` routes; they 404.
 
 ## Advanced Filtering Examples
 
@@ -112,12 +120,12 @@ GET /authors/?sort_by=article_count&order=desc&timeframe=year
 
 ### 2. Authors in Specific Team and Subject (Last Month)
 ```
-GET /teams/1/subjects/3/authors/?sort_by=article_count&timeframe=month
+GET /authors/by_team_subject/?team_id=1&subject_id=3&sort_by=article_count&timeframe=month
 ```
 
 ### 3. Authors in Category with Custom Date Range
 ```
-GET /teams/2/categories/cardiology/authors/?sort_by=article_count&date_from=2024-06-01&date_to=2024-12-01
+GET /authors/by_team_category/?team_id=2&category_slug=cardiology&sort_by=article_count&date_from=2024-06-01&date_to=2024-12-01
 ```
 
 ### 4. Authors by Team with Multiple Filters
@@ -175,14 +183,16 @@ always scoped to a single team.
 ## Error Handling
 
 ### 400 Bad Request
+Returned by `/authors/by_team_subject/` and `/authors/by_team_category/` when a required parameter is missing:
 ```json
 {
   "error": "Both team_id and subject_id are required"
 }
 ```
+Also returned by any list request whose offset (`page * page_size`) exceeds 10,000.
 
-### Missing Team ID for Category/Subject Filtering
-When using `category_slug` or `subject_id` without `team_id`, results may be ambiguous or incorrect since multiple teams can have identical category slugs or subject IDs.
+### Missing Team ID for Category Filtering
+On `GET /authors/`, `category_slug` or `category_id` without `team_id` returns an empty list (`count: 0`), not an error.
 
 ### Invalid Date Format
 Invalid date parameters are silently ignored to maintain API stability.
@@ -190,12 +200,11 @@ Invalid date parameters are silently ignored to maintain API stability.
 ### Invalid Numeric Parameters
 Invalid team_id or subject_id values are silently ignored.
 
-## Semantic URL Structure
+## Endpoint summary
 
-The API follows RESTful principles with intuitive URL structure:
-
-- `/authors/` - All authors
-- `/teams/{id}/subjects/{id}/authors/` - Authors filtered by team and subject
-- `/teams/{id}/categories/{slug}/authors/` - Authors filtered by team and category
-
-This structure makes it easy for clients to construct URLs and understand the resource hierarchy.
+- `GET /authors/` - All authors in the caller's scope
+- `GET /authors/{id}/` - One author
+- `GET /authors/{id}/coauthors/` - Co-authors, ordered by number of shared articles
+- `GET /authors/by_team_subject/` - Authors filtered by team and subject (both required)
+- `GET /authors/by_team_category/` - Authors filtered by team and category (both required)
+- `GET /authors/search/` - Team- and subject-scoped search with `all_results` and CSV; see [03-api-and-rss-feeds.md § Search endpoints](03-api-and-rss-feeds.md#search-endpoints)
