@@ -56,12 +56,13 @@ def _log_edit(
 	`mcp_request` line of the same call (user_id, tier).
 
 	`record_type` says what the edit was about: `article` or `patent` for the
-	tools that edit one, `category` for the ones that edit a category. It has no
+	tools that edit one, `category` for the ones that edit a category, `source`
+	for the source tools (tools/sources.py). It has no
 	default, so a new tool has to say. `record_id` is logged as `article_id` or
 	`patent_id` to match. `action` says which way a two-way tool went (`assign` /
 	`unassign`, `link` / `unlink`), which the tool name alone no longer does."""
 	extra = {"tool": tool, "record_type": record_type, "fields": sorted(fields), "outcome": outcome}
-	if record_type in ("article", "patent"):
+	if record_type in ("article", "patent", "source"):
 		extra[f"{record_type}_id"] = record_id
 	if category_id is not None:
 		extra["category_id"] = category_id

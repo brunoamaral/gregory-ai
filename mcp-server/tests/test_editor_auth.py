@@ -189,7 +189,7 @@ async def test_protected_resource_metadata_names_this_hosts_editor_address(djang
 	body = response.json()
 	assert body["resource"] == resource_for()
 	assert body["authorization_servers"] == ["https://api.test/"] or body["authorization_servers"] == ["https://api.test"]
-	assert body["scopes_supported"] == ["articles:read", "articles:edit"]
+	assert body["scopes_supported"] == ["articles:read", "articles:edit", "sources:add"]
 	assert body["bearer_methods_supported"] == ["header"]
 	assert body["resource_name"] == "Brain Regeneration"
 	assert response.headers["access-control-allow-origin"] == "*"

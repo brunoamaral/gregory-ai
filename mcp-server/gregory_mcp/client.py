@@ -5,7 +5,8 @@ and only ever talks to the instance named by `GREGORY_API_URL`. The anonymous
 address only ever issues `GET` requests. The editor address (MCP-AUTH-PLAN.md)
 can also write, and only through `post`/`put`/`patch`/`delete` below, which are
 refused unless the in-flight request belongs to an editor whose grant carries
-the edit scope.
+the edit scope. A request to `/editor/sources/` (read or write) is refused unless
+the grant also carries the sources scope.
 """
 
 from __future__ import annotations
@@ -38,6 +39,10 @@ MAX_BACKOFF_SECONDS = 2.0
 # useful to a caller than an immediate error). Anything else >= 400 is a
 # client error retrying won't fix.
 _RETRYABLE_CLIENT_STATUS = {429}
+
+# Every source route, reads included, needs the sources scope (Django checks it
+# again: IsSourceManager). Compared on the `/editor/...` form of a path.
+_SOURCES_PREFIX = "/editor/sources/"
 
 
 class GregoryAPIError(ToolError):
@@ -140,6 +145,7 @@ class GregoryClient:
 			site_id = get_current_site_id()
 			if site_id is not None and "site_id" not in clean_params:
 				clean_params["site_id"] = site_id
+		self._require_sources_scope(path, session)
 		return await self._send(
 			"GET", path, params=clean_params, headers=headers, attempts=self._settings.max_retries + 1
 		)
@@ -190,7 +196,17 @@ class GregoryClient:
 			# are hidden from, and refused to, anyone without the edit scope.
 			raise GregoryAPIError(403, "this sign-in cannot edit")
 		path, headers = self._editor_route(path, session)
-		return await self._send(method, path, json=json, headers=headers, attempts=1)
+		self._require_sources_scope(path, session)
+		# Preview and create check an outside service, so they get a longer timeout.
+		timeout = self._settings.source_request_timeout if path.startswith(_SOURCES_PREFIX) else None
+		return await self._send(method, path, json=json, headers=headers, attempts=1, timeout=timeout)
+
+	@staticmethod
+	def _require_sources_scope(path: str, session: EditorSession | None) -> None:
+		"""The second lock on the source tools (tool_access.py hides them): a
+		source request from a sign-in without the sources scope is never sent."""
+		if path.startswith(_SOURCES_PREFIX) and not (session is not None and session.can_manage_sources):
+			raise GregoryAPIError(403, "this sign-in cannot add sources")
 
 	def _service_headers(self) -> dict[str, str]:
 		if not self._settings.service_key:
@@ -216,6 +232,7 @@ class GregoryClient:
 		data: dict[str, Any] | None = None,
 		headers: dict[str, str] | None = None,
 		attempts: int,
+		timeout: float | None = None,
 	) -> dict[str, Any]:
 		"""One request, up to `attempts` tries (retrying transport errors, 5xx
 		and 429 between them). Telemetry is recorded for every try."""
@@ -229,6 +246,8 @@ class GregoryClient:
 			extra["data"] = data
 		if headers:
 			extra["headers"] = headers
+		if timeout is not None:
+			extra["timeout"] = httpx2.Timeout(timeout, connect=self._settings.connect_timeout)
 
 		for attempt in range(1, attempts + 1):
 			call_start = time.monotonic()

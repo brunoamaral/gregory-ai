@@ -67,6 +67,7 @@ TIER_EDITOR = "editor"
 TIER_PUBLIC = "public"
 SCOPE_READ = "articles:read"
 SCOPE_EDIT = "articles:edit"
+SCOPE_SOURCES = "sources:add"
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,12 @@ class EditorSession:
 	@property
 	def can_edit(self) -> bool:
 		return self.is_editor and SCOPE_EDIT in self.scopes
+
+	@property
+	def can_manage_sources(self) -> bool:
+		"""May add sources: the sources scope, which Django only gives to a grant
+		that also has the edit scope, and which this property checks again."""
+		return self.can_edit and SCOPE_SOURCES in self.scopes
 
 
 _editor_context: contextvars.ContextVar[EditorSession | None] = contextvars.ContextVar(

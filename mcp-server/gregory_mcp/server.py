@@ -9,7 +9,8 @@ to the one Gregory instance named by `GREGORY_API_URL`.
 
 `build_server(editor=True)` is the server behind `/mcp/editor`
 (MCP-AUTH-PLAN.md): the same read tools, plus `get_history` and the six write
-tools. What a given request may see and call depends on who signed in
+tools, and for a sign-in with the sources scope `list_sources`, `preview_source`
+and `create_source`. What a given request may see and call depends on who signed in
 (tool_access.py); the process registers every tool once, like the anonymous one.
 """
 
@@ -29,6 +30,7 @@ from .tenants import TenantGateMiddleware
 from .tool_access import ToolAccessMiddleware
 from .tools import articles, authors, catalog, patents, stats, trials
 from .tools import editor as editor_tools
+from .tools import sources as source_tools
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=False)
 
@@ -48,6 +50,9 @@ EDIT_DESTRUCTIVE = ToolAnnotations(
 EDIT_CREATE = ToolAnnotations(
 	read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=False
 )
+# Previewing a source saves nothing but reaches out to a feed, PubMed or
+# ClinicalTrials.gov, so unlike every other read it is open-world.
+READ_ONLY_OPEN_WORLD = ToolAnnotations(read_only_hint=True, idempotent_hint=True, open_world_hint=True)
 
 # All five cache hints are "private" (decision 3, MCP-MULTI-TENANCY-PHASE-3-PLAN.md):
 # every response now carries the resolved tenant's own serverInfo stamp
@@ -203,6 +208,10 @@ def build_server(editor: bool = False) -> MCPServer:
 		server.add_tool(editor_tools.create_category, annotations=EDIT_CREATE)
 		server.add_tool(editor_tools.update_category, annotations=EDIT_DESTRUCTIVE)
 		server.add_tool(editor_tools.set_category_assignment, annotations=EDIT_DESTRUCTIVE)
+		# Offered only to a sign-in with the sources scope (tool_access.py).
+		server.add_tool(source_tools.list_sources, annotations=READ_ONLY)
+		server.add_tool(source_tools.preview_source, annotations=READ_ONLY_OPEN_WORLD)
+		server.add_tool(source_tools.create_source, annotations=EDIT_CREATE)
 
 	_replace_handler(server, "prompts/list", types.PaginatedRequestParams, prompts.list_prompts)
 	_replace_handler(server, "prompts/get", types.GetPromptRequestParams, prompts.get_prompt)

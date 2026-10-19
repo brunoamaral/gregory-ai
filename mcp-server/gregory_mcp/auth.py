@@ -51,6 +51,7 @@ from .site import _normalize_host
 from .site_context import (
 	SCOPE_EDIT,
 	SCOPE_READ,
+	SCOPE_SOURCES,
 	TIER_EDITOR,
 	TIER_PUBLIC,
 	EditorSession,
@@ -282,7 +283,7 @@ class EditorAuthMiddleware:
 			user_id=verified.user_id,
 			site_id=verified.site_id,
 			tier=verified.tier,
-			scopes=frozenset(verified.scopes) & {SCOPE_READ, SCOPE_EDIT},
+			scopes=frozenset(verified.scopes) & {SCOPE_READ, SCOPE_EDIT, SCOPE_SOURCES},
 		)
 		token = _editor_context.set(session)
 		try:
@@ -369,7 +370,7 @@ class ProtectedResourceMetadataApp:
 		metadata = ProtectedResourceMetadata(
 			resource=AnyHttpUrl(resource),
 			authorization_servers=[AnyHttpUrl(self._settings.oauth_issuer)],
-			scopes_supported=[SCOPE_READ, SCOPE_EDIT],
+			scopes_supported=[SCOPE_READ, SCOPE_EDIT, SCOPE_SOURCES],
 			resource_name=tenant.title,
 		)
 		await _send(

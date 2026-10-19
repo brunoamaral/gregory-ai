@@ -675,7 +675,8 @@ SDK's `TokenVerifier`, `AccessToken` and protected-resource-metadata types).
   Never anonymous data on the editor address.
 - `GET /.well-known/oauth-protected-resource/mcp/editor` (RFC 9728) is public, per host, and
   names the site's editor address as `resource`, Django's issuer as the authorization server,
-  and the scopes `articles:read` and `articles:edit`.
+  and the scopes `articles:read`, `articles:edit` and `sources:add`. A sign-in is only given the
+  scopes its grant allows (see [Grants and scopes](#grants-and-scopes)).
 - Tokens are checked by introspection (RFC 7662) against Django, using the service key. Results
   are cached for 60 seconds, never past the token's own expiry, keyed by a hash of the token.
   If Django cannot be reached the answer is `503` with `Retry-After`, not a sign-in loop.
@@ -709,7 +710,7 @@ live grant on every `/editor/` request (`EditorAuth.can_manage_sources`).
 
 Django has the routes for it, `GET /editor/sources/`, `POST /editor/sources/preview/` and
 `POST /editor/sources/` (see [Source routes](03-api-and-rss-feeds.md#source-routes)); each needs the
-flag, reads included. No MCP tool calls them yet. What they check before a source is saved:
+flag, reads included. The three source tools below call them. What they check before a source is saved:
 
 - the admin's checks (a feed needs a link, a ClinicalTrials.gov source needs a search field, a
   PubMed search has no date clause and balanced brackets, and PubMed or ClinicalTrials.gov accepts
@@ -731,6 +732,7 @@ and site (`MCP_SOURCE_CREATES_PER_DAY`, `MCP_SOURCE_PREVIEWS_PER_HOUR`), apart f
 | Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
 | Editor, read-only grant | the ten read tools plus `get_history` |
 | Editor with the edit scope | all of those plus six write tools |
+| Editor with the edit scope and `sources:add` | all of those plus three source tools |
 
 On a site with patents every tier also gets `search_patents` and `get_patent`; that is decided
 by the site, not the sign-in (see [Patents](#patents)). An editor's `search_patents` and
@@ -738,7 +740,7 @@ by the site, not the sign-in (see [Patents](#patents)). An editor's `search_pate
 adds the site's editorial text to the record.
 
 `tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
-does not exist. `GregoryClient` refuses a write without an edit session as a second lock, and
+does not exist. `GregoryClient` refuses a write without an edit session as a second lock (and a request to `/editor/sources/`, reads included, without the sources scope: `403 this sign-in cannot add sources`), and
 writes are never retried (a timeout may or may not have been applied, and the tool says so).
 Reads on this address go to Django's `/editor/` routes as the signed-in person, so editors see
 their site's whole published scope, and the response cache is keyed by tier so an editor's
@@ -752,6 +754,9 @@ answer is never served to `/mcp`.
 | `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
 | `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
 | `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/`, or `/editor/patents/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
+| `list_sources` | `GET /editor/sources/` | Source managers only. The sources of the site's subjects, of every type, with their settings (for the four types that can be added), whether they are active and when they were last fetched. Filters `subject_id`, `source_type`, `active` (default: active only). |
+| `preview_source` | `POST /editor/sources/preview/` | Source managers only. Takes the same arguments as `create_source` (without `name` and `description`), runs the same checks and saves nothing. Returns the counts and up to 5 sample titles, what the first run brings in, PubMed's reading of the search, and `refused` / `duplicate_of`. A source that would be refused is still a normal answer. |
+| `create_source` | `POST /editor/sources/` | Source managers only. Adds an RSS feed of papers or trials (`rss_papers`, `rss_trials`), a PubMed search (`pubmed`) or a ClinicalTrials.gov search (`ctgov`) for one subject. Live at once, feeds every site that covers the subject, brings in content from today on. A duplicate is reported as "already exists" (`created: false`) rather than as an error. |
 | `get_history` | `GET /editor/articles/{id}/history/`, or `/editor/patents/{id}/history/` | Newest first, `limit` 1 to 200. Includes hand category assignments. A patent has no relevance entries. |
 
 The editor tools are grouped by what they do, not by the record they act on: the tools that can both
@@ -779,10 +784,29 @@ exception reaches it only as "Error executing tool <name>".
 `tools/list` and `server/discover` on this address are cached for 5 minutes (private) instead
 of 30, so a newly granted editor sees the edit tools soon after reconnecting.
 
+#### The source tools
+
+`list_sources`, `preview_source` and `create_source` are listed and callable only for a sign-in with
+the `sources:add` scope (a grant with *Can add sources*); for everyone else they behave as tools that
+do not exist, and the editor instructions do not mention them. Adding a source is live at once and
+feeds every site that covers the subject, so `create_source`'s description and the instructions of a
+source manager's session tell the model to run `preview_source` first, show the person the counts
+and sample titles, and get their confirmation before calling it. `preview_source` is annotated
+read-only and open-world (it reaches the feed, PubMed or ClinicalTrials.gov); `create_source` only
+adds, like `create_category`. The tools take `ctgov_condition`, `ctgov_intervention` and `ctgov_term`,
+which are sent as Django's `ctgov_search_*` fields. No tool takes a site, a team or `ignore_ssl`.
+
+The two source POSTs reach out to a feed, PubMed or ClinicalTrials.gov from Django, so the client
+gives them their own timeout, `GREGORY_SOURCE_REQUEST_TIMEOUT` (default 75 seconds), instead of
+`GREGORY_REQUEST_TIMEOUT` (15). A create that timed out in the client but was saved by Django is
+reported as "may have been added; check `list_sources`", and a second try for it is answered as
+"this source already exists" (the 409), not as an error. A limit (429) says how long to wait and that
+nothing was added; an unreachable PubMed or ClinicalTrials.gov (503) says to try again later.
+
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, `record_type` (`article` or `patent` for the tools that edit one, `category` for `create_category` and `update_category`), `article_id` or `patent_id`, category id, field names and
+`mcp_edit` line with the tool, `record_type` (`article` or `patent` for the tools that edit one, `category` for `create_category` and `update_category`, `source` for `preview_source` and `create_source`), `article_id`, `patent_id` or `source_id`, category id, field names and
 outcome, never values (those live in Django's history). The two-way tools also log an `action`
 (`link`, `unlink`, `assign` or `unassign`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
 
