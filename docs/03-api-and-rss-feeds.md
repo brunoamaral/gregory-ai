@@ -224,7 +224,7 @@ Rules:
 - Django re-checks the editor's active `SiteEditor` grant on every request, so a revocation takes effect on the next call whatever the MCP server has cached. A bad or missing credential, or an unknown or inactive user, is `401` with `WWW-Authenticate: Bearer`. A valid credential for an editor without an active grant on that site, or for a site with `mcp_enabled` off, is `403`. A grant with `can_edit` off reads but gets `403` on every write.
 - A request carrying either editor header without the credential is `401` on every route, and the headers are refused on any route outside `/editor/`.
 - The site is the token's, never a parameter. An article, trial or subject outside that site's `scope_subjects` is `404`, the same answer as one that doesn't exist.
-- Writes take effect immediately, run as the editor (history rows record the editor and `via = "mcp"`), and are throttled per (editor, site): 60 per hour and 500 per day by default (`MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY`). A throttled write is `429` with `Retry-After`. Reads are never throttled.
+- Writes take effect immediately, run as the editor (history rows record the editor and `via = "mcp"`), and are throttled per (editor, site): 60 per hour and 500 per day by default (`MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY`). A throttled write is `429` with `Retry-After`. Reads are never throttled. The source routes below have limits of their own.
 
 ### Reads
 
@@ -267,6 +267,46 @@ The same actions on patent families. A patent is found through the site's **pate
 | `GET /editor/patents/{patent_id}/history/?limit=` | Who changed this site's editorial content for the family, its hand assignments to categories in scope, and the suppressing or restoring of its links to trials in scope; newest first, `limit` 1 to 200 (default 50). Entry kinds are `editorial`, `category` and `trial_link`: patents have no relevance. Only people's changes are recorded (the pipeline's category matching and link detection write no history), so every entry is an editor, admin or API-key action |
 
 The reads `GET /editor/patents/` and `GET /editor/patents/{id}/` accept `?include=editorial` (and `claims` on the detail) like the public endpoints; each editorial entry also carries `updated_at` and `updated_by`.
+
+#### Source routes
+
+Only for a grant with `can_manage_sources` (the *Can add sources* flag, set by a superuser; see [Grants and scopes](07-mcp-server.md#grants-and-scopes)). Every method needs it, `GET` included: any other editor, read-only or not, gets `403`. They are the only way to add a source over MCP; editing or pausing one stays in the admin.
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `GET /editor/sources/` | The sources whose subject is in the site's scope, of every type, ordered by name: `id`, `name`, `source_type`, `source_for`, `method`, `subject_id`, `subject_name`, `team_id`, `team_name`, `active`, `settings` and `last_successful_fetch_at`. `source_type` is a key of `gregory/source_types.py` (`legacy` for a pair no importer fetches); `settings` shows the type's settings for `rss_papers`, `rss_trials`, `pubmed` and `ctgov` and is empty for the rest. Filters: `subject_id`, `source_type`, `active=true\|false`. Not paginated. Not throttled |
+| `POST /editor/sources/preview/` | Takes the body of the create below and saves nothing. Returns `counts` (each `{key, value, label}`), up to 5 `samples` (`title`, `date`, `link`), `first_run` (what the first pipeline run brings in), `pubmed` (`querytranslation` and `warnings`, for PubMed), `refused` (why create would refuse, or `null`) and `duplicate_of`. A refusal is still `200`: the reason is in `refused`. Takes `name` and `description` and ignores them |
+| `POST /editor/sources/` | Adds a source. `201` with the new `source`, the same `counts`, `samples`, `first_run` and `pubmed`, and `first_fetch` (`next pipeline run (every 12 hours), from today on`) |
+
+Body of preview and create: `source_type` and `subject_id`, plus the settings of the type; create also takes `name` and `description`.
+
+| `source_type` | Settings | Stored as |
+|:--------------|:---------|:----------|
+| `rss_papers` | `link` (required), `keyword_filter` | science paper / rss |
+| `rss_trials` | `link` (required) | trials / rss |
+| `pubmed` | `pubmed_query` (required), `excluded_publication_types` (names, matched ignoring case; an unknown name is `400`) | science paper / pubmed_api |
+| `ctgov` | `ctgov_search_condition`, `ctgov_search_intervention`, `ctgov_search_term` (at least one) | trials / ctgov_api |
+
+A setting that belongs to another type is `400`, and so is any field not listed, so `ignore_ssl` or `team_id` is never silently ignored. CTIS, EPO, scrape and manual sources cannot be added this way.
+
+What the server decides, never the caller: the source belongs to the subject's team; it is `active`; `ignore_ssl` is off (a feed with a broken certificate is added in the admin); `name` defaults to `RSS | <subject>`, `PubMed | <subject>` or `CTGov | <subject>`. A subject outside the site's scope is `404`.
+
+What a create does, in order, with no reliance on a preview having run:
+
+1. The admin's checks, with its messages (`gregory/source_checks.py`, shared with the admin form): a feed needs a link, a ClinicalTrials.gov source needs at least one search field, a PubMed search has no date clause and balanced brackets and quotes. `400`, keyed by field.
+2. A duplicate: an **active** source of the same team and type with the same address (RSS: ignoring case and a trailing slash, and the address the feed redirects to) or search (PubMed: ignoring case and extra whitespace; ClinicalTrials.gov: the three fields the same way). `409` with `duplicate_of` (`source_id`, `name`, `subject_id`, `subject_name`). Sources of other teams are never looked at, so never named.
+3. One call to the outside service of the type:
+   - **RSS:** the server fetches the address, so it only goes to public hosts. The scheme must be `http` or `https`; the host must resolve only to public addresses (no loopback, private, link-local, reserved or multicast, IPv4-mapped addresses included); redirects are followed by hand, at most 3, and each is checked the same way. 10-second timeout, 5 MB limit, and the body must parse as a feed with at least one entry. Anything else is `400` on `link`.
+   - **PubMed:** a count of the papers created in the last 30 days, which also confirms PubMed accepts the search (`400` with PubMed's message if not).
+   - **ClinicalTrials.gov:** the number of matching trials and of those updated in the last 30 days (`400` if it rejects the search). It builds the search exactly as the importer does (`gregory/utils/ctgov_search.py`).
+4. If PubMed or ClinicalTrials.gov cannot be reached the answer is `503` ("try again later") and nothing is created, preview included.
+5. Saved in one transaction as the editor (history records the editor and `via = "mcp"`). For `pubmed` and `ctgov`, `last_successful_fetch_at` is set to the time of creation, so the first run is an ordinary incremental one: PubMed looks at the last 2 days, ClinicalTrials.gov at trials updated in the last 2 days. A source added over MCP has **no backfill**. An RSS source has no anchor: its first run reads the feed's current entries, as for every RSS source. A source added in the admin keeps its first-run backfill.
+
+There is no volume limit: a big count is reported in `counts`, never refused.
+
+**Counts.** RSS: `entries_in_feed`, and `entries_passing_keyword_filter` when a filter is given (title and summary only; the importer also checks a paper's CrossRef abstract when a feed sends no summary, so the real number can be a little higher). PubMed: `papers_last_30_days`, the monthly volume to expect. ClinicalTrials.gov: `trials_matching` and `trials_updated_last_30_days`. Samples are the feed's first entries, PubMed's most recent papers, or the most recently updated trials; PubMed's are left out when it will not list them.
+
+**Throttles.** Per editor and site, apart from the general write limits above (a source request neither spends nor is stopped by those): `POST /editor/sources/` is limited to 30 a day (`MCP_SOURCE_CREATES_PER_DAY`) and the preview to 30 an hour (`MCP_SOURCE_PREVIEWS_PER_HOUR`). Over the limit is `429` with `Retry-After`. A request counts when it is made, whether or not it is then refused.
 
 Trials are read-only over MCP: an editor can link a trial to an article but cannot change the trial. `access`, `retracted` and `kind` stay on `POST /articles/edit/` (API key) and the admin.
 

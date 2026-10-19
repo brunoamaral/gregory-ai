@@ -280,6 +280,7 @@ Clients register themselves, so two commands keep the tables small. Run them fro
 | `OAUTH_LOGIN_MAX_FAILURES` | `10` | Failed sign-ins per 15 minutes, per client address and per username, before the login page refuses |
 | `OAUTH_DCR_MAX_PER_HOUR` | `30` | Dynamic registrations per client address per hour |
 | `MCP_EDITOR_WRITES_PER_HOUR`, `MCP_EDITOR_WRITES_PER_DAY` | `60`, `500` | Edits allowed per editor and site per window. Tune from production logs |
+| `MCP_SOURCE_CREATES_PER_DAY`, `MCP_SOURCE_PREVIEWS_PER_HOUR` | `30`, `30` | Sources a source manager may add per day, and previews per hour, per editor and site. Separate from the edit limits above |
 
 ## Editorial content (`?include=editorial`)
 

@@ -45,6 +45,22 @@ The *Keyword filter* is meant for broad RSS paper feeds that cover many topics, 
 bioRxiv, medRxiv or PNAS: only entries whose title or summary mentions one of the keywords
 are kept. Separate keywords with commas and quote phrases: `"multiple sclerosis", alzheimer`.
 
+### Sources added over MCP
+
+A person whose editor grant has *Can add sources* (a superuser sets it, see
+[Grants and scopes](07-mcp-server.md#grants-and-scopes)) can also add sources through the
+editor API, without the admin: an RSS feed of papers or trials, a PubMed search or a
+ClinicalTrials.gov search, for a subject of their site. CTIS, EPO, scrape and manual sources,
+editing, pausing and `ignore_ssl` stay in the admin. The checks, the preview and the limits are
+in [Source routes](03-api-and-rss-feeds.md#source-routes).
+
+Such a source is active at once and recorded under the person's name in the source history. It
+**starts from the day it is added**: a PubMed or ClinicalTrials.gov source is created with
+`last_successful_fetch_at` set, so its first pipeline run looks back 2 days, not 30 days or the
+whole registry; an RSS source reads the feed's current entries. A source added in the admin
+has no anchor and keeps its first-run backfill. A source added either way feeds every site that
+covers its subject.
+
 ### ClinicalTrials.gov sources (`method="ctgov_api"`)
 
 Three fields build the search: *Condition or disease* (`ctgov_search_condition`, the
