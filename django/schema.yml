@@ -3862,6 +3862,333 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /editor/sources/:
+    get:
+      operationId: editor_sources_retrieve
+      description: Source managers only (a grant with `can_manage_sources`; any other
+        editor gets 403, reads included). Lists the sources whose subject is in the
+        editor's site scope, of every type, so the full picture is visible. Their
+        settings are shown for the four types that can be added here. Not paginated.
+      summary: List the sources of the site's subjects (source managers)
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+        description: '`true` for active sources only, `false` for paused ones. Both
+          when omitted.'
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: query
+        name: source_type
+        schema:
+          type: string
+          enum:
+          - ctgov
+          - ctis
+          - epo_ops
+          - manual_news
+          - manual_papers
+          - manual_trials
+          - pubmed
+          - rss_papers
+          - rss_trials
+          - scrape_news
+          - scrape_papers
+          - scrape_trials
+      - in: query
+        name: subject_id
+        schema:
+          type: integer
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorSourceListResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorSourceListResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+    post:
+      operationId: editor_sources_create
+      description: |-
+        Source managers only. Adds an RSS feed of papers or trials, a PubMed search or a ClinicalTrials.gov search for a subject in the editor's site scope (else 404). The source is **live at once**: active, owned by the subject's team, recorded under the editor's name, and fetched from the next pipeline run for every site that covers the subject. It brings in content from today on, not older content: PubMed and ClinicalTrials.gov sources start from the day they are added and RSS sources read the feed's current entries.
+
+        Runs every check itself and never trusts that a preview was run first: the same checks as the admin (400, with the admin's messages), for RSS an address check (public hosts only; 10 s timeout, 5 MB, 3 redirects; must parse as a feed with entries), PubMed or ClinicalTrials.gov accepting the search, and duplicates (409, naming the existing source of the same team). 503 when PubMed or ClinicalTrials.gov cannot be reached; nothing is created. There is no volume limit: the counts are reported in the response, never refused. Throttled per editor and site, apart from the other editor writes (default 30 a day).
+      summary: Add a source (source managers)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+        required: true
+      security:
+      - editorServiceAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorSourceCreateResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorSourceCreateResponse'
+          description: ''
+        '409':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorSourceConflict'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorSourceConflict'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+  /editor/sources/preview/:
+    post:
+      operationId: editor_sources_preview_create
+      description: 'Source managers only. Takes the same body as `POST /editor/sources/`,
+        runs the same checks and saves nothing. Says what the source would bring in:
+        RSS, the entries in the feed now and how many pass the keyword filter; PubMed,
+        the papers created in the last 30 days (the monthly volume to expect; the
+        first run brings in only the last 2 days) with PubMed''s reading of the search;
+        ClinicalTrials.gov, all matching trials and those updated in the last 30 days
+        (the first run brings in only those updated in the last 2 days). Up to 5 sample
+        titles. `refused` holds the reason create would refuse (the checks, or a duplicate
+        in `duplicate_of`), else null. A refusal is still a 200. 503 when PubMed or
+        ClinicalTrials.gov cannot be reached. Throttled per editor and site (default
+        30 an hour), apart from creates.'
+      summary: Preview a source before adding it (source managers)
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      tags:
+      - editor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EditorSourceInput'
+        required: true
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorSourcePreviewResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorSourcePreviewResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
   /editor/tenants/:
     get:
       operationId: editor_tenants_list
@@ -8656,6 +8983,311 @@ components:
       - article_id
       - doi
       - title
+    EditorSource:
+      type: object
+      description: A source as the editor API lists it.
+      properties:
+        id:
+          type: integer
+          description: The source's ID.
+        name:
+          type: string
+          nullable: true
+        source_type:
+          type: string
+          description: 'Type key: `rss_papers`, `rss_trials`, `pubmed`, `ctgov`, `ctis`,
+            `epo_ops`, `scrape_*`, `manual_*`, or `legacy` for a combination no importer
+            fetches.'
+        source_for:
+          type: string
+          description: 'What the source produces: science paper, trials, news article
+            or patents.'
+        method:
+          type: string
+          description: 'How the content arrives: rss, pubmed_api, ctgov_api, …'
+        subject_id:
+          type: integer
+          nullable: true
+        subject_name:
+          type: string
+          nullable: true
+        team_id:
+          type: integer
+          nullable: true
+        team_name:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        settings:
+          type: object
+          additionalProperties: {}
+          description: 'The type''s settings: `link` and `keyword_filter` (`rss_papers`),
+            `link` (`rss_trials`), `pubmed_query` and `excluded_publication_types`
+            (`pubmed`), `ctgov_search_condition`, `ctgov_search_intervention` and
+            `ctgov_search_term` (`ctgov`). Empty for other types.'
+        last_successful_fetch_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Start of the last fetch that completed fully. Null for RSS
+            sources, which keep no anchor.
+      required:
+      - active
+      - id
+      - last_successful_fetch_at
+      - method
+      - name
+      - settings
+      - source_for
+      - source_type
+      - subject_id
+      - subject_name
+      - team_id
+      - team_name
+    EditorSourceConflict:
+      type: object
+      properties:
+        detail:
+          type: string
+        duplicate_of:
+          $ref: '#/components/schemas/EditorSourceDuplicate'
+      required:
+      - detail
+      - duplicate_of
+    EditorSourceCount:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: integer
+        label:
+          type: string
+          description: What the number counts.
+      required:
+      - key
+      - label
+      - value
+    EditorSourceCreateResponse:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/EditorSource'
+        counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorSourceCount'
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorSourceSample'
+        first_run:
+          type: string
+        pubmed:
+          allOf:
+          - $ref: '#/components/schemas/EditorSourcePubmed'
+          nullable: true
+        first_fetch:
+          type: string
+          description: When the source is first fetched.
+      required:
+      - counts
+      - first_fetch
+      - first_run
+      - pubmed
+      - samples
+      - source
+    EditorSourceDuplicate:
+      type: object
+      properties:
+        source_id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        subject_id:
+          type: integer
+          nullable: true
+        subject_name:
+          type: string
+          nullable: true
+      required:
+      - name
+      - source_id
+      - subject_id
+      - subject_name
+    EditorSourceInput:
+      type: object
+      description: |-
+        The body of ``POST /editor/sources/`` and ``POST /editor/sources/preview/``.
+
+        Which settings apply depends on `source_type`: a setting that belongs to another
+        type is refused (400), and so is any field not listed here, so a stray `ignore_ssl`
+        or `team_id` is never silently ignored. Empty values of another type's settings
+        are tolerated.
+      properties:
+        source_type:
+          allOf:
+          - $ref: '#/components/schemas/SourceTypeEnum'
+          description: |-
+            `rss_papers`: an RSS feed of science papers. `rss_trials`: an RSS feed of clinical trials. `pubmed`: a PubMed search. `ctgov`: a ClinicalTrials.gov search.
+
+            * `rss_papers` - RSS feed of science papers
+            * `rss_trials` - RSS feed of clinical trials
+            * `pubmed` - PubMed search
+            * `ctgov` - ClinicalTrials.gov search
+        subject_id:
+          type: integer
+          minimum: 1
+          description: The subject everything this source brings in is tagged with.
+            Must be in the editor's site scope (else 404). The source belongs to the
+            subject's team.
+        link:
+          type: string
+          nullable: true
+          description: '`rss_papers`, `rss_trials`: the feed''s address (required).
+            Must be http or https and resolve to public addresses only.'
+          maxLength: 2000
+        keyword_filter:
+          type: string
+          nullable: true
+          description: '`rss_papers`: keep only papers whose title or summary contains
+            one of these keywords. Comma-separated; quote phrases: "multiple sclerosis",
+            alzheimer.'
+          maxLength: 2000
+        pubmed_query:
+          type: string
+          nullable: true
+          description: '`pubmed` (required): the PubMed search. No date clause: Gregory
+            adds the creation-date window itself.'
+          maxLength: 4000
+        excluded_publication_types:
+          type: array
+          items:
+            type: string
+            maxLength: 200
+          nullable: true
+          description: '`pubmed`: publication type names to leave out, e.g. `Review`.
+            Excluding a type also excludes the types under it. An unknown name is
+            a 400.'
+        ctgov_search_condition:
+          type: string
+          nullable: true
+          description: '`ctgov`: searched in each trial''s conditions. Fill in at
+            least one of the three.'
+          maxLength: 500
+        ctgov_search_intervention:
+          type: string
+          nullable: true
+          description: '`ctgov`: searched in each trial''s interventions.'
+          maxLength: 500
+        ctgov_search_term:
+          type: string
+          nullable: true
+          description: '`ctgov`: searched anywhere in a trial''s record.'
+          maxLength: 500
+        name:
+          type: string
+          nullable: true
+          description: Create only (the preview ignores it). Defaults to `RSS | <subject>`,
+            `PubMed | <subject>` or `CTGov | <subject>`.
+          maxLength: 255
+        description:
+          type: string
+          nullable: true
+          description: Create only (the preview ignores it). Notes for people; Gregory
+            never reads them.
+          maxLength: 5000
+      required:
+      - source_type
+      - subject_id
+    EditorSourceListResponse:
+      type: object
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorSource'
+      required:
+      - count
+      - results
+    EditorSourcePreviewResponse:
+      type: object
+      properties:
+        source_type:
+          type: string
+        subject_id:
+          type: integer
+        counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorSourceCount'
+          description: Empty when the preview was refused before anything was counted.
+        samples:
+          type: array
+          items:
+            $ref: '#/components/schemas/EditorSourceSample'
+          description: Up to 5.
+        first_run:
+          type: string
+          description: What the first pipeline run would bring in.
+        pubmed:
+          allOf:
+          - $ref: '#/components/schemas/EditorSourcePubmed'
+          nullable: true
+          description: PubMed sources only.
+        refused:
+          type: string
+          nullable: true
+          description: The reason create would refuse this source, or null when it
+            would accept it.
+        duplicate_of:
+          allOf:
+          - $ref: '#/components/schemas/EditorSourceDuplicate'
+          nullable: true
+          description: The active source of the same team that already does this,
+            if any.
+      required:
+      - counts
+      - duplicate_of
+      - first_run
+      - pubmed
+      - refused
+      - samples
+      - source_type
+      - subject_id
+    EditorSourcePubmed:
+      type: object
+      properties:
+        querytranslation:
+          type: string
+          description: How PubMed read the search.
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Warnings PubMed gave about the search.
+      required:
+      - querytranslation
+      - warnings
+    EditorSourceSample:
+      type: object
+      properties:
+        title:
+          type: string
+        date:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+      required:
+      - date
+      - link
+      - title
     EditorTrialLinkRequest:
       type: object
       properties:
@@ -9880,6 +10512,18 @@ components:
         * `trials` - Trials
         * `news article` - News Article
         * `patents` - Patents
+    SourceTypeEnum:
+      enum:
+      - rss_papers
+      - rss_trials
+      - pubmed
+      - ctgov
+      type: string
+      description: |-
+        * `rss_papers` - RSS feed of science papers
+        * `rss_trials` - RSS feed of clinical trials
+        * `pubmed` - PubMed search
+        * `ctgov` - ClinicalTrials.gov search
     Sponsor:
       type: object
       description: |-

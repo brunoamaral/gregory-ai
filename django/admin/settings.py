@@ -407,6 +407,14 @@ MCP_EDITOR_RATE_LIMITS = {
 	'day': int(os.environ.get('MCP_EDITOR_WRITES_PER_DAY', '500')),
 }
 
+# Source creates and previews allowed per (user, site) through the MCP editor API. Kept
+# apart from MCP_EDITOR_RATE_LIMITS: adding a source is rarer and heavier than an edit,
+# and a preview calls an outside service.
+MCP_SOURCE_RATE_LIMITS = {
+	'creates_per_day': int(os.environ.get('MCP_SOURCE_CREATES_PER_DAY', '30')),
+	'previews_per_hour': int(os.environ.get('MCP_SOURCE_PREVIEWS_PER_HOUR', '30')),
+}
+
 # Failed sign-ins allowed per window on the OAuth login page, per client
 # address and per username.
 OAUTH_LOGIN_MAX_FAILURES = int(os.environ.get('OAUTH_LOGIN_MAX_FAILURES', '10'))

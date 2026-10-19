@@ -20,12 +20,18 @@ Three rules hold for every view:
 
 Reads reuse the existing viewsets (``EDITOR_READ_ROUTES`` below) behind the same
 authentication, with ``gregory.visibility`` giving them the editor's site scope.
+
+The ``/editor/sources/`` routes are the exception to "any editor reads": they need a
+grant with ``can_manage_sources`` (``IsSourceManager``) for every method, and have
+their own throttles. Their checks live in ``gregory.source_checks``.
 """
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
 from django.db.models import Case, Exists, OuterRef, When
+from django.db.models.functions import Lower
+from django.utils import timezone
 from django.utils.text import slugify
 from drf_spectacular.utils import (
 	OpenApiParameter,
@@ -76,12 +82,18 @@ from api.schema_serializers import (
 	EditorialUpdateResponseSerializer,
 	EditorHistoryResponseSerializer,
 	EditorResolveResponseSerializer,
+	EditorSourceConflictSerializer,
+	EditorSourceCreateResponseSerializer,
+	EditorSourceInputSerializer,
+	EditorSourceListResponseSerializer,
+	EditorSourcePreviewResponseSerializer,
 	EditorTrialLinkRequestSerializer,
 	EditorTrialLinkResponseSerializer,
 	EditorTrialUnlinkResponseSerializer,
 	RelevanceRequestSerializer,
 	RelevanceResponseSerializer,
 )
+from gregory import source_checks, source_types
 from gregory.editor_history import editing_as
 from gregory.models import (
 	ArticleCategoryAssignment,
@@ -96,6 +108,8 @@ from gregory.models import (
 	PatentSiteContent,
 	PatentTrialLink,
 	Patents,
+	PublicationType,
+	Sources,
 	Subject,
 	TeamCategory,
 	Trials,
@@ -192,6 +206,45 @@ class EditorHourThrottle(_EditorWriteThrottle):
 
 class EditorDayThrottle(_EditorWriteThrottle):
 	window = "day"
+
+
+class IsSourceManager(permissions.BasePermission):
+	"""The ``/editor/sources/`` routes, every method including GET: only a grant with
+	``can_edit`` and ``can_manage_sources``. Regular editors get 403 even to list."""
+
+	message = "This editor cannot add sources."
+
+	def has_permission(self, request, view):
+		auth = request.auth
+		return isinstance(auth, EditorAuth) and auth.can_edit and auth.can_manage_sources
+
+
+class _SourceThrottle(SimpleRateThrottle):
+	"""Source creates and previews per (user, site), apart from the general editor write
+	throttles. Limits come from ``MCP_SOURCE_RATE_LIMITS``."""
+
+	name = ""
+	rate_key = ""
+	period = ""
+
+	def get_rate(self):
+		return f"{settings.MCP_SOURCE_RATE_LIMITS[self.rate_key]}/{self.period}"
+
+	def get_cache_key(self, request, view):
+		auth = request.auth
+		return f"throttle_editor_{self.name}_{auth.user_id}_{auth.site_id}"
+
+
+class SourceCreateThrottle(_SourceThrottle):
+	name = "source_create"
+	rate_key = "creates_per_day"
+	period = "day"
+
+
+class SourcePreviewThrottle(_SourceThrottle):
+	name = "source_preview"
+	rate_key = "previews_per_hour"
+	period = "hour"
 
 
 class _EditorView(APIView):
@@ -1349,6 +1402,367 @@ class EditorTenantsView(McpTenantsView):
 	authentication_classes = [ServiceCredentialAuthentication]
 	permission_classes = [IsServiceCaller]
 	include_all_mcp_sites = True
+
+
+# --- Sources: list, preview and add (source managers only) ------------------
+
+SOURCE_FIRST_FETCH = "next pipeline run (every 12 hours), from today on"
+SOURCE_NAME_PREFIX = {"rss_papers": "RSS", "rss_trials": "RSS", "pubmed": "PubMed", "ctgov": "CTGov"}
+#: Sources that start from the day they are added: the importer's next run is an
+#: ordinary incremental one from this anchor, not a backfill. RSS keeps no anchor.
+ANCHORED_SOURCE_TYPES = ("pubmed", "ctgov")
+
+_SOURCE_ERRORS = {
+	400: EDITOR_VALIDATION_ERROR,
+	401: EditorErrorSerializer,
+	403: EditorErrorSerializer,
+	404: EditorErrorSerializer,
+	429: EditorErrorSerializer,
+	503: EditorErrorSerializer,
+}
+
+
+class ServiceUnavailableError(APIException):
+	status_code = 503
+	default_code = "service_unavailable"
+
+
+def _source_payload(source):
+	"""A source for the list and create responses."""
+	source_type = source_types.type_for(source.source_for, source.method)
+	key = source_type.key if source_type else source_types.LEGACY_KEY
+	settings_out = {}
+	if key in source_types.EDITOR_TYPES:
+		for name in source_types.editor_fields(key):
+			if name == "excluded_publication_types":
+				settings_out[name] = sorted(t.name for t in source.excluded_publication_types.all())
+			else:
+				settings_out[name] = getattr(source, name)
+	return {
+		"id": source.pk,
+		"name": source.name,
+		"source_type": key,
+		"source_for": source.source_for,
+		"method": source.method,
+		"subject_id": source.subject_id,
+		"subject_name": source.subject.subject_name if source.subject_id else None,
+		"team_id": source.team_id,
+		"team_name": source.team.name if source.team_id else None,
+		"active": source.active,
+		"settings": settings_out,
+		"last_successful_fetch_at": source.last_successful_fetch_at,
+	}
+
+
+def _duplicate_payload(source):
+	return {
+		"source_id": source.pk,
+		"name": source.name,
+		"subject_id": source.subject_id,
+		"subject_name": source.subject.subject_name if source.subject_id else None,
+	}
+
+
+def _describe_problems(problems):
+	return "; ".join(f"{field}: {message}" for field, messages in problems.items() for message in messages)
+
+
+class _SourceInspection:
+	"""What the checks found for a source someone wants to add. `problems` maps a field to
+	its messages and is empty when the source passes; `duplicate` is the active source of
+	the same team that already does this."""
+
+	def __init__(self, data, subject):
+		self.data = data
+		self.subject = subject
+		self.key = data["source_type"]
+		self.problems = {}
+		self.duplicate = None
+		self.preview = None
+		self.excluded_types = []
+
+	@property
+	def refused(self):
+		if self.duplicate is not None:
+			return (
+				f"An active source of this team already does this: source {self.duplicate.pk}"
+				f" ({self.duplicate.name})."
+			)
+		return _describe_problems(self.problems) if self.problems else None
+
+
+class _SourceView(_EditorView):
+	"""Shared by the source routes: ``IsSourceManager`` on every method, and one
+	``inspect`` that preview and create both run, so a preview shows exactly what
+	create would decide."""
+
+	permission_classes = [IsSourceManager]
+
+	def subject_in_scope(self, subject_id):
+		if subject_id not in set(self.site_scope()):
+			raise NotFound("Subject not found.")
+		subject = Subject.objects.select_related("team").filter(pk=subject_id).first()
+		if subject is None:
+			raise NotFound("Subject not found.")
+		if subject.team_id is None:
+			raise ValidationError({"subject_id": ["This subject has no team."]})
+		return subject
+
+	def read_input(self, request):
+		body = EditorSourceInputSerializer(data=request.data)
+		body.is_valid(raise_exception=True)
+		data = body.validated_data
+		return data, self.subject_in_scope(data["subject_id"])
+
+	def inspect(self, data, subject):
+		"""Run every check create runs, in the order the cheap ones come first, and say
+		what the source would bring in. Saves nothing. One call goes to the outside
+		service of the type (the feed, PubMed or ClinicalTrials.gov); when that service
+		cannot be reached the answer is 503."""
+		found = _SourceInspection(data, subject)
+		key = found.key
+		values = {name: data.get(name) for name in source_types.editor_fields(key)}
+		problems = source_checks.check_settings(key, values)
+		excluded_names = data.get("excluded_publication_types") or []
+		if excluded_names:
+			found.excluded_types, unknown = _publication_types(excluded_names)
+			if unknown:
+				problems["excluded_publication_types"] = [
+					f"Unknown publication type(s): {', '.join(unknown)}. Use the names PubMed "
+					"gives, e.g. Review or Clinical Trial."
+				]
+		found.problems = problems
+		if problems:
+			return found
+		found.duplicate = source_checks.find_duplicate(subject.team, key, values)
+		if found.duplicate is not None:
+			return found
+		try:
+			if key in ("rss_papers", "rss_trials"):
+				found.preview = source_checks.rss_preview(
+					source_types.BY_KEY[key].source_for, values["link"], values.get("keyword_filter")
+				)
+				# The feed may live at another address than the one given.
+				found.duplicate = source_checks.find_duplicate(
+					subject.team, key, values, extra_links=[found.preview.final_url]
+				)
+			elif key == "pubmed":
+				found.preview = source_checks.pubmed_preview(
+					values["pubmed_query"], [t.name for t in found.excluded_types]
+				)
+			else:
+				found.preview = source_checks.ctgov_preview(values)
+		except source_checks.SourceRefused as exc:
+			found.problems = {exc.field or "non_field_errors": [exc.message]}
+			found.preview = None
+		except source_checks.ServiceUnreachable as exc:
+			raise ServiceUnavailableError(f"{exc.service} could not be reached. Try again later.")
+		return found
+
+	@staticmethod
+	def preview_fields(preview):
+		"""The counts, samples and PubMed's reading, as the responses carry them."""
+		if preview is None:
+			return {"counts": [], "samples": [], "first_run": "", "pubmed": None}
+		return {
+			"counts": preview.counts,
+			"samples": preview.samples,
+			"first_run": preview.first_run,
+			"pubmed": (
+				{"querytranslation": preview.querytranslation, "warnings": preview.warnings}
+				if preview.querytranslation is not None
+				else None
+			),
+		}
+
+
+def _publication_types(names):
+	"""``(types, unknown_names)`` for publication type names, matched ignoring case."""
+	wanted = {}
+	for name in names:
+		wanted.setdefault(name.strip().lower(), name.strip())
+	found = {}
+	for publication_type in PublicationType.objects.annotate(lowered=Lower("name")).filter(
+		lowered__in=list(wanted)
+	):
+		found.setdefault(publication_type.name.lower(), publication_type)
+	unknown = [wanted[lowered] for lowered in wanted if lowered not in found]
+	return list(found.values()), unknown
+
+
+@extend_schema_view(
+	get=extend_schema(
+		summary="List the sources of the site's subjects (source managers)",
+		description=(
+			"Source managers only (a grant with `can_manage_sources`; any other editor gets "
+			"403, reads included). Lists the sources whose subject is in the editor's site "
+			"scope, of every type, so the full picture is visible. Their settings are "
+			"shown for the four types that can be added here. Not paginated."
+		),
+		parameters=[
+			OpenApiParameter("subject_id", OpenApiTypes.INT, OpenApiParameter.QUERY, required=False),
+			OpenApiParameter(
+				"source_type",
+				OpenApiTypes.STR,
+				OpenApiParameter.QUERY,
+				required=False,
+				enum=sorted(source_types.BY_KEY),
+			),
+			OpenApiParameter(
+				"active",
+				OpenApiTypes.BOOL,
+				OpenApiParameter.QUERY,
+				required=False,
+				description="`true` for active sources only, `false` for paused ones. Both when omitted.",
+			),
+		],
+		responses={200: EditorSourceListResponseSerializer, **_SOURCE_ERRORS},
+		auth=[{"editorServiceAuth": []}],
+	),
+	post=extend_schema(
+		summary="Add a source (source managers)",
+		description=(
+			"Source managers only. Adds an RSS feed of papers or trials, a PubMed search or a "
+			"ClinicalTrials.gov search for a subject in the editor's site scope (else 404). "
+			"The source is **live at once**: active, owned by the subject's team, recorded "
+			"under the editor's name, and fetched from the next pipeline run for every site "
+			"that covers the subject. It brings in content from today on, not older content: "
+			"PubMed and ClinicalTrials.gov sources start from the day they are added and RSS "
+			"sources read the feed's current entries.\n\n"
+			"Runs every check itself and never trusts that a preview was run first: the same "
+			"checks as the admin (400, with the admin's messages), for RSS an address check "
+			"(public hosts only; 10 s timeout, 5 MB, 3 redirects; must parse as a feed with "
+			"entries), PubMed or ClinicalTrials.gov accepting the search, and duplicates (409, "
+			"naming the existing source of the same team). 503 when PubMed or "
+			"ClinicalTrials.gov cannot be reached; nothing is created. There is no volume "
+			"limit: the counts are reported in the response, never refused. Throttled per "
+			"editor and site, apart from the other editor writes (default 30 a day)."
+		),
+		request=EditorSourceInputSerializer,
+		responses={201: EditorSourceCreateResponseSerializer, 409: EditorSourceConflictSerializer, **_SOURCE_ERRORS},
+		auth=[{"editorServiceAuth": []}],
+	),
+)
+class EditorSourcesView(_SourceView):
+	"""``GET /editor/sources/`` lists, ``POST /editor/sources/`` adds a source.
+
+	Create runs every check itself (never trusting that a preview ran), in the order
+	settings, duplicate, the one outside call of the type, then saves inside
+	``editing_as(user, "mcp")``. 400 for a failed check, 409 for a duplicate, 503
+	when PubMed or ClinicalTrials.gov cannot be reached. Throttled per editor and
+	site by ``SourceCreateThrottle``; the list is not throttled.
+	"""
+
+	def get_throttles(self):
+		return [SourceCreateThrottle()] if self.request.method == "POST" else []
+
+	def get(self, request):
+		queryset = (
+			Sources.objects.filter(subject_id__in=self.site_scope())
+			.select_related("subject", "team")
+			.prefetch_related("excluded_publication_types")
+			.order_by("name", "pk")
+		)
+		params = request.query_params
+		if params.get("subject_id"):
+			try:
+				queryset = queryset.filter(subject_id=int(params["subject_id"]))
+			except ValueError:
+				raise ValidationError({"subject_id": ["Must be an integer."]})
+		if params.get("source_type"):
+			source_type = source_types.BY_KEY.get(params["source_type"])
+			if source_type is None:
+				raise ValidationError({"source_type": [f"Must be one of: {', '.join(sorted(source_types.BY_KEY))}."]})
+			queryset = queryset.filter(source_for=source_type.source_for, method=source_type.method)
+		if params.get("active"):
+			value = params["active"].lower()
+			if value not in ("true", "false", "1", "0"):
+				raise ValidationError({"active": ["Must be true or false."]})
+			queryset = queryset.filter(active=value in ("true", "1"))
+		results = [_source_payload(source) for source in queryset]
+		return Response({"count": len(results), "results": results})
+
+	def post(self, request):
+		data, subject = self.read_input(request)
+		found = self.inspect(data, subject)
+		if found.duplicate is not None:
+			error = ConflictError(found.refused)
+			error.detail = {"detail": found.refused, "duplicate_of": _duplicate_payload(found.duplicate)}
+			raise error
+		if found.problems:
+			raise ValidationError(found.problems)
+
+		source_type = source_types.BY_KEY[found.key]
+		fields = {
+			"subject": subject,
+			"team": subject.team,
+			"active": True,
+			"ignore_ssl": False,
+			"source_for": source_type.source_for,
+			"method": source_type.method,
+			"name": data.get("name") or f"{SOURCE_NAME_PREFIX[found.key]} | {subject.subject_name}",
+			"description": data.get("description") or None,
+		}
+		for name in source_types.editor_fields(found.key):
+			if name != "excluded_publication_types":
+				fields[name] = data.get(name) or None
+		if found.key in ANCHORED_SOURCE_TYPES:
+			# No backfill: the importer's first run is an ordinary incremental one
+			# from now (PubMed: the last 2 days; ClinicalTrials.gov: updated in the
+			# last 2 days), not the 30-day or unfiltered first run of an admin source.
+			fields["last_successful_fetch_at"] = timezone.now()
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			source = Sources.objects.create(**fields)
+			if found.excluded_types:
+				source.excluded_publication_types.set(found.excluded_types)
+		source = Sources.objects.select_related("subject", "team").prefetch_related("excluded_publication_types").get(pk=source.pk)
+		return Response(
+			{
+				"source": _source_payload(source),
+				**self.preview_fields(found.preview),
+				"first_fetch": SOURCE_FIRST_FETCH,
+			},
+			status=status.HTTP_201_CREATED,
+		)
+
+
+@extend_schema(
+	summary="Preview a source before adding it (source managers)",
+	description=(
+		"Source managers only. Takes the same body as `POST /editor/sources/`, runs the "
+		"same checks and saves nothing. Says what the source would bring in: RSS, the "
+		"entries in the feed now and how many pass the keyword filter; PubMed, the papers "
+		"created in the last 30 days (the monthly volume to expect; the first run brings in "
+		"only the last 2 days) with PubMed's reading of the search; ClinicalTrials.gov, all "
+		"matching trials and those updated in the last 30 days (the first run brings in only "
+		"those updated in the last 2 days). Up to 5 sample titles. `refused` holds the reason "
+		"create would refuse (the checks, or a duplicate in `duplicate_of`), else null. A "
+		"refusal is still a 200. 503 when PubMed or ClinicalTrials.gov cannot be reached. "
+		"Throttled per editor and site (default 30 an hour), apart from creates."
+	),
+	request=EditorSourceInputSerializer,
+	responses={200: EditorSourcePreviewResponseSerializer, **_SOURCE_ERRORS},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorSourcePreviewView(_SourceView):
+	"""``POST /editor/sources/preview/``: the checks and counts of create, saving
+	nothing. A refusal is a 200 with ``refused`` set; only an unreachable service is
+	an error (503). Throttled per editor and site by ``SourcePreviewThrottle``."""
+
+	throttle_classes = [SourcePreviewThrottle]
+
+	def post(self, request):
+		data, subject = self.read_input(request)
+		found = self.inspect(data, subject)
+		return Response(
+			{
+				"source_type": found.key,
+				"subject_id": subject.pk,
+				**self.preview_fields(found.preview),
+				"refused": found.refused,
+				"duplicate_of": _duplicate_payload(found.duplicate) if found.duplicate is not None else None,
+			}
+		)
 
 
 # --- Read: the existing viewsets, behind editor authentication ------------
