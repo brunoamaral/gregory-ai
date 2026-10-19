@@ -98,7 +98,7 @@ class SiteEditor(models.Model):
 		super().clean()
 		if self.can_manage_sources and not self.can_edit:
 			raise ValidationError(
-				{"can_manage_sources": "Adding sources needs edit access too. Tick can edit as well."}
+				{"can_manage_sources": "Can add sources needs can edit. To make this grant read-only, untick can add sources as well."}
 			)
 		if self.user_id and self.site_id and self.revoked_at is None:
 			if not grant_allowed(self.user, self.site):

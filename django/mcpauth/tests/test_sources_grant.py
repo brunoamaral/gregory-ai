@@ -51,7 +51,10 @@ class SourceFlagRulesTest(TestCase):
 			editor.full_clean()
 
 		self.assertIn("can_manage_sources", caught.exception.message_dict)
-		self.assertIn("Tick can edit", caught.exception.message_dict["can_manage_sources"][0])
+		self.assertEqual(
+			caught.exception.message_dict["can_manage_sources"],
+			["Can add sources needs can edit. To make this grant read-only, untick can add sources as well."],
+		)
 
 	def test_the_flag_with_can_edit_is_accepted(self):
 		SiteEditor(user=self.user, site=self.site, can_edit=True, can_manage_sources=True).full_clean()
@@ -351,7 +354,7 @@ class SourceFlagAdminTest(TestCase):
 		form = SiteEditorForm({"user": self.user.pk, "can_manage_sources": "on"}, instance=SiteEditor(site=self.site))
 
 		self.assertFalse(form.is_valid())
-		self.assertIn("can_manage_sources", form.errors)
+		self.assertIn("untick can add sources as well", form.errors["can_manage_sources"][0])
 
 	def test_the_form_accepts_the_flag_with_can_edit(self):
 		form = SiteEditorForm(
