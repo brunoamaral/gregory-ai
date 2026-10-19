@@ -22,6 +22,7 @@ from gregory.site_resolution import find_site_by_domain
 from mcpauth.models import (
 	SCOPE_EDIT,
 	SCOPE_READ,
+	SCOPE_SOURCES,
 	TIER_EDITOR,
 	TIER_PUBLIC,
 	SiteEditor,
@@ -42,6 +43,7 @@ class SiteAccess:
 	site: Site
 	tier: str
 	can_edit: bool
+	can_manage_sources: bool = False
 	contact_email: str = ""
 
 	@property
@@ -49,6 +51,8 @@ class SiteAccess:
 		scopes = [SCOPE_READ]
 		if self.tier == TIER_EDITOR and self.can_edit:
 			scopes.append(SCOPE_EDIT)
+			if self.can_manage_sources:
+				scopes.append(SCOPE_SOURCES)
 		return scopes
 
 	def clamp_scope(self, scope: str) -> str:
@@ -130,9 +134,11 @@ def evaluate_access(user, site: Site) -> Optional[SiteAccess]:
 	email = contact_email(site)
 	grant = active_grant(user, site)
 	if grant is not None:
-		return SiteAccess(site, TIER_EDITOR, grant.can_edit, email)
+		return SiteAccess(
+			site, TIER_EDITOR, grant.can_edit, can_manage_sources=grant.can_manage_sources, contact_email=email
+		)
 	if site_has_public_data(site):
-		return SiteAccess(site, TIER_PUBLIC, False, email)
+		return SiteAccess(site, TIER_PUBLIC, False, contact_email=email)
 	return None
 
 

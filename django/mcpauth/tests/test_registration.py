@@ -340,8 +340,8 @@ class ServerMetadataTest(TestCase):
 		self.assertEqual(self.data["grant_types_supported"], ["authorization_code", "refresh_token"])
 		self.assertEqual(self.data["code_challenge_methods_supported"], ["S256"])
 
-	def test_scopes_are_the_two_article_scopes(self):
-		self.assertEqual(self.data["scopes_supported"], ["articles:edit", "articles:read"])
+	def test_scopes_are_the_article_scopes_and_the_sources_scope(self):
+		self.assertEqual(self.data["scopes_supported"], ["articles:edit", "articles:read", "sources:add"])
 
 	def test_metadata_is_readable_cross_origin(self):
 		response = Client().get("/.well-known/oauth-authorization-server")

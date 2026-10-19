@@ -236,6 +236,7 @@ On the Site admin page, the **MCP editors** inline lists the site's grants. Only
 |:------|:--------|
 | User | The person. Editors sign in with their Django username and password; a client editor without an account needs one created first |
 | Can edit | Ticked: the edit tools. Unticked: the editor read scope without the edit tools. Saving it unticked ends the person's existing sessions on this site |
+| Can add sources | Superuser-only power on top of *Can edit* (it needs it): gives the person's tokens the `sources:add` scope, for adding RSS feeds and PubMed or ClinicalTrials.gov searches. Saving it unticked ends the person's existing sessions on this site. Ticking it does not change existing sessions: the person signs in again to get the scope. Nothing uses the scope yet |
 | Granted by, Created | Filled in on save |
 | Revoke | Tick and save to end the grant. The person's tokens for this site are deleted in the same transaction, so access ends at once, not when the token expires |
 

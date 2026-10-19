@@ -427,6 +427,7 @@ OAUTH2_PROVIDER = {
 	'SCOPES': {
 		'articles:read': 'Read articles, trials and authors for this site',
 		'articles:edit': "Edit this site's article takeaways, relevance and trial links",
+		'sources:add': "Add RSS feeds and PubMed or ClinicalTrials.gov searches for this site's subjects",
 	},
 	'DEFAULT_SCOPES': ['articles:read'],
 	'ACCESS_TOKEN_EXPIRE_SECONDS': 60 * 60,
