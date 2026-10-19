@@ -452,7 +452,7 @@ One endpoint is not content and does not follow this rule:
 
 - **`/teams/`** lists a team when `Team.api_listed` is on, **or** when the team owns a subject already in the caller's scope. The flag is the publication switch; the second clause exists so a private site's own authenticated frontend can list its own teams. It gates *listing*, not access — an unlisted team's articles and trials are governed by subject scope like everything else. The same rule decides whether a team appears nested inside an article or trial.
 
-There is no `/organizations/` endpoint: it was removed from the URL configuration (the `OrganizationsViewSet` class is still in `api/views.py`, unrouted).
+There is no `/organizations/` endpoint: it was removed from the URL configuration, and its viewset and serializer have since been deleted.
 
 **`/sponsors/`** is scoped indirectly: a sponsor carries no subject and is visible when at least one of its trials is in scope. Its `trials_count` counts only in-scope trials, so neither the number nor `?ordering=-trials_count` discloses trials the caller cannot read.
 

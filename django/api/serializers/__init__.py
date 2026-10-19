@@ -23,7 +23,6 @@ from gregory.models import (
 	PatentApplicant,
 	PatentTrialLink,
 )
-from organizations.models import Organization
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -1191,14 +1190,6 @@ class ArticleReferenceSerializer(serializers.ModelSerializer):
 	class Meta:
 		model = Articles
 		fields = ["article_id", "title", "summary", "link"]
-
-
-class OrganizationSerializer(serializers.ModelSerializer):
-	"""Minimal serializer for the Organizations list/detail endpoints."""
-
-	class Meta:
-		model = Organization
-		fields = ["id", "name", "slug", "is_active"]
 
 
 class PublicSiteSerializer(serializers.Serializer):
