@@ -2429,23 +2429,6 @@ class ReassignToTeamMixin:
 
 class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdmin):
 	form = SourceAdminForm
-
-	def history_view(self, request, object_id, extra_context=None):
-		"""Only show the history of a source the user may see.
-
-		simple-history looks the history rows up by primary key and uses the admin
-		queryset only to name the page, falling back to the last historical copy when
-		the live row is not in it. Without this check a staff user could read another
-		organisation's source history by its ID.
-		"""
-		if not request.user.is_superuser:
-			try:
-				visible = self.get_queryset(request).filter(pk=unquote(object_id)).exists()
-			except (ValueError, ValidationError):
-				visible = False
-			if not visible:
-				raise Http404
-		return super().history_view(request, object_id, extra_context)
 	list_display = [
 		"name",
 		"active",
@@ -2483,6 +2466,23 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdm
 
 	class Media:
 		js = ("admin/js/source_type_toggle.js",)
+
+	def history_view(self, request, object_id, extra_context=None):
+		"""Only show the history of a source the user may see.
+
+		simple-history looks the history rows up by primary key and uses the admin
+		queryset only to name the page, falling back to the last historical copy when
+		the live row is not in it. Without this check a staff user could read another
+		organisation's source history by its ID.
+		"""
+		if not request.user.is_superuser:
+			try:
+				visible = self.get_queryset(request).filter(pk=unquote(object_id)).exists()
+			except (ValueError, ValidationError):
+				visible = False
+			if not visible:
+				raise Http404
+		return super().history_view(request, object_id, extra_context)
 
 	@admin.display(description="Type")
 	def source_type_label(self, obj):
