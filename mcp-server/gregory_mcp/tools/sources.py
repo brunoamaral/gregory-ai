@@ -198,6 +198,8 @@ async def preview_source(
 	Source types and what each needs:
 	- rss_papers: an RSS feed of science papers. Needs `link`; `keyword_filter`
 	  is optional (comma-separated, quote phrases: "multiple sclerosis", alzheimer).
+	  A keyword matches anywhere in a word; end it with * to match only words that
+	  start with it (oligodendro* finds "oligodendrocyte", not "preoligodendrocyte").
 	  Counts the entries in the feed now and how many pass the filter.
 	- rss_trials: an RSS feed of clinical trials. Needs `link`.
 	- pubmed: a PubMed search. Needs `pubmed_query`, e.g. "multiple sclerosis"[MeSH
@@ -216,7 +218,7 @@ async def preview_source(
 		source_type: rss_papers, rss_trials, pubmed or ctgov.
 		subject_id: The subject everything the source brings in is tagged with (see list_subjects).
 		link: The feed's address (rss_papers, rss_trials).
-		keyword_filter: Keep only papers containing one of these keywords (rss_papers).
+		keyword_filter: Keep only papers containing one of these keywords; a trailing * matches words starting with it (rss_papers).
 		pubmed_query: The PubMed search (pubmed).
 		excluded_publication_types: Publication type names to leave out (pubmed).
 		ctgov_condition: Condition or disease to search (ctgov).
@@ -276,6 +278,8 @@ async def create_source(
 	Source types and what each needs:
 	- rss_papers: an RSS feed of science papers. Needs `link`; `keyword_filter`
 	  is optional (comma-separated, quote phrases: "multiple sclerosis", alzheimer).
+	  A keyword matches anywhere in a word; end it with * to match only words that
+	  start with it (oligodendro* finds "oligodendrocyte", not "preoligodendrocyte").
 	- rss_trials: an RSS feed of clinical trials. Needs `link`.
 	- pubmed: a PubMed search. Needs `pubmed_query`, e.g. "multiple sclerosis"[MeSH
 	  Terms] AND (remyelination OR myelin repair), with no date clause. Optional
@@ -291,7 +295,7 @@ async def create_source(
 		source_type: rss_papers, rss_trials, pubmed or ctgov.
 		subject_id: The subject everything the source brings in is tagged with (see list_subjects).
 		link: The feed's address (rss_papers, rss_trials).
-		keyword_filter: Keep only papers containing one of these keywords (rss_papers).
+		keyword_filter: Keep only papers containing one of these keywords; a trailing * matches words starting with it (rss_papers).
 		pubmed_query: The PubMed search (pubmed).
 		excluded_publication_types: Publication type names to leave out (pubmed).
 		ctgov_condition: Condition or disease to search (ctgov).

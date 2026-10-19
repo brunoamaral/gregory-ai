@@ -2093,7 +2093,9 @@ class SourceAdminForm(forms.ModelForm):
 			"Meant for broad feeds that cover many topics, such as bioRxiv, medRxiv or PNAS. "
 			"Only papers whose title or summary contains one of these keywords are kept; leave "
 			"empty to keep everything. Separate keywords with commas and put phrases in quotes: "
-			'"multiple sclerosis", alzheimer, parkinson.'
+			'"multiple sclerosis", alzheimer, parkinson. A keyword matches anywhere in a word; '
+			"end it with * to match only words that start with it (oligodendro* finds "
+			'"oligodendrocyte", not "preoligodendrocyte").'
 		),
 		"ctgov_search_condition": "Searched in each trial's conditions, e.g. \"multiple sclerosis\".",
 		"ctgov_search_intervention": "Searched in each trial's interventions, e.g. \"dihydroartemisinin\".",

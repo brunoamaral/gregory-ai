@@ -166,6 +166,18 @@ class DeferredKeywordCheckTests(TestCase):
 		# The deferral's CrossRef fetch was reused for the creation: one call.
 		self.assertEqual(mock_refresh.call_count, 1)
 
+	def test_a_starred_keyword_matches_the_crossref_abstract(self):
+		self.source.keyword_filter = "neuroplast*"
+		self.source.save()
+		self.run_feed([entry(summary="")], abstract="Shows neuroplastic changes after therapy.")
+		self.assertEqual(Articles.objects.count(), 1)
+
+	def test_a_starred_keyword_does_not_match_inside_a_word_of_the_abstract(self):
+		self.source.keyword_filter = "plast*"
+		self.source.save()
+		self.run_feed([entry(summary="")], abstract="Shows neuroplastic changes after therapy.")
+		self.assertEqual(Articles.objects.count(), 0)
+
 	def test_abstract_without_keyword_stays_excluded(self):
 		self.run_feed(
 			[entry(summary="")],

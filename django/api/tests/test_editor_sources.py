@@ -417,6 +417,18 @@ class PreviewTest(SourceFixture):
 		self.assertIsNone(body["duplicate_of"])
 		self.assertIsNone(body["pubmed"])
 
+	def test_a_trailing_star_in_the_keyword_filter_matches_words_that_start_with_it(self):
+		counts = lambda keyword_filter: {
+			c["key"]: c["value"] for c in self.preview(keyword_filter=keyword_filter).json()["counts"]
+		}
+		self.assertEqual(counts("remyelinat*")["entries_passing_keyword_filter"], 1)
+		self.assertEqual(counts("parkin*, remyelinat*")["entries_passing_keyword_filter"], 2)
+		# Inside a word, so a starred keyword does not match it; a plain one does.
+		self.assertEqual(counts("yelinat*")["entries_passing_keyword_filter"], 0)
+		self.assertEqual(counts("yelinat")["entries_passing_keyword_filter"], 1)
+		# Nothing in the feed has the literal text with the star.
+		self.assertEqual(counts("remyelinat*")["entries_in_feed"], 3)
+
 	def test_the_keyword_filter_uses_the_processor_of_the_given_link_not_the_redirect_target(self):
 		from gregory.management.commands.feedreader_articles import Command as RssCommand
 
