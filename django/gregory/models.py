@@ -264,7 +264,7 @@ class TeamCategory(models.Model):
 	team = models.ForeignKey(
 		"Team",
 		on_delete=models.CASCADE,
-		related_name="team_categories",
+		related_name="categories",
 		null=False,
 		blank=False,
 	)
@@ -444,7 +444,8 @@ class TeamCategory(models.Model):
 				fields=["team", "category_slug"], name="unique_team_category_slug"
 			)
 		]
-		verbose_name_plural = "team categories"
+		verbose_name = "category"
+		verbose_name_plural = "categories"
 		db_table = "team_categories"
 
 
@@ -454,7 +455,7 @@ class CategoryAssignmentSource(models.TextChoices):
 
 
 class ArticleCategoryAssignment(models.Model):
-	"""Through model for Articles.team_categories.
+	"""Through model for Articles.categories.
 
 	Maps onto the table Django originally auto-created for the implicit M2M.
 	`source` records whether the link was made by a person (admin, API, shell —
@@ -488,7 +489,7 @@ class ArticleCategoryAssignment(models.Model):
 
 
 class TrialCategoryAssignment(models.Model):
-	"""Through model for Trials.team_categories. See ArticleCategoryAssignment."""
+	"""Through model for Trials.categories. See ArticleCategoryAssignment."""
 
 	trials = models.ForeignKey(
 		"Trials", on_delete=models.CASCADE, related_name="category_assignments"
@@ -880,7 +881,7 @@ class Articles(models.Model):
 	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
 	last_updated = models.DateTimeField(auto_now=True, null=True, db_index=True)
 	authors = models.ManyToManyField(Authors, blank=True)
-	team_categories = models.ManyToManyField(
+	categories = models.ManyToManyField(
 		"TeamCategory",
 		related_name="articles",
 		blank=True,
@@ -1370,7 +1371,7 @@ class Trials(models.Model):
 	)
 	published_date = models.DateTimeField(blank=True, null=True, db_index=True)
 	sources = models.ManyToManyField("Sources", blank=True)
-	team_categories = models.ManyToManyField(
+	categories = models.ManyToManyField(
 		"TeamCategory", related_name="trials", through="TrialCategoryAssignment"
 	)
 	identifiers = models.JSONField(blank=True, null=True)
@@ -2626,7 +2627,7 @@ class Patents(models.Model):
 	sources = models.ManyToManyField("Sources", blank=True)
 	teams = models.ManyToManyField("Team", related_name="patents", blank=True)
 	subjects = models.ManyToManyField("Subject", related_name="patents", blank=True)
-	team_categories = models.ManyToManyField(
+	categories = models.ManyToManyField(
 		"TeamCategory", related_name="patents", through="PatentCategoryAssignment"
 	)
 	discovery_date = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -2723,7 +2724,7 @@ class PatentApplicant(models.Model):
 
 
 class PatentCategoryAssignment(models.Model):
-	"""Through model for Patents.team_categories. See TrialCategoryAssignment."""
+	"""Through model for Patents.categories. See TrialCategoryAssignment."""
 
 	patents = models.ForeignKey(
 		Patents, on_delete=models.CASCADE, related_name="category_assignments"

@@ -175,12 +175,12 @@ def _category_rows(subjects, *, content_type, model, category_qs=None, count_qs=
 		if not cats:
 			continue
 		counts = {
-			r["team_categories"]: r["n"]
+			r["categories"]: r["n"]
 			for r in (
 				count_qs.filter(
-					subjects=subject, team_categories__in=[c.pk for c in cats]
+					subjects=subject, categories__in=[c.pk for c in cats]
 				)
-				.values("team_categories")
+				.values("categories")
 				.annotate(n=Count("pk", distinct=True))
 			)
 		}

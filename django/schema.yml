@@ -2203,7 +2203,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this team category.
+        description: A unique integer value identifying this category.
         required: true
       tags:
       - categories
@@ -2261,7 +2261,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this team category.
+        description: A unique integer value identifying this category.
         required: true
       - in: query
         name: min_articles
@@ -3176,7 +3176,7 @@ paths:
         name: id
         schema:
           type: integer
-        description: A unique integer value identifying this team category.
+        description: A unique integer value identifying this category.
         required: true
       tags:
       - editor
@@ -4283,7 +4283,7 @@ paths:
         `representative_publication`, `link`, `earliest_priority_date`,
         `earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
         (`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
-        `team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+        `categories`, `subjects`, `publications_count` and `trial_links_count`.
 
         `GET /patents/{id}/` adds `publications` (every member publication),
         `inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
@@ -4582,7 +4582,7 @@ paths:
         `representative_publication`, `link`, `earliest_priority_date`,
         `earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
         (`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
-        `team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+        `categories`, `subjects`, `publications_count` and `trial_links_count`.
 
         `GET /patents/{id}/` adds `publications` (every member publication),
         `inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
@@ -5692,7 +5692,7 @@ paths:
           null-FK group as `no_sponsor`.
         - `by_modality` — `{modality_slug: count, ...}`, one key per
           `CategoryModality` value (always present, 0 when empty) plus
-          `no_modality`, over the trial's `team_categories.modality`. **Not** a
+          `no_modality`, over the trial's `categories.modality`. **Not** a
           partition of `total` and **not** safe to sum: this joins an M2M, so a
           trial carrying two categories of different modalities is counted once
           *per modality*. `no_modality` also conflates two different things —
@@ -6412,7 +6412,7 @@ paths:
           null-FK group as `no_sponsor`.
         - `by_modality` — `{modality_slug: count, ...}`, one key per
           `CategoryModality` value (always present, 0 when empty) plus
-          `no_modality`, over the trial's `team_categories.modality`. **Not** a
+          `no_modality`, over the trial's `categories.modality`. **Not** a
           partition of `total` and **not** safe to sum: this joins an M2M, so a
           trial carrying two categories of different modalities is counted once
           *per modality*. `no_modality` also conflates two different things —
@@ -8263,7 +8263,7 @@ components:
           items:
             $ref: '#/components/schemas/EditorialSiteEntry'
           readOnly: true
-        team_categories:
+        categories:
           type: array
           items:
             $ref: '#/components/schemas/TeamCategory'
@@ -8290,6 +8290,7 @@ components:
       - article_id
       - article_subject_relevances
       - authors
+      - categories
       - clinical_trials
       - discovery_date
       - keywords
@@ -8300,7 +8301,6 @@ components:
       - publication_types
       - sources
       - subjects
-      - team_categories
       - teams
       - title
     ArticleAuthor:
@@ -10152,7 +10152,7 @@ components:
           items:
             $ref: '#/components/schemas/PatentApplicant'
           readOnly: true
-        team_categories:
+        categories:
           type: array
           items:
             $ref: '#/components/schemas/TeamCategory'
@@ -10199,13 +10199,13 @@ components:
           nullable: true
       required:
       - applicants
+      - categories
       - claims
       - editorial
       - patent_id
       - publications
       - publications_count
       - subjects
-      - team_categories
       - title
       - trial_links
       - trial_links_count
@@ -10213,7 +10213,7 @@ components:
       type: object
       description: |-
         One patent family (``/patents/``). Relies on PatentViewSet.get_queryset()
-        prefetching ``patent_applicants``, ``team_categories`` and ``subjects`` and
+        prefetching ``patent_applicants``, ``categories`` and ``subjects`` and
         annotating the two counts, so a page costs a constant number of queries.
 
         ``link`` is the Espacenet page for the family's representative publication
@@ -10264,7 +10264,7 @@ components:
           items:
             $ref: '#/components/schemas/PatentApplicant'
           readOnly: true
-        team_categories:
+        categories:
           type: array
           items:
             $ref: '#/components/schemas/TeamCategory'
@@ -10287,11 +10287,11 @@ components:
           readOnly: true
       required:
       - applicants
+      - categories
       - editorial
       - patent_id
       - publications_count
       - subjects
-      - team_categories
       - title
       - trial_links_count
     PatentPublication:
@@ -10807,7 +10807,7 @@ components:
           description: Canonical registry IDs as "type:VALUE", e.g. ["eudract:2021-003034-37",
             "isrctn:ISRCTN14048364"]. Derived from identifiers, secondary_id and ctg_secondary_ids;
             recomputed on every save.
-        team_categories:
+        categories:
           type: array
           items:
             $ref: '#/components/schemas/TeamCategory'
@@ -11070,6 +11070,7 @@ components:
           readOnly: true
       required:
       - articles
+      - categories
       - countries_normalized
       - discovery_date
       - identifiers_normalized
@@ -11085,7 +11086,6 @@ components:
       - sponsor
       - study_type_normalized
       - subjects
-      - team_categories
       - title
       - trial_countries
       - trial_id
@@ -11179,7 +11179,7 @@ components:
           description: Canonical registry IDs as "type:VALUE", e.g. ["eudract:2021-003034-37",
             "isrctn:ISRCTN14048364"]. Derived from identifiers, secondary_id and ctg_secondary_ids;
             recomputed on every save.
-        team_categories:
+        categories:
           type: array
           items:
             $ref: '#/components/schemas/TeamCategory'
@@ -11452,6 +11452,7 @@ components:
           readOnly: true
       required:
       - articles
+      - categories
       - countries_normalized
       - discovery_date
       - identifiers_normalized
@@ -11468,7 +11469,6 @@ components:
       - sponsor
       - study_type_normalized
       - subjects
-      - team_categories
       - title
       - trial_countries
       - trial_id

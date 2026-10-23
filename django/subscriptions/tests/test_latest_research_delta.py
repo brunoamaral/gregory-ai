@@ -98,7 +98,7 @@ class LatestResearchDeltaTestCase(TestCase):
 			discovery_date=timezone.now() - timedelta(days=days_ago)
 		)
 		article.refresh_from_db()
-		article.team_categories.add(self.category)
+		article.categories.add(self.category)
 		return article
 
 	def _make_main_article(self, title, days_ago=1):
@@ -225,7 +225,7 @@ class CategoryTrialsOnlyTest(LatestResearchDeltaTestCase):
 		main_trial.refresh_from_db()
 		main_trial.subjects.add(self.subject)
 
-		# A trial linked to the Latest Research category via team_categories —
+		# A trial linked to the Latest Research category via categories —
 		# category.articles (what Latest Research reads) stays empty even
 		# though the category has fresh content through this other relation.
 		category_trial = Trials.objects.create(
@@ -236,7 +236,7 @@ class CategoryTrialsOnlyTest(LatestResearchDeltaTestCase):
 			discovery_date=timezone.now() - timedelta(days=1)
 		)
 		category_trial.refresh_from_db()
-		category_trial.team_categories.add(self.category)
+		category_trial.categories.add(self.category)
 
 		ctx = self._run_and_capture_context()
 
@@ -259,7 +259,7 @@ class DedupAgainstMainSectionTest(LatestResearchDeltaTestCase):
 		)
 		shared.refresh_from_db()
 		shared.subjects.add(self.subject)
-		shared.team_categories.add(self.category)
+		shared.categories.add(self.category)
 
 		ctx = self._run_and_capture_context()
 
@@ -354,7 +354,7 @@ class OrgContentMapCoverageTest(TestCase):
 			title="LR Map Article",
 			link="https://example.com/article/lr-map",
 		)
-		self.article.team_categories.add(self.category)
+		self.article.categories.add(self.category)
 		ArticleSiteContent.objects.create(
 			article=self.article,
 			site=self.site,

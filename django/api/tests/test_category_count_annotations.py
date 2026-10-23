@@ -73,7 +73,7 @@ class CategoryCountAnnotationTests(TestCase):
 				link=f"https://example.com/category-count-article-{i}",
 				published_date=timezone.now(),
 			)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 			article.subjects.add(self.subject)
 
 		for i in range(3):
@@ -82,7 +82,7 @@ class CategoryCountAnnotationTests(TestCase):
 				link=f"https://example.com/category-count-trial-{i}",
 				published_date=timezone.now(),
 			)
-			trial.team_categories.add(self.category)
+			trial.categories.add(self.category)
 			trial.subjects.add(self.subject)
 
 		self.client = APIClient()
@@ -148,7 +148,7 @@ class CategoryCountAnnotationTests(TestCase):
 				link=f"https://example.com/fanout-guard-article-{i}",
 				published_date=timezone.now(),
 			)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 			article.subjects.add(self.subject)
 		for i in range(12):
 			trial = Trials.objects.create(
@@ -156,7 +156,7 @@ class CategoryCountAnnotationTests(TestCase):
 				link=f"https://example.com/fanout-guard-trial-{i}",
 				published_date=timezone.now(),
 			)
-			trial.team_categories.add(self.category)
+			trial.categories.add(self.category)
 			trial.subjects.add(self.subject)
 
 		url = reverse("categories-list")
@@ -238,7 +238,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 				link=f"https://example.com/many-authors-article-{i}",
 				published_date=timezone.now(),
 			)
-			article.team_categories.add(self.many_authors)
+			article.categories.add(self.many_authors)
 			article.subjects.add(self.subject)
 			article.authors.add(shared, extra)
 
@@ -247,7 +247,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 			link="https://example.com/few-authors-article",
 			published_date=timezone.now(),
 		)
-		article.team_categories.add(self.few_authors)
+		article.categories.add(self.few_authors)
 		article.subjects.add(self.subject)
 		article.authors.add(authors[3])
 
@@ -349,7 +349,7 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 			link="https://example.com/ordering-trial",
 			published_date=timezone.now(),
 		)
-		ordering_trial.team_categories.add(self.many_authors)
+		ordering_trial.categories.add(self.many_authors)
 		ordering_trial.subjects.add(self.subject)
 
 		url = reverse("categories-list")

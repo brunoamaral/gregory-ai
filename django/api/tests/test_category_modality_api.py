@@ -56,7 +56,7 @@ class CategoryModalityAPITestCase(TestCase):
 		trial = Trials.objects.create(title=title, link=link)
 		trial.teams.add(self.team)
 		for category in categories:
-			trial.team_categories.add(category)
+			trial.categories.add(category)
 		# Every other call site in this file predates subject-scoped
 		# visibility and doesn't pass subjects=; default to the fixture's
 		# one subject (already published) so those trials stay visible.
@@ -77,7 +77,7 @@ class CategorySerializerModalityTests(CategoryModalityAPITestCase):
 		)
 		resp = self.client.get(f"/trials/{trial.trial_id}/")
 		self.assertEqual(resp.status_code, 200)
-		payload_category = resp.data["team_categories"][0]
+		payload_category = resp.data["categories"][0]
 		self.assertEqual(payload_category["modality"], "biologic_antibody")
 
 	def test_modality_null_safe_on_uncurated_category(self):
@@ -89,7 +89,7 @@ class CategorySerializerModalityTests(CategoryModalityAPITestCase):
 		)
 		resp = self.client.get(f"/trials/{trial.trial_id}/")
 		self.assertEqual(resp.status_code, 200)
-		self.assertIsNone(resp.data["team_categories"][0]["modality"])
+		self.assertIsNone(resp.data["categories"][0]["modality"])
 
 	def test_modality_present_on_article_category_payload(self):
 		category = self._make_category(
@@ -100,11 +100,11 @@ class CategorySerializerModalityTests(CategoryModalityAPITestCase):
 		)
 		article.teams.add(self.team)
 		article.subjects.add(self.subject)
-		article.team_categories.add(category)
+		article.categories.add(category)
 		resp = self.client.get(f"/articles/{article.article_id}/")
 		self.assertEqual(resp.status_code, 200)
 		self.assertEqual(
-			resp.data["team_categories"][0]["modality"], "small_molecule"
+			resp.data["categories"][0]["modality"], "small_molecule"
 		)
 
 
@@ -184,14 +184,14 @@ class CategoryModalityFilterTests(CategoryModalityAPITestCase):
 		)
 		matching.teams.add(self.team)
 		matching.subjects.add(self.subject)
-		matching.team_categories.add(self.antibody_category)
+		matching.categories.add(self.antibody_category)
 		non_matching = Articles.objects.create(
 			title="Small Molecule Article",
 			link="https://example.com/modality-article-filter-2",
 		)
 		non_matching.teams.add(self.team)
 		non_matching.subjects.add(self.subject)
-		non_matching.team_categories.add(self.small_molecule_category)
+		non_matching.categories.add(self.small_molecule_category)
 
 		resp = self.client.get("/articles/", {"category_modality": "biologic_antibody"})
 		self.assertEqual(resp.status_code, 200)

@@ -4355,7 +4355,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			has_objects = (
 				team.subjects.exists()
 				or team.sources.exists()
-				or team.team_categories.exists()
+				or team.categories.exists()
 				or team.lists.exists()
 				or team.prediction_run_logs.exists()
 			)
@@ -5033,7 +5033,7 @@ class PatentAdmin(
 		("teams", OrganizationRestrictedFieldListFilter),
 		("subjects", OrganizationRestrictedFieldListFilter),
 		("sources", OrganizationRestrictedFieldListFilter),
-		("team_categories", OrganizationRestrictedFieldListFilter),
+		("categories", OrganizationRestrictedFieldListFilter),
 		"applicants__sponsor_type",
 		"has_grant",
 		PriorityYearFilter,

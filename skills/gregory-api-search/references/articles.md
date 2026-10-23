@@ -56,7 +56,7 @@ Single article: `GET /articles/{article_id}/`.
 
 `article_id`, `title`, `summary`, `link`, `links` (source→URL map), `doi`, `access`
 (`open`/other), `published_date`, `discovery_date`, `publisher`, `container_title` (journal),
-`authors` (list), `sources`, `teams`, `subjects`, `team_categories`,
+`authors` (list), `sources`, `teams`, `subjects`, `categories`,
 `article_subject_relevances`, `ml_predictions`, `ml_score` (avg ML probability, `null` if none),
 `clinical_trials` (linked trials).
 

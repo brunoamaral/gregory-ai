@@ -180,8 +180,7 @@ response, and most searches are followed by a `get_*` read of one or two records
 `get_article` / `get_trial` / `get_patent` / `get_author` return the full record, minus team data:
 `get_article`, `get_trial` and `get_patent` drop every `teams` and `team_id` key, at any depth
 (`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
-team plumbing is noise to the model. `team_categories` stays — despite the name, it holds
-the record's category tags.
+team plumbing is noise to the model. `categories` (the record's category tags) stays.
 
 `search_articles` can add two things on request: `include_authors=true` adds each
 article's authors (`author_id`, `full_name`, `orcid`, in no particular order), and

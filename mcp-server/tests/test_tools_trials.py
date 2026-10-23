@@ -147,7 +147,7 @@ async def test_get_trial_returns_full_record(mock_gregory):
 
 async def test_get_trial_strips_team_data(mock_gregory):
 	# A trial has no top-level `teams`, but each nested subject carries its
-	# owning team_id. team_categories is category data despite its name.
+	# owning team_id. categories is category data despite its name.
 	category = {"id": 5, "category_name": "Stem cells", "category_slug": "stem-cells"}
 	mock_gregory.set_handler(
 		lambda request: httpx2.Response(
@@ -155,7 +155,7 @@ async def test_get_trial_strips_team_data(mock_gregory):
 			json={
 				"trial_id": 7,
 				"subjects": [{"id": 1, "subject_name": "Multiple Sclerosis", "description": None, "team_id": 1}],
-				"team_categories": [category],
+				"categories": [category],
 			},
 		)
 	)
@@ -163,7 +163,7 @@ async def test_get_trial_strips_team_data(mock_gregory):
 	result = await get_trial(7)
 
 	assert result["subjects"] == [{"id": 1, "subject_name": "Multiple Sclerosis", "description": None}]
-	assert result["team_categories"] == [category]
+	assert result["categories"] == [category]
 
 
 async def test_get_trial_404_says_not_found(mock_gregory):

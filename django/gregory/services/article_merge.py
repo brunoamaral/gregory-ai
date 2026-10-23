@@ -198,7 +198,7 @@ def merge_articles(keep, remove, *, stdout=None, recompute=True):
 		return keep
 
 	# Plain M2M fields declared on Articles (sources, subjects, teams, authors,
-	# entities, ml_predictions). Custom-`through` M2Ms — team_categories — are
+	# entities, ml_predictions). Custom-`through` M2Ms — categories — are
 	# EXCLUDED here and handled via their reverse FK instead: a bare .add() would
 	# fabricate a through row with `source` defaulted to "manual", clobbering the
 	# real manual/automatic provenance. A truthy `through._meta.auto_created`

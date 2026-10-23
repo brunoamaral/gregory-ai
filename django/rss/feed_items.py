@@ -220,7 +220,7 @@ def hydrate_articles(ids, site, subject_ids):
 				to_attr="_feed_subjects",
 			),
 			Prefetch(
-				"team_categories",
+				"categories",
 				queryset=TeamCategory.objects.filter(subjects__id__in=subject_ids)
 				.distinct()
 				.order_by("category_name", "pk"),
@@ -493,7 +493,7 @@ def hydrate_patents(ids, site, settings_row, subject_ids, scope=None):
 				to_attr="_feed_subjects",
 			),
 			Prefetch(
-				"team_categories",
+				"categories",
 				queryset=TeamCategory.objects.filter(subjects__id__in=subject_ids)
 				.distinct()
 				.order_by("category_name", "pk"),

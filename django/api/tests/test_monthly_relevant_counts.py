@@ -106,7 +106,7 @@ class MonthlyRelevantCountsTest(TestCase):
 			link=f"https://example.com/{title.lower().replace(' ', '-')}",
 			published_date=published_date,
 		)
-		article.team_categories.add(cls.category)
+		article.categories.add(cls.category)
 		return article
 
 	@classmethod
@@ -295,7 +295,7 @@ class MonthlyCountsPerModelLatestPredictionTest(TestCase):
 			link=f"https://example.com/{title.lower().replace(' ', '-')}",
 			published_date=published_date,
 		)
-		article.team_categories.add(self.category)
+		article.categories.add(self.category)
 		return article
 
 	def _predict(self, article, algorithm, score, model_version="v1"):
@@ -379,7 +379,7 @@ class MonthlyCountsAvailableModelsTest(TestCase):
 			link="https://example.com/below-threshold-algo",
 			published_date=APRIL,
 		)
-		article.team_categories.add(self.category)
+		article.categories.add(self.category)
 		MLPredictions.objects.create(
 			article=article,
 			subject=self.subject,
@@ -450,7 +450,7 @@ class MonthlyCountsQueryBudgetTest(TestCase):
 				link=f"https://example.com/budget-{i}",
 				published_date=APRIL.replace(day=1) + timedelta(days=i % 27),
 			)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 			for algo in algorithms:
 				MLPredictions.objects.create(
 					article=article,

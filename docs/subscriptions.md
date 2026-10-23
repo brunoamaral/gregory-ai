@@ -323,7 +323,7 @@ deliberately **articles-only**.
   (`has_latest_research=False`).
 
 **Trials are excluded from this section by decision, not oversight.**
-`TeamCategory.trials` (`Trials.team_categories`, `related_name="trials"`) is a
+`TeamCategory.trials` (`Trials.categories`, `related_name="trials"`) is a
 real, populated relation, and a future reader will notice it is unused here —
 that is intentional. A category whose only new content is trials contributes
 nothing to Latest Research.

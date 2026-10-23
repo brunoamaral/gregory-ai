@@ -1710,7 +1710,7 @@ class ArticleViewSet(
 		"teams",
 		Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 		"sources",
-		"team_categories",
+		"categories",
 		"publication_types",
 		Prefetch("mesh_headings", queryset=_mesh_headings_queryset()),
 		Prefetch(
@@ -2394,7 +2394,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		date_filters = self._build_date_filters(date_from, date_to, timeframe)
 
 		# Build filter for articles in this category
-		article_filter = Q(team_categories=category)
+		article_filter = Q(categories=category)
 		if date_filters:
 			# Adjust the date filter keys for the Articles model
 			articles_date_filters = {}
@@ -2405,11 +2405,11 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 
 		# Get authors with article counts in this category
 		authors_queryset = (
-			Authors.objects.filter(articles__team_categories=category)
+			Authors.objects.filter(articles__categories=category)
 			.annotate(
 				category_articles_count=Count(
 					"articles",
-					filter=Q(articles__team_categories=category)
+					filter=Q(articles__categories=category)
 					& Q(
 						**{
 							f"articles__{k}": v
@@ -2593,7 +2593,7 @@ class TrialViewSet(
 	  null-FK group as `no_sponsor`.
 	- `by_modality` — `{modality_slug: count, ...}`, one key per
 	  `CategoryModality` value (always present, 0 when empty) plus
-	  `no_modality`, over the trial's `team_categories.modality`. **Not** a
+	  `no_modality`, over the trial's `categories.modality`. **Not** a
 	  partition of `total` and **not** safe to sum: this joins an M2M, so a
 	  trial carrying two categories of different modalities is counted once
 	  *per modality*. `no_modality` also conflates two different things —
@@ -2714,7 +2714,7 @@ class TrialViewSet(
 		``_prefetched_org_contents`` so the serializer's ``editorial`` field
 		costs no query per trial. Default requests skip the prefetch.
 		"""
-		# Prefetch m2m/reverse-FK relations the serializer reads (sources, team_categories,
+		# Prefetch m2m/reverse-FK relations the serializer reads (sources, categories,
 		# article_references, trial_countries) so list/CSV-export responses don't issue one
 		# query per trial. trial_countries backs the "trial_countries" and
 		# "countries_normalized" serializer fields — see
@@ -2725,7 +2725,7 @@ class TrialViewSet(
 			.select_related("primary_sponsor_normalized")
 			.prefetch_related(
 				"sources",
-				"team_categories",
+				"categories",
 				# Scoped to visible_subject_ids, not a plain
 				# "article_references__article" string lookup: an
 				# unfiltered prefetch would let TrialSerializer.get_articles()
@@ -3123,7 +3123,7 @@ class TrialViewSet(
 	def _by_modality_counts(self, filtered_qs):
 		"""``{modality_slug: count, ..., "no_modality": count}`` over *filtered_qs*.
 
-		Joins the ``team_categories`` M2M, so unlike most facets here this one is
+		Joins the ``categories`` M2M, so unlike most facets here this one is
 		neither a partition of ``total`` nor safe to sum: a trial in two categories
 		of different modalities is counted once *per modality* it carries (this is
 		intentional — see the facet test asserting it explicitly). And
@@ -3135,9 +3135,9 @@ class TrialViewSet(
 		``?category_slug=`` filtering when the distinction matters.
 		"""
 		counts = {
-			row["team_categories__modality"]: row["count"]
+			row["categories__modality"]: row["count"]
 			for row in filtered_qs.order_by()
-			.values("team_categories__modality")
+			.values("categories__modality")
 			.annotate(count=Count("trial_id", distinct=True))
 		}
 		payload = {value: counts.get(value, 0) for value in CategoryModality.values}
@@ -3421,7 +3421,7 @@ class PatentViewSet(
 	`representative_publication`, `link`, `earliest_priority_date`,
 	`earliest_publication_date`, `has_grant`, `cpc_classes`, `applicants`
 	(`raw_name`, `sponsor_id`, `sponsor_name`, `sponsor_slug`, `is_individual`),
-	`team_categories`, `subjects`, `publications_count` and `trial_links_count`.
+	`categories`, `subjects`, `publications_count` and `trial_links_count`.
 
 	`GET /patents/{id}/` adds `publications` (every member publication),
 	`inventors` (names as published), `ipc_classes`, `links`, `trial_links`, and
@@ -3525,7 +3525,7 @@ class PatentViewSet(
 				"patent_applicants",
 				queryset=PatentApplicant.objects.select_related("sponsor"),
 			),
-			"team_categories",
+			"categories",
 			# select_related("team"): SubjectsSerializer.team_id reads it.
 			Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 		)
@@ -3981,7 +3981,7 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 		# as its PK -- verified against the schema, not just the model
 		# declaration), so team_id adds nothing to disambiguate *identity*.
 		# But count_filters below ANDs `articles__teams__id` (team_id) with
-		# `articles__team_categories__id`/`__category_slug` (category) as two
+		# `articles__categories__id`/`__category_slug` (category) as two
 		# independent predicates over two different M2M relations -- i.e. it
 		# counts articles that are BOTH tagged to that team AND in that
 		# category, not merely articles in a category that happens to belong
@@ -4015,12 +4015,12 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			return Authors.objects.none()
 
 		if category_slug:
-			count_filters["articles__team_categories__category_slug"] = category_slug
+			count_filters["articles__categories__category_slug"] = category_slug
 
 		if category_id:
 			try:
 				category_id = int(category_id)
-				count_filters["articles__team_categories__id"] = category_id
+				count_filters["articles__categories__id"] = category_id
 			except ValueError:
 				pass
 
@@ -4527,7 +4527,7 @@ class ArticleSearchView(
 				"teams",
 				Prefetch("subjects", queryset=Subject.objects.select_related("team")),
 				"sources",
-				"team_categories",
+				"categories",
 				"publication_types",
 				Prefetch("mesh_headings", queryset=_mesh_headings_queryset()),
 				Prefetch(
@@ -4784,7 +4784,7 @@ class TrialSearchView(
 		# Prefetch related objects to avoid N+1 queries
 		queryset = queryset.prefetch_related(
 			"sources",
-			"team_categories",
+			"categories",
 			# Scoped to visible_subject_ids -- see
 			# visible_article_references_queryset's docstring (PR #863 review
 			# finding 2). subject_id itself is already validated against

@@ -351,7 +351,7 @@ def rank_and_limit_articles(
 def get_latest_research_by_category(lst, days=30):
 	"""
 	Returns latest articles for each team category in the latest_research_categories,
-	grouped by team category. Uses the team_categories M2M relationship populated
+	grouped by team category. Uses the categories M2M relationship populated
 	by rebuild_categories, so only articles whose titles/summaries matched the
 	category's terms are included.
 
@@ -369,7 +369,7 @@ def get_latest_research_by_category(lst, days=30):
 	if not lst.latest_research_categories.exists():
 		return result
 
-	# Get articles for each team category via the team_categories M2M
+	# Get articles for each team category via the categories M2M
 	for category in lst.latest_research_categories.all():
 		latest_articles = (
 			apply_article_max_age_filter(

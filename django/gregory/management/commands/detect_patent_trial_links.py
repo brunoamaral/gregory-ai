@@ -131,7 +131,7 @@ class Command(BaseCommand):
 			patents = patents.filter(
 				discovery_date__gte=timezone.now() - timedelta(days=options["days"])
 			)
-		patents = patents.prefetch_related("subjects", "team_categories", "patent_applicants")
+		patents = patents.prefetch_related("subjects", "categories", "patent_applicants")
 
 		reset_pks = set()
 		if options["reset"]:
@@ -153,7 +153,7 @@ class Command(BaseCommand):
 			if sponsor_id not in trials_by_sponsor:
 				trials_by_sponsor[sponsor_id] = list(
 					Trials.objects.filter(primary_sponsor_normalized_id=sponsor_id).prefetch_related(
-						"subjects", "team_categories"
+						"subjects", "categories"
 					)
 				)
 			return trials_by_sponsor[sponsor_id]
@@ -164,7 +164,7 @@ class Command(BaseCommand):
 		for patent in patents:
 			patent_count += 1
 			patent_subjects = {s.pk for s in patent.subjects.all()}
-			patent_categories = {c.pk for c in patent.team_categories.all()}
+			patent_categories = {c.pk for c in patent.categories.all()}
 			sponsor_ids = {
 				a.sponsor_id for a in patent.patent_applicants.all() if a.sponsor_id
 			}
@@ -178,7 +178,7 @@ class Command(BaseCommand):
 					if result is None:
 						continue
 					timing, days_after = result
-					shared_category = patent_categories & {c.pk for c in trial.team_categories.all()}
+					shared_category = patent_categories & {c.pk for c in trial.categories.all()}
 					wanted[trial.pk] = {
 						"sponsor_id": sponsor_id,
 						"timing": timing,
