@@ -124,6 +124,50 @@ The **Category assignments** inline on an article, trial or patent page is scope
 
 The same article, trial or patent can be visible to more than one organisation, so it can also carry another organisation's categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
 
+### Subject relevance
+
+The **Subject relevance** inline on an article page works the same way, keyed by subject. A staff user sees and marks only their own organisations' subjects that have `auto_predict` on. Opening the page creates the missing rows for those subjects only. A new row can only name one of them. An existing row's subject is fixed: the form shows it but ignores any change to it. Another organisation's rows on a shared article are hidden and left as they are. Superusers see and can mark every subject.
+
+### History pages
+
+The history list and the old-version pages of articles, trials, patents, sources and trial organisation content follow the same scoping: a staff user gets a 403 for a row outside their organisations, even when the history table still holds it. **Revert** (saving an old version from its history page) is superuser-only. A revert rewrites every field of a row that other organisations may share, and simple-history would otherwise save it with view permission alone.
+
+### Team categories and authors
+
+On a team category's page, the **team** and **subjects** pickers offer only the user's own organisations' teams and subjects, and a hand-edited form naming another organisation's is rejected. An author is shared, but their articles aren't: the **Author's articles** list on an author's page shows staff only the articles their organisations can see.
+
+---
+
+## The Editor role
+
+The admin code above decides *which rows* a staff user sees. Django model permissions decide *what they may do* with them. The **Editor** group holds the permissions for an organisation's editor. It is defined in code, in `gregory/roles.py`, and synced by a command, so the code is the record of what an editor can do. Don't change the group in the Groups admin: the next sync removes anything that isn't in the code.
+
+| Editors can | Models |
+|:------------|:-------|
+| View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links |
+| View, add and change | Per-site takeaways and summaries (articles, patents), trial organisation content, subject relevance |
+| View, add, change and delete | Category assignments (articles, trials, patents), team categories |
+| View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms (shared reference data). The read-only rows inside the article, trial and patent pages |
+
+Editors get nothing from user accounts and groups, organisations, sites, API keys, OAuth and MCP grants, or newsletters. Anyone who can edit user accounts can make themselves a superuser. Several newsletter pages are not organisation-scoped yet and show subscribers' personal data.
+
+`gregory/tests/test_roles.py` keeps the role honest: no forbidden apps, no add or delete on shared content, and every model the role can write to must be listed with the scoping that keeps an editor inside their organisation.
+
+### Setting up an editor
+
+1. Sync the group, after any deploy that changes `gregory/roles.py`:
+
+   ```bash
+   docker exec gregory python manage.py setup_roles
+   ```
+
+2. In **Users**, tick *Staff status*, add the person to the **Editor** group, and add them to their team under **Team memberships**. Joining a team also adds them to the team's organisation.
+3. Don't give editors permissions directly on their account. Those bypass the role and never change when the role does.
+
+The first sync on an instance that already has an "Editor" group removes anything added to it by hand, so run `setup_roles --check` first to see what would change.
+
+`setup_roles --check` writes nothing. It exits non-zero if the group has drifted from the code. It also lists active non-superuser staff accounts that are on no team, that hold permissions directly on the account, or that aren't in the Editor group.
+
 ---
 
 ## Setting Up Sites
