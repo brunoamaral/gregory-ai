@@ -228,6 +228,36 @@ class OrganizationFilterMixin:
 		return qs.filter(sources__team__organization__id__in=user_orgs).distinct()
 
 
+class OrgScopedHistoryMixin:
+	"""Keep simple-history's pages inside the user's organisations.
+
+	simple-history's history pages fetch rows outside ``get_queryset``:
+	``history_view`` falls back to the latest historical record, and
+	``history_form_view`` reads the historical record directly. Without this a
+	staff user could open another organisation's row through its history.
+	``history_form_view`` also saves a POSTed old version after checking only
+	view-or-change permission. A revert rewrites every field of a row that other
+	organisations may share, so it is superuser-only.
+
+	List it before SimpleHistoryAdmin in the bases.
+	"""
+
+	def has_view_history_or_change_history_permission(self, request, obj=None):
+		if not super().has_view_history_or_change_history_permission(request, obj):
+			return False
+		if obj is None or request.user.is_superuser:
+			return True
+		return self.get_queryset(request).filter(pk=obj.pk).exists()
+
+	def history_form_view(self, request, object_id, version_id, extra_context=None):
+		if request.method == "POST" and not request.user.is_superuser:
+			raise PermissionDenied
+		return super().history_form_view(request, object_id, version_id, extra_context)
+
+	def revert_disabled(self, request, obj=None):
+		return not request.user.is_superuser or super().revert_disabled(request, obj)
+
+
 def _scoped_subject_ids():
 	"""Every Subject ID that appears in at least one site's ``scope_subjects``.
 
@@ -563,23 +593,27 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 			return 1
 		return 0
 
+	@staticmethod
+	def _allowed_subjects(request):
+		"""Subjects the user may mark: every subject for superusers; for staff,
+		their organisations' auto_predict subjects. An article can be shared
+		with another organisation, and its relevance for that organisation's
+		subjects is theirs to set."""
+		qs = Subject.objects.all()
+		if not request.user.is_superuser:
+			qs = qs.filter(
+				team__organization__id__in=get_user_organizations(request.user),
+				auto_predict=True,
+			)
+		return qs
+
 	def get_formset(self, request, obj=None, **kwargs):
-		"""Pre-populate with subjects for the article's teams.
-		Superusers get all subjects; other users only get auto_predict subjects.
-		"""
+		"""Pre-populate with the user's subjects among the article's teams'."""
+		allowed = self._allowed_subjects(request)
 		if obj and obj.pk:  # If editing existing article
-			if request.user.is_superuser:
-				team_subjects = (
-					Subject.objects.filter(team__in=obj.teams.all())
-					.distinct()
-					.order_by("subject_name")
-				)
-			else:
-				team_subjects = (
-					Subject.objects.filter(team__in=obj.teams.all(), auto_predict=True)
-					.distinct()
-					.order_by("subject_name")
-				)
+			team_subjects = (
+				allowed.filter(team__in=obj.teams.all()).distinct().order_by("subject_name")
+			)
 
 			# Create ArticleSubjectRelevance instances for any missing subjects
 			for subject in team_subjects:
@@ -587,13 +621,27 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 					article=obj, subject=subject, defaults={"is_relevant": None}
 				)
 
-		return super().get_formset(request, obj, **kwargs)
+		formset = super().get_formset(request, obj, **kwargs)
+
+		class ScopedRelevanceFormSet(formset):
+			def add_fields(self, form, index):
+				super().add_fields(form, index)
+				if form.instance.pk:
+					# An existing row's subject is fixed: the widget only shows
+					# it, and a hand-edited form must not move the row to
+					# another subject.
+					form.fields["subject"].disabled = True
+				else:
+					form.fields["subject"].queryset = allowed.order_by("subject_name")
+
+		return ScopedRelevanceFormSet
 
 	def get_queryset(self, request):
-		"""Superusers see all subjects; other users see only auto_predict subjects"""
+		"""Only rows for subjects the user may mark (see _allowed_subjects).
+		Other rows are not shown, and saving the page leaves them as they are."""
 		qs = super().get_queryset(request).select_related("subject")
 		if not request.user.is_superuser:
-			qs = qs.filter(subject__auto_predict=True)
+			qs = qs.filter(subject__in=self._allowed_subjects(request))
 		return qs.order_by("subject__subject_name")
 
 
@@ -1150,7 +1198,11 @@ class ArticleMeshHeadingInline(ReadOnlyInlineMixin, admin.TabularInline):
 
 
 class ArticleAdmin(
-	OrganizationFilterMixin, SourceBulkActionMixin, RequestFormMixin, SimpleHistoryAdmin
+	OrganizationFilterMixin,
+	SourceBulkActionMixin,
+	RequestFormMixin,
+	OrgScopedHistoryMixin,
+	SimpleHistoryAdmin,
 ):
 	form = ArticleAdminForm
 	source_for_values = ["science paper", "news article"]
@@ -1755,7 +1807,11 @@ class TrialAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 
 
 class TrialAdmin(
-	OrganizationFilterMixin, SourceBulkActionMixin, RequestFormMixin, SimpleHistoryAdmin
+	OrganizationFilterMixin,
+	SourceBulkActionMixin,
+	RequestFormMixin,
+	OrgScopedHistoryMixin,
+	SimpleHistoryAdmin,
 ):
 	form = TrialAdminForm
 	source_for_values = ["trials"]
@@ -2371,7 +2427,9 @@ class ReassignToTeamMixin:
 		self.message_user(request, f"{count} object(s) reassigned to '{to_team}'.")
 
 
-class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdmin):
+class SourceAdmin(
+	OrganizationFilterMixin, ReassignToTeamMixin, OrgScopedHistoryMixin, SimpleHistoryAdmin
+):
 	form = SourceAdminForm
 	list_display = [
 		"name",
@@ -2901,6 +2959,19 @@ class AuthorArticlesInline(admin.TabularInline):
 	]
 	ordering = ["-articles__published_date"]  # Order by most recent articles first
 
+	def get_queryset(self, request):
+		# Authors are shared, their articles are not: staff see only the
+		# articles their organisations can see (source -> team -> organisation,
+		# as in OrganizationFilterMixin).
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			articles__in=Articles.objects.filter(
+				sources__team__organization__id__in=get_user_organizations(request.user)
+			)
+		)
+
 	def article_info(self, obj):
 		try:
 			article = obj.articles
@@ -3296,7 +3367,11 @@ TEAMCATEGORY_WEIGHT_FIELDS = {
 }
 
 
-class TeamCategoryAdminForm(forms.ModelForm):
+class TeamCategoryAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+	# A category's subjects may only be its organisations' (the team field is
+	# scoped in TeamCategoryAdmin.formfield_for_foreignkey).
+	org_scoped_relations = {"subjects": "team__organization__id"}
+
 	"""Edits TeamCategory matching settings, exposing the per-field weights stored
 	in the ``match_weights`` JSON column as friendly integer inputs."""
 
@@ -3355,8 +3430,20 @@ class TeamCategoryAdminForm(forms.ModelForm):
 
 
 @admin.register(TeamCategory)
-class TeamCategoryAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
+class TeamCategoryAdmin(
+	OrganizationFilterMixin, ReassignToTeamMixin, RequestFormMixin, admin.ModelAdmin
+):
 	form = TeamCategoryAdminForm
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		# Without this the team picker lists, and accepts, every organisation's
+		# teams, and a category put on another organisation's team writes
+		# category assignments onto that organisation's content.
+		if db_field.name == "team" and not request.user.is_superuser:
+			kwargs["queryset"] = Team.objects.filter(
+				organization__id__in=get_user_organizations(request.user)
+			)
+		return super().formfield_for_foreignkey(db_field, request, **kwargs)
 	list_display = (
 		"category_name",
 		"team",
@@ -4721,7 +4808,9 @@ class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 		fields = ["sources", "teams", "subjects"]
 
 
-class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin):
+class PatentAdmin(
+	OrganizationFilterMixin, RequestFormMixin, OrgScopedHistoryMixin, SimpleHistoryAdmin
+):
 	"""Patent families. Importer-managed fields are read-only; editors curate
 	subjects, teams and category assignments."""
 
@@ -4846,7 +4935,7 @@ admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 
 
-class _BaseOrgContentAdmin(OrganizationFilterMixin, SimpleHistoryAdmin):
+class _BaseOrgContentAdmin(OrganizationFilterMixin, OrgScopedHistoryMixin, SimpleHistoryAdmin):
 	"""Shared admin for ArticleOrgContent / TrialOrgContent standalone pages.
 
 	Use the parent Article/Trial admin for routine editing; this admin exists
