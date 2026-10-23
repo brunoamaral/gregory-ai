@@ -357,19 +357,19 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		help_text="Filter by PubMed ID (digits only), exact match, e.g. ?pmid=38812345.",
 	)
 	category_slug = filters.CharFilter(
-		field_name="team_categories__category_slug",
+		field_name="categories__category_slug",
 		lookup_expr="exact",
 		label="Category Slug",
 		help_text="Filter by category slug (see /categories/).",
 	)
 	category_id = filters.NumberFilter(
-		field_name="team_categories__id",
+		field_name="categories__id",
 		lookup_expr="exact",
 		label="Category ID",
 		help_text="Filter by category ID (see /categories/).",
 	)
 	category_modality = filters.ChoiceFilter(
-		field_name="team_categories__modality",
+		field_name="categories__modality",
 		choices=CategoryModality.choices,
 		distinct=True,
 		label="Intervention modality of the article's categories",
@@ -911,19 +911,19 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		),
 	)
 	category_slug = filters.CharFilter(
-		field_name="team_categories__category_slug",
+		field_name="categories__category_slug",
 		lookup_expr="exact",
 		label="Category Slug",
 		help_text="Filter by category slug (see /categories/).",
 	)
 	category_id = filters.NumberFilter(
-		field_name="team_categories__id",
+		field_name="categories__id",
 		lookup_expr="exact",
 		label="Category ID",
 		help_text="Filter by category ID (see /categories/).",
 	)
 	category_modality = filters.ChoiceFilter(
-		field_name="team_categories__modality",
+		field_name="categories__modality",
 		choices=CategoryModality.choices,
 		distinct=True,
 		label="Intervention modality of the trial's categories",
@@ -1944,13 +1944,13 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		),
 	)
 	category_id = filters.NumberFilter(
-		field_name="team_categories__id",
+		field_name="categories__id",
 		lookup_expr="exact",
 		label="Category ID",
 		help_text="Filter by category ID (see /categories/).",
 	)
 	category_slug = filters.CharFilter(
-		field_name="team_categories__category_slug",
+		field_name="categories__category_slug",
 		lookup_expr="exact",
 		label="Category Slug",
 		help_text="Filter by category slug (see /categories/).",
@@ -2134,7 +2134,7 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 			return queryset
 		return queryset.filter(
 			Exists(
-				Patents.team_categories.through.objects.filter(
+				Patents.categories.through.objects.filter(
 					patents=OuterRef("pk"), teamcategory__modality=value
 				)
 			)

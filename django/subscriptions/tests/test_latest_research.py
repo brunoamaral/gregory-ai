@@ -54,14 +54,14 @@ class TestLatestResearchCategories(TestCase):
 			list_name="Empty List", weekly_digest=True, team=self.team
 		)
 
-		# Create articles and assign to categories via team_categories M2M
+		# Create articles and assign to categories via categories M2M
 		self.article1 = Articles.objects.create(
 			title="Article 1",
 			discovery_date=timezone.now() - timedelta(days=5),
 			doi="10.1234/article1",
 		)
 		self.article1.subjects.add(self.subject1)
-		self.article1.team_categories.add(self.category1)
+		self.article1.categories.add(self.category1)
 
 		self.article2 = Articles.objects.create(
 			title="Article 2",
@@ -69,7 +69,7 @@ class TestLatestResearchCategories(TestCase):
 			doi="10.1234/article2",
 		)
 		self.article2.subjects.add(self.subject1)
-		self.article2.team_categories.add(self.category1)
+		self.article2.categories.add(self.category1)
 
 		self.article3 = Articles.objects.create(
 			title="Article 3",
@@ -77,7 +77,7 @@ class TestLatestResearchCategories(TestCase):
 			doi="10.1234/article3",
 		)
 		self.article3.subjects.add(self.subject2)
-		self.article3.team_categories.add(self.category2)
+		self.article3.categories.add(self.category2)
 
 		self.article4 = Articles.objects.create(
 			title="Article 4",
@@ -85,7 +85,7 @@ class TestLatestResearchCategories(TestCase):
 			doi="10.1234/article4",
 		)
 		self.article4.subjects.add(self.subject3)
-		self.article4.team_categories.add(self.category2)
+		self.article4.categories.add(self.category2)
 
 	def test_get_latest_research_by_category(self):
 		# Test the get_latest_research_by_category function
@@ -121,7 +121,7 @@ class TestLatestResearchCategories(TestCase):
 		self.assertFalse(empty_organized["has_latest_research"])
 
 	def test_articles_not_in_category_excluded(self):
-		"""Test that articles not assigned to a category via team_categories M2M are excluded."""
+		"""Test that articles not assigned to a category via categories M2M are excluded."""
 		# Create an article in subject1 but NOT assigned to category1
 		unassigned = Articles.objects.create(
 			title="Unassigned Article",
@@ -129,7 +129,7 @@ class TestLatestResearchCategories(TestCase):
 			doi="10.1234/unassigned",
 		)
 		unassigned.subjects.add(self.subject1)
-		# Deliberately NOT adding to team_categories
+		# Deliberately NOT adding to categories
 
 		result = get_latest_research_by_category(self.test_list)
 
@@ -147,7 +147,7 @@ class TestLatestResearchCategories(TestCase):
 				doi=f"10.1234/article{i}",
 			)
 			article.subjects.add(self.subject1)
-			article.team_categories.add(self.category1)
+			article.categories.add(self.category1)
 
 		# Now category1 should have 27 articles total (2 existing + 25 new)
 		result = get_latest_research_by_category(self.test_list)

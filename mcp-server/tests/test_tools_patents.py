@@ -46,7 +46,7 @@ async def test_search_patents_compacts_results(mock_gregory):
 							{"raw_name": "Jane Researcher", "sponsor_name": None, "sponsor_id": None},
 							{"raw_name": "ACME PHARMA LTD", "sponsor_name": "Acme Pharma"},
 						],
-						"team_categories": [{"id": 1}],
+						"categories": [{"id": 1}],
 						"subjects": [{"id": 1}],
 						"publications_count": 9,
 						"trial_links_count": 2,
@@ -225,7 +225,7 @@ async def test_get_patent_strips_team_data(mock_gregory):
 				"patent_id": 7,
 				"teams": [{"id": 1}],
 				"subjects": [{"id": 1, "subject_name": "MS", "team_id": 1}],
-				"team_categories": [category],
+				"categories": [category],
 			}
 		)
 	)
@@ -234,7 +234,7 @@ async def test_get_patent_strips_team_data(mock_gregory):
 
 	assert "teams" not in result
 	assert result["subjects"] == [{"id": 1, "subject_name": "MS"}]
-	assert result["team_categories"] == [category]
+	assert result["categories"] == [category]
 
 
 async def test_get_patent_by_publication_number_resolves_then_fetches(mock_gregory):

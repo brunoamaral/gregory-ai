@@ -69,7 +69,7 @@ class CategoryOptimizationTestCase(TestCase):
 				link=f"http://example.com/article/{i}",
 				summary=f"Summary for article {i}",
 			)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 			# Category aggregates are scoped to the caller's subjects, so
 			# untagged content contributes nothing to the counts asserted below.
 			article.subjects.add(self.subject)
@@ -82,7 +82,7 @@ class CategoryOptimizationTestCase(TestCase):
 				link=f"http://example.com/trial/{i}",
 				summary=f"Summary for trial {i}",
 			)
-			trial.team_categories.add(self.category)
+			trial.categories.add(self.category)
 			trial.subjects.add(self.subject)
 
 	def test_category_list_performance(self):
@@ -191,7 +191,7 @@ class CategoryOptimizationTestCase(TestCase):
 				link=f"http://example.com/bulk-article/{i}",
 				summary=f"Summary {i}",
 			)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 			article.subjects.add(self.subject)
 
 		connection.queries.clear()
@@ -237,7 +237,7 @@ class IndexEfficiencyTestCase(TestCase):
 		tc_indexes = self._index_names("team_categories")
 		atc_indexes = self._index_names("articles_team_categories")
 
-		# team_categories must be indexable by team_id
+		# categories must be indexable by team_id
 		self.assertIn("idx_team_categories_team_id", tc_indexes)
 		# composite (team_id, id) covering index for category list queries
 		self.assertIn("idx_team_categories_team_subject", tc_indexes)

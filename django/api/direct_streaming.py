@@ -42,7 +42,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"sources",
 		"ml_predictions",
 		"clinical_trials",
-		"team_categories",
+		"categories",
 	]
 
 	# Define columns to exclude from the CSV output
@@ -85,7 +85,7 @@ class DirectStreamingCSVRenderer(CSVRenderer):
 		"relevant_subjects",
 		"ml_predictions",
 		"clinical_trials",
-		"team_categories",
+		"categories",
 	]
 
 	def get_filename(self, renderer_context):

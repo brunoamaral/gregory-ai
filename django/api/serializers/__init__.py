@@ -308,7 +308,7 @@ class CategorySerializer(serializers.ModelSerializer):
 		# deterministic — a bare DISTINCT has undefined order.
 		available_models = list(
 			MLPredictions.objects.filter(
-				article__team_categories=obj, algorithm__isnull=False
+				article__categories=obj, algorithm__isnull=False
 			)
 			.values_list("algorithm", flat=True)
 			.distinct()
@@ -334,7 +334,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			)
 			qualifying_article_ids = (
 				MLPredictions.objects.filter(
-					article__team_categories=obj,
+					article__categories=obj,
 					algorithm=model,
 					probability_score__gte=ml_threshold,
 					created_date=Subquery(latest_date_per_pair),
@@ -379,7 +379,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 		relevant_article_ids = (
 			MLPredictions.objects.filter(
-				article__team_categories=obj,
+				article__categories=obj,
 				algorithm__isnull=False,
 				probability_score__gte=ml_threshold,
 				created_date=Subquery(latest_date_per_pair),
@@ -586,7 +586,7 @@ class ArticleSerializer(
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
 ):
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
-	team_categories = TeamCategorySerializer(many=True, read_only=True)
+	categories = TeamCategorySerializer(many=True, read_only=True)
 	authors = ArticleAuthorSerializer(many=True, read_only=True)
 	teams = TeamSerializer(many=True, read_only=True)
 	subjects = SubjectsSerializer(many=True, read_only=True)
@@ -630,7 +630,7 @@ class ArticleSerializer(
 			"keywords",
 			"access",
 			"editorial",
-			"team_categories",
+			"categories",
 			"ml_predictions",
 			"ml_score",
 			"clinical_trials",
@@ -723,7 +723,7 @@ class PatentListSerializer(
 	SiteEditorialFieldMixin, ScopedSerializerMixin, serializers.ModelSerializer
 ):
 	"""One patent family (``/patents/``). Relies on PatentViewSet.get_queryset()
-	prefetching ``patent_applicants``, ``team_categories`` and ``subjects`` and
+	prefetching ``patent_applicants``, ``categories`` and ``subjects`` and
 	annotating the two counts, so a page costs a constant number of queries.
 
 	``link`` is the Espacenet page for the family's representative publication
@@ -734,7 +734,7 @@ class PatentListSerializer(
 	applicants = PatentApplicantSerializer(
 		source="patent_applicants", many=True, read_only=True
 	)
-	team_categories = TeamCategorySerializer(many=True, read_only=True)
+	categories = TeamCategorySerializer(many=True, read_only=True)
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	publications_count = serializers.IntegerField(read_only=True)
 	trial_links_count = serializers.IntegerField(read_only=True)
@@ -764,7 +764,7 @@ class PatentListSerializer(
 			"has_grant",
 			"cpc_classes",
 			"applicants",
-			"team_categories",
+			"categories",
 			"subjects",
 			"publications_count",
 			"trial_links_count",
@@ -867,7 +867,7 @@ class SponsorSerializer(serializers.ModelSerializer):
 class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.HyperlinkedModelSerializer):
 	subjects = SubjectsSerializer(many=True, read_only=True)
 	sources = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
-	team_categories = TeamCategorySerializer(many=True, read_only=True)
+	categories = TeamCategorySerializer(many=True, read_only=True)
 	articles = serializers.SerializerMethodField()
 	# Normalized per-country breakdown (country, status, decision_date, sources) — see
 	# docs/trials-field-normalization.md. Relies on TrialViewSet.get_queryset()
@@ -897,7 +897,7 @@ class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.Hy
 			"sources",
 			"identifiers",
 			"identifiers_normalized",
-			"team_categories",
+			"categories",
 			"export_date",
 			"internal_number",
 			"last_refreshed_on",

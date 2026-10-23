@@ -36,7 +36,7 @@ from api.tests.visibility_helpers import publish_subjects
 
 def _build_articles(n, suffix):
 	"""Create *n* articles, each wired to one of every related field the
-	serializer touches (authors, teams, subjects, sources, team_categories,
+	serializer touches (authors, teams, subjects, sources, categories,
 	article_subject_relevances, trial_references) so an un-prefetched
 	relation shows up as O(n) queries instead of O(1).
 
@@ -77,7 +77,7 @@ def _build_articles(n, suffix):
 		article.teams.add(team)
 		article.subjects.add(subject)
 		article.sources.add(source)
-		article.team_categories.add(category)
+		article.categories.add(category)
 
 		author = Authors.objects.create(
 			given_name="Given", family_name=f"Family{suffix}{i}"

@@ -151,7 +151,7 @@ class PatentExportTestCase(TestCase):
 		self.link_suppressed = self.make_link(
 			self.p1, self.trial_dismissed, "during", "subject", suppressed=True
 		)
-		self.trial_open.team_categories.add(self.cat_auto)
+		self.trial_open.categories.add(self.cat_auto)
 
 		self.p2 = self.make_patent(
 			"200", "Newer US patent", D(2023, 1, 1), subjects=[self.ms, self.pd]
@@ -401,7 +401,7 @@ class SubjectSheetTests(PatentExportTestCase):
 		self.assertEqual(row["teams"], "Team A")
 		self.assertEqual(row["sources"], "EPO | MS")
 		self.assertEqual(
-			sorted(row["team_categories"].split("; ")),
+			sorted(row["categories"].split("; ")),
 			["Anti-CD20 (manual)", "Ocrelizumab (auto)"],
 		)
 

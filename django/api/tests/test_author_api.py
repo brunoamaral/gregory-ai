@@ -70,7 +70,7 @@ class AuthorAPITest(TestCase):
 		self.article1.teams.add(self.team)
 		self.article1.subjects.add(self.subject)
 		self.article1.sources.add(self.source)
-		self.article1.team_categories.add(self.category)
+		self.article1.categories.add(self.category)
 
 		self.article2 = Articles.objects.create(
 			title="Test Article 2",
@@ -81,7 +81,7 @@ class AuthorAPITest(TestCase):
 		self.article2.teams.add(self.team)
 		self.article2.subjects.add(self.subject)
 		self.article2.sources.add(self.source)
-		self.article2.team_categories.add(self.category)
+		self.article2.categories.add(self.category)
 
 		# One article for author2
 		self.article3 = Articles.objects.create(

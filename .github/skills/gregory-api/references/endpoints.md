@@ -62,7 +62,7 @@ List all articles with comprehensive filtering. Default ordering: `-discovery_da
   "authors": [
     {"author_id": 100, "given_name": "John", "family_name": "Doe", "full_name": "John Doe", "ORCID": "0000-...", "country": "US"}
   ],
-  "team_categories": [
+  "categories": [
     {"id": 5, "category_name": "Category", "category_description": "...", "category_slug": "slug", "category_terms": ["term1", "term2"]}
   ],
   "ml_predictions": [
@@ -226,7 +226,7 @@ Get a single trial by ID.
   "link": "...",
   "source": "Source Name",
   "identifiers": "...",
-  "team_categories": [...],
+  "categories": [...],
   "scientific_title": "...",
   "primary_sponsor": "...",
   "recruitment_status": "Recruiting",

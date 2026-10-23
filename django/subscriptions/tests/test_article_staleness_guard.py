@@ -249,7 +249,7 @@ class LatestResearchStalenessTest(_ArticleStalenessBase):
 			discovery_days_ago=discovery_days_ago,
 			published_days_ago=published_days_ago,
 		)
-		article.team_categories.add(self.category)
+		article.categories.add(self.category)
 		return article
 
 	def test_stale_article_excluded(self):

@@ -18,7 +18,7 @@ Applied fields (when present on the serialised object):
   - ``article_subject_relevances``→ ArticleSubjectRelevance entries whose
                                      nested subject is outside it (same
                                      shape/reasoning as ml_predictions)
-  - ``team_categories``           → TeamCategory entries whose ``subjects``
+  - ``categories``           → TeamCategory entries whose ``subjects``
                                      M2M does not intersect it
   - ``teams``                     → Team entries that are neither
                                      ``api_listed`` nor owners of a subject in
@@ -43,7 +43,7 @@ Query strategy (avoiding N+1 on list endpoints)
   IS the answer, so these are set-membership tests on data already loaded.
   The org version had to resolve orgs → teams → subjects and cache the result
   per request; that machinery is gone.
-- ``team_categories``:  a category's ``subjects`` M2M has to be consulted, so
+- ``categories``:  a category's ``subjects`` M2M has to be consulted, so
   the qualifying category IDs are resolved once per request and cached on
   ``request._scoped_mixin_category_ids``.
 - ``teams``:  ``team.api_listed`` is a direct column, so the first half costs
@@ -138,11 +138,11 @@ class ScopedSerializerMixin:
 		if "subjects" in ret:
 			ret["subjects"] = [s for s in ret["subjects"] if s.get("id") in visible]
 
-		# --- team_categories: reached through the category's own subjects M2M ---
-		if "team_categories" in ret and hasattr(instance, "team_categories"):
+		# --- categories: reached through the category's own subjects M2M ---
+		if "categories" in ret and hasattr(instance, "categories"):
 			visible_cat_ids = _request_visible_category_ids(request, visible)
-			ret["team_categories"] = [
-				c for c in ret["team_categories"] if c.get("id") in visible_cat_ids
+			ret["categories"] = [
+				c for c in ret["categories"] if c.get("id") in visible_cat_ids
 			]
 
 		# --- ml_predictions: filter directly on already-serialised data ---

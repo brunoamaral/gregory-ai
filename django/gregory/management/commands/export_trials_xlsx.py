@@ -109,7 +109,7 @@ RELATION_COLS = [
 	"subjects",
 	"teams",
 	"sources",
-	"team_categories",
+	"categories",
 	"articles",
 	"trial_countries",
 	"sponsor_id",
@@ -172,7 +172,7 @@ EXTRA_GLOSSARY = {
 		"Registry sources that provided data for this trial (semicolon-separated).",
 		"",
 	),
-	"team_categories": (
+	"categories": (
 		"Categories",
 		"Team categories assigned to this trial (semicolon-separated). See the "
 		"Categories sheet for each category's description and search terms.",
@@ -752,7 +752,7 @@ class Command(BaseCommand):
 					"subjects",
 					"teams",
 					"sources",
-					"team_categories",
+					"categories",
 					"article_references__article",
 					"trial_countries",
 				)
@@ -795,11 +795,11 @@ class Command(BaseCommand):
 							row_data.append(
 								"; ".join(src.name or "" for src in trial.sources.all())
 							)
-						elif col_name == "team_categories":
+						elif col_name == "categories":
 							row_data.append(
 								"; ".join(
 									tc.category_name
-									for tc in trial.team_categories.all()
+									for tc in trial.categories.all()
 								)
 							)
 						elif col_name == "articles":

@@ -54,7 +54,7 @@ class StreamingCSVRendererTest(TestCase):
 			article.sources.add(self.source)
 			article.teams.add(self.team)
 			article.subjects.add(self.subject)
-			article.team_categories.add(self.category)
+			article.categories.add(self.category)
 
 		# Set up client
 		self.client = APIClient()

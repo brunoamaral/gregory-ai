@@ -29,10 +29,8 @@ _TEAM_KEYS = frozenset({"teams", "team_id"})
 def strip_team_data(value: Any) -> Any:
 	"""A copy of `value` with every `teams` / `team_id` key removed, at any
 	depth — so a more deeply nested record, or a serializer field added
-	later, can't bring team data back.
-
-	`team_categories` is kept: despite the name it holds the record's
-	category tags, which the tools expose as categories.
+	later, can't bring team data back. A record's `categories` (its
+	category tags) are kept.
 	"""
 	if isinstance(value, dict):
 		return {key: strip_team_data(item) for key, item in value.items() if key not in _TEAM_KEYS}

@@ -7,7 +7,7 @@ guarded-title matching added in this PR stops *new* duplicates, but rows that we
 merged-by-title-then-split (or manually entered twice) must be reconciled by hand.
 
 For each removed trial it:
-  * adds the removed trial's M2M links (sources, teams, subjects, team_categories,
+  * adds the removed trial's M2M links (sources, teams, subjects, categories,
     ml_predictions) to the kept trial,
   * repoints every reverse-FK child (org_contents, article_references, sent notifications)
     to the kept trial — dropping a child if the kept trial already has the equivalent row

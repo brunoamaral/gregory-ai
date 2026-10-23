@@ -822,7 +822,7 @@ class PatentSerializerTest(PatentFixture):
 				"has_grant",
 				"cpc_classes",
 				"applicants",
-				"team_categories",
+				"categories",
 				"subjects",
 				"publications_count",
 				"trial_links_count",
@@ -855,7 +855,7 @@ class PatentSerializerTest(PatentFixture):
 
 	def test_categories_and_subjects(self):
 		row = self.row()
-		self.assertEqual([c["category_slug"] for c in row["team_categories"]], ["cat"])
+		self.assertEqual([c["category_slug"] for c in row["categories"]], ["cat"])
 		self.assertEqual([s["id"] for s in row["subjects"]], [self.s_on.pk])
 
 	def test_detail_adds_publications_inventors_and_classes(self):

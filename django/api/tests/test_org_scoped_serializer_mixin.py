@@ -115,7 +115,7 @@ class _MLPredictionsNestedSerializer(serializers.ModelSerializer):
 class _TestArticleNestedSubjectSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
-	team_categories = _TeamCategorySerializer(many=True, read_only=True)
+	categories = _TeamCategorySerializer(many=True, read_only=True)
 	ml_predictions = _MLPredictionsNestedSerializer(
 		many=True, read_only=True, source="ml_predictions_detail"
 	)
@@ -127,7 +127,7 @@ class _TestArticleNestedSubjectSerializer(ScopedSerializerMixin, serializers.Mod
 			"title",
 			"teams",
 			"subjects",
-			"team_categories",
+			"categories",
 			"ml_predictions",
 		]
 
@@ -135,7 +135,7 @@ class _TestArticleNestedSubjectSerializer(ScopedSerializerMixin, serializers.Mod
 class _TestArticleSerializer(ScopedSerializerMixin, serializers.ModelSerializer):
 	teams = _TeamSerializer(many=True, read_only=True)
 	subjects = _SubjectSerializer(many=True, read_only=True)
-	team_categories = _TeamCategorySerializer(many=True, read_only=True)
+	categories = _TeamCategorySerializer(many=True, read_only=True)
 	ml_predictions = _MLPredictionsSerializer(
 		many=True, read_only=True, source="ml_predictions_detail"
 	)
@@ -147,7 +147,7 @@ class _TestArticleSerializer(ScopedSerializerMixin, serializers.ModelSerializer)
 			"title",
 			"teams",
 			"subjects",
-			"team_categories",
+			"categories",
 			"ml_predictions",
 		]
 

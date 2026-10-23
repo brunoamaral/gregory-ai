@@ -84,7 +84,7 @@ RELATION_COLS = [
 	"subjects",
 	"teams",
 	"sources",
-	"team_categories",
+	"categories",
 	"trial_link_count",
 	"trial_links_summary",
 ]
@@ -358,7 +358,7 @@ PATENT_GLOSSARY = {
 		"Subject sheets: the Gregory patent searches that found this family. Publications sheet: "
 		"the data feed that supplied the document (epo_ops is the EPO).",
 	),
-	"team_categories": (
+	"categories": (
 		"Categories",
 		"Categories the family was matched to, each tagged (auto) when matched by search terms or "
 		"(manual) when an editor assigned it.",
@@ -654,7 +654,7 @@ _WIDE_COLS = {
 	"inventors",
 	"publication_numbers",
 	"granted_publications",
-	"team_categories",
+	"categories",
 	"trial_links_summary",
 	"patent_title",
 	"trial_title",
@@ -873,7 +873,7 @@ def _patent_row(patent, columns, scalar_set, context):
 		"subjects": _join(s.subject_name for s in subjects),
 		"teams": _join(t.name for t in patent.teams.all()),
 		"sources": _join(src.name or "" for src in patent.sources.all()),
-		"team_categories": _join(
+		"categories": _join(
 			f"{a.teamcategory.category_name} ({'auto' if a.source == 'automatic' else a.source})"
 			for a in assignments
 		),
@@ -910,7 +910,7 @@ def _build_trial_links_sheet(wb, patent_ids, scope, context):
 		qs = qs.filter(trial__sources__team__organization__id__in=scope.org_ids).distinct()
 	qs = (
 		qs.select_related("patent", "trial", "sponsor")
-		.prefetch_related("trial__subjects", "trial__team_categories")
+		.prefetch_related("trial__subjects", "trial__categories")
 		.order_by(
 			# category first, then not-suppressed first, then newest priority date
 			F("basis").asc(),
@@ -933,7 +933,7 @@ def _build_trial_links_sheet(wb, patent_ids, scope, context):
 		]
 		shared_categories = [
 			patent_categories[c.pk]
-			for c in trial.team_categories.all()
+			for c in trial.categories.all()
 			if c.pk in patent_categories
 		]
 		window = trial_window(trial)

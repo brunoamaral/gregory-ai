@@ -303,19 +303,19 @@ class ArticleCategoryTest(CategoryFixture):
 		self.assertEqual(ArticleCategoryAssignment.history.filter(articles_id=self.art_a.pk).count(), 1)
 
 	def test_assigning_a_pipeline_match_pins_it(self):
-		self.art_a.team_categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
+		self.art_a.categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
 		response = self.send("put", self.path(self.art_a, self.cat_a))
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json()["source"], "manual")
 		call_command("rebuild_categories", category=self.cat_a.pk, verbosity=0)
-		self.assertTrue(self.art_a.team_categories.filter(pk=self.cat_a.pk).exists())
+		self.assertTrue(self.art_a.categories.filter(pk=self.cat_a.pk).exists())
 
 	def test_a_rebuild_never_deletes_an_assignment_pinned_after_it_read_the_ids(self):
 		"""The rebuild reads automatic ids, an editor pins one, then the rebuild
 		removes stale ids: the pinned row must survive."""
 		from gregory.management.commands.rebuild_categories import Command
 
-		self.art_a.team_categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
+		self.art_a.categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
 		stale_automatic_ids = {self.art_a.pk}
 		self.send("put", self.path(self.art_a, self.cat_a))
 
@@ -346,13 +346,13 @@ class ArticleCategoryTest(CategoryFixture):
 		response = self.send("delete", self.path(self.art_a, self.cat_a))
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.json()["removed"], "manual")
-		self.assertFalse(self.art_a.team_categories.filter(pk=self.cat_a.pk).exists())
+		self.assertFalse(self.art_a.categories.filter(pk=self.cat_a.pk).exists())
 
 	def test_unassigning_a_pipeline_match_is_409(self):
-		self.art_a.team_categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
+		self.art_a.categories.add(self.cat_a, through_defaults={"source": CategoryAssignmentSource.AUTOMATIC})
 		response = self.send("delete", self.path(self.art_a, self.cat_a))
 		self.assertEqual(response.status_code, 409)
-		self.assertTrue(self.art_a.team_categories.filter(pk=self.cat_a.pk).exists())
+		self.assertTrue(self.art_a.categories.filter(pk=self.cat_a.pk).exists())
 
 	def test_unassigning_an_article_not_in_the_category_is_404(self):
 		self.assertEqual(self.send("delete", self.path(self.art_a, self.cat_a)).status_code, 404)
