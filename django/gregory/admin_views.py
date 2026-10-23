@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.http import JsonResponse
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, JsonResponse
 from django.core.paginator import Paginator
 from django.utils.html import mark_safe
 from django.db.models import (
@@ -31,40 +32,63 @@ from .models import (
 import json
 from datetime import timedelta, date
 
+# Marking relevance creates rows as well as changing them.
+RELEVANCE_PERMS = (
+	"gregory.add_articlesubjectrelevance",
+	"gregory.change_articlesubjectrelevance",
+)
+
+
+def _subjects_for_user(user):
+	"""Subjects the user may review: all for superusers, else their organisations'."""
+	if user.is_superuser:
+		return Subject.objects.all()
+	user_orgs = user.organizations_organizationuser.values_list(
+		"organization__id", flat=True
+	)
+	return Subject.objects.filter(team__organization__id__in=user_orgs).distinct()
+
 
 @staff_member_required
 def article_review_status_view(request):
 	"""
 	Custom admin view for reviewing articles by subject
 	"""
-	# Get subjects based on user's organization
-	if request.user.is_superuser:
-		subjects = Subject.objects.all().order_by("subject_name")
-	else:
-		# Get user's organizations
-		user_orgs = request.user.organizations_organizationuser.values_list(
-			"organization__id", flat=True
-		)
-		# Filter subjects by user's organization's teams
-		subjects = (
-			Subject.objects.filter(team__organization__id__in=user_orgs)
-			.order_by("subject_name")
-			.distinct()
-		)
+	subjects = _subjects_for_user(request.user).order_by("subject_name")
 
-	# Default to first subject if none selected
+	# Default to first subject if none selected. A subject from the URL must be
+	# one of the user's own: it decides which articles are listed and which
+	# subject the batch actions below write to.
 	selected_subject_id = request.GET.get("subject_id")
-	if not selected_subject_id and subjects.exists():
+	if selected_subject_id:
+		try:
+			selected_subject_id = int(selected_subject_id)
+		except (TypeError, ValueError):
+			raise Http404("Unknown subject.")
+		if not subjects.filter(id=selected_subject_id).exists():
+			raise Http404("Unknown subject.")
+	elif subjects.exists():
 		selected_subject_id = subjects.first().id
 
 	# Handle batch actions
 	if request.method == "POST" and selected_subject_id:
+		if not request.user.has_perms(RELEVANCE_PERMS):
+			raise PermissionDenied
 		action = request.POST.get("action")
-		selected_articles = request.POST.getlist("selected_articles")
+		subject = subjects.get(id=selected_subject_id)
+		# Only articles listed on this page: ones carrying the subject.
+		selected_articles = list(
+			Articles.objects.filter(
+				subjects=subject,
+				article_id__in=[
+					article_id
+					for article_id in request.POST.getlist("selected_articles")
+					if article_id.isdigit()
+				],
+			).values_list("article_id", flat=True)
+		)
 
 		if selected_articles and action:
-			subject = Subject.objects.get(id=selected_subject_id)
-
 			if action == "mark_relevant":
 				# Set the articles as relevant for the selected subject
 				mark_articles_as_relevant(selected_articles, subject, True)
@@ -342,6 +366,10 @@ def update_article_relevance_ajax(request):
 	AJAX endpoint to update a single article's relevance status
 	"""
 	if request.method == "POST":
+		if not request.user.has_perms(RELEVANCE_PERMS):
+			return JsonResponse(
+				{"success": False, "error": "Permission denied"}, status=403
+			)
 		try:
 			data = json.loads(request.body)
 			article_id = data.get("article_id")
@@ -350,8 +378,19 @@ def update_article_relevance_ajax(request):
 				"action"
 			)  # 'mark_relevant', 'mark_not_relevant', or 'mark_for_review'
 
-			article = Articles.objects.get(article_id=article_id)
-			subject = Subject.objects.get(id=subject_id)
+			# Same rule as the review page that calls this: one of the user's
+			# subjects, and an article that carries it.
+			subject = _subjects_for_user(request.user).filter(id=subject_id).first()
+			article = (
+				Articles.objects.filter(article_id=article_id, subjects=subject).first()
+				if subject
+				else None
+			)
+			if subject is None or article is None:
+				return JsonResponse(
+					{"success": False, "error": "Article or subject not found"},
+					status=404,
+				)
 
 			if action == "mark_relevant":
 				relevance, created = ArticleSubjectRelevance.objects.get_or_create(
@@ -582,6 +621,8 @@ def sources_overview_view(request):
 
 	# ── Bulk-action POST ──────────────────────────────────────────────────
 	if request.method == "POST":
+		if not request.user.has_perm("gregory.change_sources"):
+			raise PermissionDenied
 		action = request.POST.get("bulk_action")
 		# The shared intermediate template posts 'action=reassign_to_team_action' on confirmation
 		if not action and request.POST.get("action") == "reassign_to_team_action":

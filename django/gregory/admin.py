@@ -960,13 +960,13 @@ class SourceBulkActionMixin:
 					request, f"Removed '{source}' from {linked} {model_plural}."
 				)
 
-	@admin.action(description="Add source to selected…")
+	@admin.action(permissions=["change"], description="Add source to selected…")
 	def add_source_action(self, request, queryset):
 		return self._source_bulk_action(
 			request, queryset, action_name="add_source_action", verb="Add"
 		)
 
-	@admin.action(description="Remove source from selected…")
+	@admin.action(permissions=["change"], description="Remove source from selected…")
 	def remove_source_action(self, request, queryset):
 		return self._source_bulk_action(
 			request, queryset, action_name="remove_source_action", verb="Remove"
@@ -1561,7 +1561,13 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 				candidate.sponsor_b_id = b_id
 				candidate.save(update_fields=["sponsor_a", "sponsor_b"])
 
-	@admin.action(description="Merge (into curated/larger)")
+	def has_merge_permission(self, request):
+		# Merging deletes a sponsor and repoints its trials in every
+		# organisation, so it needs change and delete on sponsors themselves,
+		# not just on this review queue.
+		return request.user.has_perms(["gregory.change_sponsor", "gregory.delete_sponsor"])
+
+	@admin.action(permissions=["merge"], description="Merge (into curated/larger)")
 	def merge_action(self, request, queryset):
 		merged = 0
 		for candidate in queryset.filter(status=SponsorMergeCandidateStatus.PENDING):
@@ -1589,7 +1595,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 			merged += 1
 		self.message_user(request, f"Merged {merged} candidate pair(s).")
 
-	@admin.action(description="Dismiss")
+	@admin.action(permissions=["change"], description="Dismiss")
 	def dismiss_action(self, request, queryset):
 		updated = queryset.filter(status=SponsorMergeCandidateStatus.PENDING).update(
 			status=SponsorMergeCandidateStatus.DISMISSED, decided_at=timezone.now()
@@ -1995,7 +2001,7 @@ class TrialAdmin(
 
 	display_identifiers.short_description = "Identifiers"
 
-	@admin.action(description="Recompute normalized fields")
+	@admin.action(permissions=["change"], description="Recompute normalized fields")
 	def recompute_normalized_fields(self, request, queryset):
 		"""Tuning tool: filter to e.g. phase_normalized='other', extend the mapping table in
 		gregory/utils/trial_field_normalizers.py for the raw values you see, then select-all
@@ -2312,7 +2318,7 @@ class ReassignToTeamMixin:
 	def _get_reassign_template(self):
 		return "admin/gregory/reassign_to_team_intermediate.html"
 
-	@admin.action(description="Reassign selected to another team…")
+	@admin.action(permissions=["change"], description="Reassign selected to another team…")
 	def reassign_to_team_action(self, request, queryset):
 		# Safety: all selected objects must belong to the same organisation.
 		team_ids = queryset.values_list("team_id", flat=True).distinct()
@@ -2608,6 +2614,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdm
 		self.message_user(request, f"Successfully activated {updated_count} source(s).")
 
 	activate_sources.short_description = "Activate selected sources"
+	activate_sources.allowed_permissions = ("change",)
 
 	def deactivate_sources(self, request, queryset):
 		"""Admin action to deactivate selected sources."""
@@ -2617,6 +2624,7 @@ class SourceAdmin(OrganizationFilterMixin, ReassignToTeamMixin, SimpleHistoryAdm
 		)
 
 	deactivate_sources.short_description = "Deactivate selected sources"
+	deactivate_sources.allowed_permissions = ("change",)
 
 	def get_urls(self):
 		from django.urls import path
@@ -3163,6 +3171,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 		)
 
 	merge_selected_authors.short_description = "Merge selected authors"
+	merge_selected_authors.allowed_permissions = ("delete",)
 
 	def get_urls(self):
 		custom = [
@@ -3990,7 +3999,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 	# Admin actions                                                        #
 	# ------------------------------------------------------------------ #
 
-	@admin.action(description="Deactivate selected teams (soft delete)")
+	@admin.action(permissions=["delete"], description="Deactivate selected teams (soft delete)")
 	def soft_delete_teams(self, request, queryset):
 		count = 0
 		for team in queryset:
@@ -3999,7 +4008,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				count += 1
 		self.message_user(request, f"{count} team(s) deactivated.")
 
-	@admin.action(description="Reassign all objects to another team…")
+	@admin.action(permissions=["change"], description="Reassign all objects to another team…")
 	def reassign_to_team(self, request, queryset):
 		from gregory.services.team_reassignment import reassign_team
 
@@ -4061,7 +4070,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 				request, "Errors: " + "; ".join(errors), level=messages.ERROR
 			)
 
-	@admin.action(description="Hard-delete selected inactive teams (only if empty)")
+	@admin.action(permissions=["delete"], description="Hard-delete selected inactive teams (only if empty)")
 	def hard_delete_empty_inactive_teams(self, request, queryset):
 		deleted = 0
 		skipped = []
@@ -4112,7 +4121,12 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		"""Detail-level reassign view (accessible from the change form)."""
 		from gregory.services.team_reassignment import reassign_team
 
-		from_team = Team.all_objects.get(pk=team_id)
+		# Through get_queryset, so another organisation's team is a 404.
+		from_team = self.get_queryset(request).filter(pk=team_id).first()
+		if from_team is None:
+			raise Http404("Team not found.")
+		if not self.has_change_permission(request, from_team):
+			raise PermissionDenied
 		org_id = from_team.organization_id
 		target_qs = Team.objects.filter(organization_id=org_id).exclude(pk=team_id)
 
@@ -4233,15 +4247,6 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		# Order by most recent runs first
 		return super().get_queryset(request).order_by("-run_started")
 
-	def has_change_permission(self, request, obj=None):
-		# Logs should generally not be modified after creation
-		# But admins might need to update status or error messages
-		return True
-
-	def has_delete_permission(self, request, obj=None):
-		# Allow deletion for admins
-		return True
-
 	def mark_as_failed(self, request, queryset):
 		"""Mark selected unfinished runs as failed"""
 		from django.utils import timezone
@@ -4261,6 +4266,7 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			)
 
 	mark_as_failed.short_description = "Mark selected unfinished runs as failed"
+	mark_as_failed.allowed_permissions = ("change",)
 
 	def mark_as_successful(self, request, queryset):
 		"""Mark selected unfinished runs as successful"""
@@ -4279,6 +4285,7 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 			)
 
 	mark_as_successful.short_description = "Mark selected unfinished runs as successful"
+	mark_as_successful.allowed_permissions = ("change",)
 
 	def export_as_csv(self, request, queryset):
 		"""Export selected logs to CSV file"""
@@ -4322,37 +4329,38 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		return response
 
 	export_as_csv.short_description = "Export selected logs to CSV"
+	export_as_csv.allowed_permissions = ("view",)
 
 	def changelist_view(self, request, extra_context=None):
-		# Add dashboard statistics to the context
+		# Add dashboard statistics to the context, from the user's own
+		# organisations' runs only.
 		extra_context = extra_context or {}
+		runs = self.get_queryset(request)
 
 		# Training runs statistics
-		extra_context["training_success_count"] = PredictionRunLog.objects.filter(
+		extra_context["training_success_count"] = runs.filter(
 			run_type="train", success=True
 		).count()
-		extra_context["training_failed_count"] = PredictionRunLog.objects.filter(
+		extra_context["training_failed_count"] = runs.filter(
 			run_type="train", success=False
 		).count()
-		extra_context["training_running_count"] = PredictionRunLog.objects.filter(
+		extra_context["training_running_count"] = runs.filter(
 			run_type="train", success__isnull=True
 		).count()
 
 		# Prediction runs statistics
-		extra_context["prediction_success_count"] = PredictionRunLog.objects.filter(
+		extra_context["prediction_success_count"] = runs.filter(
 			run_type="predict", success=True
 		).count()
-		extra_context["prediction_failed_count"] = PredictionRunLog.objects.filter(
+		extra_context["prediction_failed_count"] = runs.filter(
 			run_type="predict", success=False
 		).count()
-		extra_context["prediction_running_count"] = PredictionRunLog.objects.filter(
+		extra_context["prediction_running_count"] = runs.filter(
 			run_type="predict", success__isnull=True
 		).count()
 
 		# Recent runs (last 10)
-		extra_context["recent_runs"] = PredictionRunLog.objects.all().order_by(
-			"-run_started"
-		)[:10]
+		extra_context["recent_runs"] = runs.order_by("-run_started")[:10]
 
 		return super().changelist_view(request, extra_context=extra_context)
 
@@ -4369,15 +4377,19 @@ class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 	def ml_coverage_view(self, request):
 		"""View to show ML coverage across teams and subjects"""
-		# Get all teams
-		teams = Team.objects.prefetch_related("subjects").all()
+		if not self.has_view_permission(request):
+			raise PermissionDenied
+
+		teams = Team.objects.prefetch_related("subjects")
+		all_subjects = Subject.objects.select_related("team")
+		if not request.user.is_superuser:
+			user_orgs = get_user_organizations(request.user)
+			teams = teams.filter(organization__id__in=user_orgs)
+			all_subjects = all_subjects.filter(team__organization__id__in=user_orgs)
 
 		# Create dictionaries to store the latest runs per subject
 		training_data = {}
 		prediction_data = {}
-
-		# Get all subjects
-		all_subjects = Subject.objects.all()
 
 		# For each subject, get its latest training and prediction runs
 		for subject in all_subjects:
@@ -4626,7 +4638,7 @@ class PatentTrialLinkAdmin(admin.ModelAdmin):
 		user_orgs = get_user_organizations(request.user)
 		return qs.filter(patent__sources__team__organization__id__in=user_orgs).distinct()
 
-	@admin.action(description="Export patents of selected links to XLSX…")
+	@admin.action(permissions=["view"], description="Export patents of selected links to XLSX…")
 	def export_patents_xlsx_action(self, request, queryset):
 		patent_qs = Patents.objects.filter(pk__in=queryset.values("patent_id"))
 		if not request.user.is_superuser:
@@ -4640,12 +4652,12 @@ class PatentTrialLinkAdmin(admin.ModelAdmin):
 	def has_add_permission(self, request):
 		return False
 
-	@admin.action(description="Suppress selected links (dismiss)")
+	@admin.action(permissions=["change"], description="Suppress selected links (dismiss)")
 	def suppress_links(self, request, queryset):
 		updated = queryset.update(suppressed=True)
 		self.message_user(request, f"Suppressed {updated} link(s).")
 
-	@admin.action(description="Restore selected suppressed links")
+	@admin.action(permissions=["change"], description="Restore selected suppressed links")
 	def restore_links(self, request, queryset):
 		updated = queryset.update(suppressed=False)
 		self.message_user(request, f"Restored {updated} link(s).")
@@ -4789,7 +4801,7 @@ class PatentAdmin(OrganizationFilterMixin, RequestFormMixin, SimpleHistoryAdmin)
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
 
-	@admin.action(description="Export selected to XLSX…")
+	@admin.action(permissions=["view"], description="Export selected to XLSX…")
 	def export_xlsx_action(self, request, queryset):
 		return _patent_export_response(self, request, queryset, "export_xlsx_action")
 

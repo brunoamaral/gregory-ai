@@ -66,3 +66,68 @@ def editor_address_display(site):
 	if not site or not site.pk:
 		return "-"
 	return format_html("<code>{}</code>", editor_address(site))
+
+
+# --- django-oauth-toolkit's own admin pages, superuser-only ---------------
+#
+# The toolkit registers admins for applications, tokens, grants and ID tokens
+# that list every user's rows, and its "Revoke" actions declare no permission,
+# so any staff account holding the model permissions could revoke anyone's
+# MCP access. These rows are infrastructure, not organisation content: only
+# superusers see or touch them, as with the editor grants above.
+#
+# Importing the toolkit's admin module here makes sure its classes are
+# registered before they are replaced, whatever order autodiscover runs in;
+# autodiscover later finds the module already loaded and registers nothing twice.
+from django.core.exceptions import ImproperlyConfigured
+from oauth2_provider import admin as _oauth_admin  # noqa: F401
+from oauth2_provider.models import (
+	get_access_token_model,
+	get_application_model,
+	get_grant_model,
+	get_id_token_model,
+	get_refresh_token_model,
+)
+
+
+def _superuser_only(admin_class):
+	attrs = {
+		"__module__": __name__,
+		"has_module_permission": lambda self, request: request.user.is_superuser,
+		"has_view_permission": lambda self, request, obj=None: request.user.is_superuser,
+		"has_add_permission": lambda self, request, *args: (
+			request.user.is_superuser and admin_class.has_add_permission(self, request, *args)
+		),
+		"has_change_permission": lambda self, request, obj=None: (
+			request.user.is_superuser and admin_class.has_change_permission(self, request, obj)
+		),
+		"has_delete_permission": lambda self, request, obj=None: (
+			request.user.is_superuser and admin_class.has_delete_permission(self, request, obj)
+		),
+	}
+	revoke = getattr(admin_class, "revoke_tokens", None)
+	if revoke is not None:
+
+		def revoke_tokens(self, request, queryset):
+			return revoke(self, request, queryset)
+
+		attrs["revoke_tokens"] = admin.action(
+			permissions=["change"],
+			description=getattr(revoke, "short_description", "Revoke selected tokens"),
+		)(revoke_tokens)
+	return type(f"SuperuserOnly{admin_class.__name__}", (admin_class,), attrs)
+
+
+for _model in (
+	get_application_model(),
+	get_access_token_model(),
+	get_grant_model(),
+	get_id_token_model(),
+	get_refresh_token_model(),
+):
+	if not admin.site.is_registered(_model):
+		# Fail loudly: a silent skip would drop the restriction unnoticed.
+		raise ImproperlyConfigured(f"Expected django-oauth-toolkit to register an admin for {_model}")
+	_registered = type(admin.site.get_model_admin(_model))
+	admin.site.unregister(_model)
+	admin.site.register(_model, _superuser_only(_registered))
