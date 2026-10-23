@@ -425,8 +425,7 @@ class TestDuplicateWithoutAddPermissionIsBlocked(TestCase):
 		# No new row
 		self.assertEqual(Announcement.objects.count(), initial_count)
 
+		# The action declares permissions=["add"], so Django never offers it to
+		# this user and refuses the forged POST before the action runs.
 		msgs = [str(m) for m in get_messages(response.wsgi_request)]
-		self.assertTrue(
-			any("permission" in m.lower() for m in msgs),
-			f"Expected permission error message, got: {msgs}",
-		)
+		self.assertIn("No action selected.", msgs)

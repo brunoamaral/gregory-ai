@@ -258,6 +258,9 @@ class EndToEndAttributionTest(EditorHistoryFixture, TestCase):
 		staff = User.objects.create_superuser("root", "root@example.com", "x")
 		self.client.force_login(staff)
 		url = reverse("admin:update_article_relevance")
+		# The endpoint only marks articles that carry the subject, as listed
+		# on the review page that calls it.
+		self.article.subjects.add(self.subject)
 
 		resp = self.client.post(
 			url,

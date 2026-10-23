@@ -941,6 +941,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 		)
 
 	make_active.short_description = "Enable all emails (mark as active)"
+	make_active.allowed_permissions = ("change",)
 
 	def make_inactive(self, request, queryset):
 		# Materialise the selected IDs: get_queryset() is annotated/distinct, which makes
@@ -955,8 +956,9 @@ class SubscriberAdmin(admin.ModelAdmin):
 		)
 
 	make_inactive.short_description = "Disable all emails (mark as inactive)"
+	make_inactive.allowed_permissions = ("change",)
 
-	@admin.action(description="Export selected subscribers as CSV")
+	@admin.action(permissions=["view"], description="Export selected subscribers as CSV")
 	def export_csv(self, request, queryset):
 		response = HttpResponse(content_type="text/csv")
 		response["Content-Disposition"] = 'attachment; filename="subscribers.csv"'
@@ -991,7 +993,7 @@ class SubscriberAdmin(admin.ModelAdmin):
 			)
 		return response
 
-	@admin.action(description="Add selected subscribers to a list…")
+	@admin.action(permissions=["change"], description="Add selected subscribers to a list…")
 	def add_to_list(self, request, queryset):
 		from gregory.admin import get_user_organizations
 
@@ -1235,7 +1237,7 @@ class ListsAdmin(admin.ModelAdmin):
 	organisation_name.short_description = "Organisation"
 	organisation_name.admin_order_field = "team__organization__name"
 
-	@admin.action(description="Reassign selected lists to another team…")
+	@admin.action(permissions=["change"], description="Reassign selected lists to another team…")
 	def reassign_to_team_action(self, request, queryset):
 		class ReassignListsForm(forms.Form):
 			target_team = forms.ModelChoiceField(
@@ -1739,7 +1741,7 @@ class AuthorOutreachAdmin(admin.ModelAdmin):
 				level=messages.WARNING,
 			)
 
-	@admin.action(description="Reset for retry (superuser only)")
+	@admin.action(permissions=["change"], description="Reset for retry (superuser only)")
 	def reset_for_retry(self, request, queryset):
 		"""
 		Re-opens a slot the eligibility/send rules had closed.
@@ -2089,7 +2091,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 				)
 		super().save_model(request, obj, form, change)
 
-	@admin.action(description="Duplicate selected announcements as drafts")
+	@admin.action(permissions=["add"], description="Duplicate selected announcements as drafts")
 	def duplicate_announcements(self, request, queryset):
 		from gregory.admin import get_user_organizations
 
@@ -2185,7 +2187,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 		)
 		return None
 
-	@admin.action(description="Reset stuck 'Sending' announcements back to Draft")
+	@admin.action(permissions=["change"], description="Reset stuck 'Sending' announcements back to Draft")
 	def reset_stuck_announcements(self, request, queryset):
 		"""
 		Recovery for an announcement left in "sending" by a crashed or killed
@@ -2275,7 +2277,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 	def preview_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
-		if announcement is None:
+		if announcement is None or not self.has_view_permission(request, announcement):
 			from django.http import HttpResponseForbidden
 
 			return HttpResponseForbidden("Access denied.")
@@ -2324,7 +2326,9 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 	def send_test_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
-		if announcement is None:
+		# Sending spends the organisation's Postmark quota (and, for the real
+		# send, mails every subscriber): it needs change, not just view.
+		if announcement is None or not self.has_change_permission(request, announcement):
 			from django.http import HttpResponseForbidden
 
 			return HttpResponseForbidden("Access denied.")
@@ -2485,7 +2489,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 	def send_view(self, request, announcement_id):
 		announcement = self._get_announcement_or_404(request, announcement_id)
-		if announcement is None:
+		if announcement is None or not self.has_change_permission(request, announcement):
 			from django.http import HttpResponseForbidden
 
 			return HttpResponseForbidden("Access denied.")
@@ -2640,7 +2644,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 			extra_context["show_send_buttons"] = announcement.status in (
 				"draft",
 				"failed",
-			)
+			) and self.has_change_permission(request, announcement)
 		except Announcement.DoesNotExist:
 			pass
 		return super().change_view(

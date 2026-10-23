@@ -101,6 +101,23 @@ On an article, trial or patent page, a staff user can only pick their own organi
 
 Links the content already has to another organisation's rows are hidden from staff and kept when they save. On articles and trials, where **teams** and **subjects** are required, those links count towards them, so staff don't have to add one of their own just to save. Superusers see and can change every link.
 
+### Permissions for actions and custom pages
+
+Organisation scoping decides *which rows* a staff user sees. Django model permissions decide *what they may do* with them. Every bulk action in the admin declares the permission it needs: `change` for actions that edit, `delete` for actions that delete or merge, `add` for duplicating, and `view` for exports. A user with view-only access to a model is not offered the action, and a hand-made POST naming it does nothing. A test fails if someone adds an action without a permission.
+
+The custom admin pages follow the same rule:
+
+| Page | Needs |
+|:-----|:------|
+| Articles → Review status (batch marking) and its per-row buttons | `add` and `change` on *article subject relevance*. The subject must belong to the user's organisation, and only articles carrying that subject are marked |
+| Sources → Overview (activate, deactivate, reassign) | `change` on *sources* |
+| Teams → Reassign | `change` on *team*; another organisation's team is a 404 |
+| Prediction run logs → ML coverage | `view` on *prediction run log*; lists only the user's organisations' teams and subjects. The counts and recent runs on the run log list are the user's organisations' only |
+| Announcements → Send, Send test | `change` on *announcement*. Without it the send buttons are hidden. Preview needs `view` |
+| Sponsor merge candidates → Merge | `change` and `delete` on *sponsor*: a merge deletes a sponsor and repoints its trials in every organisation. Dismiss needs `change` on the candidate |
+
+The OAuth pages (applications, access, refresh and ID tokens, grants) are superuser-only, whatever model permissions a staff account holds, like the MCP editor grants.
+
 ### Category assignments
 
 The **Category assignments** inline on an article, trial or patent page is scoped by the category's team, not by the content. A staff user sees and can assign only the categories of their own organisations' teams. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another organisation's category.
