@@ -77,7 +77,7 @@ class Command(GregoryBaseCommand):
 		self.rss.stdout, self.rss.stderr, self.rss.style = self.stdout, self.stderr, self.style
 		sources = Sources.objects.filter(
 			method="pubmed_api", source_for="science paper", active=True
-		).select_related("team__organization")
+		).select_related("team__organization").order_by("pk")
 		if options.get("source_id"):
 			sources = sources.filter(pk=options["source_id"])
 			if not sources.exists():

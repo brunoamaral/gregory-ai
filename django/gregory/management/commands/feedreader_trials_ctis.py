@@ -380,7 +380,7 @@ class Command(GregoryBaseCommand):
 		backup_dir = backup_dir or BACKUPS_DIR
 		sources = Sources.objects.filter(
 			method="ctis_api", source_for="trials", active=True
-		)
+		).order_by("pk")
 
 		if source_id:
 			sources = sources.filter(source_id=source_id)

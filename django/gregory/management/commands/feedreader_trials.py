@@ -42,7 +42,7 @@ class Command(GregoryBaseCommand):
 		inspect them after the run.
 		"""
 		self.fetch_errors = []
-		sources = Sources.objects.filter(method="rss", source_for="trials", active=True)
+		sources = Sources.objects.filter(method="rss", source_for="trials", active=True).order_by("pk")
 		for source in sources:
 			self.log(f"Processing RSS feed: {source.name}", level=1)
 			# One broken source (timeout, DNS, SSL) must not abort the whole run
