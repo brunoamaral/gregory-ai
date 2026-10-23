@@ -2739,15 +2739,8 @@ class SourcesInline(admin.StackedInline):
 		"""Return empty queryset to hide existing sources from inline forms"""
 		return super().get_queryset(request).none()
 
-	def save_formset(self, request, form, formset, change):
-		"""Automatically set subject and team when saving sources"""
-		instances = formset.save(commit=False)
-		for instance in instances:
-			# Auto-populate subject and team from the parent Subject object
-			instance.subject = form.instance
-			instance.team = form.instance.team
-			instance.save()
-		formset.save_m2m()
+	# The new source's team is set from the subject in SubjectAdmin.save_formset:
+	# save_formset is a ModelAdmin hook, so Django never calls it on an inline.
 
 
 class SubjectAdminForm(forms.ModelForm):
@@ -2857,6 +2850,22 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 		return "No sources"
 
 	view_sources.short_description = "Linked Sources"
+
+	def save_formset(self, request, form, formset, change):
+		"""Sources added from a subject page belong to the subject's team.
+
+		The inline has no team field, and a source with no team is invisible
+		to every staff user and fed to no site. This grants nothing new: the
+		subject's team is one the subject form already let this user pick (or
+		keep), and the inline is only editable when the subject is.
+		"""
+		if formset.model is not Sources:
+			return super().save_formset(request, form, formset, change)
+		for instance in formset.save(commit=False):
+			instance.subject = form.instance
+			instance.team = form.instance.team
+			instance.save()
+		formset.save_m2m()
 
 	def linked_sources(self, obj):
 		"""Display sources as clickable links in the form view."""
