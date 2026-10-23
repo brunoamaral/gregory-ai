@@ -130,7 +130,11 @@ class Command(GregoryBaseCommand):
 			for start in range(0, len(pks), DOIS_PER_SEARCH):
 				if totals["aborted"]:
 					break
-				batch = list(Articles.objects.filter(pk__in=pks[start : start + DOIS_PER_SEARCH]))
+				# Keep the batch in articles_needing_pmid() order: which DOI comes first decides how
+				# _rejected() treats an unreadable one, so a database-chosen order made runs random.
+				chunk = pks[start : start + DOIS_PER_SEARCH]
+				by_pk = Articles.objects.in_bulk(chunk)
+				batch = [by_pk[pk] for pk in chunk if pk in by_pk]
 				self._process(client, batch, totals)
 			if totals["aborted"]:
 				self.log(

@@ -126,7 +126,7 @@ class FeedreaderTrialsCommandTest(TestCase):
 			team=MagicMock(),
 			subject=MagicMock(),
 		)
-		mock_sources.objects.filter.return_value = [source]
+		mock_sources.objects.filter.return_value.order_by.return_value = [source]
 		mock_parse.return_value = {"entries": []}
 		mock_get.return_value.content = b""
 		cmd.process_feeds()

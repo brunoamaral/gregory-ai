@@ -141,7 +141,7 @@ class Command(GregoryBaseCommand):
 
 		sources = Sources.objects.filter(
 			active=True, method="epo_ops", source_for="patents"
-		).select_related("team", "team__organization", "subject")
+		).select_related("team", "team__organization", "subject").order_by("pk")
 		if options.get("source_id"):
 			sources = sources.filter(pk=options["source_id"])
 

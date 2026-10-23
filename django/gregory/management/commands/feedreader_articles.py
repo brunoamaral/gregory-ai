@@ -580,7 +580,7 @@ class Command(GregoryBaseCommand):
 		self.fetch_errors = []
 		sources = Sources.objects.filter(
 			method="rss", source_for="science paper", active=True
-		)
+		).order_by("pk")
 		for source in sources:
 			self.log(f"# Processing articles from {source}", level=1)
 			# One broken source (timeout, DNS, SSL) must not abort the whole run

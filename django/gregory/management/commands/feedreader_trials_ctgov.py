@@ -124,7 +124,7 @@ class Command(GregoryBaseCommand):
 		self.fetch_errors = []
 		sources = Sources.objects.filter(
 			method="ctgov_api", source_for="trials", active=True
-		)
+		).order_by("pk")
 
 		if source_id:
 			sources = sources.filter(source_id=source_id)
