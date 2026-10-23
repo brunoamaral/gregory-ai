@@ -21,16 +21,18 @@ from gregory.roles import (
 User = get_user_model()
 
 # Every model the role may add to, change or delete, and what keeps an editor
-# inside their own organisation on it. Adding a write permission to the role
+# inside their own organisation on it. On top of that, every one of them edits
+# only within the editor's own teams (TeamEditMixin / TeamEditInlineMixin,
+# test_team_edit_rule). Adding a write permission to the role
 # means adding the model here, with the scoping that makes it safe, and a test
 # for that scoping if one doesn't exist yet.
 SCOPED_WRITE_MODELS = {
-	"gregory.articles": "OrganizationFilterMixin (source -> team -> org); relations scoped by OrganizationScopedRelationsFormMixin (test_admin_relation_scope)",
-	"gregory.trials": "OrganizationFilterMixin; OrganizationScopedRelationsFormMixin (test_admin_relation_scope)",
-	"gregory.patents": "OrganizationFilterMixin; OrganizationScopedRelationsFormMixin (test_admin_relation_scope)",
+	"gregory.articles": "OrganizationFilterMixin (source -> team -> org); relations scoped by TeamScopedRelationsFormMixin (test_admin_relation_scope)",
+	"gregory.trials": "OrganizationFilterMixin; TeamScopedRelationsFormMixin (test_admin_relation_scope)",
+	"gregory.patents": "OrganizationFilterMixin; TeamScopedRelationsFormMixin (test_admin_relation_scope)",
 	"gregory.articlesitecontent": "inline scoped to the organisation's sites; standalone admin superuser-write (test_admin_article_site_content)",
 	"gregory.patentsitecontent": "as articlesitecontent",
-	"gregory.trialorgcontent": "inline + _BaseOrgContentAdmin scoped by organization FK",
+	"gregory.trialorgcontent": "inline scoped by organization FK, follows the trial's team; standalone admin superuser-write (test_team_edit_rule)",
 	"gregory.articlesubjectrelevance": "inline scoped to the organisation's subjects (test_admin_relevance_inline_scope)",
 	"gregory.articlecategoryassignment": "inline scoped by the category's team (test_admin_category_inline_scope)",
 	"gregory.trialcategoryassignment": "as articlecategoryassignment",
@@ -170,6 +172,7 @@ class EditorInTheAdminTest(TestCase):
 
 		self.editor = User.objects.create_user(username="editor", password="pw", is_staff=True)
 		OrganizationUser.objects.create(organization=self.org_a, user=self.editor)
+		team_a.members.add(self.editor)
 		self.editor.groups.add(Group.objects.get(name=EDITOR_GROUP))
 		self.client.force_login(self.editor)
 

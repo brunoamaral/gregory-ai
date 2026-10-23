@@ -78,6 +78,8 @@ class _CategoryInlineScopeTests:
 			username="catinline-staff", password="pw", is_staff=True
 		)
 		OrganizationUser.objects.create(organization=self.org_a, user=self.staff)
+		# Editing is limited to the user's teams (gregory.team_scope).
+		self.team_a.members.add(self.staff)
 		self.staff.user_permissions.add(
 			*Permission.objects.filter(
 				content_type__app_label="gregory",

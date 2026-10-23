@@ -75,6 +75,8 @@ class OrgFixture(TestCase):
 	def setUp(self):
 		self.staff = User.objects.create_user(username="staff-a", password="pw", is_staff=True)
 		OrganizationUser.objects.create(organization=self.org_a, user=self.staff)
+		# Editing is limited to the user's teams (gregory.team_scope).
+		self.team_a.members.add(self.staff)
 
 	def login(self):
 		self.client.force_login(self.staff)
@@ -136,9 +138,15 @@ class TeamReassignViewTest(OrgFixture):
 		self.login()
 		self.assertEqual(self.client.get(self.url(self.team_a)).status_code, 403)
 
-	def test_own_team_with_change_permission(self):
+	def test_staff_cannot_reassign_even_their_own_team(self):
+		# Team settings and membership are superuser-only (TeamAdmin).
 		grant(self.staff, "view_team", "change_team")
 		self.login()
+		self.assertEqual(self.client.get(self.url(self.team_a)).status_code, 403)
+
+	def test_superuser_can_open_reassign(self):
+		root = User.objects.create_superuser("reassign-root", "r@e.com", "pw")
+		self.client.force_login(root)
 		self.assertEqual(self.client.get(self.url(self.team_a)).status_code, 200)
 
 

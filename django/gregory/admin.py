@@ -26,6 +26,7 @@ from . import source_checks, source_types
 from .utils.ncbi import NcbiClient
 from .utils.pubmed_search import PUBMED_VOLUME_WARNING_PER_30_DAYS
 from .admin_filters import DateRangeFilter, SourceHealthFilter
+from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, OuterRef, Q, Subquery
@@ -256,6 +257,145 @@ class OrgScopedHistoryMixin:
 
 	def revert_disabled(self, request, obj=None):
 		return not request.user.is_superuser or super().revert_disabled(request, obj)
+
+
+class TeamEditMixin:
+	"""Staff see their organisations' rows but edit only their teams' rows.
+
+	OrganizationFilterMixin decides what a staff user sees. This narrows writes
+	to the rows gregory.team_scope says belong to one of their teams:
+
+	- the change page of any other row opens read-only, and saving it is
+	  refused (Django checks ``has_change_permission(request, obj)`` on POST);
+	- delete follows the same rule;
+	- bulk actions run only on the selected rows the user may edit, apart from
+	  view-only ones such as exports;
+	- rows of other teams in an editable changelist are shown but locked.
+	"""
+
+	def has_add_permission(self, request, *args):
+		# A staff user on no team edits nothing, adding included.
+		return super().has_add_permission(request, *args) and (
+			request.user.is_superuser or bool(user_team_ids(request.user))
+		)
+
+	def has_change_permission(self, request, obj=None):
+		return super().has_change_permission(request, obj) and can_edit(request.user, obj)
+
+	def has_delete_permission(self, request, obj=None):
+		return super().has_delete_permission(request, obj) and can_edit(request.user, obj)
+
+	def _selected_action(self, request):
+		"""The action function the changelist form names, or None."""
+		names = request.POST.getlist("action")
+		try:
+			index = int(request.POST.get("index", 0) or 0)
+		except (TypeError, ValueError):
+			return None
+		if not 0 <= index < len(names):
+			return None
+		entry = self.get_actions(request).get(names[index])
+		return entry[0] if entry else None
+
+	def response_action(self, request, queryset):
+		func = self._selected_action(request)
+		# An action that declares no permissions is not view-only: narrow it too.
+		perms = set(getattr(func, "allowed_permissions", None) or ())
+		view_only = bool(perms) and perms <= {"view"}
+		if not view_only and not request.user.is_superuser:
+			editable = team_editable(request.user, queryset)
+			if request.POST.get("select_across") == "1":
+				skipped = queryset.count() - editable.count()
+			else:
+				selected = set(request.POST.getlist(admin.helpers.ACTION_CHECKBOX_NAME))
+				skipped = len(selected) - editable.filter(pk__in=selected).count()
+			if skipped:
+				self.message_user(
+					request,
+					f"{skipped} selected row(s) belong to another team and were left as they are.",
+					level=messages.WARNING,
+				)
+			queryset = editable
+		return super().response_action(request, queryset)
+
+	def get_changelist_formset(self, request, **kwargs):
+		formset_class = super().get_changelist_formset(request, **kwargs)
+		if request.user.is_superuser:
+			return formset_class
+		user = request.user
+
+		class TeamLockedFormSet(formset_class):
+			@property
+			def editable_pks(self):
+				# One query for the whole page rather than one per row.
+				if not hasattr(self, "_editable_pks"):
+					# The page's queryset is sliced (paginated), so it can't be
+					# filtered again: take its ids first.
+					pks = [obj.pk for obj in self.get_queryset()]
+					self._editable_pks = set(
+						team_editable(user, self.model._default_manager.filter(pk__in=pks))
+						.values_list("pk", flat=True)
+					)
+				return self._editable_pks
+
+			def add_fields(self, form, index):
+				super().add_fields(form, index)
+				if form.instance.pk and form.instance.pk not in self.editable_pks:
+					# Disabled fields ignore what is posted, so a forged edit
+					# to another team's row changes nothing.
+					for field in form.fields.values():
+						field.disabled = True
+
+		return TeamLockedFormSet
+
+
+class SharedFieldsReadOnlyMixin:
+	"""On a saved article or trial, only superusers change or delete the shared record.
+
+	Articles and trials are shared between teams and organisations: a title,
+	abstract, DOI, author list or registry field changed by one team changes
+	it for everyone. Staff edit their own layer (``staff_editable_fields``
+	plus the inlines: categories, relevance, site content); everything else
+	on the record is read-only for them. Adding a new record is unaffected.
+	"""
+
+	staff_editable_fields = ("teams", "subjects", "sources")
+
+	def has_delete_permission(self, request, obj=None):
+		# Deleting a shared record removes it for every team that has it.
+		return request.user.is_superuser and super().has_delete_permission(request, obj)
+
+	def get_readonly_fields(self, request, obj=None):
+		readonly = list(super().get_readonly_fields(request, obj))
+		if request.user.is_superuser or obj is None:
+			return readonly
+		opts = self.model._meta
+		excluded = set(self.exclude or ())
+		shared = [
+			field.name
+			for field in (*opts.fields, *opts.many_to_many)
+			if field.editable
+			and not field.primary_key
+			and field.name not in self.staff_editable_fields
+			and field.name not in excluded
+			and field.name not in readonly
+		]
+		return readonly + shared
+
+
+class TeamEditInlineMixin:
+	"""An inline on a content page is editable only when its parent is (see
+	TeamEditMixin). Django already refuses a POST to a parent the user can't
+	change; this makes the page show the inline read-only to match."""
+
+	def has_add_permission(self, request, obj=None):
+		return super().has_add_permission(request, obj) and can_edit(request.user, obj)
+
+	def has_change_permission(self, request, obj=None):
+		return super().has_change_permission(request, obj) and can_edit(request.user, obj)
+
+	def has_delete_permission(self, request, obj=None):
+		return super().has_delete_permission(request, obj) and can_edit(request.user, obj)
 
 
 def _scoped_subject_ids():
@@ -580,7 +720,7 @@ class ArticleSubjectRelevanceFormSet(forms.BaseInlineFormSet):
 			form.fields["subject"].widget = SubjectDisplayWidget()
 
 
-class ArticleSubjectRelevanceInline(admin.TabularInline):
+class ArticleSubjectRelevanceInline(TeamEditInlineMixin, admin.TabularInline):
 	model = ArticleSubjectRelevance
 	form = ArticleSubjectRelevanceForm
 	formset = ArticleSubjectRelevanceFormSet
@@ -596,21 +736,18 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 	@staticmethod
 	def _allowed_subjects(request):
 		"""Subjects the user may mark: every subject for superusers; for staff,
-		their organisations' auto_predict subjects. An article can be shared
-		with another organisation, and its relevance for that organisation's
-		subjects is theirs to set."""
+		their own teams' auto_predict subjects. An article can be shared with
+		other teams, and its relevance for their subjects is theirs to set."""
 		qs = Subject.objects.all()
 		if not request.user.is_superuser:
-			qs = qs.filter(
-				team__organization__id__in=get_user_organizations(request.user),
-				auto_predict=True,
-			)
+			qs = qs.filter(team__in=user_team_ids(request.user), auto_predict=True)
 		return qs
 
 	def get_formset(self, request, obj=None, **kwargs):
 		"""Pre-populate with the user's subjects among the article's teams'."""
 		allowed = self._allowed_subjects(request)
-		if obj and obj.pk:  # If editing existing article
+		# Only on an article the user may edit: opening one read-only writes nothing.
+		if obj and obj.pk and can_edit(request.user, obj):
 			team_subjects = (
 				allowed.filter(team__in=obj.teams.all()).distinct().order_by("subject_name")
 			)
@@ -645,7 +782,7 @@ class ArticleSubjectRelevanceInline(admin.TabularInline):
 		return qs.order_by("subject__subject_name")
 
 
-class _BaseOrgContentInline(admin.StackedInline):
+class _BaseOrgContentInline(TeamEditInlineMixin, admin.StackedInline):
 	"""Shared inline behaviour for ArticleOrgContent / TrialOrgContent.
 
 	- Staff users only see/edit rows for their own organisation(s).
@@ -668,6 +805,8 @@ class _BaseOrgContentInline(admin.StackedInline):
 		return qs.filter(organization_id__in=user_orgs)
 
 	def has_add_permission(self, request, obj=None):
+		if not super().has_add_permission(request, obj):
+			return False
 		if request.user.is_superuser:
 			return True
 		return bool(get_user_organizations(request.user))
@@ -732,7 +871,7 @@ class _BaseOrgContentInline(admin.StackedInline):
 		return ScopedOrgContentFormSet
 
 
-class ArticleSiteContentInline(admin.StackedInline):
+class ArticleSiteContentInline(TeamEditInlineMixin, admin.StackedInline):
 	"""Per-site editorial content on the article page.
 
 	Same rules as the per-organisation inline: staff only see and edit rows
@@ -866,13 +1005,12 @@ class TrialOrgContentInline(_BaseOrgContentInline):
 	verbose_name_plural = "Editorial content (per organisation)"
 
 
-class _BaseCategoryAssignmentInline(admin.TabularInline):
+class _BaseCategoryAssignmentInline(TeamEditInlineMixin, admin.TabularInline):
 	"""Category assignments on a content page (article, trial or patent).
 
-	Scoped to the user's organisations: staff can only pick their own
-	organisations' categories, and other organisations' assignments, which
-	shared content can carry, are hidden and left as they are on save.
-	Subclasses set `model`.
+	Scoped to the user's teams: staff can only pick their own teams'
+	categories, and other teams' assignments, which shared content can carry,
+	are hidden and left as they are on save. Subclasses set `model`.
 	"""
 
 	extra = 0
@@ -881,19 +1019,20 @@ class _BaseCategoryAssignmentInline(admin.TabularInline):
 	verbose_name_plural = "Category assignments"
 
 	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		"""Limit categories to the user's organisations. The autocomplete endpoint is
-		already scoped, but the field validates against its own queryset, so without
-		this a staff member could post another organisation's category id."""
+		"""Limit categories to the user's teams. The autocomplete endpoint only
+		scopes to the organisation, and the field validates against its own
+		queryset, so without this a staff member could post another team's
+		category id."""
 		if db_field.name == "teamcategory" and not request.user.is_superuser:
 			kwargs["queryset"] = TeamCategory.objects.filter(
-				team__organization__id__in=get_user_organizations(request.user)
+				team__in=user_team_ids(request.user)
 			)
 		return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 	def get_queryset(self, request):
-		"""Hide other organisations' assignments. Shared content can carry them,
-		and the scoped category field above would reject such a row, blocking
-		every save of the page."""
+		"""Hide other teams' assignments. Shared content can carry them, and the
+		scoped category field above would reject such a row, blocking every save
+		of the page."""
 		qs = (
 			super()
 			.get_queryset(request)
@@ -901,9 +1040,7 @@ class _BaseCategoryAssignmentInline(admin.TabularInline):
 		)
 		if request.user.is_superuser:
 			return qs
-		return qs.filter(
-			teamcategory__team__organization__id__in=get_user_organizations(request.user)
-		)
+		return qs.filter(teamcategory__team__in=user_team_ids(request.user))
 
 
 class ArticleCategoryAssignmentInline(_BaseCategoryAssignmentInline):
@@ -943,8 +1080,7 @@ class SourceBulkActionMixin:
 		)
 		if request.user.is_superuser:
 			return qs
-		user_orgs = get_user_organizations(request.user)
-		return qs.filter(team__organization__id__in=user_orgs)
+		return qs.filter(team__in=user_team_ids(request.user))
 
 	def _source_bulk_action(self, request, queryset, *, action_name, verb):
 		source_qs = self._get_source_queryset(request)
@@ -1035,24 +1171,25 @@ class RequestFormMixin:
 		return FormWithRequest
 
 
-class OrganizationScopedRelationsFormMixin:
-	"""Limit a content form's sources, teams and subjects to the user's organisations.
+class TeamScopedRelationsFormMixin:
+	"""Limit a form's sources, teams and subjects to the user's own teams.
 
 	The field validates against its own queryset, so without this a staff member
-	could pick, or post the id of, another organisation's row and attach the
-	content to it. Adding another organisation's subject, for instance, publishes
-	the content on that organisation's site.
+	could pick, or post the id of, another team's row and attach the content to
+	it. Adding another organisation's subject, for instance, publishes the
+	content on that organisation's site.
 
-	Content can be shared between organisations, so it may already link another
-	organisation's rows. Those links are hidden from the field and kept on save,
-	so saving the page never drops them. Superusers see and can change everything.
+	Content can be shared between teams and organisations, so it may already
+	link other teams' rows. Those links are hidden from the field and kept on
+	save, so saving the page never drops them. Superusers see and can change
+	everything.
 	"""
 
-	# Form field -> lookup from the related model to its organisation's id.
-	org_scoped_relations = {
-		"sources": "team__organization__id",
-		"teams": "organization__id",
-		"subjects": "team__organization__id",
+	# Form field -> lookup from the related model to its team's id.
+	scoped_relations = {
+		"sources": "team__id",
+		"teams": "id",
+		"subjects": "team__id",
 	}
 
 	def __init__(self, *args, **kwargs):
@@ -1061,12 +1198,12 @@ class OrganizationScopedRelationsFormMixin:
 		self._kept_relation_pks = {}
 		if self.request is None or self.request.user.is_superuser:
 			return
-		user_orgs = list(get_user_organizations(self.request.user))
-		for name, org_lookup in self.org_scoped_relations.items():
+		team_ids = user_team_ids(self.request.user)
+		for name, team_lookup in self.scoped_relations.items():
 			field = self.fields.get(name)
 			if field is None:
 				continue
-			in_scope = {f"{org_lookup}__in": user_orgs}
+			in_scope = {f"{team_lookup}__in": team_ids}
 			field.queryset = field.queryset.filter(**in_scope)
 			if not self.instance.pk:
 				continue
@@ -1096,7 +1233,7 @@ class OrganizationScopedRelationsFormMixin:
 		return cleaned_data
 
 
-class ArticleAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+class ArticleAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
 	class Meta:
@@ -1198,6 +1335,8 @@ class ArticleMeshHeadingInline(ReadOnlyInlineMixin, admin.TabularInline):
 
 
 class ArticleAdmin(
+	TeamEditMixin,
+	SharedFieldsReadOnlyMixin,
 	OrganizationFilterMixin,
 	SourceBulkActionMixin,
 	RequestFormMixin,
@@ -1280,6 +1419,16 @@ class ArticleAdmin(
 		"""Optimize queryset with prefetch for sources."""
 		qs = super().get_queryset(request)
 		return qs.prefetch_related("sources")
+
+	def get_fieldsets(self, request, obj=None):
+		fieldsets = super().get_fieldsets(request, obj)
+		if request.user.is_superuser:
+			return fieldsets
+		# The CrossRef refresh is superuser-only (see crossref_refresh_view).
+		return [
+			(name, {**opts, "fields": tuple(f for f in opts["fields"] if f != "crossref_refresh_button")})
+			for name, opts in fieldsets
+		]
 
 	def crossref_refresh_button(self, obj):
 		if not obj.pk:
@@ -1380,7 +1529,9 @@ class ArticleAdmin(
 			self.message_user(request, "Article not found.", level=messages.ERROR)
 			return redirect("admin:gregory_articles_changelist")
 
-		if not self.has_change_permission(request, article):
+		# Applying CrossRef's values rewrites the shared record (title, dates,
+		# publisher, ...), which only superusers change (SharedFieldsReadOnlyMixin).
+		if not request.user.is_superuser or not self.has_change_permission(request, article):
 			raise PermissionDenied
 
 		change_url = reverse("admin:gregory_articles_change", args=[article_id])
@@ -1655,7 +1806,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 
 
-class TrialAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+class TrialAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
 	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
 
 	class Meta:
@@ -1813,6 +1964,8 @@ class TrialAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 
 
 class TrialAdmin(
+	TeamEditMixin,
+	SharedFieldsReadOnlyMixin,
 	OrganizationFilterMixin,
 	SourceBulkActionMixin,
 	RequestFormMixin,
@@ -2230,13 +2383,9 @@ class SourceAdminForm(forms.ModelForm):
 				self.fields["team"].queryset = Team.objects.all()
 				self.fields["subject"].queryset = Subject.objects.all()
 			else:
-				user_orgs = get_user_organizations(self.request.user)
-				self.fields["team"].queryset = Team.objects.filter(
-					organization__id__in=user_orgs
-				)
-				self.fields["subject"].queryset = Subject.objects.filter(
-					team__organization__id__in=user_orgs
-				)
+				team_ids = user_team_ids(self.request.user)
+				self.fields["team"].queryset = Team.objects.filter(pk__in=team_ids)
+				self.fields["subject"].queryset = Subject.objects.filter(team__in=team_ids)
 
 		choices = [("", "---------"), *source_types.grouped_choices()]
 		if self.instance.pk:
@@ -2393,6 +2542,10 @@ class ReassignToTeamMixin:
 			return
 
 		target_qs = Team.objects.filter(organization_id=org_ids[0])
+		if not request.user.is_superuser:
+			# Only to a team of the user's own: anything else would hand the
+			# rows to a team they can't edit.
+			target_qs = target_qs.filter(pk__in=user_team_ids(request.user))
 
 		if "apply" not in request.POST:
 			form = ReassignToTeamForm()
@@ -2434,7 +2587,11 @@ class ReassignToTeamMixin:
 
 
 class SourceAdmin(
-	OrganizationFilterMixin, ReassignToTeamMixin, OrgScopedHistoryMixin, SimpleHistoryAdmin
+	TeamEditMixin,
+	OrganizationFilterMixin,
+	ReassignToTeamMixin,
+	OrgScopedHistoryMixin,
+	SimpleHistoryAdmin,
 ):
 	form = SourceAdminForm
 	list_display = [
@@ -2718,7 +2875,7 @@ class SourceAdmin(
 		return super().changelist_view(request, extra_context=extra_context)
 
 
-class SourcesInline(admin.StackedInline):
+class SourcesInline(TeamEditInlineMixin, admin.StackedInline):
 	"""Inline admin for managing sources within a subject"""
 
 	model = Sources
@@ -2760,14 +2917,13 @@ class SubjectAdminForm(forms.ModelForm):
 			if self.request.user.is_superuser:
 				self.fields["team"].queryset = Team.objects.all()
 			else:
-				user_orgs = get_user_organizations(self.request.user)
 				self.fields["team"].queryset = Team.objects.filter(
-					organization__id__in=user_orgs
+					pk__in=user_team_ids(self.request.user)
 				)
 
 
 @admin.register(Subject)
-class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
+class SubjectAdmin(TeamEditMixin, OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
 	list_display = [
 		"formatted_subject_name",
 		"description",
@@ -2888,30 +3044,38 @@ class SubjectAdmin(OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmi
 		from django.contrib.admin.utils import unquote
 
 		obj = self.get_object(request, unquote(object_id))
+		if obj is None or not self.has_delete_permission(request, obj):
+			# Let Django answer (404 or 403) before anything is touched.
+			return super().delete_view(request, object_id, extra_context=extra_context)
 
-		if obj:
-			can_view_sources = request.user.has_perm("gregory.view_sources")
-			can_delete_sources = request.user.has_perm("gregory.delete_sources")
+		can_view_sources = request.user.has_perm("gregory.view_sources")
+		can_delete_sources = request.user.has_perm("gregory.delete_sources")
+		# Only sources the user may edit: another team's source stays.
+		orphaned_sources = team_editable(request.user, Sources.objects.filter(subject=obj))
+		delete_sources = (
+			request.method == "POST"
+			and request.POST.get("delete_orphaned_sources") == "yes"
+			and orphaned_sources.exists()
+		)
+		source_pks = list(orphaned_sources.values_list("pk", flat=True)) if delete_sources else []
 
-			orphaned_sources = Sources.objects.filter(subject=obj)
+		extra_context = extra_context or {}
+		if orphaned_sources.exists() and can_view_sources:
+			extra_context["orphaned_sources"] = orphaned_sources
+			extra_context["can_delete_sources"] = can_delete_sources
 
-			if orphaned_sources.exists() and request.method == "POST":
-				if request.POST.get("delete_orphaned_sources") == "yes":
-					if can_delete_sources:
-						orphaned_sources.delete()
-					else:
-						self.message_user(
-							request,
-							"You do not have permission to delete sources. The subject was deleted but the sources were kept.",
-							level=messages.WARNING,
-						)
-
-			extra_context = extra_context or {}
-			if orphaned_sources.exists() and can_view_sources:
-				extra_context["orphaned_sources"] = orphaned_sources
-				extra_context["can_delete_sources"] = can_delete_sources
-
-		return super().delete_view(request, object_id, extra_context=extra_context)
+		response = super().delete_view(request, object_id, extra_context=extra_context)
+		# Delete the sources only once the subject itself is gone.
+		if delete_sources and not Subject.objects.filter(pk=obj.pk).exists():
+			if can_delete_sources:
+				Sources.objects.filter(pk__in=source_pks).delete()
+			else:
+				self.message_user(
+					request,
+					"You do not have permission to delete sources. The subject was deleted but the sources were kept.",
+					level=messages.WARNING,
+				)
+		return response
 
 	def get_urls(self):
 		from django.urls import path
@@ -3385,10 +3549,10 @@ TEAMCATEGORY_WEIGHT_FIELDS = {
 }
 
 
-class TeamCategoryAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
-	# A category's subjects may only be its organisations' (the team field is
+class TeamCategoryAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
+	# A category's subjects may only be the user's teams' (the team field is
 	# scoped in TeamCategoryAdmin.formfield_for_foreignkey).
-	org_scoped_relations = {"subjects": "team__organization__id"}
+	scoped_relations = {"subjects": "team__id"}
 
 	"""Edits TeamCategory matching settings, exposing the per-field weights stored
 	in the ``match_weights`` JSON column as friendly integer inputs."""
@@ -3449,18 +3613,20 @@ class TeamCategoryAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelFor
 
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(
-	OrganizationFilterMixin, ReassignToTeamMixin, RequestFormMixin, admin.ModelAdmin
+	TeamEditMixin,
+	OrganizationFilterMixin,
+	ReassignToTeamMixin,
+	RequestFormMixin,
+	admin.ModelAdmin,
 ):
 	form = TeamCategoryAdminForm
 
 	def formfield_for_foreignkey(self, db_field, request, **kwargs):
-		# Without this the team picker lists, and accepts, every organisation's
-		# teams, and a category put on another organisation's team writes
-		# category assignments onto that organisation's content.
+		# Without this the team picker lists, and accepts, every team, and a
+		# category put on another team writes category assignments onto that
+		# team's content.
 		if db_field.name == "team" and not request.user.is_superuser:
-			kwargs["queryset"] = Team.objects.filter(
-				organization__id__in=get_user_organizations(request.user)
-			)
+			kwargs["queryset"] = Team.objects.filter(pk__in=user_team_ids(request.user))
 		return super().formfield_for_foreignkey(db_field, request, **kwargs)
 	list_display = (
 		"category_name",
@@ -3646,7 +3812,7 @@ class TeamCategoryAdmin(
 	display_subjects.short_description = "Subjects"
 
 
-class TeamSubjectInline(admin.TabularInline):
+class TeamSubjectInline(TeamEditInlineMixin, admin.TabularInline):
 	model = Subject
 	extra = 0
 	fields = ("subject_name", "subject_slug", "auto_predict", "ml_consensus_type")
@@ -3787,7 +3953,7 @@ class OrganizationAdmin(BaseOrganizationAdmin):
 	lists_display.short_description = "Lists"
 
 
-class TeamSourceInline(admin.TabularInline):
+class TeamSourceInline(TeamEditInlineMixin, admin.TabularInline):
 	model = Sources
 	extra = 0
 	fields = ("name", "source_for", "method", "subject", "active")
@@ -3802,7 +3968,7 @@ class TeamSourceInline(admin.TabularInline):
 		return False
 
 
-class TeamCategoryInline(admin.TabularInline):
+class TeamCategoryInline(TeamEditInlineMixin, admin.TabularInline):
 	model = TeamCategory
 	extra = 0
 	fields = ("category_name", "category_slug", "category_description")
@@ -3914,7 +4080,7 @@ class TeamAdminForm(forms.ModelForm):
 		return super().save(commit)
 
 
-class TeamMembersInline(admin.TabularInline):
+class TeamMembersInline(TeamEditInlineMixin, admin.TabularInline):
 	model = Team.members.through
 	extra = 1
 	verbose_name = "Member"
@@ -3923,7 +4089,7 @@ class TeamMembersInline(admin.TabularInline):
 	autocomplete_fields = ["user"]
 
 
-class TeamListsInline(admin.TabularInline):
+class TeamListsInline(TeamEditInlineMixin, admin.TabularInline):
 	"""Inline to display lists belonging to a team."""
 
 	model = apps.get_model("subscriptions", "Lists")
@@ -4016,6 +4182,18 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 		),
 	)
 	readonly_fields = ("organization_link",)
+
+	# A team's settings and members are access control: membership is what
+	# lets someone edit the team's content, and joining a team adds the person
+	# to its organisation. Staff can view teams; only superusers change them.
+	def has_add_permission(self, request):
+		return request.user.is_superuser and super().has_add_permission(request)
+
+	def has_change_permission(self, request, obj=None):
+		return request.user.is_superuser and super().has_change_permission(request, obj)
+
+	def has_delete_permission(self, request, obj=None):
+		return request.user.is_superuser and super().has_delete_permission(request, obj)
 
 	def get_queryset(self, request):
 		# Show all teams (active and inactive) in the admin.
@@ -4269,7 +4447,7 @@ class TeamAdmin(OrganizationFilterMixin, admin.ModelAdmin):
 
 
 @admin.register(PredictionRunLog)
-class PredictionRunLogAdmin(OrganizationFilterMixin, admin.ModelAdmin):
+class PredictionRunLogAdmin(TeamEditMixin, OrganizationFilterMixin, admin.ModelAdmin):
 	list_display = [
 		"id",
 		"team",
@@ -4696,7 +4874,7 @@ def _patent_export_response(modeladmin, request, patent_qs, action_name):
 	return response
 
 
-class PatentTrialLinkAdmin(admin.ModelAdmin):
+class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 	"""Sponsor-timing signals, grouped by patent. Scoped to the caller's organisations
 	through the patent's sources (OrganizationFilterMixin cannot do this: the model has
 	no sources of its own)."""
@@ -4819,9 +4997,9 @@ class PatentCategoryModalityFilter(admin.SimpleListFilter):
 		return queryset.filter(Exists(assignments))
 
 
-class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
+class PatentAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
 	"""Limits the editable relations to the caller's organisations (see
-	OrganizationScopedRelationsFormMixin). OrganizationFilterMixin only scopes the
+	TeamScopedRelationsFormMixin). OrganizationFilterMixin only scopes the
 	patent queryset itself."""
 
 	class Meta:
@@ -4830,7 +5008,11 @@ class PatentAdminForm(OrganizationScopedRelationsFormMixin, forms.ModelForm):
 
 
 class PatentAdmin(
-	OrganizationFilterMixin, RequestFormMixin, OrgScopedHistoryMixin, SimpleHistoryAdmin
+	TeamEditMixin,
+	OrganizationFilterMixin,
+	RequestFormMixin,
+	OrgScopedHistoryMixin,
+	SimpleHistoryAdmin,
 ):
 	"""Patent families. Importer-managed fields are read-only; editors curate
 	subjects, teams and category assignments."""
@@ -4895,6 +5077,10 @@ class PatentAdmin(
 	]
 
 	actions = ["export_xlsx_action"]
+
+	def has_delete_permission(self, request, obj=None):
+		# Deleting a shared patent family removes it for every team that has it.
+		return request.user.is_superuser and super().has_delete_permission(request, obj)
 
 	def get_queryset(self, request):
 		return super().get_queryset(request).prefetch_related("patent_applicants")
@@ -5015,7 +5201,7 @@ class ArticleOrgContentAdmin(_BaseOrgContentAdmin):
 
 
 @admin.register(ArticleSiteContent)
-class ArticleSiteContentAdmin(SimpleHistoryAdmin):
+class ArticleSiteContentAdmin(OrgScopedHistoryMixin, SimpleHistoryAdmin):
 	"""Standalone page for browsing audit history; routine editing happens in
 	the Article page's inline."""
 
@@ -5105,6 +5291,20 @@ class PatentSiteContentAdmin(ArticleSiteContentAdmin):
 
 @admin.register(TrialOrgContent)
 class TrialOrgContentAdmin(_BaseOrgContentAdmin):
+	"""Standalone page for browsing history; staff edit trial organisation
+	content in the trial page's inline, which follows the trial's team. Here
+	the trial is a raw id that could name any trial, so writes are
+	superuser-only, as on ArticleSiteContentAdmin."""
+
+	def has_add_permission(self, request):
+		return request.user.is_superuser
+
+	def has_change_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def has_delete_permission(self, request, obj=None):
+		return request.user.is_superuser
+
 	list_display = ("trial", "organization", "updated_at")
 	raw_id_fields = ("trial",)
 	search_fields = _BaseOrgContentAdmin.search_fields + ("trial__title",)
