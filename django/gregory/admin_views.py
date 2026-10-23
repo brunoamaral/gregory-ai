@@ -20,6 +20,7 @@ from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django import forms
 from django.urls import reverse
+from .team_scope import user_team_ids
 from .models import (
 	Articles,
 	Subject,
@@ -49,6 +50,15 @@ def _subjects_for_user(user):
 	return Subject.objects.filter(team__organization__id__in=user_orgs).distinct()
 
 
+def _editable_subjects(user):
+	"""Subjects the user may mark relevance for: all for superusers, else their
+	own teams'. Relevance belongs to the subject, so seeing another team's
+	subject on the review page doesn't let you mark it."""
+	if user.is_superuser:
+		return Subject.objects.all()
+	return Subject.objects.filter(team__in=user_team_ids(user))
+
+
 @staff_member_required
 def article_review_status_view(request):
 	"""
@@ -75,7 +85,9 @@ def article_review_status_view(request):
 		if not request.user.has_perms(RELEVANCE_PERMS):
 			raise PermissionDenied
 		action = request.POST.get("action")
-		subject = subjects.get(id=selected_subject_id)
+		subject = _editable_subjects(request.user).filter(id=selected_subject_id).first()
+		if subject is None:
+			raise PermissionDenied
 		# Only articles listed on this page: ones carrying the subject.
 		selected_articles = list(
 			Articles.objects.filter(
@@ -302,8 +314,16 @@ def article_review_status_view(request):
 			}
 		)
 
+	# The buttons only for a subject the user may mark (see _editable_subjects).
+	can_mark = bool(
+		selected_subject_id
+		and request.user.has_perms(RELEVANCE_PERMS)
+		and _editable_subjects(request.user).filter(id=selected_subject_id).exists()
+	)
+
 	context = {
 		"title": "Article Review Status",
+		"can_mark": can_mark,
 		"subjects": subjects,
 		"selected_subject_id": int(selected_subject_id)
 		if selected_subject_id
@@ -380,7 +400,7 @@ def update_article_relevance_ajax(request):
 
 			# Same rule as the review page that calls this: one of the user's
 			# subjects, and an article that carries it.
-			subject = _subjects_for_user(request.user).filter(id=subject_id).first()
+			subject = _editable_subjects(request.user).filter(id=subject_id).first()
 			article = (
 				Articles.objects.filter(article_id=article_id, subjects=subject).first()
 				if subject
@@ -631,6 +651,9 @@ def sources_overview_view(request):
 
 		if selected_ids and action in ("activate", "deactivate", "reassign_to_team"):
 			selected_qs = qs.filter(pk__in=selected_ids)
+			if not request.user.is_superuser:
+				# Visible across the organisation, changed only within the user's teams.
+				selected_qs = selected_qs.filter(team__in=user_team_ids(request.user))
 
 			if action == "activate":
 				count = selected_qs.update(active=True)
@@ -657,6 +680,8 @@ def sources_overview_view(request):
 					)
 				else:
 					target_qs = Team.objects.filter(organization_id=org_ids[0])
+					if not request.user.is_superuser:
+						target_qs = target_qs.filter(pk__in=user_team_ids(request.user))
 					if "apply" not in request.POST:
 						form = ReassignToTeamForm()
 						form.fields["target_team"].queryset = target_qs
@@ -1062,10 +1087,7 @@ class AddByDoiForm(forms.Form):
 			"team", "subject"
 		)
 		if user and not user.is_superuser:
-			user_org_ids = user.organizations_organizationuser.values_list(
-				"organization__id", flat=True
-			)
-			qs = qs.filter(team__organization__id__in=user_org_ids)
+			qs = qs.filter(team__in=user_team_ids(user))
 		self.fields["source"].queryset = qs.order_by("name")
 		self.fields["source"].label_from_instance = self._source_label
 

@@ -9,7 +9,8 @@ Groups admin.
 
 Rules for adding to it (gregory/tests/test_roles.py enforces them):
 
-- Only models whose admin is scoped to the user's organisation may get add,
+- Only models whose admin is scoped to the user's organisation, with writes
+  narrowed to the user's own teams (gregory/team_scope.py), may get add,
   change or delete. Shared reference data (authors, sponsors, entities, MeSH,
   publication types) stays view-only: changing it changes it for everyone.
 - Articles, trials and patents are shared between organisations, so editors

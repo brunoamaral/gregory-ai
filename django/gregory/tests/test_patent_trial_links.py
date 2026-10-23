@@ -378,6 +378,7 @@ class LinkAdminTests(LinkTestCase):
 
 		self.staff = User.objects.create_user(username="link-staff", password="pw", is_staff=True)
 		OrganizationUser.objects.create(organization=self.org, user=self.staff)
+		self.team.members.add(self.staff)  # editing is limited to the user's teams
 		from django.contrib.auth.models import Permission
 
 		self.staff.user_permissions.add(*Permission.objects.filter(content_type__model="patenttriallink"))
@@ -567,6 +568,7 @@ class ReviewFixTests(LinkTestCase):
 		other_category = TeamCategory.objects.create(team=other_team, category_name="Other", category_terms=["y"])
 		staff = User.objects.create_user(username="inline-staff", password="pw", is_staff=True)
 		OrganizationUser.objects.create(organization=self.org, user=staff)
+		self.team.members.add(staff)  # editing is limited to the user's teams
 		request = RequestFactory().get("/")
 		request.user = staff
 
@@ -589,6 +591,7 @@ class ReviewFixTests(LinkTestCase):
 		own_source = Sources.objects.create(name="S", source_for="patents", method="epo_ops", team=self.team)
 		staff = User.objects.create_user(username="form-staff", password="pw", is_staff=True)
 		OrganizationUser.objects.create(organization=self.org, user=staff)
+		self.team.members.add(staff)  # editing is limited to the user's teams
 		request = RequestFactory().get("/")
 		request.user = staff
 

@@ -228,6 +228,8 @@ class AddByDoiAdminViewTests(TestCase):
 		OrganizationUser.objects.create(
 			organization=self.org, user=self.staff_user, is_admin=False
 		)
+		# Editing is limited to the user's teams (gregory.team_scope).
+		self.team.members.add(self.staff_user)
 
 	def _get_url(self):
 		return reverse("admin:article_add_by_doi")

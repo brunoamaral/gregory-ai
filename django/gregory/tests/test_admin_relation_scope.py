@@ -1,6 +1,6 @@
 """
 Tests for the sources, teams and subjects fields on the Articles, Trials and
-Patents admin forms (gregory.admin.OrganizationScopedRelationsFormMixin).
+Patents admin forms (gregory.admin.TeamScopedRelationsFormMixin).
 
 A staff member may only pick, or post the id of, their own organisations'
 sources, teams and subjects. Content can be shared between organisations, so it
@@ -65,6 +65,10 @@ class _RelationScopeTests:
 			username="relscope-staff", password="pw", is_staff=True
 		)
 		OrganizationUser.objects.create(organization=self.org_a, user=self.staff)
+		# Editing is limited to the user's teams (gregory.team_scope); a member of
+		# both of org A's teams keeps this file about organisation scoping.
+		team_a.members.add(self.staff)
+		team_a2.members.add(self.staff)
 		self.staff.user_permissions.add(
 			*Permission.objects.filter(
 				content_type__app_label="gregory",
@@ -83,14 +87,19 @@ class _RelationScopeTests:
 				getattr(self.content, name).add(group[name])
 
 	def _form(self, user, data=None):
+		"""The admin's form class, built directly: these tests are about the
+		form's field scoping, not about who may open the change page (see
+		test_team_edit_rule for that)."""
+		from django.forms import modelform_factory
+
 		request = RequestFactory().get("/")
 		request.user = user
-		form_class = self.model_admin.get_form(
-			request, self.content, change=True, fields=list(RELATIONS)
+		form_class = modelform_factory(
+			self.content_model, form=self.model_admin.form, fields=list(RELATIONS)
 		)
 		if data is None:
-			return form_class(instance=self.content)
-		return form_class(data, instance=self.content)
+			return form_class(instance=self.content, request=request)
+		return form_class(data, instance=self.content, request=request)
 
 	def _post(self, *groups):
 		"""Form data choosing, for every relation, the rows in `groups`."""

@@ -58,6 +58,8 @@ class SourceBulkActionMixinTests(TestCase):
 			username="staff-a", password="pw", is_staff=True
 		)
 		OrganizationUser.objects.create(organization=self.org_a, user=self.staff_user)
+		# Editing is limited to the user's teams (gregory.team_scope).
+		self.team_a.members.add(self.staff_user)
 
 		self.superuser = User.objects.create_superuser(
 			username="root", email="r@e.com", password="pw"

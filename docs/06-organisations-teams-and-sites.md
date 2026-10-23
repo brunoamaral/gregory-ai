@@ -86,6 +86,33 @@ Two different counts get quoted about this population, so to be exact about whic
 
 Production is the number that matters operationally: six articles move from "visible to their team's organisation" to "superuser only". There is no cross-organisation case — **zero** articles or trials have sources pointing at a different organisation than their curated teams, so nothing is being taken from one organisation and given to another.
 
+### Editing: your team only
+
+A staff user **sees** their organisations' content, as above, but **edits** only what belongs to one of their teams (the teams they are a member of, under **Team memberships** on their user page). `gregory/team_scope.py` defines what belongs to a team:
+
+| Rows | Belong to a team when |
+|:-----|:----------------------|
+| Articles, trials, patents | One of their sources is the team's, or they are tagged with the team (**Teams** field) |
+| Sources, subjects, team categories, prediction run logs | Their **team** is the team |
+| Site takeaways and summaries, trial organisation content, patent–trial links | Their article, trial or patent belongs to the team. They are edited from the article, trial or patent page; their standalone pages are superuser-only for writes |
+| Teams | Never: a team's settings and members are superuser-only, because membership is what grants editing |
+
+In practice:
+
+- Another team's row opens read-only, inlines included, and saving it is refused. Deleting follows the same rule.
+- Bulk actions run only on the selected rows the user may edit. Any others are left alone, with a warning. Exports and other view-only actions still cover the whole selection.
+- In a list with editable columns (team categories' modality), other teams' rows are shown but locked.
+- Pickers offer only the user's own teams' rows: **teams**, **subjects** and **sources** on content, categories, the team of a category, source or subject, and the target of **Reassign to another team**.
+- A staff user on no active team can see their organisation but edit or add nothing. `setup_roles --check` lists such accounts.
+- **Add by DOI** on a DOI that's already in the database attaches the user's source, team and subject to that article, which makes it their team's too. It needs the *add articles* permission, which the Editor role doesn't have.
+- Newsletters (lists, subscribers, announcements) are outside this rule: they stay organisation-scoped and outside the Editor role.
+
+Superusers edit everything.
+
+### Shared fields are superuser-only
+
+An article or trial can belong to several teams and organisations at once, so its own record (title, abstract, DOI, authors, dates, links, registry fields) is shared: a change by one team changes it for all. On a saved article or trial, staff can change only **teams**, **subjects** and **sources**, plus the inlines that hold their own layer (categories, subject relevance, site takeaways and summaries, trial organisation content). Everything else on the page is read-only for them, and the **Refresh from CrossRef** button, which rewrites the record, is superuser-only. So is deleting an article, trial or patent: it removes the record for every team that has it. Patents already worked this way: their importer-managed fields are read-only for everyone. Adding a new article or trial by hand is unaffected.
+
 ### List filters
 
 The Articles and Trials admin changelists each carry two filters built on this rule:
@@ -97,9 +124,9 @@ The Articles and Trials admin changelists each carry two filters built on this r
 
 ### Sources, teams and subjects
 
-On an article, trial or patent page, a staff user can only pick their own organisations' **sources**, **teams** and **subjects**. The fields check this when the form is saved, so a hand-edited form can't link another organisation's rows either. This matters because publishing is subject-scoped: adding another organisation's subject would put the content on that organisation's site.
+On an article, trial or patent page, a staff user can only pick their own teams' **sources**, **teams** and **subjects**. The fields check this when the form is saved, so a hand-edited form can't link another team's rows either. This matters because publishing is subject-scoped: adding another organisation's subject would put the content on that organisation's site.
 
-Links the content already has to another organisation's rows are hidden from staff and kept when they save. On articles and trials, where **teams** and **subjects** are required, those links count towards them, so staff don't have to add one of their own just to save. Superusers see and can change every link.
+Links the content already has to other teams' rows are hidden from staff and kept when they save. On articles and trials, where **teams** and **subjects** are required, those links count towards them, so staff don't have to add one of their own just to save. Superusers see and can change every link.
 
 ### Permissions for actions and custom pages
 
@@ -109,9 +136,9 @@ The custom admin pages follow the same rule:
 
 | Page | Needs |
 |:-----|:------|
-| Articles → Review status (batch marking) and its per-row buttons | `add` and `change` on *article subject relevance*. The subject must belong to the user's organisation, and only articles carrying that subject are marked |
-| Sources → Overview (activate, deactivate, reassign) | `change` on *sources* |
-| Teams → Reassign | `change` on *team*; another organisation's team is a 404 |
+| Articles → Review status (batch marking) and its per-row buttons | `add` and `change` on *article subject relevance*. The page lists the organisation's subjects, but marking needs a subject of one of the user's teams (the buttons are hidden otherwise), and only articles carrying that subject are marked. Relevance belongs to the subject, so here the article itself need not be the team's, unlike on the article page |
+| Sources → Overview (activate, deactivate, reassign) | `change` on *sources*; acts only on the user's teams' sources, and reassigns only to one of their teams |
+| Teams → Reassign | Superuser only (team settings are); another organisation's team is a 404 |
 | Prediction run logs → ML coverage | `view` on *prediction run log*; lists only the user's organisations' teams and subjects. The counts and recent runs on the run log list are the user's organisations' only |
 | Announcements → Send, Send test | `change` on *announcement*. Without it the send buttons are hidden. Preview needs `view` |
 | Sponsor merge candidates → Merge | `change` and `delete` on *sponsor*: a merge deletes a sponsor and repoints its trials in every organisation. Dismiss needs `change` on the candidate |
@@ -120,27 +147,27 @@ The OAuth pages (applications, access, refresh and ID tokens, grants) are superu
 
 ### Category assignments
 
-The **Category assignments** inline on an article, trial or patent page is scoped by the category's team, not by the content. A staff user sees and can assign only the categories of their own organisations' teams. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another organisation's category.
+The **Category assignments** inline on an article, trial or patent page is scoped by the category's team, not by the content. A staff user sees and can assign only their own teams' categories. The category field enforces this when the form is saved, not just in the autocomplete list, so a hand-edited form can't attach another team's category.
 
-The same article, trial or patent can be visible to more than one organisation, so it can also carry another organisation's categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
+The same article, trial or patent can belong to more than one team, so it can also carry other teams' categories. Those rows are hidden from staff, and saving the page leaves them as they are. Superusers see and can assign every category.
 
 ### Subject relevance
 
-The **Subject relevance** inline on an article page works the same way, keyed by subject. A staff user sees and marks only their own organisations' subjects that have `auto_predict` on. Opening the page creates the missing rows for those subjects only. A new row can only name one of them. An existing row's subject is fixed: the form shows it but ignores any change to it. Another organisation's rows on a shared article are hidden and left as they are. Superusers see and can mark every subject.
+The **Subject relevance** inline on an article page works the same way, keyed by subject. A staff user sees and marks only their own teams' subjects that have `auto_predict` on, on articles their team may edit. Opening the page of an article they may edit creates the missing rows for those subjects only; opening one read-only creates nothing. A new row can only name one of their subjects. An existing row's subject is fixed: the form shows it but ignores any change to it. Other teams' rows on a shared article are hidden and left as they are. Superusers see and can mark every subject.
 
 ### History pages
 
-The history list and the old-version pages of articles, trials, patents, sources and trial organisation content follow the same scoping: a staff user gets a 403 for a row outside their organisations, even when the history table still holds it. **Revert** (saving an old version from its history page) is superuser-only. A revert rewrites every field of a row that other organisations may share, and simple-history would otherwise save it with view permission alone.
+The history list and the old-version pages of articles, trials, patents, sources, trial organisation content and site takeaways and summaries follow the same scoping: a staff user gets a 403 for a row outside their organisations, even when the history table still holds it. **Revert** (saving an old version from its history page) is superuser-only. A revert rewrites every field of a row that other organisations may share, and simple-history would otherwise save it with view permission alone.
 
 ### Team categories and authors
 
-On a team category's page, the **team** and **subjects** pickers offer only the user's own organisations' teams and subjects, and a hand-edited form naming another organisation's is rejected. An author is shared, but their articles aren't: the **Author's articles** list on an author's page shows staff only the articles their organisations can see.
+On a team category's page, the **team** and **subjects** pickers offer only the user's own teams and their subjects, and a hand-edited form naming another team's is rejected. An author is shared, but their articles aren't: the **Author's articles** list on an author's page shows staff only the articles their organisations can see.
 
 ---
 
 ## The Editor role
 
-The admin code above decides *which rows* a staff user sees. Django model permissions decide *what they may do* with them. The **Editor** group holds the permissions for an organisation's editor. It is defined in code, in `gregory/roles.py`, and synced by a command, so the code is the record of what an editor can do. Don't change the group in the Groups admin: the next sync removes anything that isn't in the code.
+The admin code above decides *which rows* a staff user sees and which of those they may edit (their team's). Django model permissions decide *what they may do* with them. The **Editor** group holds the permissions for an organisation's editor. It is defined in code, in `gregory/roles.py`, and synced by a command, so the code is the record of what an editor can do. Don't change the group in the Groups admin: the next sync removes anything that isn't in the code.
 
 | Editors can | Models |
 |:------------|:-------|
@@ -161,7 +188,7 @@ Editors get nothing from user accounts and groups, organisations, sites, API key
    docker exec gregory python manage.py setup_roles
    ```
 
-2. In **Users**, tick *Staff status*, add the person to the **Editor** group, and add them to their team under **Team memberships**. Joining a team also adds them to the team's organisation.
+2. In **Users**, tick *Staff status*, add the person to the **Editor** group, and add them to their team under **Team memberships**. Joining a team also adds them to the team's organisation. The team is what they can edit: an editor on no team can only look.
 3. Don't give editors permissions directly on their account. Those bypass the role and never change when the role does.
 
 The first sync on an instance that already has an "Editor" group removes anything added to it by hand, so run `setup_roles --check` first to see what would change.

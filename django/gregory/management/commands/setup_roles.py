@@ -8,8 +8,8 @@ gregory/roles.py. With --check nothing is written, and it exits non-zero if
 the group has drifted from the role.
 
 It also lists active non-superuser staff accounts that:
-  - are not on any team (they can't be told apart by team, and will be
-    read-only once editing is limited to the editor's own team);
+  - are not on any active team (they can see their organisation but edit
+    nothing: editing is limited to the user's teams, see gregory/team_scope.py);
   - hold permissions directly on the account rather than through a group
     (those bypass the role: clear them in the user admin and add the person
     to the Editor group instead);
@@ -102,7 +102,7 @@ class Command(BaseCommand):
 
 		self.stdout.write("")
 		self.stdout.write(f"Active non-superuser staff accounts: {len(staff)}")
-		self._list("Not on any team", no_team)
+		self._list("Not on any team (read-only)", no_team)
 		self._list("Permissions held directly on the account", direct)
 		self._list(f'Not in the "{EDITOR_GROUP}" group', not_editor)
 

@@ -638,6 +638,7 @@
 
       <!-- Batch actions bar -->
       <div class="batch-bar">
+        {% if can_mark %}
         <span style="font-size:13px; font-weight:600; color:#374151;">With selected:</span>
         <select name="action" id="action-select">
           <option value="">Choose an action…</option>
@@ -646,6 +647,9 @@
           <option value="mark_for_review">Mark for Review</option>
         </select>
         <button type="submit" class="btn btn-primary">Apply</button>
+        {% else %}
+        <span style="font-size:13px; color:#6b7280;">This subject belongs to another team: you can see its review status, not change it.</span>
+        {% endif %}
         <label class="select-all-label">
           <input type="checkbox" id="select-all-checkbox"> Select All
         </label>
@@ -714,6 +718,7 @@
               </td>
               <td style="text-align:center;">
                 <div class="action-stack">
+                  {% if can_mark %}
                   <button class="btn btn-sm btn-relevant"
                           onclick="updateRelevance({{ item.article.article_id }}, 'mark_relevant')"
                           {% if item.is_relevant == True %}disabled{% endif %}>
@@ -729,6 +734,7 @@
                           {% if item.is_relevant == None %}disabled{% endif %}>
                     &#8635; For Review
                   </button>
+                  {% endif %}
                   <a href="{{ item.edit_url }}" class="btn btn-sm btn-edit" target="_blank">Edit</a>
                 </div>
               </td>
