@@ -174,7 +174,7 @@ EXTRA_GLOSSARY = {
 	),
 	"categories": (
 		"Categories",
-		"Team categories assigned to this trial (semicolon-separated). See the "
+		"Categories assigned to this trial (semicolon-separated). See the "
 		"Categories sheet for each category's description and search terms.",
 		"",
 	),

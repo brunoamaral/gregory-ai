@@ -564,7 +564,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 
 ## Available endpoints
 
-**Breaking change (2026-10): `team_categories` is now `categories`.** Article, trial and patent responses (including nested article lists such as an author's articles), the streaming CSV export and the MCP tools return a record's categories under `categories`. The items inside are unchanged (`id`, `category_name`, `category_slug`, `modality`, …), and so are the `category_slug` / `category_id` / `category_modality` query parameters and the `/authors/by_team_category/` endpoint. Clients that read `team_categories` must switch to `categories`. See the [changelog entry](changelog/rename-team-categories.md).
+**Breaking change (2026-10): `team_categories` is now `categories`.** Article, trial and patent responses (list, detail and search endpoints, including `/articles/?author_id=`), the streaming CSV export, the patents and trials XLSX exports and the MCP tools return a record's categories under `categories`. The items inside are unchanged (`id`, `category_name`, `category_slug`, `modality`, …), and so are the `category_slug` / `category_id` / `category_modality` query parameters and the `/authors/by_team_category/` endpoint. Clients that read `team_categories` must switch to `categories`. See the [changelog entry](changelog/rename-team-categories.md).
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|

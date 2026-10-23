@@ -11,8 +11,8 @@
 | Where | Before | After |
 |:------|:-------|:------|
 | `GET /articles/`, `/trials/`, `/patents/` and their detail and search endpoints | `team_categories: [...]` | `categories: [...]` |
-| Nested article lists (for example an author's articles) | `team_categories` | `categories` |
 | Streaming CSV export (`?format=csv`) | `team_categories` column | `categories` column |
+| Patents and trials XLSX exports (`export_patents_xlsx`, `export_trials_xlsx` and the patents admin action) | `team_categories` column header | `categories` column header |
 | MCP `get_article` / `get_trial` / `get_patent` | `team_categories` | `categories` |
 
 The category objects inside the list are unchanged. These stay the same too:

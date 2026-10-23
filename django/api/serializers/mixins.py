@@ -18,7 +18,7 @@ Applied fields (when present on the serialised object):
   - ``article_subject_relevances``→ ArticleSubjectRelevance entries whose
                                      nested subject is outside it (same
                                      shape/reasoning as ml_predictions)
-  - ``categories``           → TeamCategory entries whose ``subjects``
+  - ``categories``                → TeamCategory entries whose ``subjects``
                                      M2M does not intersect it
   - ``teams``                     → Team entries that are neither
                                      ``api_listed`` nor owners of a subject in

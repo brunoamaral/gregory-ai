@@ -93,7 +93,7 @@ A staff user **sees** their organisations' content, as above, but **edits** only
 | Rows | Belong to a team when |
 |:-----|:----------------------|
 | Articles, trials, patents | One of their sources is the team's, or they are tagged with the team (**Teams** field) |
-| Sources, subjects, team categories, prediction run logs | Their **team** is the team |
+| Sources, subjects, categories, prediction run logs | Their **team** is the team |
 | Site takeaways and summaries, trial organisation content, patent–trial links | Their article, trial or patent belongs to the team. They are edited from the article, trial or patent page; their standalone pages are superuser-only for writes |
 | Teams | Never: a team's settings and members are superuser-only, because membership is what grants editing |
 
@@ -101,7 +101,7 @@ In practice:
 
 - Another team's row opens read-only, inlines included, and saving it is refused. Deleting follows the same rule.
 - Bulk actions run only on the selected rows the user may edit. Any others are left alone, with a warning. Exports and other view-only actions still cover the whole selection.
-- In a list with editable columns (team categories' modality), other teams' rows are shown but locked.
+- In a list with editable columns (categories' modality), other teams' rows are shown but locked.
 - Pickers offer only the user's own teams' rows: **teams**, **subjects** and **sources** on content, categories, the team of a category, source or subject, and the target of **Reassign to another team**.
 - A staff user on no active team can see their organisation but edit or add nothing. `setup_roles --check` lists such accounts.
 - **Add by DOI** on a DOI that's already in the database attaches the user's source, team and subject to that article, which makes it their team's too. It needs the *add articles* permission, which the Editor role doesn't have.
@@ -159,9 +159,9 @@ The **Subject relevance** inline on an article page works the same way, keyed by
 
 The history list and the old-version pages of articles, trials, patents, sources, trial organisation content and site takeaways and summaries follow the same scoping: a staff user gets a 403 for a row outside their organisations, even when the history table still holds it. **Revert** (saving an old version from its history page) is superuser-only. A revert rewrites every field of a row that other organisations may share, and simple-history would otherwise save it with view permission alone.
 
-### Team categories and authors
+### Categories and authors
 
-On a team category's page, the **team** and **subjects** pickers offer only the user's own teams and their subjects, and a hand-edited form naming another team's is rejected. An author is shared, but their articles aren't: the **Author's articles** list on an author's page shows staff only the articles their organisations can see.
+On a category's page, the **team** and **subjects** pickers offer only the user's own teams and their subjects, and a hand-edited form naming another team's is rejected. An author is shared, but their articles aren't: the **Author's articles** list on an author's page shows staff only the articles their organisations can see.
 
 ---
 
@@ -173,7 +173,7 @@ The admin code above decides *which rows* a staff user sees and which of those t
 |:------------|:-------|
 | View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links |
 | View, add and change | Per-site takeaways and summaries (articles, patents), trial organisation content, subject relevance |
-| View, add, change and delete | Category assignments (articles, trials, patents), team categories |
+| View, add, change and delete | Category assignments (articles, trials, patents), categories |
 | View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms (shared reference data). The read-only rows inside the article, trial and patent pages |
 
 Editors get nothing from user accounts and groups, organisations, sites, API keys, OAuth and MCP grants, or newsletters. Anyone who can edit user accounts can make themselves a superuser. Several newsletter pages are not organisation-scoped yet and show subscribers' personal data.
