@@ -182,6 +182,10 @@ for bulk work. Staff see their organisations' links and change only their own te
 medicine's own page lists its links to the user's teams' categories, and the medicine list
 can be filtered to medicines with or without a link.
 
+Editors get these permissions from the Editor role: full access to medicine–category links,
+and view-only access to medicines and their events. Run `setup_roles` after deploying a
+change to the role. See [The Editor role](06-organisations-teams-and-sites.md#the-editor-role).
+
 To give a broad category medicines, set its *EMA substance patterns* (`medicine_terms`) on the
 category form. CAR-T uses `*cabtagene*` and `tisagenlecleucel`, which together find the
 seven CAR-T products in EMA's export; a suffix such as `*leucel` would also catch Ebvallo and
