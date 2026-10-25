@@ -98,6 +98,13 @@ else:
 	if _domain:
 		_cors_origins += [f'https://{_domain}', f'https://www.{_domain}']
 	CORS_ALLOWED_ORIGINS = _cors_origins
+	# Origins whose host changes per deploy, which an exact list can't cover,
+	# e.g. Cloudflare Pages previews https://<hash-or-branch>.brain-regeneration.pages.dev.
+	# Whitespace-separated, because a regex may contain commas ({1,63}).
+	# Anchor every pattern ^...$: django-cors-headers anchors only the start, so
+	# an unanchored pattern also matches x.brain-regeneration.pages.dev.attacker.com.
+	# Unset or empty means no regexes, the same as before this setting existed.
+	CORS_ALLOWED_ORIGIN_REGEXES = os.environ.get('CORS_ALLOWED_ORIGIN_REGEXES', '').split()
 
 # Application definition
 INSTALLED_APPS = [

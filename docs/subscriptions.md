@@ -873,7 +873,7 @@ If your site has users subscribing to lists that belong to different teams/sites
 
 ### CORS
 
-The endpoint accepts cross-origin POST requests. The nginx configuration allows `Access-Control-Allow-Origin: $http_origin` for all methods.
+A plain HTML form POST is not subject to CORS, so it works from any origin (the `allowed_domains` check above still applies). A `fetch`/`axios` call can read the response only if its origin is allowed by the API's CORS settings: `https://DOMAIN_NAME`, `https://www.DOMAIN_NAME`, `CORS_ALLOWED_ORIGINS` or `CORS_ALLOWED_ORIGIN_REGEXES`. Django sends these headers, not nginx. See [CORS in the API reference](03-api-and-rss-feeds.md#cors-calling-the-api-from-a-browser-on-another-origin).
 
 If submitting via `fetch` or `axios` instead of a plain HTML form, set `Content-Type: application/x-www-form-urlencoded` and serialize the body accordingly, for example:
 

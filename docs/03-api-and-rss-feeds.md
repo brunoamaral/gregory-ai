@@ -315,6 +315,22 @@ Trials are read-only over MCP: an editor can link a trial to an article but cann
 
 ---
 
+## CORS (calling the API from a browser on another origin)
+
+Django sends the CORS headers ([django-cors-headers](https://github.com/adamchainz/django-cors-headers)); nginx adds none. With `DEBUG=True` every origin is allowed. Otherwise an origin gets `Access-Control-Allow-Origin` only if it is one of:
+
+- `https://<DOMAIN_NAME>` and `https://www.<DOMAIN_NAME>`, added automatically.
+- An exact entry in `CORS_ALLOWED_ORIGINS`: comma-separated, each with its scheme (`https://app.example.com`). A bare domain fails Django's system check (`corsheaders.E013`) and stops the whole app from starting.
+- A match for a pattern in `CORS_ALLOWED_ORIGIN_REGEXES`, for hosts that change on every deploy, like Cloudflare Pages previews (`https://<hash-or-branch>.<project>.pages.dev`). Patterns are separated by whitespace, not commas, because a regex can contain a comma (`{1,63}`). Anchor each one with `^…$`. django-cors-headers anchors only the start, so `^https://[a-z0-9-]+\.brain-regeneration\.pages\.dev` without the `$` also matches `https://x.brain-regeneration.pages.dev.attacker.com`. Example:
+
+  ```bash
+  CORS_ALLOWED_ORIGIN_REGEXES=^https://[a-z0-9-]+\.brain-regeneration\.pages\.dev$
+  ```
+
+  In `.env`, wrap the value in single quotes (or leave it unquoted): docker compose then passes `\.`, `{…}` and a trailing `$` through unchanged.
+
+Credentials are not enabled for cross-origin requests (`CORS_ALLOW_CREDENTIALS` is off), so a browser on an allowed origin reads exactly what an anonymous `curl` would. Being allowed by CORS does not pick a site: a preview origin such as `feature-x.brain-regeneration.pages.dev` matches no Site, so its requests take the fallback in step 4 below.
+
 ## Resolving a site for an anonymous caller
 
 An anonymous request is scoped to exactly one site's `scope_subjects`, resolved in this order:
