@@ -1,4 +1,4 @@
-"""Guidance attached to zero-hit search_articles/search_trials/search_patents responses.
+"""Guidance attached to zero-hit search_articles/search_trials/search_patents/search_medicines responses.
 
 Phase 3 of MCP-TELEMETRY-PLAN.md. A product change independent of the
 telemetry work: `{"count": 0, "articles": []}` is a dead end for the model
@@ -194,6 +194,42 @@ _TRIAL_SEARCH_RULE = (
 	"or `intervention=`. If the query uses AND/parentheses, try loosening it.",
 )
 
+_MEDICINE_SUBSTANCE_RULE = (
+	("substance",),
+	"`substance` is an exact match (ignoring case) on one active substance as EMA names it, "
+	"the INN: \"ocrelizumab\", not the brand name \"Ocrevus\" and not part of a name.",
+)
+
+_MEDICINE_GENERICS_RULE = (
+	("substance", "status", "category_id", "category_slug", "subject_id"),
+	lambda params: (
+		"Generics and biosimilars are already included, so they are not the cause."
+		if params.get("include_generics")
+		else "Generic and biosimilar products are hidden unless `include_generics` is true: "
+		"a substance whose only listed products are copies would otherwise look absent."
+	),
+)
+
+_MEDICINE_STATUS_RULE = (
+	("status", "opinion_status"),
+	"`status` is EMA's own wording (Authorised, Withdrawn, Refused, Opinion, ...). "
+	"`opinion_status` is filled only while a product is at the opinion stage, so most "
+	"products have none: drop it, or use `status`.",
+)
+
+_MEDICINE_DATE_RULE = (
+	("authorised_after", "authorised_before"),
+	"These bound the date of FIRST authorisation, not the latest European Commission "
+	"decision. Widen or drop them.",
+)
+
+_MEDICINE_COVERAGE_RULE = (
+	("substance",),
+	"EMA lists only medicines authorised centrally for the whole EU, and this site "
+	"shows only those linked to its categories. A drug that is not here may still be "
+	"authorised in individual countries: do not conclude it is not approved.",
+)
+
 # Checked in order per tool, so the categories most likely to silently zero
 # out an otherwise-good search rank first. Every matching rule fires; `search`
 # is last in both because it's the broadest filter, so its suggestion ranks
@@ -224,6 +260,14 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 		_APPLICANT_RULE,
 		_PATENT_SEARCH_RULE,
 	),
+	"medicines": (
+		_MEDICINE_DATE_RULE,
+		_TAXONOMY_RULE,
+		_MEDICINE_STATUS_RULE,
+		_MEDICINE_SUBSTANCE_RULE,
+		_MEDICINE_GENERICS_RULE,
+		_MEDICINE_COVERAGE_RULE,
+	),
 }
 
 _FALLBACK_SUGGESTION = "Try a broader search term, or drop optional filters one at a time to see which is excluding everything."
@@ -234,7 +278,7 @@ def guidance_for(params: dict[str, Any], tool: str) -> dict[str, Any]:
 
 	`params` is the tool's own param dict before None-pruning — only the
 	*names* of the non-None entries matter here, never their values.
-	`tool` is `"articles"`, `"trials"` or `"patents"`: it selects which rule
+	`tool` is `"articles"`, `"trials"`, `"patents"` or `"medicines"`: it selects which rule
 	set and `fields_read` mapping apply, since `search`'s coverage (and the
 	filters specific to each) differ between them.
 	"""

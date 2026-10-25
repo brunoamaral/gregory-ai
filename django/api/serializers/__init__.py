@@ -1281,6 +1281,7 @@ class McpTenantSerializer(serializers.Serializer):
 	api_public = serializers.BooleanField(read_only=True)
 	mcp_description = serializers.CharField(read_only=True, allow_blank=True)
 	patents_enabled = serializers.BooleanField(read_only=True)
+	medicines_enabled = serializers.BooleanField(read_only=True)
 	subjects = McpTenantSubjectSerializer(many=True, read_only=True)
 	prompts = McpTenantPromptSerializer(many=True, read_only=True)
 	documents = McpTenantDocumentSerializer(many=True, read_only=True)

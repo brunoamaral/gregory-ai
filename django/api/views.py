@@ -5440,6 +5440,14 @@ def _tenant_shows_patents(site_id, *, public_only) -> bool:
 	return bool(site_scope_subject_ids(site_id, public_only=public_only, patents=True))
 
 
+def _tenant_shows_medicines(site_id, *, public_only) -> bool:
+	"""Whether EMA medicines are reachable through this tenant: the same rule as
+	``_tenant_shows_patents``, on ``medicines_enabled``."""
+	from gregory.visibility import site_scope_subject_ids
+
+	return bool(site_scope_subject_ids(site_id, public_only=public_only, medicines=True))
+
+
 @extend_schema(
 	summary="List MCP tenants",
 	description=(
@@ -5518,6 +5526,7 @@ class McpTenantsView(APIView):
 					setting,
 					subject_ids,
 					_tenant_shows_patents(setting.site_id, public_only=True),
+					_tenant_shows_medicines(setting.site_id, public_only=True),
 				)
 
 		# --- Every MCP site, private included, for the MCP server's editor
@@ -5542,6 +5551,7 @@ class McpTenantsView(APIView):
 						setting,
 						subject_ids,
 						_tenant_shows_patents(setting.site_id, public_only=False),
+						_tenant_shows_medicines(setting.site_id, public_only=False),
 					)
 
 		# --- The caller's own site, if a site-bound key names one. Computed
@@ -5563,6 +5573,7 @@ class McpTenantsView(APIView):
 						own_setting,
 						subject_ids,
 						_tenant_shows_patents(own_site_id, public_only=False),
+						_tenant_shows_medicines(own_site_id, public_only=False),
 					)
 
 		site_ids_sorted = sorted(tenants.keys())
@@ -5582,7 +5593,7 @@ class McpTenantsView(APIView):
 
 		payload = []
 		for site_id in site_ids_sorted:
-			setting, subject_ids, patents_enabled = tenants[site_id]
+			setting, subject_ids, patents_enabled, medicines_enabled = tenants[site_id]
 			site = sites_by_id[site_id]
 			payload.append(
 				{
@@ -5593,6 +5604,7 @@ class McpTenantsView(APIView):
 					"api_public": setting.api_public,
 					"mcp_description": setting.mcp_description,
 					"patents_enabled": patents_enabled,
+					"medicines_enabled": medicines_enabled,
 					"subjects": list(
 						Subject.objects.filter(id__in=subject_ids)
 						.order_by("id")

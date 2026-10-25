@@ -53,12 +53,14 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
+from api.medicine_scope import category_has_subject
 from api.serializers import McpTenantSerializer
 from api.views import (
 	ArticleViewSet,
 	AuthorsViewSet,
 	CategoryViewSet,
 	McpTenantsView,
+	MedicineViewSet,
 	PatentViewSet,
 	SponsorViewSet,
 	StatsView,
@@ -78,6 +80,7 @@ from api.schema_serializers import (
 	EditorCategoryUnassignResponseSerializer,
 	EditorCategoryUpdateSerializer,
 	EditorErrorSerializer,
+	EditorMedicineLinkResponseSerializer,
 	EditorialUpdateRequestSerializer,
 	EditorialUpdateResponseSerializer,
 	EditorHistoryResponseSerializer,
@@ -103,6 +106,8 @@ from gregory.models import (
 	ArticleTrialReference,
 	CategoryAssignmentSource,
 	CategoryType,
+	Medicine,
+	MedicineCategoryAssignment,
 	PatentCategoryAssignment,
 	PatentPublication,
 	PatentSiteContent,
@@ -1361,6 +1366,155 @@ class EditorPatentHistoryView(_EditorView):
 		return Response({"patent_id": patent.patent_id, "entries": entries[:limit]})
 
 
+# --- EMA medicines ----------------------------------------------------------
+#
+# A medicine is global EMA reference data with no subject of its own, so it is
+# reached through the categories it is linked to. Editors of a category can hide
+# a link the matcher made (it stays, marked ``suppressed``, so the matcher never
+# brings it back), restore it, add a hand link the matcher did not find, or delete
+# a hand link. Only sites with ``medicines_enabled`` on have any of this: for the
+# others every route is a 404.
+
+
+@extend_schema(
+	summary="Restore or add a medicine-category link (editor)",
+	description=(
+		"Editor-only. Makes the medicine live in the category: a link an editor "
+		"suppressed is restored (200), and a pair with no link gets a new hand link "
+		"(201) that the matcher never changes or removes. A link that is already live "
+		"is returned unchanged (200), automatic or manual, so repeating the call "
+		"records nothing new. The change applies to the whole category, on every site "
+		"that shows it. The category must be one the editor can change (all of its "
+		"subjects in the editor's site scope, else 403) and the site must have "
+		"`medicines_enabled` on. 404 when the category is out of scope, the site has "
+		"no medicines, or the medicine is not one this site can see: it must be linked "
+		"(live or suppressed) to a category with a subject in the site's medicine scope. "
+		"Recorded under the editor's name."
+	),
+	request=None,
+	responses={
+		200: EditorMedicineLinkResponseSerializer,
+		201: EditorMedicineLinkResponseSerializer,
+		**_CATEGORY_WRITE_ERRORS,
+	},
+	auth=[{"editorServiceAuth": []}],
+)
+class EditorCategoryMedicineView(_CategoryScopeMixin, _EditorView):
+	"""``PUT`` (restore or add) and ``DELETE`` (suppress or delete)
+	``/editor/categories/{category_id}/medicines/{medicine_id}/``.
+
+	Rows are saved one at a time inside ``editing_as(user, "mcp")`` so
+	``MedicineCategoryAssignment.history`` names the editor; a queryset ``update()``
+	would record nobody. Locked with ``select_for_update`` so two overlapping calls
+	queue instead of both reading the old row.
+	"""
+
+	def medicine_scope(self):
+		"""Subject ids the editor's site shows MEDICINES for: its scope, but only
+		when the site has ``medicines_enabled`` on (empty otherwise)."""
+		return site_scope_subject_ids(self.request.auth.site_id, public_only=False, medicines=True)
+
+	def get_category_and_medicine(self, category_id, medicine_id):
+		"""The category (one this editor may change, shown with medicines) and the
+		medicine (one this site can see), else 404.
+
+		A medicine is not tied to a subject, so "can see" means it has a link, live
+		or suppressed, to a category with a subject in the site's medicine scope.
+		Suppressed counts: otherwise suppressing a medicine's only link would put
+		it out of reach of the restore that undoes it. So does having had a link to
+		this very category: a hand link that was deleted can be deleted again
+		(idempotent) and added back.
+		"""
+		scope = self.medicine_scope()
+		if not scope:
+			# A site with the switch off has no medicines at all, whatever the category.
+			raise NotFound("Category not found.")
+		category = self.category_for_edit(category_id)
+		if not {s.id for s in category.subjects.all()} & scope:
+			raise NotFound("Category not found.")
+		medicine = Medicine.objects.defer("raw").filter(pk=medicine_id).first()
+		known = medicine is not None and (
+			MedicineCategoryAssignment.objects.filter(medicine=medicine)
+			.filter(category_has_subject(scope))
+			.exists()
+			or MedicineCategoryAssignment.history.filter(medicine_id=medicine.pk, teamcategory_id=category.pk).exists()
+		)
+		if not known:
+			raise NotFound("Medicine not found.")
+		return category, medicine
+
+	@staticmethod
+	def payload(medicine, category, link, change):
+		updated_by, updated_at = _last_change(
+			MedicineCategoryAssignment.history, medicine_id=medicine.pk, teamcategory_id=category.pk
+		)
+		return {
+			"medicine_id": medicine.pk,
+			"category_id": category.pk,
+			"linked": link is not None and not link.suppressed,
+			"source": link.source if link is not None else None,
+			"suppressed": link.suppressed if link is not None else False,
+			"change": change,
+			"updated_by": updated_by,
+			"updated_at": updated_at,
+		}
+
+	def put(self, request, category_id, medicine_id):
+		category, medicine = self.get_category_and_medicine(category_id, medicine_id)
+		change = "unchanged"
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			link, created = MedicineCategoryAssignment.objects.select_for_update().get_or_create(
+				medicine=medicine,
+				teamcategory=category,
+				defaults={"source": CategoryAssignmentSource.MANUAL},
+			)
+			if created:
+				change = "added"
+			elif link.suppressed:
+				link.suppressed = False
+				link.save(update_fields=["suppressed"])
+				change = "restored"
+		return Response(
+			self.payload(medicine, category, link, change),
+			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+		)
+
+	@extend_schema(
+		summary="Suppress or delete a medicine-category link (editor)",
+		description=(
+			"Editor-only. Takes the medicine out of the category. A link the matcher "
+			"made is suppressed (it stays, hidden everywhere, so the matcher never "
+			"brings it back); a hand link is deleted. Idempotent: a link that is "
+			"already suppressed, or that does not exist, is answered 200 with "
+			"`linked: false` and nothing is recorded. The change applies to the whole "
+			"category. Same scope and 403/404 rules as the PUT."
+		),
+		request=None,
+		responses={200: EditorMedicineLinkResponseSerializer, **_CATEGORY_WRITE_ERRORS},
+		auth=[{"editorServiceAuth": []}],
+	)
+	def delete(self, request, category_id, medicine_id):
+		category, medicine = self.get_category_and_medicine(category_id, medicine_id)
+		change = "unchanged"
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			link = (
+				MedicineCategoryAssignment.objects.select_for_update()
+				.filter(medicine=medicine, teamcategory=category)
+				.first()
+			)
+			if link is None:
+				pass
+			elif link.source == CategoryAssignmentSource.MANUAL:
+				link.delete()
+				link = None
+				change = "deleted"
+			elif not link.suppressed:
+				link.suppressed = True
+				link.save(update_fields=["suppressed"])
+				change = "suppressed"
+		return Response(self.payload(medicine, category, link, change))
+
+
 # --- Read: tenants, for the MCP server's editor mount --------------------
 
 
@@ -1796,6 +1950,7 @@ EditorAuthorsViewSet = _editor_read_view(AuthorsViewSet)
 EditorSubjectsViewSet = _editor_read_view(SubjectsViewSet)
 EditorSponsorViewSet = _editor_read_view(SponsorViewSet)
 EditorPatentViewSet = _editor_read_view(PatentViewSet)
+EditorMedicineViewSet = _editor_read_view(MedicineViewSet)
 class EditorStatsView(_editor_read_view(StatsView)):
 	"""``/editor/stats/``: counts over the editor's site scope.
 
@@ -1819,4 +1974,5 @@ EDITOR_READ_ROUTES = [
 	("subjects", EditorSubjectsViewSet, "editor-subjects"),
 	("sponsors", EditorSponsorViewSet, "editor-sponsors"),
 	("patents", EditorPatentViewSet, "editor-patents"),
+	("medicines", EditorMedicineViewSet, "editor-medicines"),
 ]
