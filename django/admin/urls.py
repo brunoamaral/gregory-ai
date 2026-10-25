@@ -78,6 +78,7 @@ from rss.views import (
 	redirect_articles_by_author_feed,
 	redirect_trials_by_subject_feed,
 )
+from rss.medicine_feeds import SiteMedicineEventsByCategoryFeed, SiteMedicineEventsFeed
 from rss.patent_feeds import (
 	SitePatentsByCategoryFeed,
 	SitePatentsBySubjectFeed,
@@ -220,6 +221,18 @@ urlpatterns = (
 			"feed/sites/<int:site_id>/patents/category/<str:category_slug>/",
 			cache_page(FEED_CACHE_SECONDS)(SitePatentsByCategoryFeed()),
 			name="site_patents_by_category_feed",
+		),
+		# EMA medicine event feeds (rss/medicine_feeds.py). Need rss_enabled AND
+		# medicines_enabled on the site; 404 otherwise.
+		path(
+			"feed/sites/<int:site_id>/medicines/category/<str:category_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SiteMedicineEventsByCategoryFeed()),
+			name="site_medicines_by_category_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/medicines/",
+			cache_page(FEED_CACHE_SECONDS)(SiteMedicineEventsFeed()),
+			name="site_medicines_feed",
 		),
 		# Search feeds (rss/search_feeds.py, and patents/search/ in
 		# rss/patent_feeds.py). NOT wrapped in cache_page: they cache

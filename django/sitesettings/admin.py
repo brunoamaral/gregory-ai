@@ -91,6 +91,7 @@ class CustomSettingInline(admin.StackedInline):
 					"scope_subjects",
 					"rss_enabled",
 					"patents_enabled",
+					"medicines_enabled",
 				],
 				"description": (
 					"What this site owns and whether it is served anonymously. "

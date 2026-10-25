@@ -3010,6 +3010,25 @@ class MedicineEvent(models.Model):
 		ENDED = "ended", "Authorisation ended"
 		STATUS_CHANGED = "status_changed", "Status changed"
 
+	# The event as a reader's sentence ("Authorised in the EU"), where Kind's labels
+	# are for the admin. One dict, shared by the RSS feeds and the API, so a kind is
+	# never worded two ways.
+	IN_WORDS = {
+		Kind.ROLLING_REVIEW_STARTED: "Rolling review started",
+		Kind.EVALUATION_STARTED: "EMA evaluation started",
+		Kind.OPINION_POSITIVE: "CHMP positive opinion",
+		Kind.OPINION_NEGATIVE: "CHMP negative opinion",
+		Kind.OPINION_ADOPTED: "CHMP opinion adopted",
+		Kind.AUTHORISED: "Authorised in the EU",
+		Kind.EC_DECISION: "New European Commission decision",
+		Kind.INDICATION_CHANGED: "Indication changed",
+		Kind.REFUSED: "Authorisation refused",
+		Kind.APPLICATION_WITHDRAWN: "Application withdrawn",
+		Kind.SUSPENDED: "Authorisation suspended",
+		Kind.ENDED: "Authorisation ended",
+		Kind.STATUS_CHANGED: "Status changed",
+	}
+
 	class Basis(models.TextChoices):
 		RECONSTRUCTED = "reconstructed", "Reconstructed from EMA's dates"
 		OBSERVED = "observed", "Observed between syncs"
@@ -3029,6 +3048,21 @@ class MedicineEvent(models.Model):
 
 	def __str__(self):
 		return f"{self.medicine_id} {self.kind} {self.event_date}"
+
+	@property
+	def in_words(self):
+		"""The event as a reader's sentence; the raw kind if a new one has no wording yet.
+
+		``ended`` and ``status_changed`` add what the event stored, so a withdrawal reads
+		differently from an expiry ("Authorisation ended (Withdrawn)") and a status change
+		says from what to what. Without those values the base wording stands.
+		"""
+		words = self.IN_WORDS.get(self.kind, self.get_kind_display())
+		if self.kind == self.Kind.ENDED and self.to_value:
+			return f"{words} ({self.to_value})"
+		if self.kind == self.Kind.STATUS_CHANGED and self.from_value and self.to_value:
+			return f"{words}: {self.from_value} → {self.to_value}"
+		return words
 
 	class Meta:
 		db_table = "medicine_events"

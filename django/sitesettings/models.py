@@ -353,6 +353,16 @@ class CustomSetting(models.Model):
 			"API\" in docs/patents.md)."
 		),
 	)
+	medicines_enabled = models.BooleanField(
+		default=False,
+		help_text=(
+			"Show EMA medicine approvals for this site's categories: the RSS "
+			"medicine feeds (which also need rss_enabled) and, in later "
+			"releases, the API and the MCP server. Off by default; a site "
+			"with this off serves no medicines anywhere, even when its "
+			"scope lists the subjects (see docs/ema-medicines.md)."
+		),
+	)
 
 
 class SiteMcpPrompt(models.Model):

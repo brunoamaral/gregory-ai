@@ -33,6 +33,7 @@ from api.patent_links import visible_patent_trial_links_queryset
 from gregory.models import (
 	Articles,
 	ArticleSiteContent,
+	MedicineEvent,
 	PatentApplicant,
 	Patents,
 	PatentSiteContent,
@@ -588,3 +589,77 @@ class PatentFeedItemMixin:
 		return [subject.subject_name for subject in item._feed_subjects] + [
 			category.category_name for category in item._feed_categories
 		]
+
+
+# ---------------------------------------------------------------------------
+# EMA medicine events
+#
+# An item is one MedicineEvent: a regulatory milestone of one medicine (an
+# opinion, an authorisation, a new EC decision). The data is EMA's, reusable
+# provided EMA is credited, so every description ends with the attribution.
+# ---------------------------------------------------------------------------
+
+# Where an item links when a medicine has no EPAR page of its own.
+EMA_MEDICINES_URL = "https://www.ema.europa.eu/en/medicines"
+
+EMA_SOURCE_NOTE = "Source: European Medicines Agency"
+
+
+def medicine_event_title(event):
+	"""``"<product name> (<substance>): <event in words>"``.
+
+	The substance is the INN, or the active substance when EMA leaves the INN
+	empty; with neither, the brackets are left out.
+	"""
+	medicine = event.medicine
+	substance = medicine.inn or medicine.active_substance
+	name = f"{medicine.name} ({substance})" if substance else medicine.name
+	return f"{name}: {event.in_words}"
+
+
+def medicine_event_description(event):
+	"""HTML description: the cleaned indication, then the EMA attribution.
+
+	Medicine.indication is already cleaned of tags and entities by the sync;
+	it is escaped here all the same, as for every other database text.
+	"""
+	sections = []
+	if event.medicine.indication:
+		sections.append(format_html("<p>{}</p>", _text_block(event.medicine.indication)))
+	sections.append(format_html("<p>{}</p>", EMA_SOURCE_NOTE))
+	return _join_sections(sections)
+
+
+def hydrate_medicine_events(ids):
+	"""Load the events in `ids`, in that order, with their medicines, in one query."""
+	by_id = {
+		event.pk: event
+		for event in MedicineEvent.objects.filter(pk__in=ids).select_related("medicine")
+	}
+	return [by_id[pk] for pk in ids if pk in by_id]
+
+
+class MedicineEventFeedItemMixin:
+	"""item_* methods shared by every feed of medicine events.
+
+	Items must come from hydrate_medicine_events().
+	"""
+
+	def item_title(self, item):
+		return medicine_event_title(item)
+
+	def item_description(self, item):
+		return medicine_event_description(item)
+
+	def item_link(self, item):
+		return _http_url(item.medicine.url) or EMA_MEDICINES_URL
+
+	def item_guid(self, item):
+		return f"ema-medicine-event-{item.pk}"
+
+	item_guid_is_permalink = False
+
+	def item_pubdate(self, item):
+		# EMA's date for the event (a date, so midnight UTC), or the day the
+		# sync saw it for an observed change EMA gave no date for.
+		return datetime.combine(item.event_date, time.min, tzinfo=timezone.utc)

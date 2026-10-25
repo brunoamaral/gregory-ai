@@ -52,6 +52,7 @@ def _make_site(
 	domain=None,
 	name=None,
 	patents_enabled=False,
+	medicines_enabled=False,
 ):
 	site = Site.objects.create(
 		domain=domain or _next_domain("public" if api_public else "private"),
@@ -62,6 +63,7 @@ def _make_site(
 		title=name or f"{site.domain} settings",
 		api_public=api_public,
 		patents_enabled=patents_enabled,
+		medicines_enabled=medicines_enabled,
 	)
 	for subject in subjects:
 		settings_row.scope_subjects.add(subject)
@@ -88,7 +90,12 @@ def _make_site(
 
 
 def publish_subjects(
-	*subjects, organization=None, domain=None, name=None, patents_enabled=False
+	*subjects,
+	organization=None,
+	domain=None,
+	name=None,
+	patents_enabled=False,
+	medicines_enabled=False,
 ):
 	"""Make ``subjects`` readable by an anonymous caller.
 
@@ -99,6 +106,7 @@ def publish_subjects(
 
 	``patents_enabled`` turns on the site's patent switch (off by default, as
 	in production); patents are visible only through sites that have it on.
+	``medicines_enabled`` is the same for EMA medicines.
 
 	Returns the Site, so a test that needs the id (``?site_id=``, an API key
 	binding) can use it.
@@ -110,11 +118,17 @@ def publish_subjects(
 		domain=domain,
 		name=name,
 		patents_enabled=patents_enabled,
+		medicines_enabled=medicines_enabled,
 	)
 
 
 def private_site_publishing(
-	*subjects, organization=None, domain=None, name=None, patents_enabled=False
+	*subjects,
+	organization=None,
+	domain=None,
+	name=None,
+	patents_enabled=False,
+	medicines_enabled=False,
 ):
 	"""The counterpart: a site whose scope an anonymous caller cannot see.
 
@@ -129,4 +143,5 @@ def private_site_publishing(
 		domain=domain,
 		name=name,
 		patents_enabled=patents_enabled,
+		medicines_enabled=medicines_enabled,
 	)

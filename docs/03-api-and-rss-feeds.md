@@ -38,6 +38,8 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 | New patent families by subject | `GET /feed/sites/{site_id}/patents/subject/{subject_slug}/` — see [Patent feeds](#patent-feeds) |
 | New patent families by topic (category) | `GET /feed/sites/{site_id}/patents/category/{category_slug}/` — see [Patent feeds](#patent-feeds) |
 | Patent search results | `GET /feed/sites/{site_id}/patents/search/?…` — see [Patent feeds](#patent-feeds) |
+| EMA medicine events, all categories | `GET /feed/sites/{site_id}/medicines/` — see [Medicine feeds](#medicine-feeds) |
+| EMA medicine events by topic (category) | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` — see [Medicine feeds](#medicine-feeds) |
 
 The variants of the subject, category and author feeds are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **On those feeds any query string is ignored** and does not change the response. The [search feeds](#search-feeds) are the one exception: a search is open-ended, so they take an allowlisted query string.
 
@@ -76,7 +78,7 @@ A busy condition gets dozens of new articles a day, so a reader that polls less 
 
 **Feeds are site-scoped, not caller-scoped** — the same design as the [sitemaps](#sitemaps) below, and a deliberate change from how this worked before. A feed serves the *requested site's* `CustomSetting.scope_subjects`: the subject, category and trials feeds 404 when the requested subject or category is not in that site's scope, and the author feed 404s when none of the author's articles carries a subject in it, otherwise listing only the articles that do. The response never varies by who (or what) is asking — a feed reader has no identity and the response is cached, so there is nothing to key a caller-specific response on. `?include_public=true` and any notion of "the caller's own scope" (API key, signed-in user) do not apply to these URLs at all.
 
-A site's feed is gated by its own `CustomSetting.rss_enabled` alone (the [patent feeds](#patent-feeds) also need `patents_enabled`) — 404 when it's off, or when the site has no `CustomSetting` row, or when `site_id` doesn't exist. Unlike the sitemaps, a feed's scope is **not** narrowed to the publicly-visible subject set: `rss_enabled` and `scope_subjects` are the whole gate, whether or not the site is `api_public` — the same rule a site-bound API key follows for its own scope (see [Visibility rules summary](#visibility-rules-summary)). Curation into the site's scope is the whole grant otherwise, so team ownership plays no part: a subject with no team is served once some site's scope names it, exactly as for the API and sitemaps.
+A site's feed is gated by its own `CustomSetting.rss_enabled` alone (the [patent feeds](#patent-feeds) also need `patents_enabled`, and the [medicine feeds](#medicine-feeds) `medicines_enabled`) — 404 when it's off, or when the site has no `CustomSetting` row, or when `site_id` doesn't exist. Unlike the sitemaps, a feed's scope is **not** narrowed to the publicly-visible subject set: `rss_enabled` and `scope_subjects` are the whole gate, whether or not the site is `api_public` — the same rule a site-bound API key follows for its own scope (see [Visibility rules summary](#visibility-rules-summary)). Curation into the site's scope is the whole grant otherwise, so team ownership plays no part: a subject with no team is served once some site's scope names it, exactly as for the API and sitemaps.
 
 The author feed's `<link>` element points at the requested site's author profile page (`https://{site.domain}/authors/{orcid}/`) when that site's `CustomSetting.has_author_pages` is on, and at `https://orcid.org/{orcid}` otherwise. See [Author profile page links](06-organisations-teams-and-sites.md#author-profile-page-links).
 
@@ -128,6 +130,27 @@ New patent families, for researchers and industry watchers: who is patenting wha
 	- **Never in a feed:** the abstract (`summary`), `claims`, `inventors`, CPC/IPC codes, publication numbers. The query that loads the items doesn't even select those columns.
 - **Channel.** `{Subject} patents — {site}` and `Patents: {Category} — {site}`; the description says these are new patent families by first publication, sourced from the EPO's Open Patent Services, with a link to the OPS terms. The `<link>` is the site's homepage.
 - **Search.** `patents/search/` works like the other [search feeds](#search-feeds) (allowlist, canonical query string, 400 for invalid values, 300-character cap, `X-Robots-Tag: noindex, nofollow`, one-hour cache, no POST, and `/robots.txt` disallows it). Allowed parameters: `search`, `title`, `summary`, `subject_id`, `category_slug`, `applicant_sponsor_slug`, `has_grant`, `has_trial_link` (the last two must be `true` or `false`). They have the same meaning as on `/patents/` (`PatentFilter`); `has_trial_link` counts only visible category-basis links to trials in the site's scope. `search`, `title` and `summary` match against the patent text on the server, but the text is never output. Everything else (`applicant`, `cpc`, `publication_number`, `family_id`, date windows, `include_subject_links`, …) is ignored. The channel title is `Patent search: … — {site}`, with the labels `grant published` / `no grant published` and `linked to a trial` / `no linked trial`, and `All patents — {site}` with no parameters.
+
+### Medicine feeds
+
+New regulatory events of medicines the European Medicines Agency (EMA) has handled: a CHMP opinion, an authorisation, a new European Commission decision, a withdrawal. They are how a partner hears about an approval without polling the API. The data and the sync behind it are described in [ema-medicines.md](ema-medicines.md). The feeds follow the scope, slug-resolution, empty-feed and caching rules above, with these differences:
+
+| Feed | URL |
+|:-----|:----|
+| All categories | `GET /feed/sites/{site_id}/medicines/` |
+| By category | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` |
+
+- **Two switches.** A medicine feed needs the site's `CustomSetting.rss_enabled` **and** `CustomSetting.medicines_enabled`, which is **off** for every site until someone ticks it. With either off it is a **404**, even when the category is in scope. A category outside the site's scope (none of its subjects is in `scope_subjects`) is a **404** too. There are no `/relevant/` variants and no search feed.
+- **Which medicines.** Those with a link to the category that an editor has **not suppressed** (automatic or manual: see [Matching medicines to categories](ema-medicines.md#matching-medicines-to-categories)). The category feed uses one category, the site feed every category that has a subject in the site's scope. An event appears once in the site feed, however many of the site's categories its medicine is in. **Generic and biosimilar products are left out.**
+- **Which events.** `observed` events (a change the sync saw between two downloads) always; `reconstructed` events (read off EMA's date fields when a medicine was first seen) only when their date is within the last **90 days**. Without that cut-off, the first sync would put every approval since 1995 in the feed. Events of a medicine that EMA no longer lists are still shown.
+- **Ordered by event date**, newest first (ties by newest event id), **50 items**. `<pubDate>` is the event date at midnight UTC.
+- **Item content.**
+	- `title`: `{product name} ({substance}): {event in words}`, for example `Ocrevus (ocrelizumab): CHMP positive opinion`. The substance is EMA's INN, or the active substance when the INN is empty; with neither, the brackets are left out. The wordings are fixed per event kind (`MedicineEvent.IN_WORDS`): *CHMP positive opinion*, *CHMP negative opinion*, *CHMP opinion adopted*, *Authorised in the EU*, *New European Commission decision*, *Indication changed*, *Authorisation refused*, *Application withdrawn*, *Authorisation suspended*, *Authorisation ended*, *Rolling review started*, *EMA evaluation started* and *Status changed*. *New European Commission decision* is a later decision such as a variation, not the approval. *Authorisation ended* adds the new status when the event has one (`Authorisation ended (Withdrawn)`), and *Status changed* adds both (`Status changed: Authorised → Suspended`).
+	- `link`: the medicine's EPAR page on ema.europa.eu.
+	- `guid`: `ema-medicine-event-{event id}` (not a permalink).
+	- the HTML description: the medicine's cleaned indication (HTML-escaped), then `Source: European Medicines Agency`, which EMA's legal notice asks for wherever its data is served.
+- **Channel.** `Medicines: {Category} — {site}` and `Medicine approvals — {site}`; the description credits EMA. The `<link>` is the site's homepage.
+- **Cost.** One render uses a fixed number of queries (7 for a category feed, 6 for the site feed) whatever the number of items.
 
 ### Old feed URLs — permanent redirect
 
