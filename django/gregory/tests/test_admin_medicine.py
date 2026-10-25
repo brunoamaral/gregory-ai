@@ -59,7 +59,9 @@ class MedicineAdminTests(TestCase):
 		response = self.client.get(
 			reverse("admin:gregory_medicine_change", args=[self.medicine.pk])
 		)
-		(inline,) = response.context["inline_admin_formsets"]
+		inline = next(
+			i for i in response.context["inline_admin_formsets"] if i.formset.model is MedicineEvent
+		)
 		self.assertEqual(
 			[form.instance.kind for form in inline.formset.forms],
 			[MedicineEvent.Kind.EC_DECISION, MedicineEvent.Kind.AUTHORISED],

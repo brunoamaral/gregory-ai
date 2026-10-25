@@ -547,8 +547,18 @@ class TeamCategoryAdminBackfillTest(TestCase):
 		"weight_trial_therapeutic_areas": 1,
 	}
 
+	# The category page has an inline of EMA medicine links; an empty one is posted
+	# along with the form.
+	MEDICINE_LINKS_FORMSET = {
+		"medicine_assignments-TOTAL_FORMS": "0",
+		"medicine_assignments-INITIAL_FORMS": "0",
+		"medicine_assignments-MIN_NUM_FORMS": "0",
+		"medicine_assignments-MAX_NUM_FORMS": "1000",
+	}
+
 	def create_category_via_admin(self, category_type, **overrides):
 		data = {
+			**self.MEDICINE_LINKS_FORMSET,
 			"team": self.team.pk,
 			"subjects": [self.subject.pk],
 			"category_name": "Neuroplasticity",
@@ -615,6 +625,7 @@ class TeamCategoryAdminBackfillTest(TestCase):
 			"weight_trial_primary_outcome": trial_weights["primary_outcome"],
 			"weight_trial_secondary_outcome": trial_weights["secondary_outcome"],
 			"weight_trial_therapeutic_areas": trial_weights["therapeutic_areas"],
+			**self.MEDICINE_LINKS_FORMSET,
 		}
 		data.update(overrides)
 		return self.client.post(

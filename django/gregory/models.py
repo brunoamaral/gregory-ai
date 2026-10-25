@@ -290,6 +290,26 @@ class TeamCategory(models.Model):
 			"automatically, whatever its score. Manual assignments are not affected."
 		),
 	)
+	medicine_terms = ArrayField(
+		models.CharField(max_length=100),
+		default=list,
+		blank=True,
+		verbose_name="EMA substance patterns (comma separated)",
+		help_text=(
+			"Substance patterns for matching EMA medicines. '*' is a wildcard over the whole "
+			"substance name, e.g. *cabtagene*, tisagenlecleucel for CAR-T. When set, these "
+			"replace the category terms for medicine matching, and they are the only way a "
+			"research topic or other non-intervention category gets medicines."
+		),
+	)
+	medicine_include_combinations = models.BooleanField(
+		default=False,
+		verbose_name="Include EMA combination products",
+		help_text=(
+			"Also match EMA products where the substance is one of several. Off by default: "
+			"a combination product is rarely what the category is about."
+		),
+	)
 	category_type = models.CharField(
 		max_length=10,
 		choices=CategoryType.choices,
@@ -532,6 +552,19 @@ class Subject(models.Model):
 	subject_name = models.CharField(blank=False, null=False, max_length=50)
 	description = models.TextField(blank=True, null=True)
 	subject_slug = models.SlugField(editable=True)
+	ema_therapeutic_areas = ArrayField(
+		models.CharField(max_length=255),
+		default=list,
+		blank=True,
+		verbose_name="EMA therapeutic areas (comma separated)",
+		help_text=(
+			"MeSH headings as EMA writes them, e.g. Multiple Sclerosis. A medicine links to this "
+			"subject's categories only when EMA approved it for an area starting with one of "
+			"these, ignoring case. Suggestions: Multiple Sclerosis; Alzheimer Disease, Dementia; "
+			"Parkinson Disease. Leave empty when the subject has no EMA equivalent: its "
+			"categories then link every medicine that matches by substance."
+		),
+	)
 	auto_predict = models.BooleanField(
 		default=False, help_text="Enable automatic ML prediction for new articles"
 	)
@@ -2937,6 +2970,12 @@ class Medicine(models.Model):
 		default=timezone.now,
 		help_text="When a sync last created or changed this row. Unchanged rows are not rewritten.",
 	)
+	categories = models.ManyToManyField(
+		"TeamCategory",
+		through="MedicineCategoryAssignment",
+		related_name="medicines",
+		blank=True,
+	)
 
 	def __str__(self):
 		return f"{self.name} ({self.ema_product_number})"
@@ -2997,6 +3036,54 @@ class MedicineEvent(models.Model):
 		constraints = [
 			models.UniqueConstraint(
 				fields=["medicine", "kind", "event_date"], name="uniq_medicine_event"
+			)
+		]
+
+
+class MedicineCategoryAssignment(models.Model):
+	"""Through model for Medicine.categories: a medicine filed under a team category.
+
+	``automatic`` rows are written by match_medicines, which re-derives them from the
+	category's patterns on every run. An editor who removes one sets ``suppressed``
+	instead of deleting it, so the matcher never brings it back; ``manual`` rows are an
+	editor's own and skip every matching rule. Modelled on PatentCategoryAssignment and
+	PatentTrialLink."""
+
+	medicine = models.ForeignKey(
+		Medicine, on_delete=models.CASCADE, related_name="category_assignments"
+	)
+	teamcategory = models.ForeignKey(
+		"TeamCategory", on_delete=models.CASCADE, related_name="medicine_assignments"
+	)
+	source = models.CharField(
+		max_length=10,
+		choices=CategoryAssignmentSource.choices,
+		default=CategoryAssignmentSource.MANUAL,
+	)
+	matched_on = models.CharField(
+		max_length=255,
+		blank=True,
+		help_text="The pattern, and the EMA area when the disease check ran, that made the matcher link this medicine.",
+	)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text="Set when an editor removed an automatic link. The matcher never recreates, changes or restores a suppressed link.",
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	# Records an editor's additions, suppressions and restores (admin, an MCP editor).
+	# match_medicines writes its rows with bulk_create and queryset deletes, which record
+	# nothing: a pipeline write has no editor, as with rebuild_categories.
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
+
+	def __str__(self):
+		return f"{self.medicine_id} → {self.teamcategory_id} ({self.source})"
+
+	class Meta:
+		db_table = "medicines_team_categories"
+		verbose_name = "medicine category assignment"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["medicine", "teamcategory"], name="uniq_medicine_category"
 			)
 		]
 
