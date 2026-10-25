@@ -25,6 +25,7 @@ from tests.editor_helpers import (
 	mcp_client,
 	new_app,
 	running,
+	two_tenants,
 )
 
 STORED = {
@@ -1316,3 +1317,156 @@ def test_the_trial_link_docstring_says_editors_cannot_create_a_patent_link():
 
 def test_set_article_relevance_does_not_mention_patents():
 	assert "patent" not in editor.set_article_relevance.__doc__.lower()
+
+
+# --- set_medicine_link ---------------------------------------------------------------------------
+
+LINK = {
+	"medicine_id": 77,
+	"category_id": 140,
+	"linked": True,
+	"source": "manual",
+	"suppressed": False,
+	"change": "added",
+	"updated_by": "ana",
+	"updated_at": "2026-10-25T10:00:00Z",
+}
+
+
+def _medicine_routes():
+	return {
+		"/editor/categories/140/medicines/77/": lambda r: httpx2.Response(
+			201 if r.method == "PUT" else 200,
+			json={**LINK, "linked": r.method == "PUT", "change": "added" if r.method == "PUT" else "suppressed"},
+		),
+		# A category shared with another site: the admin only.
+		"/editor/categories/141/medicines/77/": httpx2.Response(
+			403,
+			json={"detail": "This category also covers subjects outside this site, so it can only be changed in the admin."},
+		),
+		# What the route answers on a site without medicines, a hidden medicine or a missing one.
+		"/editor/categories/140/medicines/404/": httpx2.Response(404, json={"detail": "Medicine not found."}),
+		"/editor/categories/140/medicines/429/": httpx2.Response(429, json={"detail": "slow"}, headers={"Retry-After": "30"}),
+	}
+
+
+@pytest.fixture
+def medicine_django(mock_editor_gregory):
+	tenants = [{**t, "medicines_enabled": True} for t in two_tenants()]
+	fake = FakeDjango(
+		editor_tenants=tenants,
+		anon_tenants=tenants,
+		tokens={
+			"editor": introspection(),
+			"readonly": introspection(scope="articles:read"),
+		},
+		api_routes=_medicine_routes(),
+	)
+	mock_editor_gregory.set_handler(fake.handler())
+	return fake
+
+
+async def test_set_medicine_link_true_puts_and_returns_what_django_stored(medicine_django, mock_editor_gregory):
+	result = await _call("set_medicine_link", {"category_id": 140, "medicine_id": 77, "linked": True})
+
+	assert not result.is_error
+	assert json.loads(result.content[0].text) == {**LINK, "change": "added"}
+	(write,) = _writes(mock_editor_gregory)
+	assert (write.method, write.url.path) == ("PUT", "/editor/categories/140/medicines/77/")
+	assert write.headers["x-gregory-editor-user"] == "7"
+	assert write.headers["x-gregory-editor-site"] == str(SITE_ID)
+	assert write.headers["authorization"] == f"Bearer {SERVICE_KEY}"
+
+
+async def test_set_medicine_link_false_deletes(medicine_django, mock_editor_gregory):
+	result = await _call("set_medicine_link", {"category_id": 140, "medicine_id": 77, "linked": False})
+
+	assert not result.is_error
+	body = json.loads(result.content[0].text)
+	assert (body["linked"], body["change"]) == (False, "suppressed")
+	(write,) = _writes(mock_editor_gregory)
+	assert (write.method, write.url.path) == ("DELETE", "/editor/categories/140/medicines/77/")
+
+
+async def test_a_category_shared_with_another_site_is_refused_with_the_reason(medicine_django):
+	result = await _call("set_medicine_link", {"category_id": 141, "medicine_id": 77, "linked": True})
+
+	assert result.is_error
+	assert "The edit was refused" in result.content[0].text
+	assert "only be changed in the admin" in result.content[0].text
+
+
+async def test_a_medicine_the_site_cannot_show_is_not_found_without_naming_switches(medicine_django):
+	for linked in (True, False):
+		result = await _call("set_medicine_link", {"category_id": 140, "medicine_id": 404, "linked": linked})
+		text = result.content[0].text
+		assert result.is_error
+		assert text.endswith("Medicine 404 or category 140 was not found on this site.")
+		for word in ("instance", "tenant", "medicines_enabled", "switch", "enabled"):
+			assert word not in text.lower(), word
+
+
+async def test_the_edit_limit_is_reported_with_the_wait(medicine_django):
+	result = await _call("set_medicine_link", {"category_id": 140, "medicine_id": 429, "linked": True})
+
+	assert result.is_error
+	assert "edit limit" in result.content[0].text
+	assert "30 seconds" in result.content[0].text
+
+
+async def test_a_timed_out_link_edit_says_to_read_the_medicine_not_its_history(monkeypatch):
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(0))
+
+	with pytest.raises(editor.ToolError) as caught:
+		await editor.set_medicine_link(category_id=140, medicine_id=77, linked=True)
+
+	assert "may not have been applied" in str(caught.value)
+	assert "get_medicine" in str(caught.value)
+	assert "history" not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+	"linked,action", [(True, "link"), (False, "unlink")]
+)
+async def test_set_medicine_link_logs_the_medicine_the_category_and_the_direction(
+	medicine_django, caplog, linked, action
+):
+	caplog.set_level(logging.INFO)
+
+	await _call("set_medicine_link", {"category_id": 140, "medicine_id": 77, "linked": linked})
+
+	(edit,) = _edits(caplog)
+	assert (edit.tool, edit.record_type, edit.medicine_id, edit.category_id) == (
+		"set_medicine_link",
+		"medicine",
+		77,
+		140,
+	)
+	assert (edit.action, edit.fields, edit.outcome) == (action, ["category"], "ok")
+	line = _formatted(edit)
+	assert (line["record_type"], line["medicine_id"], line["category_id"], line["action"]) == (
+		"medicine",
+		77,
+		140,
+		action,
+	)
+	assert "article_id" not in line and "patent_id" not in line
+
+
+async def test_a_failed_link_edit_logs_the_error(monkeypatch, caplog):
+	caplog.set_level(logging.INFO)
+	monkeypatch.setattr(editor, "get_client", lambda: _Failing(404))
+
+	with pytest.raises(editor.ToolError):
+		await editor.set_medicine_link(category_id=140, medicine_id=77, linked=False)
+
+	(edit,) = _edits(caplog)
+	assert (edit.tool, edit.outcome, edit.action, edit.medicine_id) == ("set_medicine_link", "error", "unlink", 77)
+
+
+def test_the_link_tool_docstring_says_live_whole_category_and_confirm():
+	doc = editor.set_medicine_link.__doc__
+	assert "live immediately" in doc
+	assert "whole category" in doc
+	assert "confirmation before calling" in doc
+	assert "Repeating either call changes nothing" in doc

@@ -69,6 +69,7 @@ class McpTenantsAnonymousTests(TestCase):
 				"api_public",
 				"mcp_description",
 				"patents_enabled",
+				"medicines_enabled",
 				"subjects",
 				"prompts",
 				"documents",
@@ -216,6 +217,77 @@ class McpTenantsContentTests(TestCase):
 
 		self.assertEqual(tenant_subject_ids, api_subject_ids)
 		self.assertEqual(tenant_subject_ids, {self.subject.pk, other_subject.pk})
+
+
+class McpTenantsMedicinesEnabledTests(TestCase):
+	"""``medicines_enabled`` is computed the way ``patents_enabled`` is: the switch is
+	on in a settings row of the slice of the site that supplies the tenant's scope."""
+
+	def setUp(self):
+		self.client = APIClient()
+		self.org = Organization.objects.create(name="Medicines Org", slug="medicines-org")
+		self.team = Team.objects.create(
+			organization=self.org, name="Medicines Team", slug="medicines-team"
+		)
+		self.subject = Subject.objects.create(
+			subject_name="Medicines Subject", subject_slug="medicines-subj", team=self.team
+		)
+
+	def row(self, site, response=None):
+		response = response or self.client.get(reverse("mcp_tenants"))
+		return next(r for r in response.data if r["site_id"] == site.pk)
+
+	def test_off_by_default(self):
+		site = publish_subjects(self.subject, organization=self.org, name="Medicines Off")
+		_enable_mcp(site)
+		row = self.row(site)
+		self.assertIs(row["medicines_enabled"], False)
+		self.assertIs(row["patents_enabled"], False)
+
+	def test_on_when_the_site_has_the_switch(self):
+		site = publish_subjects(
+			self.subject, organization=self.org, name="Medicines On", medicines_enabled=True
+		)
+		_enable_mcp(site)
+		row = self.row(site)
+		self.assertIs(row["medicines_enabled"], True)
+		# Independent of patents.
+		self.assertIs(row["patents_enabled"], False)
+
+	def test_independent_of_the_patents_switch(self):
+		site = publish_subjects(
+			self.subject, organization=self.org, name="Patents Only", patents_enabled=True
+		)
+		_enable_mcp(site)
+		row = self.row(site)
+		self.assertIs(row["patents_enabled"], True)
+		self.assertIs(row["medicines_enabled"], False)
+
+	def test_a_private_row_with_the_switch_does_not_turn_it_on_for_the_public_answer(self):
+		site = publish_subjects(self.subject, organization=self.org, name="Split Site")
+		_enable_mcp(site)
+		private_row = CustomSetting.objects.create(
+			site=site, title="Private row", api_public=False, medicines_enabled=True
+		)
+		private_row.scope_subjects.set([self.subject])
+		self.assertIs(self.row(site)["medicines_enabled"], False)
+
+	def test_a_key_sees_the_switch_of_its_own_private_site(self):
+		site = private_site_publishing(
+			self.subject, organization=self.org, name="Private Medicines", medicines_enabled=True
+		)
+		_enable_mcp(site)
+		key = APIAccessScheme.objects.create(
+			client_name="Medicines Key",
+			client_contacts="a@b.com",
+			organization=self.org,
+			site=site,
+			ip_addresses="",
+			begin_date=now() - timedelta(days=1),
+			end_date=now() + timedelta(days=30),
+		)
+		self.client.defaults["HTTP_AUTHORIZATION"] = key.api_key
+		self.assertIs(self.row(site)["medicines_enabled"], True)
 
 
 class McpTenantsKeyTests(TestCase):

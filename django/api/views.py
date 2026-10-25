@@ -3737,6 +3737,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- **subject_id** - medicines linked to a category that has this subject
 	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
 	- **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+	- **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
 	- **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
 	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
 	- **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
@@ -3776,6 +3777,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- On a condition page: `/medicines/?subject_id=1&category_id=6`
 	- In either of two categories: `/medicines/?category_id=6,21`
 	- One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+	- By brand name: `/medicines/?name=ocrevus`
 	- Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
 	- With its events: `/medicines/123/`
 	"""
@@ -5440,6 +5442,14 @@ def _tenant_shows_patents(site_id, *, public_only) -> bool:
 	return bool(site_scope_subject_ids(site_id, public_only=public_only, patents=True))
 
 
+def _tenant_shows_medicines(site_id, *, public_only) -> bool:
+	"""Whether EMA medicines are reachable through this tenant: the same rule as
+	``_tenant_shows_patents``, on ``medicines_enabled``."""
+	from gregory.visibility import site_scope_subject_ids
+
+	return bool(site_scope_subject_ids(site_id, public_only=public_only, medicines=True))
+
+
 @extend_schema(
 	summary="List MCP tenants",
 	description=(
@@ -5518,6 +5528,7 @@ class McpTenantsView(APIView):
 					setting,
 					subject_ids,
 					_tenant_shows_patents(setting.site_id, public_only=True),
+					_tenant_shows_medicines(setting.site_id, public_only=True),
 				)
 
 		# --- Every MCP site, private included, for the MCP server's editor
@@ -5542,6 +5553,7 @@ class McpTenantsView(APIView):
 						setting,
 						subject_ids,
 						_tenant_shows_patents(setting.site_id, public_only=False),
+						_tenant_shows_medicines(setting.site_id, public_only=False),
 					)
 
 		# --- The caller's own site, if a site-bound key names one. Computed
@@ -5563,6 +5575,7 @@ class McpTenantsView(APIView):
 						own_setting,
 						subject_ids,
 						_tenant_shows_patents(own_site_id, public_only=False),
+						_tenant_shows_medicines(own_site_id, public_only=False),
 					)
 
 		site_ids_sorted = sorted(tenants.keys())
@@ -5582,7 +5595,7 @@ class McpTenantsView(APIView):
 
 		payload = []
 		for site_id in site_ids_sorted:
-			setting, subject_ids, patents_enabled = tenants[site_id]
+			setting, subject_ids, patents_enabled, medicines_enabled = tenants[site_id]
 			site = sites_by_id[site_id]
 			payload.append(
 				{
@@ -5593,6 +5606,7 @@ class McpTenantsView(APIView):
 					"api_public": setting.api_public,
 					"mcp_description": setting.mcp_description,
 					"patents_enabled": patents_enabled,
+					"medicines_enabled": medicines_enabled,
 					"subjects": list(
 						Subject.objects.filter(id__in=subject_ids)
 						.order_by("id")

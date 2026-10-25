@@ -17,6 +17,10 @@ A tenant without them has the list above and nothing mentions patents there.
 That applies on both addresses: `/mcp` runs this middleware too, for exactly
 this reason.
 
+`search_medicines` and `get_medicine` are offered the same way, on
+`Tenant.medicines_enabled`. `set_medicine_link` needs both: the tenant's
+medicines and an editor with the edit scope, like the six write tools.
+
 `tools/list` is filtered to that set, and `tools/call` for anything outside it
 is answered exactly as a tool that doesn't exist is: a client that sends a
 write tool's (or a patent tool's) name anyway learns nothing and writes
@@ -52,6 +56,13 @@ READ_TOOLS = frozenset(
 )
 #: Offered only on a tenant with `patents_enabled`.
 PATENT_TOOLS = frozenset({"search_patents", "get_patent"})
+#: Offered only on a tenant with `medicines_enabled`...
+MEDICINE_READ_TOOLS = frozenset({"search_medicines", "get_medicine"})
+#: ...and this one only to an editor with the edit scope as well. It is not in
+#: WRITE_TOOLS: those are offered on every tenant, and a tenant without medicines
+#: must not be offered it.
+MEDICINE_EDIT_TOOL = "set_medicine_link"
+MEDICINE_TOOLS = MEDICINE_READ_TOOLS | {MEDICINE_EDIT_TOOL}
 HISTORY_TOOL = "get_history"
 WRITE_TOOLS = frozenset(
 	{
@@ -69,16 +80,23 @@ SOURCE_TOOLS = frozenset({"list_sources", "preview_source", "create_source"})
 
 def allowed_tools(session: EditorSession | None, tenant: Any = None) -> frozenset[str]:
 	"""The tools this caller may use on this tenant's site. A missing tenant has
-	no patents: nothing is offered that the tenant has not been shown to have."""
+	no patents and no medicines: nothing is offered that the tenant has not been
+	shown to have."""
 	tools = READ_TOOLS
+	can_edit = False
 	if session is not None and session.is_editor:
 		tools = tools | {HISTORY_TOOL}
 		if session.can_edit:
+			can_edit = True
 			tools = tools | WRITE_TOOLS
 		if session.can_manage_sources:
 			tools = tools | SOURCE_TOOLS
 	if tenant is not None and getattr(tenant, "patents_enabled", False):
 		tools = tools | PATENT_TOOLS
+	if tenant is not None and getattr(tenant, "medicines_enabled", False):
+		tools = tools | MEDICINE_READ_TOOLS
+		if can_edit:
+			tools = tools | {MEDICINE_EDIT_TOOL}
 	return tools
 
 

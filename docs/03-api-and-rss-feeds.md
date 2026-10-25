@@ -254,7 +254,7 @@ Rules:
 
 ### Reads
 
-The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/`, `/editor/patents/`, `/editor/patents/{id}/`, `/editor/patents/stats/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
+The read endpoints are the ordinary ones, mounted again under `/editor/` with editor authentication: `/editor/articles/`, `/editor/articles/{id}/`, `/editor/articles/stats/`, `/editor/trials/`, `/editor/trials/{id}/`, `/editor/trials/stats/`, `/editor/authors/`, `/editor/categories/`, `/editor/subjects/`, `/editor/sponsors/`, `/editor/patents/`, `/editor/patents/{id}/`, `/editor/patents/stats/`, `/editor/medicines/`, `/editor/medicines/{id}/` and `/editor/stats/`. They accept the same parameters and return the same bodies, scoped to the editor's one site: its `scope_subjects` whether or not the site is `api_public`. `?include_public`, `?site_id` and `?team_id` cannot widen that scope. They are not repeated in the OpenAPI schema.
 
 Differences from the public endpoints:
 
@@ -293,6 +293,22 @@ The same actions on patent families. A patent is found through the site's **pate
 | `GET /editor/patents/{patent_id}/history/?limit=` | Who changed this site's editorial content for the family, its hand assignments to categories in scope, and the suppressing or restoring of its links to trials in scope; newest first, `limit` 1 to 200 (default 50). Entry kinds are `editorial`, `category` and `trial_link`: patents have no relevance. Only people's changes are recorded (the pipeline's category matching and link detection write no history), so every entry is an editor, admin or API-key action |
 
 The reads `GET /editor/patents/` and `GET /editor/patents/{id}/` accept `?include=editorial` (and `claims` on the detail) like the public endpoints; each editorial entry also carries `updated_at` and `updated_by`.
+
+#### Medicine routes
+
+An EMA medicine is global reference data with no subject of its own (see [Medicines](#medicines)), so editors work on its **links to categories**, not on the medicine. One route, which the MCP tool `set_medicine_link` calls:
+
+| Method and path | Purpose |
+|:----------------|:--------|
+| `PUT /editor/categories/{category_id}/medicines/{medicine_id}/` | Makes the medicine live in the category. A link an editor suppressed is restored, `200` (`change: "restored"`); a pair with no link gets a new **manual** link, `201` (`change: "added"`), which the matcher never changes or removes; a link that is already live, automatic or manual, is returned unchanged, `200` (`change: "unchanged"`) |
+| `DELETE /editor/categories/{category_id}/medicines/{medicine_id}/` | Takes the medicine out of the category. An **automatic** link is suppressed (`change: "suppressed"`): it stays, hidden everywhere, and `match_medicines` never recreates or restores it. A **manual** link is deleted (`change: "deleted"`). A link that is already suppressed, or that does not exist, is answered `200` with `change: "unchanged"` and nothing is recorded |
+
+The response is the link's state: `medicine_id`, `category_id`, `linked` (live in the category), `source` (`manual`, `automatic`, or `null` when the pair has no link), `suppressed`, `change`, and `updated_by` / `updated_at` (the newest history row for the pair). The change applies to the **whole category**, so it shows on every site that lists the category.
+
+- **Who can change it.** The category goes through the same check as `PATCH /editor/categories/{id}/`: every one of its subjects must be in the editor's site scope (`404` when none is, `403` when only some are), and the grant needs `can_edit`. The site must have `medicines_enabled` on, and the category must have a subject in that medicine scope; otherwise every route is `404`, the same answer as for a category that does not exist.
+- **Which medicines.** The medicine must be one the site can see: linked, **live or suppressed**, to a category that has a subject in the site's medicine scope. (Suppressed counts so that suppressing a medicine's only link can still be undone; so does having had a link to this very category, so repeating a manual delete is a `200`.) Any other medicine, including one that does not exist, is `404`.
+- **History.** Each row is saved individually inside the editor's attribution (never `queryset.update()`), so `MedicineCategoryAssignment.history` records the person and `via="mcp"` for every add, suppression, restore and deletion. A repeat that changes nothing records nothing.
+- **Throttled** with the other editor writes.
 
 #### Source routes
 
@@ -416,6 +432,7 @@ The response is a plain JSON array, ordered by `site_id`, with no pagination:
     "api_public": true,
     "mcp_description": "",
     "patents_enabled": true,
+    "medicines_enabled": false,
     "subjects": [{"id": 1, "subject_name": "Multiple Sclerosis"}],
     "prompts": [
       {
@@ -431,7 +448,7 @@ The response is a plain JSON array, ordered by `site_id`, with no pagination:
 ]
 ```
 
-`patents_enabled` says whether patent families are reachable through this tenant (see [Patents](#patents)): `true` when a settings row in the same slice of the site that supplies its scope has `patents_enabled` on. The MCP server uses it to hide the patent tools and leave patents out of the instructions. `subjects` carries `id` and `subject_name` only — no `team_id`, anywhere. `prompts` and `documents` list only `is_active` rows, in their model `ordering`; a prompt's `template` is raw text (`$name`-style placeholders), substituted by the MCP server at render time, not here.
+`patents_enabled` says whether patent families are reachable through this tenant (see [Patents](#patents)): `true` when a settings row in the same slice of the site that supplies its scope has `patents_enabled` on. The MCP server uses it to hide the patent tools and leave patents out of the instructions. `medicines_enabled` is the same for EMA medicines (see [Medicines](#medicines)), computed the same way from `CustomSetting.medicines_enabled`, and hides `search_medicines`, `get_medicine` and `set_medicine_link`; the two flags are independent. `subjects` carries `id` and `subject_name` only — no `team_id`, anywhere. `prompts` and `documents` list only `is_active` rows, in their model `ordering`; a prompt's `template` is raw text (`$name`-style placeholders), substituted by the MCP server at render time, not here.
 
 Like `GET /sites/`, this endpoint is **never gated by the resolution above** — it answers the same way no matter how many `api_public` sites exist, even where `/articles/` would 400 on an anonymous caller who names none. Every response carries `Vary: Authorization`, since the answer depends on the caller's key.
 
@@ -643,7 +660,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
-| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `substance`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope. Generics and biosimilars are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `substance`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope. Generics and biosimilars are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
 | Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `events`, newest first |
 | Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
@@ -1113,6 +1130,7 @@ Every parameter is optional.
 | `subject_id` | Linked to a category that has this subject |
 | `site_id` | Linked to a category that has a subject in that site's scope. A site with `medicines_enabled` off returns nothing |
 | `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances |
+| `name` | Part of the product's `name` (the brand name), case-insensitive: `?name=ocrevus`, or `?name=corbilta` for "Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)". A plain column filter; it combines with every other filter and changes nothing about visibility or generics |
 | `status` | EMA's status wording, case-insensitive: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … Values are EMA's own, so new ones can appear |
 | `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none |
 | `advanced_therapy`, `orphan_medicine`, `is_combination` | `true`/`false` |
@@ -1186,6 +1204,7 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/?subject_id=1&category_id=6              a condition page: category 6, which has subject 1
 /medicines/?category_id=6,21                        either category
 /medicines/?substance=natalizumab&include_generics=true
+/medicines/?name=ocrevus                            by brand name
 /medicines/?authorised_after=2024-01-01&ordering=-authorisation_date
 /medicines/123/                                     with events
 /medicines/events/?site_id=3                        events for the medicines of site 3

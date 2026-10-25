@@ -3150,6 +3150,199 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /editor/categories/{category_id}/medicines/{medicine_id}/:
+    put:
+      operationId: editor_categories_medicines_update
+      description: 'Editor-only. Makes the medicine live in the category: a link an
+        editor suppressed is restored (200), and a pair with no link gets a new hand
+        link (201) that the matcher never changes or removes. A link that is already
+        live is returned unchanged (200), automatic or manual, so repeating the call
+        records nothing new. The change applies to the whole category, on every site
+        that shows it. The category must be one the editor can change (all of its
+        subjects in the editor''s site scope, else 403) and the site must have `medicines_enabled`
+        on. 404 when the category is out of scope, the site has no medicines, or the
+        medicine is not one this site can see: it must be linked (live or suppressed)
+        to a category with a subject in the site''s medicine scope. Recorded under
+        the editor''s name.'
+      summary: Restore or add a medicine-category link (editor)
+      parameters:
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: medicine_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+    delete:
+      operationId: editor_categories_medicines_destroy
+      description: 'Editor-only. Takes the medicine out of the category. A link the
+        matcher made is suppressed (it stays, hidden everywhere, so the matcher never
+        brings it back); a hand link is deleted. Idempotent: a link that is already
+        suppressed, or that does not exist, is answered 200 with `linked: false` and
+        nothing is recorded. The change applies to the whole category. Same scope
+        and 403/404 rules as the PUT.'
+      summary: Suppress or delete a medicine-category link (editor)
+      parameters:
+      - in: path
+        name: category_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - csv
+          - json
+      - in: path
+        name: medicine_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - editor
+      security:
+      - editorServiceAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorMedicineLinkResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+            text/csv:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: 'Validation error: each invalid field, or `non_field_errors`,
+            maps to a list of messages.'
+        '401':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '403':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorError'
+          description: ''
   /editor/categories/{id}/:
     patch:
       operationId: editor_categories_partial_update
@@ -4270,6 +4463,7 @@ paths:
         - **subject_id** - medicines linked to a category that has this subject
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
         - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
@@ -4309,6 +4503,7 @@ paths:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
         - In either of two categories: `/medicines/?category_id=6,21`
         - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
       parameters:
@@ -4370,6 +4565,14 @@ paths:
           type: boolean
         description: 'true: products with more than one substance; false: single-substance
           products.'
+      - in: query
+        name: name
+        schema:
+          type: string
+        description: 'Part of the product''s name as EMA publishes it (the brand name),
+          case-insensitive, e.g. ?name=ocrevus. A substring of the whole name, which
+          can include a former name: ?name=corbilta finds "Corbilta (previously Levodopa/Carbidopa/Entacapone
+          Sandoz)". Use `substance` for the active substance.'
       - in: query
         name: opinion_status
         schema:
@@ -4497,6 +4700,7 @@ paths:
         - **subject_id** - medicines linked to a category that has this subject
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
         - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
@@ -4536,6 +4740,7 @@ paths:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
         - In either of two categories: `/medicines/?category_id=6,21`
         - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
       parameters:
@@ -9379,6 +9584,48 @@ components:
       required:
       - article_id
       - entries
+    EditorMedicineLinkResponse:
+      type: object
+      properties:
+        medicine_id:
+          type: integer
+        category_id:
+          type: integer
+        linked:
+          type: boolean
+          description: True when the medicine is live in the category (shown by the
+            API and the feeds).
+        source:
+          type: string
+          nullable: true
+          description: '`manual` or `automatic`; null when the pair has no link (a
+            hand link was deleted).'
+        suppressed:
+          type: boolean
+          description: True when an editor hid an automatic link; the matcher never
+            brings it back.
+        change:
+          type: string
+          description: 'What this call did: `added` (a new hand link), `restored`
+            (a suppressed link is live again), `suppressed` (an automatic link is
+            now hidden), `deleted` (a hand link was removed) or `unchanged` (it was
+            already as asked).'
+        updated_by:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - category_id
+      - change
+      - linked
+      - medicine_id
+      - source
+      - suppressed
+      - updated_at
+      - updated_by
     EditorPatentCategoryAssignmentResponse:
       type: object
       properties:
@@ -10165,6 +10412,9 @@ components:
         patents_enabled:
           type: boolean
           readOnly: true
+        medicines_enabled:
+          type: boolean
+          readOnly: true
         subjects:
           type: array
           items:
@@ -10185,6 +10435,7 @@ components:
       - documents
       - domain
       - mcp_description
+      - medicines_enabled
       - name
       - patents_enabled
       - prompts

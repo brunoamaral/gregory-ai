@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from gregory_mcp.tools import articles, authors, catalog, patents, trials
+from gregory_mcp.tools import articles, authors, catalog, medicines, patents, trials
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "django" / "schema.yml"
 
@@ -45,6 +45,7 @@ TOOL_ENDPOINTS = [
 	(articles.search_articles, "/articles/", {"intent", "include_authors", "full_summary"}),
 	(trials.search_trials, "/trials/", {"intent"}),
 	(patents.search_patents, "/patents/", {"intent"}),
+	(medicines.search_medicines, "/medicines/", set()),
 	(authors.search_authors, "/authors/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
 	(catalog.list_categories, "/categories/", set()),
@@ -55,6 +56,7 @@ DETAIL_ENDPOINTS = [
 	(articles.get_article, "/articles/{article_id}/"),
 	(trials.get_trial, "/trials/{trial_id}/"),
 	(patents.get_patent, "/patents/{patent_id}/"),
+	(medicines.get_medicine, "/medicines/{id}/"),
 	(authors.get_author, "/authors/{id}/"),
 ]
 
@@ -131,6 +133,19 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"title",
 		"summary",
 		"family_id",
+		"site_id",
+		"include_public",
+	},
+	# Not exposed by search_medicines. The three flag filters are left out to keep
+	# the tool small: every row carries `advanced_therapy`, `orphan_medicine` and
+	# `is_combination`, so a model that wants them reads them off the rows (and
+	# `substance`, `status` and the category filters already narrow the search).
+	# `site_id` and `include_public` are the same transport-level / no-op
+	# parameters as on /patents/ and /articles/.
+	"/medicines/": {
+		"advanced_therapy",
+		"orphan_medicine",
+		"is_combination",
 		"site_id",
 		"include_public",
 	},

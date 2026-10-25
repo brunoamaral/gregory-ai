@@ -3,7 +3,7 @@
 Search tools return a small, flat projection of each record — full abstracts
 and nested author/site lists blow up context fast, and most searches are
 followed by a `get_*` read of one or two records anyway. Detail tools
-(`get_article`, `get_trial`, `get_patent`) return the full record, minus team data
+(`get_article`, `get_trial`, `get_patent`, `get_medicine`) return the full record, minus team data
 (`strip_team_data`).
 
 Nested author lists are left out by default and are opt-in on article search
@@ -113,6 +113,40 @@ def compact_patent(patent: dict[str, Any]) -> dict[str, Any]:
 		"has_grant": patent.get("has_grant"),
 		"applicants": names,
 		"trial_links_count": patent.get("trial_links_count"),
+	}
+
+
+def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
+	"""An EMA medicine's search row. `link` is the product's EPAR page on
+	ema.europa.eu. `latest_ec_decision_date` keeps that name on purpose: it is the
+	latest European Commission decision (usually a variation), never the approval,
+	which is `authorisation_date`. `categories` are the live links the caller may
+	see."""
+	return {
+		"medicine_id": medicine.get("id"),
+		"name": medicine.get("name"),
+		"substances": medicine.get("substances"),
+		"status": medicine.get("status"),
+		"opinion_status": medicine.get("opinion_status"),
+		"authorisation_date": medicine.get("authorisation_date"),
+		"opinion_date": medicine.get("opinion_date"),
+		"latest_ec_decision_date": medicine.get("latest_ec_decision_date"),
+		"holder": medicine.get("holder"),
+		"indication": _truncate(medicine.get("indication")),
+		"advanced_therapy": medicine.get("advanced_therapy"),
+		"orphan_medicine": medicine.get("orphan_medicine"),
+		"is_combination": medicine.get("is_combination"),
+		"generic": medicine.get("generic"),
+		"biosimilar": medicine.get("biosimilar"),
+		"categories": [
+			{
+				"category_id": c.get("id"),
+				"category_name": c.get("category_name"),
+				"category_slug": c.get("category_slug"),
+			}
+			for c in medicine.get("categories") or []
+		],
+		"link": medicine.get("url"),
 	}
 
 

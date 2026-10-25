@@ -67,9 +67,10 @@ re-checks within a minute).
 
 ## Tools
 
-Ten task-shaped tools, plus two for patents on sites that have them, rather than a 1:1
-mirror of every API endpoint — a large tool list crowds context and degrades model tool
-selection. The two patent tools are offered per site: see [Patents](#patents).
+Ten task-shaped tools, plus two for patents on sites that have them and two for EMA medicines
+on sites that have those, rather than a 1:1 mirror of every API endpoint — a large tool list
+crowds context and degrades model tool selection. The patent and medicine tools are offered per
+site: see [Patents](#patents) and [Medicines](#medicines).
 
 | Tool | Backing endpoint | Notes |
 |:---|:---|:---|
@@ -85,6 +86,8 @@ selection. The two patent tools are offered per site: see [Patents](#patents).
 | `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/`, `/patents/stats/` | `scope` selects which (`global`, `articles`, `trials`, `patents`). |
 | `search_patents` | `GET /patents/` | Only on a site with patents. See [Patents](#patents). |
 | `get_patent` | `GET /patents/{patent_id}/` | Only on a site with patents. See [Patents](#patents). |
+| `search_medicines` | `GET /medicines/` | Only on a site with medicines. See [Medicines](#medicines). |
+| `get_medicine` | `GET /medicines/{id}/` | Only on a site with medicines. See [Medicines](#medicines). |
 
 `ml_score_min` and `ml_threshold` are different filters. `ml_score_min` keeps articles whose
 `ml_score` — the score shown in each result — is at least that value, with no other rule; pair
@@ -131,6 +134,35 @@ which allow showing processed records in a product but not republishing the data
 is why patents are opt-in per site, claims are capped and there is no bulk export (see
 [patents.md](patents.md#licence-and-the-api)).
 
+### Medicines
+
+EMA medicines (see [ema-medicines.md](ema-medicines.md)) are a per-site feature in the same way:
+`search_medicines` and `get_medicine` are listed, and can be called, only on a site whose
+`medicines_enabled` switch is on (reported per site by `GET /tenants/` and `GET /editor/tenants/`; a
+missing or non-boolean value means off). On any other site — on `/mcp` and `/mcp/editor` alike —
+`tools/list` leaves them out, a call to either is answered as a tool that doesn't exist, and the site's
+instructions, description and tool descriptions never mention medicines. Patents and medicines are
+independent: a site can have either, both or neither.
+
+| Tool | What it does |
+|:---|:---|
+| `search_medicines` | One row per EMA product, limited to those linked to the site's categories. `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id`, `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `include_generics`, `ordering`. Generic and biosimilar products are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `categories` and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
+| `get_medicine` | One product by `medicine_id`: the full record plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off EMA's dates the first time the product was seen. A product the site cannot show is "not found", the same as one that does not exist. |
+
+**Source and coverage.** Every response carries `source: "European Medicines Agency"` and a `note`, and
+both tools' descriptions say it: the data is EMA's, and it covers only medicines authorised centrally for
+the whole EU. A drug missing from it may still be authorised in individual countries, so "not in EMA's
+data" is not "not approved". The site's instructions say the same, and tell the model to name EMA as the
+source. The tools' descriptions also tell the model to show the product's `link`.
+
+**Dates.** `authorisation_date` is the first approval. `latest_ec_decision_date` is the most recent
+European Commission decision, usually a variation (a new indication, a label change), and keeps that name
+in the compact rows so it is never read as "approved on".
+
+**Visibility.** A product is visible when it has a live (non-suppressed) link to a category of the site
+(see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines)). An editor's reads go to
+`/editor/medicines/`, which applies the same rule to the site's whole scope.
+
 ### `search` syntax
 
 `search_articles`'s, `search_trials`'s and `search_patents`'s `search` parameter is boolean (same semantics
@@ -148,8 +180,11 @@ match only one field. `search_patents`'s reads title and summary only.
 
 ### Zero-hit guidance
 
-When `search_articles`, `search_trials` or `search_patents` returns zero results, the response carries a
-`guidance` key instead of just an empty list:
+When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
+response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
+`substance` being an exact INN (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), generics being hidden by default, `status` and
+`opinion_status`, the first-authorisation date range, and the reminder that a drug missing from EMA's data
+may be authorised nationally):
 
 - `applied_filters` — the names (never the values) of every filter that was set on the
   call, sorted.
@@ -173,12 +208,12 @@ names and static advice text.
 
 ### Payload shaping
 
-`search_articles` / `search_trials` / `search_patents` / `search_authors` return a compact projection — id,
+`search_articles` / `search_trials` / `search_patents` / `search_medicines` / `search_authors` return a compact projection — id,
 title, date, a few key fields, and a summary truncated to ~400 characters — not the full
 record. A ten-result search with full abstracts and nested author lists is a very large
 response, and most searches are followed by a `get_*` read of one or two records anyway.
-`get_article` / `get_trial` / `get_patent` / `get_author` return the full record, minus team data:
-`get_article`, `get_trial` and `get_patent` drop every `teams` and `team_id` key, at any depth
+`get_article` / `get_trial` / `get_patent` / `get_medicine` / `get_author` return the full record, minus team data:
+`get_article`, `get_trial`, `get_patent` and `get_medicine` drop every `teams` and `team_id` key, at any depth
 (`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
 team plumbing is noise to the model. `categories` (the record's category tags) stays.
 
@@ -197,7 +232,7 @@ server — see [Risks](#risks).
 
 ### Not-found errors
 
-`get_article`, `get_trial`, `get_patent` and `get_author` turn a `404` from their endpoint into a clear
+`get_article`, `get_trial`, `get_patent`, `get_medicine` and `get_author` turn a `404` from their endpoint into a clear
 `ToolError` naming the record — e.g. `Article 123 was not found.` — rather than the
 generic upstream error text. Django returns `404` both for a record that doesn't exist and
 one outside this site's scope (see [Tenant resolution](#tenant-resolution-site_id)),
@@ -361,7 +396,11 @@ assistant"` — a client only ever sees these if no tenant resolved, which
 - **`instructions`** are generated by `instructions_for()`, three paragraphs: an
   introduction (the tenant's own `mcp_description` if set, otherwise a generated one
   naming the title), the subjects covered (in `id` order), and a note that every tool is
-  read-only and scoped to those subjects. None of this text ever contains "GregoryAI",
+  read-only and scoped to those subjects. Patents and medicines are named in the generated
+  introduction, the `description` and the note only for a tenant that has them; a tenant with
+  medicines also gets a sentence saying the medicines are the European Medicines Agency's, cover only
+  centrally authorised ones, and that a drug missing from them may still be authorised nationally, and
+  its editors are told about `set_medicine_link`. None of this text ever contains "GregoryAI",
   "instance" or "tenant" — `tests/test_identity.py` checks every tenant's rendered text
   for that.
 
@@ -608,7 +647,7 @@ curl -s --max-time 10 -X POST https://<host>/mcp \
        "io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-Expect a JSON-RPC result listing all the tools (ten, or twelve on a site with patents). This is the check that matters: it is a
+Expect a JSON-RPC result listing all the tools (ten, plus two on a site with patents and two more on a site with medicines). This is the check that matters: it is a
 POST, which is what real clients use, and it is what proves the routing above is right.
 
 To confirm rate limiting is applied and returns `429` rather than nginx's default `503`,
@@ -738,6 +777,12 @@ by the site, not the sign-in (see [Patents](#patents)). An editor's `search_pate
 `get_patent` read Django's `/editor/patents/` routes, like the other reads, and `get_patent`
 adds the site's editorial text to the record.
 
+On a site with medicines every tier also gets `search_medicines` and `get_medicine`, and an editor
+with the edit scope gets `set_medicine_link` as a seventh write tool (see [Medicines](#medicines)).
+It is not one of the six: those are listed on every site, and this one only on a site with
+medicines. An editor's `search_medicines` and `get_medicine` read Django's `/editor/medicines/`
+routes, like the other reads.
+
 `tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
 does not exist. `GregoryClient` refuses a write without an edit session as a second lock (and a request to `/editor/sources/`, reads included, without the sources scope: `403 this sign-in cannot add sources`), and
 writes are never retried (a timeout may or may not have been applied, and the tool says so).
@@ -753,6 +798,7 @@ answer is never served to `/mcp`.
 | `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
 | `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
 | `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/`, or `/editor/patents/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
+| `set_medicine_link` | `PUT` (`linked=true`) or `DELETE` (`linked=false`) `/editor/categories/{category_id}/medicines/{medicine_id}/` | Only on a site with medicines (see [Medicines](#medicines)). Puts an EMA medicine in a category or takes it out; the change applies to the **whole category**, so it shows on every site that lists it. `linked=false` suppresses a link the matcher made (so it never comes back) and deletes a manual one; `linked=true` restores a suppressed link or adds a manual one. Repeating either changes nothing. The description asks the model to show the medicine and the category and get the user's confirmation first. |
 | `list_sources` | `GET /editor/sources/` | Source managers only. The sources of the site's subjects, of every type, with their settings (for the four types that can be added), whether they are active and when they were last fetched. Filters `subject_id`, `source_type`, `active` (default: active only). |
 | `preview_source` | `POST /editor/sources/preview/` | Source managers only. Takes the same arguments as `create_source` (without `name` and `description`), runs the same checks and saves nothing. Returns the counts and up to 5 sample titles, what the first run brings in, PubMed's reading of the search, and `refused` / `duplicate_of`. A source that would be refused is still a normal answer. |
 | `create_source` | `POST /editor/sources/` | Source managers only. Adds an RSS feed of papers or trials (`rss_papers`, `rss_trials`), a PubMed search (`pubmed`) or a ClinicalTrials.gov search (`ctgov`) for one subject. Live at once, feeds every site that covers the subject, brings in content from today on. A duplicate is reported as "already exists" (`created: false`) rather than as an error. |
@@ -769,7 +815,7 @@ of being two tools, which keeps the editor list at 17 tools with the read tools 
 `publication_number` (none, or more than one, is `INVALID_PARAMS`). The record type follows from the identifier, so there is no `record_type` argument to get wrong. A `doi` or
 `publication_number` is looked up among the site's own records (`/editor/articles/resolve/`, `/editor/patents/resolve/`), and a number that matches several is a readable error listing the ids. A
 publication number is a single number in any common format (`EP4123456A1`, `EP 4123456 A1`); a list is refused. `set_article_relevance` takes only an article (`article_id` or `doi`), since patents
-have no relevance. The category tools take a `category_id` from `list_categories`. On a site whose patents switch is off, every patent route answers "not found", the same as for a missing record. The
+have no relevance. The category tools take a `category_id` from `list_categories`, and `set_medicine_link` a `medicine_id` from `search_medicines` or `get_medicine`. On a site whose patents switch is off, every patent route answers "not found", the same as for a missing record. The
 parameters appear on every site (the tool schemas are fixed per process); only the editor instructions name patents, and only for a site that has them. No tool takes a site. Every write tool carries
 `destructive_hint` except `create_category`, which only adds: the tools that take a direction can remove as
 well as add, and a hint cannot say "only when the flag is false", so a client that confirms destructive
@@ -805,9 +851,9 @@ nothing was added; an unreachable PubMed or ClinicalTrials.gov (503) says to try
 ### Logs
 
 `mcp_request` lines gain `tier` and, for signed-in callers, `user_id`. Each write adds an
-`mcp_edit` line with the tool, `record_type` (`article` or `patent` for the tools that edit one, `category` for `create_category` and `update_category`, `source` for `preview_source` and `create_source`), `article_id`, `patent_id` or `source_id`, category id, field names and
+`mcp_edit` line with the tool, `record_type` (`article` or `patent` for the tools that edit one, `category` for `create_category` and `update_category`, `medicine` for `set_medicine_link`, `source` for `preview_source` and `create_source`), `article_id`, `patent_id`, `medicine_id` or `source_id`, category id, field names and
 outcome, never values (those live in Django's history). The two-way tools also log an `action`
-(`link`, `unlink`, `assign` or `unassign`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
+(`link`, `unlink`, `assign` or `unassign`; `set_medicine_link` uses `link` and `unlink`), since one tool name now covers both directions. Tokens, authorization headers and the service key are never logged.
 
 ---
 

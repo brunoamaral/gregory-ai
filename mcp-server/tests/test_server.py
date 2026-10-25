@@ -26,6 +26,9 @@ EXPECTED_TOOLS = {
 	# see tests/test_patent_tool_access.py.
 	"search_patents",
 	"get_patent",
+	# The same, for a tenant with medicines: see tests/test_medicine_tool_access.py.
+	"search_medicines",
+	"get_medicine",
 }
 
 

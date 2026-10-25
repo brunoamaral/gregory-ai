@@ -57,12 +57,12 @@ def _log_edit(
 
 	`record_type` says what the edit was about: `article` or `patent` for the
 	tools that edit one, `category` for the ones that edit a category, `source`
-	for the source tools (tools/sources.py). It has no
-	default, so a new tool has to say. `record_id` is logged as `article_id` or
-	`patent_id` to match. `action` says which way a two-way tool went (`assign` /
+	for the source tools (tools/sources.py), `medicine` for a medicine's link to
+	a category. It has no default, so a new tool has to say. `record_id` is
+	logged as `article_id`, `patent_id`, `source_id` or `medicine_id` to match. `action` says which way a two-way tool went (`assign` /
 	`unassign`, `link` / `unlink`), which the tool name alone no longer does."""
 	extra = {"tool": tool, "record_type": record_type, "fields": sorted(fields), "outcome": outcome}
-	if record_type in ("article", "patent", "source"):
+	if record_type in ("article", "patent", "source", "medicine"):
 		extra[f"{record_type}_id"] = record_id
 	if category_id is not None:
 		extra["category_id"] = category_id
@@ -76,7 +76,8 @@ def _explain(exc: GregoryAPIError, what: str, record: str = "article") -> ToolEr
 
 	`record` is the kind of record whose history the model is sent to check after
 	a timeout (`article` or `patent`): get_history takes either, and pointing at
-	the wrong kind would have it read an unrelated record."""
+	the wrong kind would have it read an unrelated record. A medicine has no
+	history tool, so it is sent to read the medicine again instead."""
 	status = exc.status_code
 	if status == 404:
 		return ToolError(f"{what} was not found on this site.")
@@ -98,9 +99,13 @@ def _explain(exc: GregoryAPIError, what: str, record: str = "article") -> ToolEr
 		return ToolError(f"The edit was refused: {_detail_message(exc)}")
 	if status == 0:
 		# A write is never retried, so a timeout may or may not have been applied.
+		check = (
+			"Read the medicine again with get_medicine to see its categories"
+			if record == "medicine"
+			else f"Check the {record}'s history"
+		)
 		return ToolError(
-			"The edit may not have been applied: the request to the server failed. "
-			f"Check the {record}'s history before trying again."
+			f"The edit may not have been applied: the request to the server failed. {check} before trying again."
 		)
 	return ToolError(f"The edit could not be applied (status {status}).")
 
@@ -567,5 +572,57 @@ async def set_category_assignment(
 		category_id=category_id,
 		action=action,
 		record_type=record,
+	)
+	return stored
+
+
+async def set_medicine_link(category_id: int, medicine_id: int, linked: bool) -> dict:
+	"""Put an EMA medicine in a category, or take it out of one.
+
+	`linked=true` makes the medicine show in the category: a link an editor
+	removed is restored, and a medicine the automatic matching did not link is
+	added by hand, which the matching never changes or removes. `linked=false`
+	takes it out: a link the matching made is hidden (it stays, marked
+	suppressed, so the matching never brings it back) and a hand link is
+	deleted. Repeating either call changes nothing.
+
+	The change is live immediately and applies to the whole category, so it shows
+	on every site that lists that category, not only this one. It is recorded
+	under the signed-in person's name. Show the user the medicine (name and
+	substance, see search_medicines or get_medicine) and the category, and get
+	their confirmation before calling.
+
+	The medicine must be one this site shows (linked to a category of this site)
+	and the category one this site can change. Medicines are not edited, only
+	their links to categories.
+
+	Args:
+		category_id: The category's id (see list_categories).
+		medicine_id: The medicine's id (the `medicine_id` of search_medicines or get_medicine).
+		linked: true to put the medicine in the category (or restore it), false to take it out.
+	"""
+	action = "link" if linked else "unlink"
+	path = f"/editor/categories/{category_id}/medicines/{medicine_id}/"
+	try:
+		stored = await (get_client().put(path) if linked else get_client().delete(path))
+	except GregoryAPIError as exc:
+		_log_edit(
+			"set_medicine_link",
+			medicine_id,
+			["category"],
+			"error",
+			category_id=category_id,
+			action=action,
+			record_type="medicine",
+		)
+		raise _explain(exc, f"Medicine {medicine_id} or category {category_id}", "medicine") from exc
+	_log_edit(
+		"set_medicine_link",
+		medicine_id,
+		["category"],
+		"ok",
+		category_id=category_id,
+		action=action,
+		record_type="medicine",
 	)
 	return stored

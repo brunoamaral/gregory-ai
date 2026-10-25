@@ -8,7 +8,8 @@ or organisation of its own.
 
 Gregory brings the data in, links each medicine to the team categories it belongs to, shows
 both in the Django admin, and serves them as RSS feeds of events (see [Feeds](#feeds)) and
-through the JSON API (see [JSON API](#json-api)).
+through the JSON API (see [JSON API](#json-api)). The research assistant can search them and,
+for editors, fix their links (see [MCP](#mcp)).
 
 ## What the data is
 
@@ -255,6 +256,42 @@ The rules that matter when reading or changing the code:
 - **No bulk export.** Both lists are JSON only; `all_results` is ignored.
 - **Cost.** A list costs a fixed number of queries whatever the page holds: the visible links of
   the page's medicines come in one extra query, and the events' medicines are joined.
+
+## MCP
+
+The research assistant (the MCP server, see [07-mcp-server.md](07-mcp-server.md#medicines)) can read
+and curate medicines on the sites that have them.
+
+| Tool | Who | What it does |
+|:-----|:----|:-------------|
+| `search_medicines` | Everyone | Searches the medicines linked to the site's categories by `name` (brand or product name), `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates and `include_generics`. Compact rows with the dates, the categories and the EPAR link |
+| `get_medicine` | Everyone | One product with its events, each worded by `kind_label` |
+| `set_medicine_link` | Editors with the edit scope | Puts a medicine in a category, or takes it out. Live immediately, applies to the whole category |
+
+- **Per site.** The tools are listed, and can be called, only on a site with `medicines_enabled` on
+  (the tenant directory, `GET /tenants/`, reports it). On any other site they do not exist and the
+  site's instructions never mention medicines. `set_medicine_link` also needs an editor with the
+  edit scope; a read-only sign-in never sees it.
+- **Attribution travels with the data.** Every response says `source: "European Medicines Agency"`
+  and that the list covers only centrally authorised medicines: a drug missing from it may still be
+  authorised in individual countries, so "not in EMA's data" is not "not approved". The tool
+  descriptions say the same, and tell the model to show the EPAR `link`.
+- **`name` is for brand names, `substance` for the INN.** `name=ocrevus` is a case-insensitive
+  substring of the product name (a former name in brackets counts); `substance=ocrelizumab` is an
+  exact match on the active substance. A zero-hit response on one suggests the other.
+- **`set_medicine_link` is the admin's fix, over MCP.** It calls
+  `PUT`/`DELETE /editor/categories/{category_id}/medicines/{medicine_id}/`, which follows the table
+  under [Fixing links](#fixing-links): `linked=false` suppresses an automatic link (the matcher never
+  brings it back) and deletes a manual one; `linked=true` restores a suppressed link or adds a manual
+  one. Repeating either changes nothing. The row is saved under the editor's attribution, so the link's
+  history names the person and says `mcp`. Only a medicine the site can see, and a category the editor
+  may change, are accepted; otherwise the answer is "not found". The route is described in
+  [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicine-routes).
+- **Restoring does not pin the link.** A restored automatic link is an ordinary automatic link again,
+  so the matcher manages it from then on and removes it if the medicine stops matching the category.
+  Only a pair with no link at all gets a manual one, which the matcher never touches. Nothing
+  converts an existing automatic link to a manual one; if it keeps going missing, fix the
+  category's terms or EMA substance patterns instead.
 
 ## In the admin
 

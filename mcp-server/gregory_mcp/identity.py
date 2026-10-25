@@ -52,6 +52,21 @@ _EDIT_TOOLS_WITH_PATENTS = (
 	"set_category_assignment (put an article or a patent in a category by hand, or take it out)"
 )
 
+# Added to the list above for a site that shows EMA medicines, and only for such a
+# site: elsewhere the tool is hidden and the text must not point at what is absent.
+# A medicine is global EMA data, so the tool changes only its link to a category.
+_MEDICINE_EDIT_TOOL = (
+	"set_medicine_link (put an EMA medicine in a category, or take it out; the change applies to the "
+	"whole category)"
+)
+
+# For a site that shows medicines: where the data is from, and what its absence means.
+_MEDICINES_NOTE = (
+	"Medicines come from the European Medicines Agency (EMA) and cover only those authorised centrally for "
+	"the EU. A drug missing from them may still be authorised in individual countries, so not being in "
+	"EMA's data does not mean it is not approved. Name EMA as the source when you present one."
+)
+
 # Added for a sign-in with the sources scope only; every other session's text is
 # unchanged. Names the three tools and the preview-then-confirm rule, because a new
 # source is live at once and feeds every site that covers its subject.
@@ -63,14 +78,20 @@ _SOURCE_TOOLS_NOTE = (
 )
 
 
-def _behavior_paragraph(session: EditorSession | None, patents: bool = False) -> str:
+def _behavior_paragraph(session: EditorSession | None, patents: bool = False, medicines: bool = False) -> str:
 	"""How the tools behave, for the caller's tier.
 
 	Anonymous callers and the public tier get the original wording: every tool
 	is read-only. An editor is told what they can change, that changes are live
 	at once and attributed to the signed-in person, and to show the proposed
-	text before writing.
+	text before writing. A site that shows medicines adds where they come from
+	and what a missing drug means, at the end of the same paragraph.
 	"""
+	text = _tier_paragraph(session, patents, medicines)
+	return f"{text} {_MEDICINES_NOTE}" if medicines else text
+
+
+def _tier_paragraph(session: EditorSession | None, patents: bool, medicines: bool) -> str:
 	anonymous = (
 		"All tools are read-only. Searches and lists only return these "
 		"subjects; a record outside them is reported as not found."
@@ -91,6 +112,8 @@ def _behavior_paragraph(session: EditorSession | None, patents: bool = False) ->
 		return f"You have read-only editor access to this site. {scope} {history} Editing is not available with this sign-in."
 	content = "article and patent content" if patents else "article content"
 	tools = _EDIT_TOOLS_WITH_PATENTS if patents else _EDIT_TOOLS
+	if medicines:
+		tools = f"{tools}, {_MEDICINE_EDIT_TOOL}"
 	sources = f" {_SOURCE_TOOLS_NOTE}" if session.can_manage_sources else ""
 	return (
 		f"You are signed in as an editor of this site and can change its {content} with: {tools}. "
@@ -99,6 +122,17 @@ def _behavior_paragraph(session: EditorSession | None, patents: bool = False) ->
 		f"site: a change applies to every site that covers that subject.{sources} "
 		f"{history} {scope}"
 	)
+
+
+def _records(tenant: Tenant) -> str:
+	"""The kinds of record the tenant's database holds, as a list ending in
+	"... and researchers". Only the kinds the tenant has."""
+	kinds = ["articles", "clinical trials"]
+	if tenant.patents_enabled:
+		kinds.append("patents")
+	if tenant.medicines_enabled:
+		kinds.append("EU-authorised medicines")
+	return f"{', '.join(kinds)} and researchers"
 
 
 def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> str:
@@ -116,11 +150,11 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 	"""
 	intro = tenant.mcp_description.strip()
 	if not intro:
-		# Patents are named only for a tenant that has them (its patent tools
-		# are hidden otherwise, and the text must not point at what is absent).
-		records = "articles, clinical trials, patents and researchers" if tenant.patents_enabled else "articles, clinical trials and researchers"
+		# Patents and medicines are named only for a tenant that has them (their
+		# tools are hidden otherwise, and the text must not point at what is absent).
+		records = _records(tenant)
 		intro = f"This is {tenant.title}'s research database: {records}, curated to the subjects below."
-	behavior_paragraph = _behavior_paragraph(session, tenant.patents_enabled)
+	behavior_paragraph = _behavior_paragraph(session, tenant.patents_enabled, tenant.medicines_enabled)
 	if not tenant.subjects:
 		# Only reachable if every subject row failed to parse: the API lists
 		# no tenant whose scope is empty. Drop the paragraph rather than
@@ -132,7 +166,12 @@ def instructions_for(tenant: Tenant, session: EditorSession | None = None) -> st
 
 def _server_info(tenant: Tenant, session: EditorSession | None = None) -> dict[str, Any]:
 	access = "Read and edit access" if session is not None and session.can_edit else "Read-only access"
-	records = "articles, clinical trials, patents, authors" if tenant.patents_enabled else "articles, clinical trials, authors"
+	records = ", ".join(
+		["articles", "clinical trials"]
+		+ (["patents"] if tenant.patents_enabled else [])
+		+ (["EU-authorised medicines"] if tenant.medicines_enabled else [])
+		+ ["authors"]
+	)
 	return {
 		"name": tenant.domain,
 		"title": tenant.title,

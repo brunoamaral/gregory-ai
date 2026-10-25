@@ -1,9 +1,10 @@
 """Builds the MCPServer: registers tools, resources, and prompts.
 
 `build_server()` is the anonymous server behind `/mcp`: everything on it is
-read-only. Twelve read tools are registered, but `search_patents` and
-`get_patent` are offered only to a tenant that has patents (tool_access.py), so
-the others see ten. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
+read-only. Fourteen read tools are registered, but `search_patents` and
+`get_patent` are offered only to a tenant that has patents, and `search_medicines`
+and `get_medicine` only to one that has medicines (tool_access.py), so the others
+see ten. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
 open_world_hint=False` since none of them write, and every one only ever talks
 to the one Gregory instance named by `GREGORY_API_URL`.
 
@@ -28,7 +29,7 @@ from .site import SiteMiddleware
 from .telemetry import TelemetryMiddleware
 from .tenants import TenantGateMiddleware
 from .tool_access import ToolAccessMiddleware
-from .tools import articles, authors, catalog, patents, stats, trials
+from .tools import articles, authors, catalog, medicines, patents, stats, trials
 from .tools import editor as editor_tools
 from .tools import sources as source_tools
 
@@ -194,6 +195,9 @@ def build_server(editor: bool = False) -> MCPServer:
 	server.add_tool(trials.get_trial, annotations=READ_ONLY)
 	server.add_tool(patents.search_patents, annotations=READ_ONLY)
 	server.add_tool(patents.get_patent, annotations=READ_ONLY)
+	# Offered only to a tenant with medicines_enabled (tool_access.py).
+	server.add_tool(medicines.search_medicines, annotations=READ_ONLY)
+	server.add_tool(medicines.get_medicine, annotations=READ_ONLY)
 	server.add_tool(authors.search_authors, annotations=READ_ONLY)
 	server.add_tool(authors.get_author, annotations=READ_ONLY)
 	server.add_tool(catalog.list_categories, annotations=READ_ONLY)
@@ -208,6 +212,10 @@ def build_server(editor: bool = False) -> MCPServer:
 		server.add_tool(editor_tools.create_category, annotations=EDIT_CREATE)
 		server.add_tool(editor_tools.update_category, annotations=EDIT_DESTRUCTIVE)
 		server.add_tool(editor_tools.set_category_assignment, annotations=EDIT_DESTRUCTIVE)
+		# Offered only on a tenant with medicines_enabled, to an editor with the
+		# edit scope (tool_access.py). Adds and removes, so destructive like the
+		# other two-way tools.
+		server.add_tool(editor_tools.set_medicine_link, annotations=EDIT_DESTRUCTIVE)
 		# Offered only to a sign-in with the sources scope (tool_access.py).
 		server.add_tool(source_tools.list_sources, annotations=READ_ONLY)
 		server.add_tool(source_tools.preview_source, annotations=READ_ONLY_OPEN_WORLD)

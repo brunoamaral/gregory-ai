@@ -416,6 +416,30 @@ class EditorPatentTrialLinkResponseSerializer(serializers.Serializer):
 	updated_at = serializers.DateTimeField(allow_null=True)
 
 
+class EditorMedicineLinkResponseSerializer(serializers.Serializer):
+	medicine_id = serializers.IntegerField()
+	category_id = serializers.IntegerField()
+	linked = serializers.BooleanField(
+		help_text="True when the medicine is live in the category (shown by the API and the feeds)."
+	)
+	source = serializers.CharField(
+		allow_null=True,
+		help_text="`manual` or `automatic`; null when the pair has no link (a hand link was deleted).",
+	)
+	suppressed = serializers.BooleanField(
+		help_text="True when an editor hid an automatic link; the matcher never brings it back."
+	)
+	change = serializers.CharField(
+		help_text=(
+			"What this call did: `added` (a new hand link), `restored` (a suppressed link "
+			"is live again), `suppressed` (an automatic link is now hidden), `deleted` (a "
+			"hand link was removed) or `unchanged` (it was already as asked)."
+		)
+	)
+	updated_by = serializers.CharField(allow_null=True)
+	updated_at = serializers.DateTimeField(allow_null=True)
+
+
 class EditorPatentHistoryResponseSerializer(serializers.Serializer):
 	patent_id = serializers.IntegerField()
 	entries = EditorHistoryEntrySerializer(many=True)

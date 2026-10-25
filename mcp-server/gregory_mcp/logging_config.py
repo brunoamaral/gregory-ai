@@ -63,17 +63,18 @@ _EXTRA_FIELDS = (
 	"prompt",
 	# Editor access (MCP-AUTH-PLAN.md). `tier` is anon, public or editor;
 	# `user_id` a Django user id (editors only); on an `mcp_edit` line,
-	# `article_id`, `patent_id`, `source_id` and/or `category_id`, and `fields` (the NAMES of the fields
+	# `article_id`, `patent_id`, `medicine_id`, `source_id` and/or `category_id`, and `fields` (the NAMES of the fields
 	# a write changed, never their values -- those live in Django's history,
 	# which has its own access control). An Authorization header or token has
 	# no way through. `record_type` is what the edit was about (article,
-	# category, patent, source) and `action` which way a two-way tool went (link,
+	# category, medicine, patent, source) and `action` which way a two-way tool went (link,
 	# unlink, assign, unassign): both fixed vocabularies set by this server,
 	# never caller text.
 	"tier",
 	"user_id",
 	"article_id",
 	"patent_id",
+	"medicine_id",
 	"source_id",
 	"category_id",
 	"fields",
