@@ -76,6 +76,7 @@ python-ml/utils/__pycache__/
 data/articles.json
 data/embeds.json
 data/trials.json
+!django/gregory/tests/fixtures/ema/*.json
 
 # Gitignore itself
 .gitignore

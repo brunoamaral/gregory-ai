@@ -49,6 +49,10 @@ class Command(BaseCommand):
 				"feedreader_patents_ops",
 				{"max_families": 500},
 			),  # 3c. EPO OPS patents (incremental window; the cap is a safety ceiling for a new or broad source)
+			(
+				"sync_ema_medicines",
+				{},
+			),  # 3d. EMA medicines (one conditional download; a 304 costs nothing)
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors

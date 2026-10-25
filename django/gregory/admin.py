@@ -33,6 +33,7 @@ from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 from django import forms
 from django.utils.html import format_html, mark_safe
+from django.utils.text import Truncator
 from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 
@@ -41,6 +42,8 @@ from .models import (
 	ArticleMeshHeading,
 	MeshTerm,
 	PublicationType,
+	Medicine,
+	MedicineEvent,
 	CategoryModality,
 	Trials,
 	Sources,
@@ -5130,6 +5133,153 @@ class PublicationTypeAdmin(ReadOnlyReferenceAdmin):
 class MeshTermAdmin(ReadOnlyReferenceAdmin):
 	list_display = ["name", "ui", "kind"]
 	list_filter = ["kind"]
+
+
+class MedicineEventInline(ReadOnlyInlineMixin, admin.TabularInline):
+	"""A medicine's regulatory history, newest first. Written only by the EMA sync."""
+
+	model = MedicineEvent
+	verbose_name_plural = "Events"
+	fields = ("event_date", "kind", "basis", "change", "detected_at")
+	readonly_fields = fields
+	ordering = ("-event_date", "-id")
+
+	def has_view_permission(self, request, obj=None):
+		return request.user.is_active and request.user.is_staff
+
+	@admin.display(description="Change")
+	def change(self, obj):
+		# Indication changes carry whole texts; show enough to recognise them.
+		parts = [Truncator(v).chars(120) for v in (obj.from_value, obj.to_value) if v]
+		return " → ".join(parts)
+
+
+@admin.register(Medicine)
+class MedicineAdmin(admin.ModelAdmin):
+	"""EMA's centrally authorised human medicines. Read-only: the sync is the only
+	writer. The data is public, so every staff user can browse it; it has no team or
+	organisation to scope by."""
+
+	list_display = (
+		"name",
+		"inn",
+		"status",
+		"opinion_status",
+		"authorisation_date",
+		"advanced_therapy",
+		"orphan_medicine",
+		"generic",
+		"biosimilar",
+		"in_latest_export",
+	)
+	list_filter = (
+		"status",
+		"opinion_status",
+		"advanced_therapy",
+		"orphan_medicine",
+		"generic",
+		"biosimilar",
+		"is_combination",
+		"in_latest_export",
+	)
+	search_fields = ("name", "inn", "active_substance", "ema_product_number")
+	ordering = ("name",)
+	list_per_page = 100
+	inlines = [MedicineEventInline]
+	fieldsets = (
+		(
+			None,
+			{"fields": ("name", "ema_product_number", "status", "opinion_status", "epar_link")},
+		),
+		(
+			"Substance",
+			{
+				"fields": (
+					"inn",
+					"active_substance",
+					"substances",
+					"is_combination",
+					"holder",
+					"atc_code",
+					"pharmacotherapeutic_group",
+				)
+			},
+		),
+		("Indication", {"fields": ("therapeutic_areas", "indication")}),
+		(
+			"Flags",
+			{
+				"fields": (
+					"advanced_therapy",
+					"orphan_medicine",
+					"conditional_approval",
+					"exceptional_circumstances",
+					"prime_priority_medicine",
+					"accelerated_assessment",
+					"additional_monitoring",
+					"biosimilar",
+					"generic",
+					"patient_safety",
+				)
+			},
+		),
+		(
+			"Dates",
+			{
+				"fields": (
+					"rolling_review_start_date",
+					"evaluation_start_date",
+					"opinion_date",
+					"authorisation_date",
+					"latest_ec_decision_date",
+					"refusal_date",
+					"application_withdrawal_date",
+					"suspension_date",
+					"end_date",
+				)
+			},
+		),
+		(
+			"EMA record",
+			{
+				"fields": (
+					"latest_procedure",
+					"revision_number",
+					"ema_first_published",
+					"ema_last_updated",
+					"in_latest_export",
+					"first_seen_at",
+					"last_synced_at",
+					"raw",
+				),
+				"classes": ("collapse",),
+			},
+		),
+	)
+	readonly_fields = tuple(
+		name for _, options in fieldsets for name in options["fields"]
+	)
+
+	def has_module_permission(self, request):
+		return request.user.is_active and request.user.is_staff
+
+	def has_view_permission(self, request, obj=None):
+		return request.user.is_active and request.user.is_staff
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	@admin.display(description="EPAR page")
+	def epar_link(self, obj):
+		if obj.url.startswith(("https://", "http://")):
+			return format_html('<a href="{0}" target="_blank" rel="noopener">{0}</a>', obj.url)
+		return obj.url or "-"
 
 
 admin.site.register(Authors, AuthorsAdmin)

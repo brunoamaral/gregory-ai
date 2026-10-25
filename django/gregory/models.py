@@ -2845,3 +2845,175 @@ class PatentSiteContent(models.Model):
 		]
 		verbose_name = "patent site content"
 		verbose_name_plural = "patent site contents"
+
+
+class Medicine(models.Model):
+	"""One EMA centrally authorised human medicine, keyed on its EMA product number.
+
+	Global reference data like PublicationType: no organisation, team or subject.
+	Written only by sync_ema_medicines from EMA's public JSON export; scoping
+	comes later from the categories a medicine is linked to. Not a row per
+	substance: one substance can be several products (an originator, a
+	biosimilar, a refused application), each with its own status and dates."""
+
+	ema_product_number = models.CharField(max_length=32, unique=True)
+	name = models.CharField(max_length=255)
+	inn = models.CharField(
+		max_length=500,
+		blank=True,
+		help_text="International non-proprietary name, as EMA publishes it. Empty for some products.",
+	)
+	active_substance = models.TextField(blank=True)
+	substances = ArrayField(
+		models.CharField(max_length=255),
+		default=list,
+		blank=True,
+		help_text="Lowercased substances split on ';', from the INN or, when that is empty, the active substance.",
+	)
+	is_combination = models.BooleanField(default=False)
+	status = models.CharField(
+		max_length=50,
+		db_index=True,
+		help_text="EMA's wording, kept as published: new values must not break the import.",
+	)
+	opinion_status = models.CharField(
+		max_length=20,
+		blank=True,
+		help_text="Positive or Negative while the medicine is at the opinion stage; EMA clears it once the EC decides.",
+	)
+	therapeutic_areas = ArrayField(
+		models.CharField(max_length=255), default=list, blank=True
+	)
+	atc_code = models.CharField(max_length=20, blank=True)
+	pharmacotherapeutic_group = models.CharField(max_length=255, blank=True)
+	indication = models.TextField(blank=True)
+	holder = models.CharField(max_length=255, blank=True)
+	advanced_therapy = models.BooleanField(default=False)
+	orphan_medicine = models.BooleanField(default=False)
+	conditional_approval = models.BooleanField(default=False)
+	exceptional_circumstances = models.BooleanField(default=False)
+	prime_priority_medicine = models.BooleanField(default=False)
+	accelerated_assessment = models.BooleanField(default=False)
+	additional_monitoring = models.BooleanField(default=False)
+	biosimilar = models.BooleanField(default=False)
+	generic = models.BooleanField(default=False)
+	patient_safety = models.BooleanField(default=False)
+	rolling_review_start_date = models.DateField(null=True, blank=True)
+	evaluation_start_date = models.DateField(null=True, blank=True)
+	opinion_date = models.DateField(null=True, blank=True, help_text="CHMP opinion.")
+	authorisation_date = models.DateField(
+		null=True, blank=True, db_index=True, help_text="The first approval."
+	)
+	latest_ec_decision_date = models.DateField(
+		null=True,
+		blank=True,
+		verbose_name="latest EC decision",
+		help_text="The latest European Commission decision, usually a variation. Not the approval date.",
+	)
+	refusal_date = models.DateField(null=True, blank=True)
+	application_withdrawal_date = models.DateField(null=True, blank=True)
+	suspension_date = models.DateField(null=True, blank=True)
+	end_date = models.DateField(
+		null=True,
+		blank=True,
+		help_text="Withdrawn, expired, revoked or lapsed; the status says which.",
+	)
+	latest_procedure = models.CharField(max_length=50, blank=True)
+	revision_number = models.PositiveIntegerField(null=True, blank=True)
+	ema_first_published = models.DateField(null=True, blank=True)
+	ema_last_updated = models.DateField(null=True, blank=True)
+	url = models.URLField(max_length=500, blank=True, help_text="The EPAR page on ema.europa.eu.")
+	raw = models.JSONField(
+		default=dict,
+		blank=True,
+		help_text="EMA's whole row, so a parsing fix can be re-applied without downloading again.",
+	)
+	in_latest_export = models.BooleanField(
+		default=True,
+		help_text="False when the latest sync no longer found the product in EMA's export. Rows are never deleted.",
+	)
+	first_seen_at = models.DateTimeField(auto_now_add=True)
+	last_synced_at = models.DateTimeField(
+		default=timezone.now,
+		help_text="When a sync last created or changed this row. Unchanged rows are not rewritten.",
+	)
+
+	def __str__(self):
+		return f"{self.name} ({self.ema_product_number})"
+
+	class Meta:
+		db_table = "medicines"
+		ordering = ["name"]
+		indexes = [
+			GinIndex(fields=["substances"], name="medicines_substances_gin"),
+		]
+
+
+class MedicineEvent(models.Model):
+	"""One change in a medicine's regulatory life: an opinion, an authorisation, a new
+	EC decision, a withdrawal. ``reconstructed`` events come from EMA's date fields on
+	the first sync; ``observed`` events come from a difference between two syncs."""
+
+	class Kind(models.TextChoices):
+		ROLLING_REVIEW_STARTED = "rolling_review_started", "Rolling review started"
+		EVALUATION_STARTED = "evaluation_started", "Evaluation started"
+		OPINION_POSITIVE = "opinion_positive", "CHMP positive opinion"
+		OPINION_NEGATIVE = "opinion_negative", "CHMP negative opinion"
+		# EMA clears opinion_status once the EC decides, so an opinion that ended
+		# in neither an authorisation nor a refusal has no outcome we can state.
+		OPINION_ADOPTED = "opinion_adopted", "CHMP opinion adopted"
+		AUTHORISED = "authorised", "Authorised"
+		EC_DECISION = "ec_decision", "European Commission decision"
+		INDICATION_CHANGED = "indication_changed", "Indication changed"
+		REFUSED = "refused", "Refused"
+		APPLICATION_WITHDRAWN = "application_withdrawn", "Application withdrawn"
+		SUSPENDED = "suspended", "Suspended"
+		ENDED = "ended", "Authorisation ended"
+		STATUS_CHANGED = "status_changed", "Status changed"
+
+	class Basis(models.TextChoices):
+		RECONSTRUCTED = "reconstructed", "Reconstructed from EMA's dates"
+		OBSERVED = "observed", "Observed between syncs"
+
+	medicine = models.ForeignKey(
+		Medicine, on_delete=models.CASCADE, related_name="events"
+	)
+	kind = models.CharField(max_length=30, choices=Kind.choices)
+	event_date = models.DateField(
+		db_index=True,
+		help_text="EMA's date where it gives one, otherwise the day the sync saw the change.",
+	)
+	basis = models.CharField(max_length=15, choices=Basis.choices)
+	from_value = models.TextField(blank=True)
+	to_value = models.TextField(blank=True)
+	detected_at = models.DateTimeField(auto_now_add=True)
+
+	def __str__(self):
+		return f"{self.medicine_id} {self.kind} {self.event_date}"
+
+	class Meta:
+		db_table = "medicine_events"
+		ordering = ["-event_date", "-id"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["medicine", "kind", "event_date"], name="uniq_medicine_event"
+			)
+		]
+
+
+class EmaSyncState(models.Model):
+	"""Single row (pk=1) remembering what the last EMA sync saw, so the next one can
+	send ``If-Modified-Since`` and notice a truncated export."""
+
+	last_modified = models.CharField(
+		max_length=100, blank=True, help_text="The export's Last-Modified header, as sent."
+	)
+	last_human_count = models.PositiveIntegerField(default=0)
+	last_export_timestamp = models.CharField(max_length=50, blank=True)
+	last_run_at = models.DateTimeField(null=True, blank=True)
+
+	def __str__(self):
+		return "EMA sync state"
+
+	class Meta:
+		db_table = "ema_sync_state"
