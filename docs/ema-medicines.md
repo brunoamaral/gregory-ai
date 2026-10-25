@@ -7,7 +7,7 @@ data is global reference data, like PubMed's publication types. It has no team, 
 or organisation of its own.
 
 Gregory brings the data in, links each medicine to the team categories it belongs to, and
-shows both in the Django admin. It does not yet serve medicines through the API or RSS feeds.
+shows both in the Django admin and serves their events as RSS feeds (see [Feeds](#feeds)). It does not yet serve medicines through the API.
 
 ## What the data is
 
@@ -190,6 +190,35 @@ To give a broad category medicines, set its *EMA substance patterns* (`medicine_
 category form. CAR-T uses `*cabtagene*` and `tisagenlecleucel`, which together find the
 seven CAR-T products in EMA's export; a suffix such as `*leucel` would also catch Ebvallo and
 Amtagvi, which are not CAR-T.
+
+## Feeds
+
+A site can publish the medicine events of its categories as RSS, so a partner hears about an
+approval without polling anything. The site has to opt in: **`medicines_enabled`** is a
+setting on the site (Site settings, *API visibility*) and is off by default, and the site's
+`rss_enabled` has to be on as well. With either off the feeds are a 404. To turn a site on,
+tick the box and save; no deploy is needed.
+
+| Feed | URL |
+|:-----|:----|
+| Every category in the site's scope | `/feed/sites/{site_id}/medicines/` |
+| One category | `/feed/sites/{site_id}/medicines/category/{category_slug}/` |
+
+What a feed contains:
+
+- **Medicines the category links to** and an editor has not suppressed. A category counts for a
+  site when at least one of its subjects is in the site's scope; one that is not is a 404.
+- **No generics or biosimilars.** The feed carries news about the originator.
+- **Observed events, and recent reconstructed ones.** A reconstructed event is only listed when
+  it is under 90 days old, because the first sync reconstructs every approval EMA has ever
+  recorded. An event seen between two syncs is always listed.
+- **The newest 50 events**, by event date.
+
+An item is titled `Ocrevus (ocrelizumab): CHMP positive opinion`, links to the medicine's EPAR
+page, and its text is the cleaned indication followed by `Source: European Medicines Agency`.
+The wording of each kind of event lives in one place, `MedicineEvent.IN_WORDS`, so the API can
+use the same sentences later. The full reference, with the rest of the feed rules, is in
+[03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicine-feeds).
 
 ## In the admin
 

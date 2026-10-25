@@ -104,25 +104,49 @@ def _resolve_api_scheme(request):
 		raise
 
 
-def _settings_rows(*, patents: bool):
+#: The CustomSetting switches that gate a whole content type. A scope helper
+#: given one of these counts only the rows with it on.
+FEATURE_SWITCHES = frozenset({"patents_enabled", "medicines_enabled"})
+
+
+def _feature_switch(*, patents: bool = False, medicines: bool = False) -> str | None:
+	"""The switch name behind the ``patents=`` / ``medicines=`` keywords.
+
+	The public helpers keep boolean keywords (``patents=True`` predates the
+	second switch and has many callers); this turns them into the one name
+	``_settings_rows`` takes. A scope can't need two switches at once.
+	"""
+	if patents and medicines:
+		raise ValueError("patents and medicines cannot both be required at once")
+	if patents:
+		return "patents_enabled"
+	if medicines:
+		return "medicines_enabled"
+	return None
+
+
+def _settings_rows(*, feature: str | None = None):
 	"""CustomSetting rows that count towards a scope.
 
-	``patents=True`` keeps only rows with ``patents_enabled`` on, so the same
-	resolution code that answers "which subjects can this caller see" can
-	answer "which subjects can they see patents for" without a second copy.
+	``feature`` is a switch name from ``FEATURE_SWITCHES``: only rows with it
+	on are kept, so the same resolution code that answers "which subjects can
+	this caller see" can answer "which subjects can they see patents (or
+	medicines) for" without a second copy. ``None`` keeps every row.
 	"""
 	from sitesettings.models import CustomSetting
 
 	qs = CustomSetting.objects.all()
-	if patents:
-		qs = qs.filter(patents_enabled=True)
+	if feature is not None:
+		if feature not in FEATURE_SWITCHES:
+			raise ValueError(f"unknown feature switch: {feature!r}")
+		qs = qs.filter(**{feature: True})
 	return qs
 
 
-def _public_subject_ids(*, patents: bool = False) -> set[int]:
+def _public_subject_ids(*, patents: bool = False, medicines: bool = False) -> set[int]:
 	"""Return the union of scope_subjects across every api_public site."""
 	return set(
-		_settings_rows(patents=patents)
+		_settings_rows(feature=_feature_switch(patents=patents, medicines=medicines))
 		.filter(api_public=True)
 		.exclude(scope_subjects__isnull=True)
 		.values_list("scope_subjects__id", flat=True)
@@ -165,7 +189,7 @@ def api_key_site_id(request) -> int | None:
 
 
 def site_scope_subject_ids(
-	site_id, *, public_only: bool, patents: bool = False
+	site_id, *, public_only: bool, patents: bool = False, medicines: bool = False
 ) -> set[int]:
 	"""Return the union of scope_subjects across site_id's CustomSetting
 	row(s).
@@ -177,8 +201,11 @@ def site_scope_subject_ids(
 
 	patents=True counts only rows with ``patents_enabled`` on: a site whose
 	switch is off contributes nothing, even when its scope lists the subject.
+	medicines=True does the same for ``medicines_enabled``.
 	"""
-	qs = _settings_rows(patents=patents).filter(site_id=site_id)
+	qs = _settings_rows(
+		feature=_feature_switch(patents=patents, medicines=medicines)
+	).filter(site_id=site_id)
 	if public_only:
 		qs = qs.filter(api_public=True)
 	return set(
@@ -271,7 +298,7 @@ def visible_subject_ids(request) -> set[int]:
 	site's scope has no way to ask for it from this function; that is
 	intentional, since "give me everything public" is not a resolvable site.
 	"""
-	return _resolve_visible_subject_ids(request, patents=False)
+	return _resolve_visible_subject_ids(request)
 
 
 def visible_patent_subject_ids(request) -> set[int]:
@@ -290,18 +317,43 @@ def visible_patent_subject_ids(request) -> set[int]:
 	return _resolve_visible_subject_ids(request, patents=True)
 
 
-def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
-	"""Shared body of ``visible_subject_ids`` / ``visible_patent_subject_ids``.
-
-	``patents`` only changes which CustomSetting rows are counted. Site
-	resolution (which site an anonymous caller means, whether that is
-	ambiguous) is the same either way, on purpose: a caller must get the same
-	400 for the same request on both.
+def visible_medicine_subject_ids(request) -> set[int]:
 	"""
+	Return the set of Subject IDs the caller may see EMA MEDICINES for.
+
+	Same caller rules as ``visible_subject_ids`` (site-bound key, MCP editor,
+	authenticated user, resolved anonymous site, ``?include_public=true``),
+	but only ``CustomSetting`` rows with ``medicines_enabled`` on count. A
+	medicine is visible when it has a non-suppressed link to a category with a
+	subject in this set; a site with the switch off shows no medicines,
+	whatever its ``scope_subjects`` say.
+
+	This is a subset of ``visible_subject_ids`` for the same request. Like
+	that function, the anonymous branch can raise ``NoSiteResolvedError``.
+	"""
+	return _resolve_visible_subject_ids(request, medicines=True)
+
+
+def _resolve_visible_subject_ids(
+	request, *, patents: bool = False, medicines: bool = False
+) -> set[int]:
+	"""Shared body of ``visible_subject_ids``, ``visible_patent_subject_ids``
+	and ``visible_medicine_subject_ids``.
+
+	``patents`` / ``medicines`` only change which CustomSetting rows are
+	counted. Site resolution (which site an anonymous caller means, whether
+	that is ambiguous) is the same in every case, on purpose: a caller must get
+	the same 400 for the same request on all of them.
+	"""
+	feature = _feature_switch(patents=patents, medicines=medicines)
 	include_public = request.GET.get("include_public", "").lower() == "true"
 
 	def _resolve(owned: set[int]) -> set[int]:
-		return owned | _public_subject_ids(patents=patents) if include_public else owned
+		return (
+			owned | _public_subject_ids(patents=patents, medicines=medicines)
+			if include_public
+			else owned
+		)
 
 	api_scheme = _resolve_api_scheme(request)
 	if api_scheme is not None:
@@ -309,7 +361,9 @@ def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
 		if site_id is None:
 			return _resolve(set())
 		return _resolve(
-			site_scope_subject_ids(site_id, public_only=False, patents=patents)
+			site_scope_subject_ids(
+				site_id, public_only=False, patents=patents, medicines=medicines
+			)
 		)
 
 	# An MCP editor (MCP-AUTH-PLAN.md): the one site their token is bound to,
@@ -321,7 +375,9 @@ def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
 
 	editor = editor_auth_of(request)
 	if editor is not None:
-		return site_scope_subject_ids(editor.site_id, public_only=False, patents=patents)
+		return site_scope_subject_ids(
+			editor.site_id, public_only=False, patents=patents, medicines=medicines
+		)
 
 	if getattr(request, "user", None) is not None and request.user.is_authenticated:
 		from gregory.models import OrganizationSite
@@ -342,7 +398,7 @@ def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
 			return _resolve(set())
 		return _resolve(
 			set(
-				_settings_rows(patents=patents)
+				_settings_rows(feature=feature)
 				.filter(site_id__in=site_ids)
 				.exclude(scope_subjects__isnull=True)
 				.values_list("scope_subjects__id", flat=True)
@@ -354,8 +410,9 @@ def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
 	from gregory.site_resolution import NoSiteResolvedError, resolve_anonymous_site
 
 	# Resolved once per request: visible_subject_ids and
-	# visible_patent_subject_ids both land here, and the answer (which public
-	# site the caller means) does not depend on the patents switch.
+	# visible_patent_subject_ids and visible_medicine_subject_ids all land
+	# here, and the answer (which public site the caller means) does not
+	# depend on either switch.
 	resolution = getattr(request, "_anonymous_site_resolution", None)
 	if resolution is None:
 		resolution = resolve_anonymous_site(request)
@@ -381,7 +438,9 @@ def _resolve_visible_subject_ids(request, *, patents: bool) -> set[int]:
 	# site_id alone would union that private row's own scope_subjects into
 	# this anonymous response -- matching _public_subject_ids()'s own filter
 	# for the same reason.
-	return site_scope_subject_ids(site_id, public_only=True, patents=patents)
+	return site_scope_subject_ids(
+		site_id, public_only=True, patents=patents, medicines=medicines
+	)
 
 
 #: Query parameters whose effect depends on the caller's PATENT scope, on

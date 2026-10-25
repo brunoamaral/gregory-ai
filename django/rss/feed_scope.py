@@ -23,19 +23,36 @@ in api/filters.py, so the API's behaviour stays a frontend concern.
 """
 
 import logging
+from datetime import timedelta
 
 from django.contrib.sites.models import Site
 from django.db.models import Exists, OuterRef
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
-from gregory.models import Articles, Patents, Subject, TeamCategory, Trials
+from gregory.models import (
+	Articles,
+	MedicineCategoryAssignment,
+	MedicineEvent,
+	Patents,
+	Subject,
+	TeamCategory,
+	Trials,
+)
 from sitesettings.models import CustomSetting
 
 logger = logging.getLogger(__name__)
 
 
-def site_feed_scope(site_id, require_patents=False):
+#: A medicine feed lists a ``reconstructed`` event only while it is this recent.
+#: Reconstructed events are read off EMA's date fields on a medicine's first sync,
+#: so without the cut-off the first sync would flood a feed with every approval
+#: back to 1995. ``observed`` events are always listed.
+RECONSTRUCTED_EVENT_DAYS = 90
+
+
+def site_feed_scope(site_id, require_patents=False, require_medicines=False):
 	"""Resolve the Site, its CustomSetting and its RSS-visible subject ids.
 
 	404s exactly like rss/sitemaps.py's _site_sitemaps: unknown site, no
@@ -50,6 +67,9 @@ def site_feed_scope(site_id, require_patents=False):
 	sites, so a site with the switch off serves no patents anywhere -- not on
 	the API, not in the MCP server and not here -- even with rss_enabled on and
 	the subject in scope. See docs/patents.md, "Licence and the API".
+
+	require_medicines=True (the medicine feeds) likewise needs
+	CustomSetting.medicines_enabled, which is off until a site is switched on.
 	"""
 	site = get_object_or_404(Site, pk=site_id)
 	# CustomSetting.site is a plain FK (not unique) -- order explicitly so
@@ -59,6 +79,8 @@ def site_feed_scope(site_id, require_patents=False):
 		raise Http404("RSS feed not enabled for this site.")
 	if require_patents and not settings_row.patents_enabled:
 		raise Http404("Patents are not enabled for this site.")
+	if require_medicines and not settings_row.medicines_enabled:
+		raise Http404("Medicines are not enabled for this site.")
 	subject_ids = set(settings_row.scope_subjects.values_list("id", flat=True))
 	return site, settings_row, subject_ids
 
@@ -141,3 +163,54 @@ def patent_base_qs(subject_ids):
 		Exists(Patents.objects.filter(pk=OuterRef("pk"), subjects__in=subject_ids)),
 		earliest_publication_date__isnull=False,
 	)
+
+
+def category_subject_map(subject_ids):
+	"""{category id: the subject ids it shares with subject_ids}, one query.
+
+	Every category with at least one subject in the site's scope, i.e. the
+	categories a site-wide feed covers. The same overlap resolve_scoped_category
+	returns for one category, for all of them.
+	"""
+	through = TeamCategory.subjects.through
+	mapping = {}
+	for category_id, subject_id in through.objects.filter(
+		subject_id__in=subject_ids
+	).values_list("teamcategory_id", "subject_id"):
+		mapping.setdefault(category_id, set()).add(subject_id)
+	return mapping
+
+
+def medicine_event_base_qs(category_subject_map):
+	"""Medicine events a feed may list, for the categories in category_subject_map.
+
+	category_subject_map is {category id: its subject ids inside the site's
+	scope}, as category_subject_map() and resolve_scoped_category() give it.
+	A category whose set is empty is outside the scope and contributes nothing.
+
+	An event is in when its medicine has a NON-SUPPRESSED link to one of those
+	categories. Feeds are editorial, so a link an editor suppressed hides the
+	medicine, as it does on the API. Membership is an Exists() rather than a
+	join + .distinct(), as for the other feeds, so a medicine in several of the
+	categories is not repeated and the outer query can order and slice cheaply.
+
+	Excluded:
+	  * generic and biosimilar products: the feed is for news about the
+	    originator, not for each copy of a drug that is already on the market;
+	  * ``reconstructed`` events older than RECONSTRUCTED_EVENT_DAYS (see above).
+	"""
+	category_ids = [
+		category_id for category_id, subjects in category_subject_map.items() if subjects
+	]
+	cutoff = timezone.localdate() - timedelta(days=RECONSTRUCTED_EVENT_DAYS)
+	return MedicineEvent.objects.filter(
+		Exists(
+			MedicineCategoryAssignment.objects.filter(
+				medicine=OuterRef("medicine"),
+				teamcategory__in=category_ids,
+				suppressed=False,
+			)
+		),
+		medicine__generic=False,
+		medicine__biosimilar=False,
+	).exclude(basis=MedicineEvent.Basis.RECONSTRUCTED, event_date__lt=cutoff)
