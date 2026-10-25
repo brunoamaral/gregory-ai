@@ -402,6 +402,41 @@ class MedicineFilterTests(MedicineFixture):
 		Medicine.objects.filter(pk=self.kesimpta.pk).update(substances=["ofatumumab", "second one"])
 		self.assertEqual(self.get("substance=second%20%20one"), ["Kesimpta"])
 
+	def test_name_matches_a_substring_ignoring_case(self):
+		self.assertEqual(self.get("name=OCREVUS"), ["Ocrevus"])
+		self.assertEqual(self.get("name=cre"), ["Ocrevus"])
+		self.assertEqual(self.get("name=riluzole"), ["Riluzole Zentiva"])
+		self.assertEqual(self.get("name=nothing-like-this"), [])
+
+	def test_name_finds_a_product_by_its_former_name(self):
+		Medicine.objects.filter(pk=self.kesimpta.pk).update(
+			name="Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)"
+		)
+		self.assertEqual(
+			self.get("name=corbilta"), ["Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)"]
+		)
+		self.assertEqual(len(self.get("name=entacapone")), 1)
+
+	def test_name_combines_with_the_other_filters(self):
+		self.assertEqual(self.get(f"name=ocrevus&category_id={self.c_ms.pk}"), ["Ocrevus"])
+		self.assertEqual(self.get(f"name=ocrevus&category_id={self.c_als.pk}"), [])
+		self.assertEqual(self.get("name=ocrevus&status=Withdrawn"), [])
+		self.assertEqual(self.get("name=riluzole&status=Withdrawn"), ["Riluzole Zentiva"])
+		self.assertEqual(self.get("name=ocrevus&substance=ocrelizumab"), ["Ocrevus"])
+		self.assertEqual(self.get("name=ocrevus&substance=riluzole"), [])
+
+	def test_name_never_matches_a_medicine_the_caller_cannot_see(self):
+		# Linked only to a category outside the site's scope, or only by a suppressed link.
+		self.assertEqual(self.get("name=hidden"), [])
+		self.assertEqual(self.get("name=suppressed"), [])
+
+	def test_name_leaves_generics_to_include_generics(self):
+		self.assertEqual(self.get("name=tyruko"), [])
+		self.assertEqual(self.get("name=tyruko&include_generics=true"), ["Tyruko"])
+
+	def test_name_does_not_repeat_a_medicine_in_two_categories(self):
+		self.assertEqual(self.get("name=riluzole%20zentiva"), ["Riluzole Zentiva"])
+
 	def test_status_is_case_insensitive(self):
 		self.assertEqual(self.get("status=withdrawn"), ["Riluzole Zentiva"])
 

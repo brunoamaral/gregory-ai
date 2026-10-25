@@ -660,7 +660,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
-| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `substance`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope. Generics and biosimilars are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `substance`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope. Generics and biosimilars are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
 | Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `events`, newest first |
 | Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
@@ -1130,6 +1130,7 @@ Every parameter is optional.
 | `subject_id` | Linked to a category that has this subject |
 | `site_id` | Linked to a category that has a subject in that site's scope. A site with `medicines_enabled` off returns nothing |
 | `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances |
+| `name` | Part of the product's `name` (the brand name), case-insensitive: `?name=ocrevus`, or `?name=corbilta` for "Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)". A plain column filter; it combines with every other filter and changes nothing about visibility or generics |
 | `status` | EMA's status wording, case-insensitive: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … Values are EMA's own, so new ones can appear |
 | `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none |
 | `advanced_therapy`, `orphan_medicine`, `is_combination` | `true`/`false` |
@@ -1203,6 +1204,7 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/?subject_id=1&category_id=6              a condition page: category 6, which has subject 1
 /medicines/?category_id=6,21                        either category
 /medicines/?substance=natalizumab&include_generics=true
+/medicines/?name=ocrevus                            by brand name
 /medicines/?authorised_after=2024-01-01&ordering=-authorisation_date
 /medicines/123/                                     with events
 /medicines/events/?site_id=3                        events for the medicines of site 3

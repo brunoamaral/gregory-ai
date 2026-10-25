@@ -96,6 +96,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
 
 	await search_medicines(
+		name="ocrevus",
 		substance="ocrelizumab",
 		category_id=6,
 		category_slug="ocrelizumab",
@@ -112,6 +113,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 
 	params = dict(mock_gregory.requests[0].url.params)
 	assert params == {
+		"name": "ocrevus",
 		"substance": "ocrelizumab",
 		"category_id": "6",
 		"category_slug": "ocrelizumab",
@@ -155,9 +157,49 @@ async def test_a_zero_hit_search_says_why_and_repeats_the_coverage_caveat(mock_g
 	guidance = result["guidance"]
 	assert guidance["applied_filters"] == ["status", "substance"]
 	text = " ".join(guidance["suggestions"])
-	assert "brand name" in text
+	assert "looks like a brand or product name: use `name`" in text
 	assert "include_generics" in text
 	assert "not approved" in text
+
+
+@pytest.mark.parametrize("value", ["Ocrevus", "ocrevus 600", "Cenrifki", "Dimethyl fumarate"])
+async def test_a_failed_substance_search_that_looks_like_a_brand_suggests_name(mock_gregory, value):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance=value)
+
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "use `name` instead" in text
+	# Only filter names are echoed, never the value.
+	assert value not in text
+
+
+async def test_a_failed_substance_search_that_looks_like_an_inn_still_mentions_name(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance="ocrelizumabb")
+
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "looks like a brand" not in text
+	assert "use `name`" in text
+
+
+async def test_a_failed_name_search_suggests_substance(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(name="ocrelizumab")
+
+	assert result["guidance"]["applied_filters"] == ["name"]
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "use `substance` instead" in text
+	assert "not approved" in text
+
+
+def test_the_docstring_tells_name_and_substance_apart():
+	doc = search_medicines.__doc__
+	assert "Use `name` for a brand or product name" in doc
+	assert "Use `substance` for the" in doc
+	assert "not Ocrevus" not in doc and "not \"Ocrevus\"" not in doc
 
 
 async def test_the_guidance_does_not_blame_generics_when_they_are_included(mock_gregory):

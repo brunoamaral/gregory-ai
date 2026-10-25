@@ -264,7 +264,7 @@ and curate medicines on the sites that have them.
 
 | Tool | Who | What it does |
 |:-----|:----|:-------------|
-| `search_medicines` | Everyone | Searches the medicines linked to the site's categories by `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates and `include_generics`. Compact rows with the dates, the categories and the EPAR link |
+| `search_medicines` | Everyone | Searches the medicines linked to the site's categories by `name` (brand or product name), `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates and `include_generics`. Compact rows with the dates, the categories and the EPAR link |
 | `get_medicine` | Everyone | One product with its events, each worded by `kind_label` |
 | `set_medicine_link` | Editors with the edit scope | Puts a medicine in a category, or takes it out. Live immediately, applies to the whole category |
 
@@ -276,8 +276,9 @@ and curate medicines on the sites that have them.
   and that the list covers only centrally authorised medicines: a drug missing from it may still be
   authorised in individual countries, so "not in EMA's data" is not "not approved". The tool
   descriptions say the same, and tell the model to show the EPAR `link`.
-- **`substance` is the INN, not a brand name.** `ocrelizumab` finds Ocrevus; `Ocrevus` finds nothing.
-  A zero-hit response says so.
+- **`name` is for brand names, `substance` for the INN.** `name=ocrevus` is a case-insensitive
+  substring of the product name (a former name in brackets counts); `substance=ocrelizumab` is an
+  exact match on the active substance. A zero-hit response on one suggests the other.
 - **`set_medicine_link` is the admin's fix, over MCP.** It calls
   `PUT`/`DELETE /editor/categories/{category_id}/medicines/{medicine_id}/`, which follows the table
   under [Fixing links](#fixing-links): `linked=false` suppresses an automatic link (the matcher never

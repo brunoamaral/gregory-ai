@@ -194,14 +194,39 @@ _TRIAL_SEARCH_RULE = (
 	"or `intervention=`. If the query uses AND/parentheses, try loosening it.",
 )
 
-_MEDICINE_SUBSTANCE_RULE = (
-	("substance",),
-	"`substance` is an exact match (ignoring case) on one active substance as EMA names it, "
-	"the INN: \"ocrelizumab\", not the brand name \"Ocrevus\" and not part of a name.",
+def _looks_like_a_brand(value: Any) -> bool:
+	"""An INN is written in lowercase, one word; a brand name is usually
+	capitalised, or has a space, digit or hyphen. A hint only, never a filter."""
+	if not isinstance(value, str) or not value.strip():
+		return False
+	value = value.strip()
+	return value[0].isupper() or any(ch.isdigit() or ch in " -/" for ch in value)
+
+
+def _medicine_substance_text(params: dict[str, Any]) -> str:
+	exact = (
+		"`substance` is an exact match (ignoring case) on one active substance as EMA names it, "
+		"the INN (e.g. ocrelizumab), not part of a name."
+	)
+	if _looks_like_a_brand(params.get("substance")):
+		return (
+			"The `substance` value looks like a brand or product name: use `name` instead, which matches "
+			"part of the product name, ignoring case. " + exact
+		)
+	return exact + " If it is a brand or product name, use `name`."
+
+
+_MEDICINE_SUBSTANCE_RULE = (("substance",), _medicine_substance_text)
+
+_MEDICINE_NAME_RULE = (
+	("name",),
+	"`name` matches part of the product name EMA publishes (a brand name, sometimes with a former "
+	"name in brackets), ignoring case. If the value is an active substance, use `substance` instead "
+	"(the INN, e.g. ocrelizumab).",
 )
 
 _MEDICINE_GENERICS_RULE = (
-	("substance", "status", "category_id", "category_slug", "subject_id"),
+	("substance", "name", "status", "category_id", "category_slug", "subject_id"),
 	lambda params: (
 		"Generics and biosimilars are already included, so they are not the cause."
 		if params.get("include_generics")
@@ -224,7 +249,7 @@ _MEDICINE_DATE_RULE = (
 )
 
 _MEDICINE_COVERAGE_RULE = (
-	("substance",),
+	("substance", "name"),
 	"EMA lists only medicines authorised centrally for the whole EU, and this site "
 	"shows only those linked to its categories. A drug that is not here may still be "
 	"authorised in individual countries: do not conclude it is not approved.",
@@ -265,6 +290,7 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 		_TAXONOMY_RULE,
 		_MEDICINE_STATUS_RULE,
 		_MEDICINE_SUBSTANCE_RULE,
+		_MEDICINE_NAME_RULE,
 		_MEDICINE_GENERICS_RULE,
 		_MEDICINE_COVERAGE_RULE,
 	),

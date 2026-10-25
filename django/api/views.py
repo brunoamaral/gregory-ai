@@ -3737,6 +3737,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- **subject_id** - medicines linked to a category that has this subject
 	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
 	- **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+	- **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
 	- **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
 	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
 	- **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
@@ -3776,6 +3777,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- On a condition page: `/medicines/?subject_id=1&category_id=6`
 	- In either of two categories: `/medicines/?category_id=6,21`
 	- One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+	- By brand name: `/medicines/?name=ocrevus`
 	- Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
 	- With its events: `/medicines/123/`
 	"""

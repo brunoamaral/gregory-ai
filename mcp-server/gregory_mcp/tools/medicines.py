@@ -35,6 +35,7 @@ COVERAGE_NOTE = (
 
 
 async def search_medicines(
+	name: str | None = None,
 	substance: str | None = None,
 	category_id: int | None = None,
 	category_slug: str | None = None,
@@ -58,10 +59,13 @@ async def search_medicines(
 	EU countries, so "not in EMA's data" is not "not approved": say so when a search
 	finds nothing.
 
-	`substance` is one active substance as EMA names it (the INN, e.g.
-	"ocrelizumab"), matched exactly but ignoring case. It is not a brand name and not
-	free text: search "ocrelizumab", not "Ocrevus". A combination product matches on
-	any of its substances. `category_id` / `category_slug` / `subject_id` (see
+	Use `name` for a brand or product name: it matches part of the name EMA
+	publishes, ignoring case ("ocrevus" finds Ocrevus; a product renamed from
+	another name also matches on the former name in brackets). Use `substance` for the
+	active substance: the INN as EMA names it (e.g. "ocrelizumab"), matched exactly
+	but ignoring case, not part of a name. A combination product matches on any of
+	its substances. They combine with each other and with the filters below.
+	`category_id` / `category_slug` / `subject_id` (see
 	list_categories, list_subjects) keep products linked to that category, or to a
 	category of that subject.
 
@@ -88,6 +92,7 @@ async def search_medicines(
 	"""
 	clamped_page = clamp_page(page)
 	params = {
+		"name": name,
 		"substance": substance,
 		"category_id": category_id,
 		"category_slug": category_slug,

@@ -2388,6 +2388,18 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"A combination product matches on any of its substances."
 		),
 	)
+	name = filters.CharFilter(
+		field_name="name",
+		lookup_expr="icontains",
+		label="Name",
+		help_text=(
+			"Part of the product's name as EMA publishes it (the brand name), "
+			"case-insensitive, e.g. ?name=ocrevus. A substring of the whole name, "
+			"which can include a former name: ?name=corbilta finds \"Corbilta "
+			"(previously Levodopa/Carbidopa/Entacapone Sandoz)\". Use `substance` for "
+			"the active substance."
+		),
+	)
 	status = filters.CharFilter(
 		field_name="status",
 		lookup_expr="iexact",
@@ -2452,6 +2464,7 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"subject_id",
 			"site_id",
 			"substance",
+			"name",
 			"status",
 			"opinion_status",
 			"advanced_therapy",

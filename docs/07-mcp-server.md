@@ -146,7 +146,7 @@ independent: a site can have either, both or neither.
 
 | Tool | What it does |
 |:---|:---|
-| `search_medicines` | One row per EMA product, limited to those linked to the site's categories. `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab` and not the brand name `Ocrevus`), `category_id` / `category_slug` / `subject_id`, `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `include_generics`, `ordering`. Generic and biosimilar products are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `categories` and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
+| `search_medicines` | One row per EMA product, limited to those linked to the site's categories. `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id`, `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `include_generics`, `ordering`. Generic and biosimilar products are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `categories` and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
 | `get_medicine` | One product by `medicine_id`: the full record plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off EMA's dates the first time the product was seen. A product the site cannot show is "not found", the same as one that does not exist. |
 
 **Source and coverage.** Every response carries `source: "European Medicines Agency"` and a `note`, and
@@ -182,7 +182,7 @@ match only one field. `search_patents`'s reads title and summary only.
 
 When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
 response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
-`substance` being an exact INN rather than a brand name, generics being hidden by default, `status` and
+`substance` being an exact INN (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), generics being hidden by default, `status` and
 `opinion_status`, the first-authorisation date range, and the reminder that a drug missing from EMA's data
 may be authorised nationally):
 
