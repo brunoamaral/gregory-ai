@@ -63,12 +63,18 @@ services:
     depends_on:
       - db
     healthcheck:
-      # Same readiness check entrypoint.sh's wait_for_db already uses.
-      test: ["CMD", "python", "manage.py", "check", "--database", "default"]
+      # Asks the running gunicorn for /healthz/ (django/healthcheck.py,
+      # admin/health.py). Not `manage.py check`: that booted a new Django
+      # process every 30s, ~10s of CPU on House, past the timeout, so the
+      # container showed unhealthy while serving fine. -I keeps the probe
+      # from importing anything under /code.
+      test: ["CMD", "python", "-I", "/code/healthcheck.py"]
       interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      timeout: 5s
+      retries: 3
+      # entrypoint.sh migrates and runs collectstatic before gunicorn starts.
+      # Checks still run in this window; the first pass marks it healthy.
+      start_period: 120s
 
   gregory-mcp:
     container_name: gregory-mcp

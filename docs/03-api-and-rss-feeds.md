@@ -644,6 +644,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Subscriptions | `GET`/`POST /subscriptions/author-optout/{token}/` | `token` (path, `AuthorOutreach.opt_out_token`) | Author outreach opt-out, same confirm-then-`POST` pattern — see [author-outreach.md](author-outreach.md) |
 | Webhooks | `POST /webhooks/` | Postmark payload | Postmark suppression and reactivation events — see [subscriptions.md](subscriptions.md) |
 | Robots | `GET /robots.txt` | None | The API host's `robots.txt`; disallows the search feeds — see [Search feeds](#search-feeds) |
+| Health | `GET`/`HEAD /healthz/` | None | Docker healthcheck probe for the `gregory` container (`django/healthcheck.py` calls it from inside the container). Plain text: `200 ok` when the database answers a query, `503 database unavailable` when it doesn't. Never cached; `POST` is `405` |
 
 ### Search endpoints
 
@@ -1195,6 +1196,6 @@ The REST endpoints support three formats. Specify via the `format` query paramet
 | Browsable API | `html` | `text/html` |
 | CSV | `csv` | `text/csv` |
 
-Exceptions: `/patents/` and its detail and stats are JSON and browsable API only (`?format=csv` is `404`, a condition of the EPO licence, see [Patents](#patents)). RSS feeds, sitemaps, `robots.txt`, the `/emails/` previews and the `/subscriptions/` and `/webhooks/` routes are plain Django views with a fixed content type and ignore `format`.
+Exceptions: `/patents/` and its detail and stats are JSON and browsable API only (`?format=csv` is `404`, a condition of the EPO licence, see [Patents](#patents)). RSS feeds, sitemaps, `robots.txt`, `/healthz/`, the `/emails/` previews and the `/subscriptions/` and `/webhooks/` routes are plain Django views with a fixed content type and ignore `format`.
 
 For CSV export details and streaming behaviour, see [csv-export.md](csv-export.md).

@@ -102,6 +102,8 @@ uv pip install -r requirements.txt
 
 Open the Django admin at `http://localhost/admin/` and log in with the superuser credentials you created.
 
+`docker ps` should show the `gregory` container as `(healthy)` within a couple of minutes of starting. The healthcheck asks gunicorn for `/healthz/`; to see why it fails, run `docker inspect --format '{{json .State.Health}}' gregory`.
+
 ---
 
 ## Seeding test data
