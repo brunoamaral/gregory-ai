@@ -242,6 +242,46 @@ class MedicineFeedContentTests(MedicineFixture, TestCase):
 		# A kind added later without wording yet falls back to its own name.
 		self.assertEqual(MedicineEvent(kind="something_new").in_words, "something_new")
 
+	def test_ended_says_how_it_ended_when_the_event_knows(self):
+		self.assertEqual(
+			MedicineEvent(kind=Kind.ENDED, to_value="Withdrawn").in_words,
+			"Authorisation ended (Withdrawn)",
+		)
+		self.assertEqual(MedicineEvent(kind=Kind.ENDED).in_words, "Authorisation ended")
+
+	def test_status_changed_says_from_what_to_what_when_the_event_knows(self):
+		self.assertEqual(
+			MedicineEvent(kind=Kind.STATUS_CHANGED, from_value="Authorised", to_value="Suspended").in_words,
+			"Status changed: Authorised → Suspended",
+		)
+		for values in ({}, {"from_value": "Authorised"}, {"to_value": "Suspended"}):
+			with self.subTest(values=values):
+				self.assertEqual(
+					MedicineEvent(kind=Kind.STATUS_CHANGED, **values).in_words, "Status changed"
+				)
+
+	def test_other_kinds_ignore_stored_values(self):
+		event = MedicineEvent(kind=Kind.INDICATION_CHANGED, from_value="old", to_value="new")
+		self.assertEqual(event.in_words, "Indication changed")
+
+	def test_an_ended_event_is_titled_with_how_it_ended(self):
+		self.make_event(self.medicine, Kind.ENDED, to_value="Withdrawn")
+		self.assertEqual(
+			self.category_titles(), ["Ocrevus (ocrelizumab): Authorisation ended (Withdrawn)"]
+		)
+
+	def test_a_status_change_is_titled_with_both_statuses(self):
+		self.make_event(
+			self.medicine, Kind.STATUS_CHANGED, from_value="Authorised", to_value="Suspended"
+		)
+		self.assertEqual(
+			self.site_feed_titles(),
+			["Ocrevus (ocrelizumab): Status changed: Authorised → Suspended"],
+		)
+
+	def site_feed_titles(self):
+		return self.titles(self.site_feed())
+
 	def test_suppressed_links_never_appear(self):
 		hidden = self.make_medicine("Suppressed", suppressed=True)
 		self.make_event(hidden)

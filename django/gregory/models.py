@@ -3051,8 +3051,18 @@ class MedicineEvent(models.Model):
 
 	@property
 	def in_words(self):
-		"""The event as a reader's sentence; the raw kind if a new one has no wording yet."""
-		return self.IN_WORDS.get(self.kind, self.get_kind_display())
+		"""The event as a reader's sentence; the raw kind if a new one has no wording yet.
+
+		``ended`` and ``status_changed`` add what the event stored, so a withdrawal reads
+		differently from an expiry ("Authorisation ended (Withdrawn)") and a status change
+		says from what to what. Without those values the base wording stands.
+		"""
+		words = self.IN_WORDS.get(self.kind, self.get_kind_display())
+		if self.kind == self.Kind.ENDED and self.to_value:
+			return f"{words} ({self.to_value})"
+		if self.kind == self.Kind.STATUS_CHANGED and self.from_value and self.to_value:
+			return f"{words}: {self.from_value} → {self.to_value}"
+		return words
 
 	class Meta:
 		db_table = "medicine_events"
