@@ -46,6 +46,9 @@ EDITOR_PERMISSIONS = {
 	"gregory.trialcategoryassignment": FULL,
 	"gregory.patentcategoryassignment": FULL,
 	"gregory.patenttriallink": VIEW_CHANGE,
+	# Removing an automatic medicine link from a category suppresses it rather than
+	# deleting it, but the category page's inline still needs add and delete.
+	"gregory.medicinecategoryassignment": FULL,
 	"gregory.teamcategory": FULL,
 	# The organisation's set-up: visible, changed by a superuser.
 	"gregory.sources": VIEW,
@@ -65,6 +68,9 @@ EDITOR_PERMISSIONS = {
 	"gregory.entities": VIEW,
 	"gregory.publicationtype": VIEW,
 	"gregory.meshterm": VIEW,
+	# EMA's medicines and their events: written only by sync_ema_medicines.
+	"gregory.medicine": VIEW,
+	"gregory.medicineevent": VIEW,
 }
 
 FORBIDDEN_APPS = frozenset(

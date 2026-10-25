@@ -173,8 +173,8 @@ The admin code above decides *which rows* a staff user sees and which of those t
 |:------------|:-------|
 | View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links |
 | View, add and change | Per-site takeaways and summaries (articles, patents), trial organisation content, subject relevance |
-| View, add, change and delete | Category assignments (articles, trials, patents), categories |
-| View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms (shared reference data). The read-only rows inside the article, trial and patent pages |
+| View, add, change and delete | Category assignments (articles, trials, patents), medicine–category links, categories |
+| View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms, EMA medicines and their events (shared reference data). The read-only rows inside the article, trial and patent pages |
 
 Editors get nothing from user accounts and groups, organisations, sites, API keys, OAuth and MCP grants, or newsletters. Anyone who can edit user accounts can make themselves a superuser. Several newsletter pages are not organisation-scoped yet and show subscribers' personal data.
 
