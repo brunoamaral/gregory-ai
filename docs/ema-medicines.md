@@ -76,6 +76,12 @@ event is **reconstructed** when it is read off a date field the first time a med
 seen, and **observed** when a later sync sees a difference.
 
 - A date that appears or moves gives the event for that field, dated with EMA's date.
+- **A corrected one-off date replaces its event.** Authorisation, refusal, application
+  withdrawal, end of authorisation, and the start of a rolling review or evaluation
+  happen once per product. If EMA moves one from a date to a different date, the event
+  for the old date is deleted and the new one is recorded, so a product never shows two
+  "Authorised" events. EC decisions, suspensions and opinions can recur (variations,
+  re-suspension, re-examination), so a moved date adds a second event and keeps the first.
 - `ec_decision` is recorded when the latest decision differs from the authorisation date.
   The export holds only the latest decision, so a first sync recovers one per product;
   later ones are observed as they arrive.

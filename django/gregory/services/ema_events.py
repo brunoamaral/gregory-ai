@@ -11,7 +11,9 @@ Two kinds of event come out of a sync:
 Both functions return plain dicts (``kind``, ``event_date``, ``basis``, ``from_value``,
 ``to_value``); the caller attaches the medicine and writes them with
 ``bulk_create(..., ignore_conflicts=True)``, which the unique constraint on
-(medicine, kind, event_date) makes safe to repeat.
+(medicine, kind, event_date) makes safe to repeat. An observed event may also carry
+``replaces``: the old date of a one-off milestone that EMA corrected. The caller
+deletes that old event and must not pass the key to ``MedicineEvent``.
 """
 
 from gregory.models import MedicineEvent
@@ -30,6 +32,20 @@ _SIMPLE_DATES = (
 	("suspension_date", Kind.SUSPENDED),
 	("end_date", Kind.ENDED),
 )
+
+# Milestones that happen once per product. When EMA moves one from a date to a
+# different date it is correcting itself, so the event for the old date is
+# replaced rather than kept beside the new one. Not in this set, because they can
+# legitimately recur: ec_decision (variations), suspended (re-suspension) and the
+# opinion kinds (re-examination).
+_ONE_OFF_KINDS = {
+	Kind.ROLLING_REVIEW_STARTED,
+	Kind.EVALUATION_STARTED,
+	Kind.AUTHORISED,
+	Kind.REFUSED,
+	Kind.APPLICATION_WITHDRAWN,
+	Kind.ENDED,
+}
 
 # Kinds that account for a change of status. EC decisions and indication edits
 # do not: a product can get both without changing status.
@@ -118,9 +134,14 @@ def observed_events(old_medicine, parsed, today):
 
 	for attr, kind in _SIMPLE_DATES:
 		new_date = getattr(parsed, attr)
-		if new_date is not None and new_date != getattr(old_medicine, attr):
+		old_date = getattr(old_medicine, attr)
+		if new_date is not None and new_date != old_date:
 			to_value = parsed.status if kind == Kind.ENDED else ""
-			events.append(_event(kind, new_date, Basis.OBSERVED, to_value=to_value))
+			event = _event(kind, new_date, Basis.OBSERVED, to_value=to_value)
+			if kind in _ONE_OFF_KINDS and old_date is not None:
+				# The caller deletes the (kind, old_date) event before writing this one.
+				event["replaces"] = old_date
+			events.append(event)
 
 	if parsed.opinion_date is not None:
 		new_kind = _parsed_opinion_kind(parsed)

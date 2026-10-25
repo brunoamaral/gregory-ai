@@ -256,6 +256,99 @@ class ChangedSyncTests(SyncTestCase):
 		self.assertEqual(state.last_export_timestamp, "2026-12-10T06:02:02Z")
 
 
+class CorrectedDateTests(SyncTestCase):
+	"""A one-off milestone that EMA moves is a correction; recurring kinds are not."""
+
+	def sync_with(self, name, **changes):
+		rows = load(BASE)["data"]
+		for row in rows:
+			if row["name_of_medicine"] == name:
+				row.update(changes)
+		self.sync(self.write_export(rows))
+
+	def kinds(self, name, kind):
+		return sorted(
+			MedicineEvent.objects.filter(medicine__name=name, kind=kind).values_list("event_date", "basis")
+		)
+
+	def test_a_corrected_authorisation_date_leaves_one_event_on_the_new_date(self):
+		self.sync()
+		self.assertEqual(self.kinds("Ocrevus", Kind.AUTHORISED), [(date(2018, 1, 8), Basis.RECONSTRUCTED)])
+		self.sync_with("Ocrevus", marketing_authorisation_date="09/01/2018")
+		self.assertEqual(self.kinds("Ocrevus", Kind.AUTHORISED), [(date(2018, 1, 9), Basis.OBSERVED)])
+		self.assertEqual(self.medicine("Ocrevus").authorisation_date, date(2018, 1, 9))
+
+	def test_every_one_off_kind_is_replaced(self):
+		self.sync()
+		self.sync_with(
+			"Natalizumab Elan Pharma",
+			refusal_of_marketing_authorisation_date="12/01/2008",
+		)
+		self.assertEqual(
+			self.kinds("Natalizumab Elan Pharma", Kind.REFUSED), [(date(2008, 1, 12), Basis.OBSERVED)]
+		)
+		self.sync_with(
+			"Hydrocortisone Aguettant", withdrawal_of_application_date="19/09/2025"
+		)
+		self.assertEqual(
+			self.kinds("Hydrocortisone Aguettant", Kind.APPLICATION_WITHDRAWN),
+			[(date(2025, 9, 19), Basis.OBSERVED)],
+		)
+		self.sync_with(
+			"Arzerra",
+			withdrawal_expiry_revocation_lapse_of_marketing_authorisation_date="01/03/2019",
+		)
+		self.assertEqual(self.kinds("Arzerra", Kind.ENDED), [(date(2019, 3, 1), Basis.OBSERVED)])
+
+	def test_a_moved_ec_decision_adds_a_second_event(self):
+		self.sync()
+		self.sync_with("Ocrevus", european_commission_decision_date="20/11/2026")
+		self.assertEqual(
+			self.kinds("Ocrevus", Kind.EC_DECISION),
+			[(date(2026, 10, 15), Basis.RECONSTRUCTED), (date(2026, 11, 20), Basis.OBSERVED)],
+		)
+
+	def test_a_moved_suspension_date_adds_a_second_event(self):
+		self.sync_with("Ocrevus", suspension_of_marketing_authorisation_date="01/02/2020")
+		self.sync_with("Ocrevus", suspension_of_marketing_authorisation_date="01/03/2021")
+		self.assertEqual(
+			[d for d, _ in self.kinds("Ocrevus", Kind.SUSPENDED)], [date(2020, 2, 1), date(2021, 3, 1)]
+		)
+
+	def test_a_date_that_appears_adds_one_event_and_deletes_nothing(self):
+		self.sync()
+		before = MedicineEvent.objects.filter(medicine__name="Tysabri").count()
+		self.sync_with(
+			"Tysabri",
+			withdrawal_expiry_revocation_lapse_of_marketing_authorisation_date="01/12/2026",
+		)
+		self.assertEqual(MedicineEvent.objects.filter(medicine__name="Tysabri").count(), before + 1)
+		self.assertEqual(self.kinds("Tysabri", Kind.ENDED), [(date(2026, 12, 1), Basis.OBSERVED)])
+		self.assertEqual(self.kinds("Tysabri", Kind.AUTHORISED), [(date(2006, 6, 27), Basis.RECONSTRUCTED)])
+
+	def test_the_replaces_marker_is_set_only_for_a_move_between_two_dates(self):
+		self.sync()
+		stored = self.medicine("Ocrevus")
+		moved = observed_events(
+			stored, parse_row(dict(self.base_row("Ocrevus"), marketing_authorisation_date="09/01/2018")), TODAY
+		)
+		(authorised,) = [e for e in moved if e["kind"] == Kind.AUTHORISED]
+		self.assertEqual(authorised["replaces"], date(2018, 1, 8))
+		stored = self.medicine("Tysabri")
+		appeared = observed_events(
+			stored,
+			parse_row(
+				dict(
+					self.base_row("Tysabri"),
+					withdrawal_expiry_revocation_lapse_of_marketing_authorisation_date="01/12/2026",
+				)
+			),
+			TODAY,
+		)
+		(ended,) = [e for e in appeared if e["kind"] == Kind.ENDED]
+		self.assertNotIn("replaces", ended)
+
+
 class StatusChangedTests(SyncTestCase):
 	def test_a_status_change_nothing_else_explains(self):
 		self.sync()

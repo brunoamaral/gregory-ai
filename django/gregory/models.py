@@ -2933,7 +2933,10 @@ class Medicine(models.Model):
 		help_text="False when the latest sync no longer found the product in EMA's export. Rows are never deleted.",
 	)
 	first_seen_at = models.DateTimeField(auto_now_add=True)
-	last_synced_at = models.DateTimeField(default=timezone.now)
+	last_synced_at = models.DateTimeField(
+		default=timezone.now,
+		help_text="When a sync last created or changed this row. Unchanged rows are not rewritten.",
+	)
 
 	def __str__(self):
 		return f"{self.name} ({self.ema_product_number})"

@@ -21,6 +21,7 @@ from collections import Counter
 
 from django.core.management.base import CommandError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from gregory.management.base import GregoryBaseCommand
@@ -232,8 +233,20 @@ class Command(GregoryBaseCommand):
 		Medicine.objects.bulk_update(changed_medicines, UPDATE_FIELDS, batch_size=BATCH_SIZE)
 		Medicine.objects.bulk_update(plan["gone"], ["in_latest_export"], batch_size=BATCH_SIZE)
 
+		# A corrected one-off milestone replaces the event for its old date.
+		stale = Q()
+		for medicine, medicine_events in plan["changed"]:
+			for event in medicine_events:
+				if "replaces" in event:
+					stale |= Q(medicine=medicine, kind=event["kind"], event_date=event["replaces"])
+		if stale:
+			MedicineEvent.objects.filter(stale).delete()
+
 		events = [
-			MedicineEvent(medicine=medicine, **event)
+			MedicineEvent(
+				medicine=medicine,
+				**{key: value for key, value in event.items() if key != "replaces"},
+			)
 			for medicine, medicine_events in plan["new"] + plan["changed"]
 			for event in medicine_events
 		]
