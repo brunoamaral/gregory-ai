@@ -96,6 +96,8 @@ from subscriptions.views import (
 )
 from organizations.backends import invitation_backend
 
+from admin.health import healthz
+
 # Email template views (direct import to avoid module issues)
 from templates.emails.views import (
 	email_preview_dashboard,
@@ -241,6 +243,8 @@ urlpatterns = (
 		# robots.txt for the API host: Disallow the search feeds. nginx has to
 		# proxy /robots.txt to Django (nginx-example-configuration/nginx.conf).
 		path("robots.txt", robots_txt, name="robots_txt"),
+		# Docker healthcheck probe (admin/health.py, django/healthcheck.py).
+		path("healthz/", healthz, name="healthz"),
 		# Site-scoped sitemaps (see rss/sitemaps.py)
 		path(
 			"sitemap/sites/<int:site_id>/index.xml",
