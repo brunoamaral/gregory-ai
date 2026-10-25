@@ -327,7 +327,7 @@ Django sends the CORS headers ([django-cors-headers](https://github.com/adamchai
   CORS_ALLOWED_ORIGIN_REGEXES=^https://[a-z0-9-]+\.brain-regeneration\.pages\.dev$
   ```
 
-  Leave the value unquoted in `.env`: docker compose passes `\.`, `{…}` and a trailing `$` through unchanged.
+  In `.env`, wrap the value in single quotes (or leave it unquoted): docker compose then passes `\.`, `{…}` and a trailing `$` through unchanged.
 
 Credentials are not enabled for cross-origin requests (`CORS_ALLOW_CREDENTIALS` is off), so a browser on an allowed origin reads exactly what an anonymous `curl` would. Being allowed by CORS does not pick a site: a preview origin such as `feature-x.brain-regeneration.pages.dev` matches no Site, so its requests take the fallback in step 4 below.
 
