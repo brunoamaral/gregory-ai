@@ -621,7 +621,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
-| Categories | `GET /categories/` | `team_id`, `subject_id`, `subjects_any`, `category_id`, `category_terms`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents) |
+| Categories | `GET /categories/` | `team_id`, `subject_id`, `subjects_any`, `category_id`, `category_terms`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents), and `medicines_count`, scoped to its [medicine scope](#which-sites-show-medicines) |
 | Categories | `GET /categories/{id}/` | `id` (path) | Includes `category_terms` and `category_exclude_terms` |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
 | Sources | `GET /sources/` | `source_id`, `team_id`, `subject_id`, `active`, `source_for`, `link`, `search`, `ordering` (`name`, `source_id`), pagination | `search` matches name and description; `link` is a case-insensitive substring of the feed or search URL; `active=true\|false` filters on whether the pipeline polls it. `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
@@ -643,6 +643,9 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
+| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `substance`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope. Generics and biosimilars are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `events`, newest first |
+| Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | Rendered template |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | The template's context as JSON |
@@ -1084,6 +1087,111 @@ A sponsor can file a patent while one of its trials is running or shortly after 
 ### `GET /patents/stats/`
 
 Takes the same parameters as the list and the same scope. Returns `total`, `with_grant`, `with_trial_link` (category-basis unless `include_subject_links=true`) and `by_priority_year` (`[{year, count}]`, ascending, with a trailing `{"year": null, ...}` for families with no priority date). Cached for `STATS_CACHE_TTL` seconds; the cache key includes the patent scope, since two callers with the same subjects can differ on which of their sites show patents.
+
+## Medicines
+
+`GET /medicines/` lists the medicines the European Medicines Agency (EMA) has authorised for human use in the EU, one record per EMA product; `GET /medicines/events/` lists what happened to them. Where the data comes from, how it is synced and how medicines are linked to categories is in [ema-medicines.md](ema-medicines.md).
+
+**Source: European Medicines Agency.** Every medicine and every event carries `"source": "European Medicines Agency"`, and `url` is the product's EPAR page on ema.europa.eu. EMA's legal notice allows reuse provided EMA is acknowledged, so keep the attribution wherever you display the data.
+
+### Which sites show medicines
+
+A medicine has no subject of its own. It is **visible when it has a live (non-suppressed) link to a category that has a subject in the caller's scope**, and only on sites with `CustomSetting.medicines_enabled` on (off by default). A site with the switch off shows no medicines even when its scope lists the subject. The caller rules are those of every other endpoint (see [Visibility rules summary](#visibility-rules-summary)), counting only sites with the switch on, exactly as for [patents](#which-sites-show-patents).
+
+A caller with nothing in scope gets an empty list from `/medicines/` and `/medicines/events/`, `404` on a single medicine, and a `medicines_count` of `0` on every category. A link an editor removed (suppressed) is dead everywhere: it does not make a medicine visible, does not appear in `categories` and never satisfies a filter.
+
+**Generics and biosimilars are hidden by default.** Products with `generic` or `biosimilar` set are left out of both lists unless `?include_generics=true`. `GET /medicines/{id}/` returns a product whatever it is, since you asked for it by id.
+
+### `GET /medicines/`
+
+Every parameter is optional.
+
+| Parameter | Matches |
+|:----------|:--------|
+| `category_id` | One category id, or a comma-separated list that matches **any** of them (`?category_id=6,21`). A single id behaves exactly like `category_id` on the other endpoints |
+| `category_slug` | Category slug |
+| `subject_id` | Linked to a category that has this subject |
+| `site_id` | Linked to a category that has a subject in that site's scope. A site with `medicines_enabled` off returns nothing |
+| `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances |
+| `status` | EMA's status wording, case-insensitive: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … Values are EMA's own, so new ones can appear |
+| `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none |
+| `advanced_therapy`, `orphan_medicine`, `is_combination` | `true`/`false` |
+| `authorised_after`, `authorised_before` | `authorisation_date`, inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
+| `include_generics` | `true` also lists generic and biosimilar products |
+| `ordering` | `authorisation_date`, `latest_ec_decision_date`, `ema_last_updated`, each with an optional `-`. Default `-ema_last_updated`. Products without the date sort last in both directions; ties break on `-id` |
+| `page`, `page_size` | `page_size` up to 100; `page * page_size` above 10,000 is `400`, as elsewhere |
+
+**The four link filters.** `category_id`, `category_slug`, `subject_id` and `site_id` are about a medicine's links to categories, and are what a condition page sends (`/medicines/?subject_id=1&category_id=6`, the same parameters as `/patents/`).
+
+- They count **live links only**, and only links the caller can see.
+- Given together they must all **hold on the same link**. `?subject_id=1&category_id=6` means one live link to category 6, and category 6 has subject 1. A medicine linked to category 6 (subject 2) and to some other category of subject 1 is not returned.
+- A medicine appears once, however many of the listed categories it is in.
+- An id that is not a whole number (`?category_id=6,abc`, `?site_id=x`) is `400`.
+
+JSON only: there is no CSV, `?format=csv` is `404`, and `?all_results=true` is ignored (you get an ordinary page).
+
+### Fields
+
+| Field | Meaning |
+|:------|:--------|
+| `id`, `ema_product_number` | Gregory's id and EMA's product number (`EMEA/H/C/004043`) |
+| `name`, `inn`, `active_substance` | As EMA publishes them. `inn` is empty for some products |
+| `substances` | Lowercased substances, from the INN or, when that is empty, the active substance |
+| `is_combination` | More than one substance |
+| `status`, `opinion_status` | EMA's wording |
+| `therapeutic_areas`, `atc_code`, `pharmacotherapeutic_group`, `indication`, `holder` | As published; `indication` has its HTML removed |
+| `advanced_therapy`, `orphan_medicine`, `conditional_approval`, `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`, `additional_monitoring`, `biosimilar`, `generic`, `patient_safety` | EMA's flags |
+| `rolling_review_start_date`, `evaluation_start_date`, `opinion_date`, `authorisation_date`, `refusal_date`, `application_withdrawal_date`, `suspension_date`, `end_date` | Dates, or `null`. `end_date` is when an authorisation was withdrawn, expired, lapsed or revoked; `status` says which |
+| `latest_ec_decision_date` | The most recent European Commission decision. **Not the approval date**: it is usually a variation (a new indication, a label change). `authorisation_date` is the first approval, so show that one as "authorised" |
+| `ema_first_published`, `ema_last_updated` | When EMA first published and last updated the product's record |
+| `url` | The EPAR page on ema.europa.eu |
+| `categories` | The categories the medicine is linked to that the caller can see, by live links only: `id`, `category_name`, `category_slug` |
+| `source` | `European Medicines Agency` |
+
+`GET /medicines/{id}/` adds `events`: the product's regulatory history, newest first, each with the event fields below except `medicine` and `source`.
+
+### `GET /medicines/events/`
+
+Newest first (`event_date`, then newest id). Visibility is the event's medicine's, as above, and generics are hidden by default. Parameters:
+
+| Parameter | Matches |
+|:----------|:--------|
+| `category_id`, `category_slug`, `subject_id`, `site_id` | As on `/medicines/`, applied to the event's medicine. Given together they must hold on the same live link |
+| `kind` | One kind or a comma-separated list (`?kind=opinion_positive,authorised`). Unknown values are `400` |
+| `basis` | `observed` or `reconstructed` |
+| `event_date_after`, `event_date_before` | Inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
+| `include_generics` | `true` also lists events of generic and biosimilar products |
+| `page`, `page_size` | As above |
+
+| Field | Meaning |
+|:------|:--------|
+| `id` | The event's id |
+| `kind` | `rolling_review_started`, `evaluation_started`, `opinion_positive`, `opinion_negative`, `opinion_adopted`, `authorised`, `ec_decision`, `indication_changed`, `refused`, `application_withdrawn`, `suspended`, `ended` or `status_changed` |
+| `kind_label` | The event as a sentence, worded exactly as in the [medicine feeds](#medicine-feeds): *Authorised in the EU*, *New European Commission decision*, … (`Authorisation ended (Withdrawn)` adds the new status; `Status changed: Authorised → Suspended` adds both) |
+| `event_date` | EMA's date where it gives one, otherwise the day Gregory saw the change |
+| `basis` | `observed`: Gregory saw the change between two syncs. `reconstructed`: read off EMA's date fields the first time the product was seen, so it is real history but not news. Filter on `basis=observed` for a "what's new" list |
+| `from_value`, `to_value` | The old and new text for status and indication changes; `to_value` holds the status for `ended` |
+| `medicine` | `id`, `name`, `inn`, `url` |
+| `source` | `European Medicines Agency` |
+
+An `ec_decision` event is the date of EMA's latest Commission decision, not the approval: that is the `authorised` event. `/medicines/events/` is its own route: `events` is never read as a medicine id.
+
+### Categories
+
+`GET /categories/` rows carry `medicines_count`: the live links of the category to medicines, **without generics and biosimilars**, so it equals `count` of `/medicines/?category_id={id}`. It is `0` for a category none of whose subjects is in the caller's medicine scope, which includes every category on a site with `medicines_enabled` off.
+
+### Examples
+
+```
+/medicines/?subject_id=1&category_id=6              a condition page: category 6, which has subject 1
+/medicines/?category_id=6,21                        either category
+/medicines/?substance=natalizumab&include_generics=true
+/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date
+/medicines/123/                                     with events
+/medicines/events/?site_id=3                        events for the medicines of site 3
+/medicines/events/?subject_id=1&category_id=6&basis=observed
+/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01
+```
 
 ---
 

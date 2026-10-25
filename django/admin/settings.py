@@ -341,6 +341,17 @@ SPECTACULAR_SETTINGS = {
 		'drf_spectacular.hooks.postprocess_schema_enums',
 		'api.schema_hooks.make_editorial_optional',
 	],
+	# MedicineEvent.kind and .basis share their field names with other models'
+	# choice sets, which drf-spectacular would otherwise name with a hash. The
+	# second `basis` and `kind` would also have renamed the patent-trial-link and
+	# editor-history enums that were BasisEnum and KindEnum, so those are pinned to
+	# their old names.
+	'ENUM_NAME_OVERRIDES': {
+		'KindEnum': 'api.schema_serializers.EDITOR_HISTORY_KIND_CHOICES',
+		'BasisEnum': 'api.schema_serializers.PATENT_TRIAL_LINK_BASIS_CHOICES',
+		'MedicineEventKindEnum': 'api.schema_serializers.MEDICINE_EVENT_KIND_CHOICES',
+		'MedicineEventBasisEnum': 'api.schema_serializers.MEDICINE_EVENT_BASIS_CHOICES',
+	},
 	'TITLE': 'GregoryAI API',
 	'DESCRIPTION': (
 		'REST API for GregoryAI: articles, clinical trials, authors, sources, '

@@ -33,6 +33,8 @@ from api.views import (
 	TrialViewSet,
 	SponsorViewSet,
 	PatentViewSet,
+	MedicineViewSet,
+	MedicineEventViewSet,
 	post_article,
 	edit_article,
 	edit_trial,
@@ -118,6 +120,11 @@ router.register(r"trials", TrialViewSet)
 router.register(r"subjects", SubjectsViewSet)
 router.register(r"sponsors", SponsorViewSet, basename="sponsors")
 router.register(r"patents", PatentViewSet, basename="patents")
+# `medicines/events` before `medicines`: the router tries routes in registration
+# order, so the other way round `events` would be read as a medicine id (the
+# medicine detail route also takes digits only, as a second guard).
+router.register(r"medicines/events", MedicineEventViewSet, basename="medicine-events")
+router.register(r"medicines", MedicineViewSet, basename="medicines")
 
 # Teams router (excluded from API root listing)
 teams_router = routers.SimpleRouter()

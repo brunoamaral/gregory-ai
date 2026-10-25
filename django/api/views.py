@@ -31,6 +31,9 @@ from api.serializers import (
 	ArticleSerializer,
 	PatentListSerializer,
 	PatentDetailSerializer,
+	MedicineSerializer,
+	MedicineDetailSerializer,
+	MedicineEventSerializer,
 	TrialSerializer,
 	TrialDetailSerializer,
 	SourceSerializer,
@@ -47,6 +50,7 @@ from api.serializers import (
 from api.pagination import (
 	CappedPageNumberPagination,
 	FlexiblePagination,
+	MedicinePagination,
 	PatentPagination,
 	TrialSitePagination,
 	request_bypasses_pagination,
@@ -104,8 +108,11 @@ from gregory.models import (
 	PatentApplicant,
 	PatentCategoryAssignment,
 	PatentPublication,
+	Medicine,
+	MedicineCategoryAssignment,
+	MedicineEvent,
 )
-from rest_framework import permissions, viewsets, generics, filters, status
+from rest_framework import mixins, permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
 from rest_framework.exceptions import ValidationError
 from rest_framework.throttling import ScopedRateThrottle
@@ -119,6 +126,8 @@ from api.filters import (
 	SubjectFilter,
 	SponsorFilter,
 	PatentFilter,
+	MedicineFilter,
+	MedicineEventFilter,
 )
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
@@ -165,6 +174,7 @@ from gregory.utils.registry_utils import merge_links
 from gregory.site_resolution import public_sites
 from gregory.visibility import patent_scope_cache_part, site_id_for_api_scheme
 from api.patent_links import flag_requested, visible_patent_trial_links_queryset
+from api.medicine_scope import category_has_subject, scope_to_visible, visible_links_queryset
 from api.models import APIAccessSchemeLog
 from api.utils.exceptions import (
 	APIAccessDeniedError,
@@ -1929,6 +1939,54 @@ def _category_through_count_subquery(through_model, content_fk, visible_subject_
 	)
 
 
+def _category_medicines_count_subquery(visible_medicine_subject_ids=None):
+	"""Correlated scalar count of the EMA medicines a category lists.
+
+	Counts the category's live (non-suppressed) links, leaving out generic and
+	biosimilar products so the number equals what ``/medicines/?category_id=<id>``
+	returns by default. A medicine has no subject of its own, so the scope applies to
+	the category: it counts only when it has a subject in the caller's medicine
+	scope (``visible_medicine_subject_ids``, which only counts sites with
+	``medicines_enabled`` on), and is 0 otherwise -- a site that does not show
+	medicines sees no count, whatever its scope lists. The through table has a
+	unique (medicine, teamcategory), so a plain COUNT(*) is already the distinct
+	count.
+
+	``None`` means "no middleware / no scoping" -- same fallback contract as
+	``_visible_content_q``.
+	"""
+	if visible_medicine_subject_ids is not None:
+		visible_medicine_subject_ids = list(visible_medicine_subject_ids)
+		if not visible_medicine_subject_ids:
+			return Value(0, output_field=IntegerField())
+	count = Coalesce(
+		Subquery(
+			MedicineCategoryAssignment.objects.filter(
+				teamcategory=OuterRef("pk"),
+				suppressed=False,
+				medicine__generic=False,
+				medicine__biosimilar=False,
+			)
+			.order_by()
+			.values("teamcategory")
+			.annotate(c=Count("pk"))
+			.values("c"),
+			output_field=IntegerField(),
+		),
+		0,
+	)
+	if visible_medicine_subject_ids is None:
+		return count
+	return Case(
+		When(
+			category_has_subject(visible_medicine_subject_ids, link_ref="pk"),
+			then=count,
+		),
+		default=Value(0),
+		output_field=IntegerField(),
+	)
+
+
 def _category_authors_count_subquery(visible_subject_ids=None):
 	"""Correlated scalar count of the distinct authors behind a category's
 	articles.
@@ -2221,6 +2279,10 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 				PatentCategoryAssignment,
 				"patents",
 				getattr(self.request, "visible_patent_subject_ids", None),
+			),
+			# Medicines are scoped the same way, by the medicine subject set.
+			medicines_count_annotated=_category_medicines_count_subquery(
+				getattr(self.request, "visible_medicine_subject_ids", None)
 			),
 		)
 
@@ -3603,6 +3665,241 @@ class PatentViewSet(
 
 
 ###
+# MEDICINES (EMA)
+###
+
+
+class MedicineOrderingFilter(NullsLastOrderingFilter):
+	"""Ordering for ``/medicines/``: dates sort NULLS LAST in both directions and
+	``-id`` is appended as a tiebreaker. EMA dates many products the same day, so
+	without it a page boundary can repeat or skip a product between requests."""
+
+	nulls_last_fields = frozenset(
+		{"authorisation_date", "latest_ec_decision_date", "ema_last_updated"}
+	)
+
+	def filter_queryset(self, request, queryset, view):
+		queryset = super().filter_queryset(request, queryset, view)
+		return queryset.order_by(*queryset.query.order_by, "-id")
+
+
+_MEDICINES_ORDERING_PARAM = _ordering_param(
+	["authorisation_date", "latest_ec_decision_date", "ema_last_updated"],
+	"Sort field, prefix with `-` for descending (default `-ema_last_updated`). "
+	"Products without the date always sort last, in both directions. Ties break "
+	"on `-id`. `latest_ec_decision_date` is the latest Commission decision, not "
+	"the approval; sort on `authorisation_date` for that.",
+)
+
+
+@extend_schema_view(
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_MEDICINES_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
+	retrieve=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_INCLUDE_PUBLIC_PARAM]
+	),
+)
+class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	List the medicines the European Medicines Agency (EMA) has authorised for human
+	use in the EU, one record per EMA product, most recently updated first.
+
+	**Source: European Medicines Agency.** Every record carries
+	`"source": "European Medicines Agency"` and its `url` is the product's EPAR page
+	on ema.europa.eu. Keep both wherever you display a medicine.
+
+	Medicines are only visible through sites that have **medicines_enabled** on
+	(`CustomSetting.medicines_enabled`, off by default), and only the ones linked to
+	a category of that site's scope. A medicine has no subject of its own: it is
+	visible when it has a live (non-suppressed) link to a category that has a
+	subject in the caller's scope. A caller whose sites do not show medicines gets
+	an empty list, and a 404 on a single record. A link an editor removed never
+	counts, for visibility, for `categories` or for any filter.
+
+	**Generics and biosimilars are hidden by default.** Products with `generic` or
+	`biosimilar` set are left out of the list unless `?include_generics=true`. A
+	single record is returned whatever it is.
+
+	**`latest_ec_decision_date` is not the approval date.** It is the date of the
+	most recent European Commission decision, which is usually a variation (a new
+	indication, a label change). `authorisation_date` is the first approval; the two
+	usually differ. Do not show the former as
+	"approved on".
+
+	JSON only: no CSV, and `?all_results=true` is ignored (you get an ordinary
+	page). Page with `page` / `page_size` (max 100).
+
+	# Query Parameters:
+	- **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
+	- **category_slug** - filter by category slug
+	- **subject_id** - medicines linked to a category that has this subject
+	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+	- **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+	- **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
+	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
+	- **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+	- **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+	- **include_generics** - `true` also lists generic and biosimilar products
+	- **page**, **page_size**, **ordering**
+
+	The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
+	count live links only. Given together they must all hold on the **same** link:
+	`?subject_id=1&category_id=6` means a live link to category 6, and category 6
+	has subject 1. A medicine in several matching categories is still listed once,
+	and an invalid ID (`?category_id=6,abc`) returns 400.
+
+	# Ordering:
+	`?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
+	`latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
+	Products without the date sort last in both directions; ties break on `-id`.
+	Unrecognised values are silently ignored.
+
+	# Fields:
+	`id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+	`is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
+	`pharmacotherapeutic_group`, `indication`, `holder`, the flags
+	(`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
+	`exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
+	`additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+	(`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
+	`authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
+	`application_withdrawal_date`, `suspension_date`, `end_date`,
+	`ema_first_published`, `ema_last_updated`), `url`, `categories` (the live links
+	the caller may see: `id`, `category_name`, `category_slug`) and `source`.
+
+	`GET /medicines/{id}/` adds `events`, the product's regulatory history newest
+	first. The same events across all products are at `/medicines/events/`.
+
+	# Examples:
+	- On a condition page: `/medicines/?subject_id=1&category_id=6`
+	- In either of two categories: `/medicines/?category_id=6,21`
+	- One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+	- Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
+	- With its events: `/medicines/123/`
+	"""
+
+	queryset = Medicine.objects.all()
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = MedicinePagination
+	# No CSV: see the docstring. Declared here so the project-wide default
+	# (which includes DirectStreamingCSVRenderer) never applies.
+	renderer_classes = (JSONRenderer, BrowsableAPIRenderer)
+	filter_backends = [django_filters.DjangoFilterBackend, MedicineOrderingFilter]
+	filterset_class = MedicineFilter
+	ordering_fields = ["authorisation_date", "latest_ec_decision_date", "ema_last_updated"]
+	ordering = ["-ema_last_updated"]
+	# `events` would otherwise match the detail route's id.
+	lookup_value_regex = r"\d+"
+
+	# Read by CachedCountMixin: the cached count depends on the medicine scope.
+	medicine_scoped = True
+
+	def get_serializer_class(self):
+		if self.action == "retrieve":
+			return MedicineDetailSerializer
+		return MedicineSerializer
+
+	def get_queryset(self):
+		request = self.request
+		# `raw` holds EMA's whole row (several KB) and is never serialized.
+		qs = scope_to_visible(super().get_queryset().defer("raw"), request, "pk")
+		qs = qs.prefetch_related(
+			Prefetch(
+				"category_assignments",
+				queryset=visible_links_queryset(request)
+				.select_related("teamcategory")
+				.order_by("teamcategory__category_name", "teamcategory_id"),
+				to_attr="_visible_links",
+			)
+		)
+		if self.action == "retrieve":
+			qs = qs.prefetch_related("events")
+		return qs
+
+	def filter_queryset(self, queryset):
+		# A single record is asked for by id: the list's filters (the generics
+		# default above all) would 404 a generic you were sent a link to.
+		if self.action == "retrieve":
+			return queryset
+		return super().filter_queryset(queryset)
+
+
+@extend_schema_view(
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY, parameters=[_INCLUDE_PUBLIC_PARAM]
+	),
+)
+class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+	"""
+	List what happened to EMA medicines, newest first: a CHMP opinion, an
+	authorisation, a new European Commission decision, a change of indication, a
+	withdrawal.
+
+	**Source: European Medicines Agency.** Every row carries
+	`"source": "European Medicines Agency"`, and the nested medicine's `url` is its
+	EPAR page on ema.europa.eu.
+
+	Visibility is `/medicines/`'s, applied through the event's medicine: a medicine
+	is visible when it has a live link to a category with a subject in the caller's
+	scope, and only on sites with **medicines_enabled** on. A caller whose sites do
+	not show medicines gets an empty list. **Generics and biosimilars are hidden by
+	default**; `?include_generics=true` lists their events too.
+
+	Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
+	"Authorised in the EU"), `event_date`, `basis`, `from_value`, `to_value`, a small
+	`medicine` (`id`, `name`, `inn`, `url`) and `source`. `basis` says where the event
+	comes from. `observed` means Gregory saw the change between two syncs, and its
+	`event_date` is EMA's date or the day the change was seen. `reconstructed` means it
+	was read off EMA's date fields the first time the product was seen, so it is real
+	history but is not news. `from_value` / `to_value` hold the old and new text for
+	status and indication changes.
+
+	An `ec_decision` event is the date of EMA's latest Commission decision, usually a
+	variation. It is not the approval: that is the `authorised` event.
+
+	JSON only, ordered `-event_date`, `-id`. Page with `page` / `page_size` (max 100);
+	`?all_results=true` is ignored.
+
+	# Query Parameters:
+	- **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
+	- **category_slug** - filter by category slug
+	- **subject_id** - events of medicines linked to a category that has this subject
+	- **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+	- **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, ...)
+	- **basis** - `observed` or `reconstructed`
+	- **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
+	- **include_generics** - `true` also lists events of generic and biosimilar products
+	- **page**, **page_size**
+
+	The link filters follow the single-link rule of `/medicines/`: given together they
+	must all hold on the same live link of the event's medicine.
+
+	# Examples:
+	- News for a condition page: `/medicines/events/?subject_id=1&category_id=6&basis=observed`
+	- For one site: `/medicines/events/?site_id=3`
+	- Positive opinions since January: `/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01`
+	"""
+
+	queryset = (
+		MedicineEvent.objects.select_related("medicine")
+		.defer("medicine__raw")
+		.order_by("-event_date", "-id")
+	)
+	serializer_class = MedicineEventSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = MedicinePagination
+	renderer_classes = (JSONRenderer, BrowsableAPIRenderer)
+	filter_backends = [django_filters.DjangoFilterBackend]
+	filterset_class = MedicineEventFilter
+	medicine_scoped = True
+
+	def get_queryset(self):
+		return scope_to_visible(super().get_queryset(), self.request, "medicine_id")
+
+
+###
 # SOURCES
 ###
 
@@ -4392,6 +4689,9 @@ class CategoriesByTeamAndSubject(viewsets.ModelViewSet):
 					PatentCategoryAssignment,
 					"patents",
 					getattr(self.request, "visible_patent_subject_ids", None),
+				),
+				medicines_count_annotated=_category_medicines_count_subquery(
+					getattr(self.request, "visible_medicine_subject_ids", None)
 				),
 			)
 			.order_by("-id")
