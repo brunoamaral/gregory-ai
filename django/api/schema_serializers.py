@@ -12,7 +12,21 @@ from django_filters import rest_framework as filters
 from rest_framework import serializers
 
 from gregory import source_types
-from gregory.models import CategoryMatchScope, CategoryModality, CategoryType
+from gregory.models import (
+	CategoryMatchScope,
+	CategoryModality,
+	CategoryType,
+	MedicineEvent,
+	PatentTrialLink,
+)
+
+# Named for settings.SPECTACULAR_SETTINGS["ENUM_NAME_OVERRIDES"], which can only
+# point at module-level names: ``kind`` and ``basis`` are also field names on other
+# models, so without a fixed name the generated enums get hash suffixes.
+MEDICINE_EVENT_KIND_CHOICES = MedicineEvent.Kind.choices
+MEDICINE_EVENT_BASIS_CHOICES = MedicineEvent.Basis.choices
+PATENT_TRIAL_LINK_BASIS_CHOICES = PatentTrialLink.BASIS_CHOICES
+EDITOR_HISTORY_KIND_CHOICES = ["editorial", "relevance", "trial_link", "category"]
 
 
 def filterset_request_schema(
@@ -331,7 +345,7 @@ class EditorTrialUnlinkResponseSerializer(serializers.Serializer):
 
 
 class EditorHistoryEntrySerializer(serializers.Serializer):
-	kind = serializers.ChoiceField(choices=["editorial", "relevance", "trial_link", "category"])
+	kind = serializers.ChoiceField(choices=EDITOR_HISTORY_KIND_CHOICES)
 	change = serializers.ChoiceField(choices=["created", "updated", "deleted"])
 	changed_at = serializers.DateTimeField()
 	changed_by = serializers.CharField(

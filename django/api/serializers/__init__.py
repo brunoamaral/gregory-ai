@@ -1,6 +1,6 @@
 from typing import Optional
 
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import extend_schema_field, inline_serializer
 from rest_framework import serializers
 from gregory.models import (
 	Articles,
@@ -22,7 +22,10 @@ from gregory.models import (
 	PatentPublication,
 	PatentApplicant,
 	PatentTrialLink,
+	Medicine,
+	MedicineEvent,
 )
+from api.medicine_scope import EMA_SOURCE, visible_links_queryset
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -154,6 +157,7 @@ class CategorySerializer(serializers.ModelSerializer):
 	article_count_total = serializers.SerializerMethodField()
 	trials_count_total = serializers.SerializerMethodField()
 	patents_count_total = serializers.SerializerMethodField()
+	medicines_count = serializers.SerializerMethodField()
 	authors_count = serializers.SerializerMethodField()
 	top_authors = serializers.SerializerMethodField()
 	monthly_counts = serializers.SerializerMethodField()
@@ -171,6 +175,7 @@ class CategorySerializer(serializers.ModelSerializer):
 			"article_count_total",
 			"trials_count_total",
 			"patents_count_total",
+			"medicines_count",
 			"authors_count",
 			"top_authors",
 			"monthly_counts",
@@ -205,6 +210,14 @@ class CategorySerializer(serializers.ModelSerializer):
 		# request, and a live count would hand a caller whose sites don't show
 		# patents the global count.
 		return getattr(obj, "patents_count_annotated", None) or 0
+
+	def get_medicines_count(self, obj) -> int:
+		"""EMA medicines linked to the category that the caller may see: live
+		links only, generics and biosimilars left out as on /medicines/, and 0
+		where the site's ``medicines_enabled`` is off."""
+		# From the queryset's annotation only, for the reason given on
+		# get_patents_count_total: the scope belongs to the request.
+		return getattr(obj, "medicines_count_annotated", None) or 0
 
 	def get_authors_count(self, obj) -> int:
 		"""Optimized authors count avoiding complex JOINs"""
@@ -1271,3 +1284,159 @@ class McpTenantSerializer(serializers.Serializer):
 	subjects = McpTenantSubjectSerializer(many=True, read_only=True)
 	prompts = McpTenantPromptSerializer(many=True, read_only=True)
 	documents = McpTenantDocumentSerializer(many=True, read_only=True)
+
+
+class MedicineCategorySerializer(serializers.ModelSerializer):
+	"""A category a medicine is linked to, as ``categories`` on a medicine."""
+
+	class Meta:
+		model = TeamCategory
+		fields = ["id", "category_name", "category_slug"]
+
+
+class MedicineEventSerializer(serializers.ModelSerializer):
+	"""One event in a medicine's regulatory life (``/medicines/events/``).
+
+	``kind_label`` is the same sentence the RSS feeds use (``MedicineEvent.in_words``),
+	so a kind is never worded two ways. Relies on MedicineEventViewSet selecting
+	the medicine.
+	"""
+
+	kind_label = serializers.CharField(source="in_words", read_only=True)
+	medicine = serializers.SerializerMethodField()
+	source = serializers.SerializerMethodField()
+
+	class Meta:
+		model = MedicineEvent
+		fields = [
+			"id",
+			"kind",
+			"kind_label",
+			"event_date",
+			"basis",
+			"from_value",
+			"to_value",
+			"medicine",
+			"source",
+		]
+
+	@extend_schema_field(
+		inline_serializer(
+			"MedicineEventMedicine",
+			{
+				"id": serializers.IntegerField(),
+				"name": serializers.CharField(),
+				"inn": serializers.CharField(),
+				"url": serializers.CharField(),
+			},
+		)
+	)
+	def get_medicine(self, obj):
+		medicine = obj.medicine
+		return {
+			"id": medicine.id,
+			"name": medicine.name,
+			"inn": medicine.inn,
+			"url": medicine.url,
+		}
+
+	def get_source(self, obj) -> str:
+		return EMA_SOURCE
+
+
+class MedicineHistoryEventSerializer(MedicineEventSerializer):
+	"""An event inside a medicine's own detail: the medicine is the parent, so it
+	and its attribution are not repeated on each event."""
+
+	class Meta(MedicineEventSerializer.Meta):
+		fields = [
+			f for f in MedicineEventSerializer.Meta.fields if f not in ("medicine", "source")
+		]
+
+
+class MedicineSerializer(serializers.ModelSerializer):
+	"""One EMA centrally authorised human medicine (``/medicines/``).
+
+	Relies on MedicineViewSet attaching the caller's visible links as
+	``_visible_links``, so a page costs a constant number of queries. Without it
+	(an instance built by hand) the same rule runs for that one medicine.
+
+	``latest_ec_decision_date`` is the most recent European Commission decision,
+	usually a variation. It is NOT the approval date: ``authorisation_date`` is
+	the first approval.
+	"""
+
+	categories = serializers.SerializerMethodField()
+	source = serializers.SerializerMethodField()
+
+	class Meta:
+		model = Medicine
+		fields = [
+			"id",
+			"ema_product_number",
+			"name",
+			"inn",
+			"active_substance",
+			"substances",
+			"is_combination",
+			"status",
+			"opinion_status",
+			"therapeutic_areas",
+			"atc_code",
+			"pharmacotherapeutic_group",
+			"indication",
+			"holder",
+			"advanced_therapy",
+			"orphan_medicine",
+			"conditional_approval",
+			"exceptional_circumstances",
+			"prime_priority_medicine",
+			"accelerated_assessment",
+			"additional_monitoring",
+			"biosimilar",
+			"generic",
+			"patient_safety",
+			"rolling_review_start_date",
+			"evaluation_start_date",
+			"opinion_date",
+			"authorisation_date",
+			"latest_ec_decision_date",
+			"refusal_date",
+			"application_withdrawal_date",
+			"suspension_date",
+			"end_date",
+			"ema_first_published",
+			"ema_last_updated",
+			"url",
+			"categories",
+			"source",
+		]
+
+	@extend_schema_field(MedicineCategorySerializer(many=True))
+	def get_categories(self, obj):
+		"""The categories this medicine is linked to that the caller may see.
+		Suppressed links, and links to categories outside the caller's scope,
+		are left out."""
+		links = getattr(obj, "_visible_links", None)
+		if links is None:
+			links = (
+				visible_links_queryset(self.context.get("request"))
+				.filter(medicine=obj)
+				.select_related("teamcategory")
+				.order_by("teamcategory__category_name", "teamcategory_id")
+			)
+		return MedicineCategorySerializer(
+			[link.teamcategory for link in links], many=True
+		).data
+
+	def get_source(self, obj) -> str:
+		return EMA_SOURCE
+
+
+class MedicineDetailSerializer(MedicineSerializer):
+	"""``MedicineSerializer`` plus the medicine's events, newest first."""
+
+	events = MedicineHistoryEventSerializer(many=True, read_only=True)
+
+	class Meta(MedicineSerializer.Meta):
+		fields = MedicineSerializer.Meta.fields + ["events"]

@@ -286,6 +286,10 @@ def test_site_id_declared_endpoints_match_what_this_audit_found(schema_params):
 	assert declared == {
 		"/articles/",
 		"/articles/search/",
+		# EMA medicines: site_id narrows to that site's scope, and only sites with
+		# medicines_enabled on count, so the client's site_id does what it should.
+		"/medicines/",
+		"/medicines/events/",
 		"/patents/",
 		"/trials/",
 		"/trials/search/",

@@ -55,6 +55,7 @@ class CategoryAuthorsTestCase(TestCase):
 			"article_count_total",
 			"trials_count_total",
 			"patents_count_total",
+			"medicines_count",
 			"authors_count",
 			"top_authors",
 			"monthly_counts",

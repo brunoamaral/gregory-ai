@@ -6,8 +6,9 @@ positive opinion, an authorisation, a new European Commission decision, a withdr
 data is global reference data, like PubMed's publication types. It has no team, subject
 or organisation of its own.
 
-Gregory brings the data in, links each medicine to the team categories it belongs to, and
-shows both in the Django admin and serves their events as RSS feeds (see [Feeds](#feeds)). It does not yet serve medicines through the API.
+Gregory brings the data in, links each medicine to the team categories it belongs to, shows
+both in the Django admin, and serves them as RSS feeds of events (see [Feeds](#feeds)) and
+through the JSON API (see [JSON API](#json-api)).
 
 ## What the data is
 
@@ -216,9 +217,44 @@ What a feed contains:
 
 An item is titled `Ocrevus (ocrelizumab): CHMP positive opinion`, links to the medicine's EPAR
 page, and its text is the cleaned indication followed by `Source: European Medicines Agency`.
-The wording of each kind of event lives in one place, `MedicineEvent.IN_WORDS`, so the API can
-use the same sentences later. The full reference, with the rest of the feed rules, is in
+The wording of each kind of event lives in one place, `MedicineEvent.IN_WORDS`, which the API
+uses for `kind_label`, so a kind is never worded two ways. The full reference, with the rest of the feed rules, is in
 [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicine-feeds).
+
+## JSON API
+
+```
+GET /medicines/                  the medicines, one per EMA product
+GET /medicines/{id}/             one medicine, with its events
+GET /medicines/events/           what happened to them, newest first
+GET /categories/                 each category carries medicines_count
+```
+
+The parameters, fields and examples are in [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines).
+The rules that matter when reading or changing the code:
+
+- **Visibility is the feeds' rule.** A medicine is shown when it has a link, which an editor has
+  not suppressed, to a category with a subject in the caller's scope, and only on sites with
+  `medicines_enabled` on. A site with it off gets an empty list, a 404 on a single medicine
+  and a `medicines_count` of 0. `request.visible_medicine_subject_ids` holds the scope; the
+  API's helpers are in `api/medicine_scope.py`.
+- **One link, not one join per filter.** `category_id` (one id or a comma-separated list),
+  `category_slug`, `subject_id` and `site_id` all go through a single `Exists()` over
+  `MedicineCategoryAssignment`, together with the visibility condition, so
+  `?subject_id=1&category_id=6` means one live link to category 6 *whose category has subject 1*.
+  A product in several matching categories is still one row, and a link the caller cannot see
+  or an editor suppressed never matches. A plain join per filter would answer a looser question
+  and repeat products.
+- **Generics and biosimilars are hidden** from both lists unless `include_generics=true`. The
+  single-medicine route returns them, since it is asked for by id. `medicines_count` leaves them
+  out too, so a category's number matches what `/medicines/?category_id=` returns.
+- **`latest_ec_decision_date` is not the approval date.** It keeps that name in the API so
+  nobody mistakes it for one; `authorisation_date` is the first approval.
+- **Every row says where it comes from:** `"source": "European Medicines Agency"`, with the
+  EPAR page as `url`. See [Source and attribution](#source-and-attribution).
+- **No bulk export.** Both lists are JSON only; `all_results` is ignored.
+- **Cost.** A list costs a fixed number of queries whatever the page holds: the visible links of
+  the page's medicines come in one extra query, and the events' medicines are joined.
 
 ## In the admin
 

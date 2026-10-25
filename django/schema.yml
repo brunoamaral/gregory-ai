@@ -4232,6 +4232,532 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /medicines/:
+    get:
+      operationId: medicines_list
+      description: |-
+        List the medicines the European Medicines Agency (EMA) has authorised for human
+        use in the EU, one record per EMA product, most recently updated first.
+
+        **Source: European Medicines Agency.** Every record carries
+        `"source": "European Medicines Agency"` and its `url` is the product's EPAR page
+        on ema.europa.eu. Keep both wherever you display a medicine.
+
+        Medicines are only visible through sites that have **medicines_enabled** on
+        (`CustomSetting.medicines_enabled`, off by default), and only the ones linked to
+        a category of that site's scope. A medicine has no subject of its own: it is
+        visible when it has a live (non-suppressed) link to a category that has a
+        subject in the caller's scope. A caller whose sites do not show medicines gets
+        an empty list, and a 404 on a single record. A link an editor removed never
+        counts, for visibility, for `categories` or for any filter.
+
+        **Generics and biosimilars are hidden by default.** Products with `generic` or
+        `biosimilar` set are left out of the list unless `?include_generics=true`. A
+        single record is returned whatever it is.
+
+        **`latest_ec_decision_date` is not the approval date.** It is the date of the
+        most recent European Commission decision, which is usually a variation (a new
+        indication, a label change). `authorisation_date` is the first approval; the two
+        usually differ. Do not show the former as
+        "approved on".
+
+        JSON only: no CSV, and `?all_results=true` is ignored (you get an ordinary
+        page). Page with `page` / `page_size` (max 100).
+
+        # Query Parameters:
+        - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
+        - **category_slug** - filter by category slug
+        - **subject_id** - medicines linked to a category that has this subject
+        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
+        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
+        - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+        - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **include_generics** - `true` also lists generic and biosimilar products
+        - **page**, **page_size**, **ordering**
+
+        The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
+        count live links only. Given together they must all hold on the **same** link:
+        `?subject_id=1&category_id=6` means a live link to category 6, and category 6
+        has subject 1. A medicine in several matching categories is still listed once,
+        and an invalid ID (`?category_id=6,abc`) returns 400.
+
+        # Ordering:
+        `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
+        `latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
+        Products without the date sort last in both directions; ties break on `-id`.
+        Unrecognised values are silently ignored.
+
+        # Fields:
+        `id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+        `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
+        `pharmacotherapeutic_group`, `indication`, `holder`, the flags
+        (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
+        `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
+        `additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+        (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
+        `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
+        `application_withdrawal_date`, `suspension_date`, `end_date`,
+        `ema_first_published`, `ema_last_updated`), `url`, `categories` (the live links
+        the caller may see: `id`, `category_name`, `category_slug`) and `source`.
+
+        `GET /medicines/{id}/` adds `events`, the product's regulatory history newest
+        first. The same events across all products are at `/medicines/events/`.
+
+        # Examples:
+        - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - In either of two categories: `/medicines/?category_id=6,21`
+        - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
+        - With its events: `/medicines/123/`
+      parameters:
+      - in: query
+        name: advanced_therapy
+        schema:
+          type: boolean
+        description: 'true: gene, cell and tissue-engineered products; false: the
+          rest.'
+      - in: query
+        name: authorised_after
+        schema:
+          type: string
+          format: date
+        description: Products first authorised on or after this date (YYYY-MM-DD,
+          inclusive). This is the first approval, not the latest EC decision. Invalid
+          dates return 400.
+      - in: query
+        name: authorised_before
+        schema:
+          type: string
+          format: date
+        description: Products first authorised on or before this date (YYYY-MM-DD,
+          inclusive). Invalid dates return 400.
+      - in: query
+        name: category_id
+        schema:
+          type: array
+          items:
+            type: number
+        description: 'Filter by category ID (see /categories/). One ID, or a comma-separated
+          list that matches ANY of them, e.g. ?category_id=6,21. Only live links count:
+          a link an editor removed never matches.'
+        explode: false
+        style: form
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Filter by category slug (see /categories/). Only live links count.
+      - in: query
+        name: include_generics
+        schema:
+          type: boolean
+        description: Generic and biosimilar products are left out unless this is true.
+          They are matched and stored like any other product; the default hides them
+          so a list shows the originators.
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
+        name: is_combination
+        schema:
+          type: boolean
+        description: 'true: products with more than one substance; false: single-substance
+          products.'
+      - in: query
+        name: opinion_status
+        schema:
+          type: string
+        description: Positive or Negative. EMA fills it only while a medicine is at
+          the opinion stage and clears it once the Commission decides, so most products
+          have none.
+      - in: query
+        name: ordering
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - authorisation_date
+            - -authorisation_date
+            - latest_ec_decision_date
+            - -latest_ec_decision_date
+            - ema_last_updated
+            - -ema_last_updated
+        description: Sort field, prefix with `-` for descending (default `-ema_last_updated`).
+          Products without the date always sort last, in both directions. Ties break
+          on `-id`. `latest_ec_decision_date` is the latest Commission decision, not
+          the approval; sort on `authorisation_date` for that. Accepts a comma-separated
+          combination of the values above to break ties on a second field, e.g. ?ordering=authorisation_date,-latest_ec_decision_date.
+        explode: false
+        style: form
+      - in: query
+        name: orphan_medicine
+        schema:
+          type: boolean
+        description: 'true: designated orphan medicines; false: the rest.'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: site_id
+        schema:
+          type: number
+        description: 'Filter by Django Site ID: keep medicines linked to a category
+          that has a subject in that site''s scope (see CustomSetting.scope_subjects).
+          A site that does not show medicines (medicines_enabled off) returns nothing.
+          Only live links count.'
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: EMA's status wording, case-insensitive, e.g. Authorised, Withdrawn,
+          Refused, Opinion. EMA's own words are stored, so new values can appear.
+      - in: query
+        name: subject_id
+        schema:
+          type: number
+        description: 'Keep medicines linked to a category that has this subject (see
+          /subjects/). Only live links count. Given together with category_id, category_slug
+          or site_id, all of them must hold on the same link: ?subject_id=1&category_id=6
+          means a live link to category 6, and category 6 has subject 1.'
+      - in: query
+        name: substance
+        schema:
+          type: string
+        description: A substance, as EMA names it (the INN, or the active substance
+          when the INN is empty). Matches one element of the product's `substances`
+          exactly, ignoring case and extra spaces, e.g. ?substance=ocrelizumab. A
+          combination product matches on any of its substances.
+      tags:
+      - medicines
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineList'
+          description: ''
+  /medicines/{id}/:
+    get:
+      operationId: medicines_retrieve
+      description: |-
+        List the medicines the European Medicines Agency (EMA) has authorised for human
+        use in the EU, one record per EMA product, most recently updated first.
+
+        **Source: European Medicines Agency.** Every record carries
+        `"source": "European Medicines Agency"` and its `url` is the product's EPAR page
+        on ema.europa.eu. Keep both wherever you display a medicine.
+
+        Medicines are only visible through sites that have **medicines_enabled** on
+        (`CustomSetting.medicines_enabled`, off by default), and only the ones linked to
+        a category of that site's scope. A medicine has no subject of its own: it is
+        visible when it has a live (non-suppressed) link to a category that has a
+        subject in the caller's scope. A caller whose sites do not show medicines gets
+        an empty list, and a 404 on a single record. A link an editor removed never
+        counts, for visibility, for `categories` or for any filter.
+
+        **Generics and biosimilars are hidden by default.** Products with `generic` or
+        `biosimilar` set are left out of the list unless `?include_generics=true`. A
+        single record is returned whatever it is.
+
+        **`latest_ec_decision_date` is not the approval date.** It is the date of the
+        most recent European Commission decision, which is usually a variation (a new
+        indication, a label change). `authorisation_date` is the first approval; the two
+        usually differ. Do not show the former as
+        "approved on".
+
+        JSON only: no CSV, and `?all_results=true` is ignored (you get an ordinary
+        page). Page with `page` / `page_size` (max 100).
+
+        # Query Parameters:
+        - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
+        - **category_slug** - filter by category slug
+        - **subject_id** - medicines linked to a category that has this subject
+        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
+        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
+        - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+        - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **include_generics** - `true` also lists generic and biosimilar products
+        - **page**, **page_size**, **ordering**
+
+        The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
+        count live links only. Given together they must all hold on the **same** link:
+        `?subject_id=1&category_id=6` means a live link to category 6, and category 6
+        has subject 1. A medicine in several matching categories is still listed once,
+        and an invalid ID (`?category_id=6,abc`) returns 400.
+
+        # Ordering:
+        `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
+        `latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
+        Products without the date sort last in both directions; ties break on `-id`.
+        Unrecognised values are silently ignored.
+
+        # Fields:
+        `id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+        `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
+        `pharmacotherapeutic_group`, `indication`, `holder`, the flags
+        (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
+        `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
+        `additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+        (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
+        `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
+        `application_withdrawal_date`, `suspension_date`, `end_date`,
+        `ema_first_published`, `ema_last_updated`), `url`, `categories` (the live links
+        the caller may see: `id`, `category_name`, `category_slug`) and `source`.
+
+        `GET /medicines/{id}/` adds `events`, the product's regulatory history newest
+        first. The same events across all products are at `/medicines/events/`.
+
+        # Examples:
+        - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - In either of two categories: `/medicines/?category_id=6,21`
+        - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
+        - With its events: `/medicines/123/`
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      tags:
+      - medicines
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineDetail'
+          description: ''
+  /medicines/events/:
+    get:
+      operationId: medicines_events_list
+      description: |-
+        List what happened to EMA medicines, newest first: a CHMP opinion, an
+        authorisation, a new European Commission decision, a change of indication, a
+        withdrawal.
+
+        **Source: European Medicines Agency.** Every row carries
+        `"source": "European Medicines Agency"`, and the nested medicine's `url` is its
+        EPAR page on ema.europa.eu.
+
+        Visibility is `/medicines/`'s, applied through the event's medicine: a medicine
+        is visible when it has a live link to a category with a subject in the caller's
+        scope, and only on sites with **medicines_enabled** on. A caller whose sites do
+        not show medicines gets an empty list. **Generics and biosimilars are hidden by
+        default**; `?include_generics=true` lists their events too.
+
+        Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
+        "Authorised in the EU"), `event_date`, `basis`, `from_value`, `to_value`, a small
+        `medicine` (`id`, `name`, `inn`, `url`) and `source`. `basis` says where the event
+        comes from. `observed` means Gregory saw the change between two syncs, and its
+        `event_date` is EMA's date or the day the change was seen. `reconstructed` means it
+        was read off EMA's date fields the first time the product was seen, so it is real
+        history but is not news. `from_value` / `to_value` hold the old and new text for
+        status and indication changes.
+
+        An `ec_decision` event is the date of EMA's latest Commission decision, usually a
+        variation. It is not the approval: that is the `authorised` event.
+
+        JSON only, ordered `-event_date`, `-id`. Page with `page` / `page_size` (max 100);
+        `?all_results=true` is ignored.
+
+        # Query Parameters:
+        - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
+        - **category_slug** - filter by category slug
+        - **subject_id** - events of medicines linked to a category that has this subject
+        - **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, ...)
+        - **basis** - `observed` or `reconstructed`
+        - **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **include_generics** - `true` also lists events of generic and biosimilar products
+        - **page**, **page_size**
+
+        The link filters follow the single-link rule of `/medicines/`: given together they
+        must all hold on the same live link of the event's medicine.
+
+        # Examples:
+        - News for a condition page: `/medicines/events/?subject_id=1&category_id=6&basis=observed`
+        - For one site: `/medicines/events/?site_id=3`
+        - Positive opinions since January: `/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01`
+      parameters:
+      - in: query
+        name: basis
+        schema:
+          type: string
+          enum:
+          - observed
+          - reconstructed
+        description: |-
+          observed: Gregory saw the change between two syncs; reconstructed: read off EMA's date fields the first time the product was seen.
+
+          * `reconstructed` - Reconstructed from EMA's dates
+          * `observed` - Observed between syncs
+      - in: query
+        name: category_id
+        schema:
+          type: array
+          items:
+            type: number
+        description: 'Filter by category ID (see /categories/). One ID, or a comma-separated
+          list that matches ANY of them, e.g. ?category_id=6,21. Only live links count:
+          a link an editor removed never matches.'
+        explode: false
+        style: form
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Filter by category slug (see /categories/). Only live links count.
+      - in: query
+        name: event_date_after
+        schema:
+          type: string
+          format: date
+        description: Events dated on or after this date (YYYY-MM-DD, inclusive). Invalid
+          dates return 400.
+      - in: query
+        name: event_date_before
+        schema:
+          type: string
+          format: date
+        description: Events dated on or before this date (YYYY-MM-DD, inclusive).
+          Invalid dates return 400.
+      - in: query
+        name: include_generics
+        schema:
+          type: boolean
+        description: Generic and biosimilar products are left out unless this is true.
+          They are matched and stored like any other product; the default hides them
+          so a list shows the originators.
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
+        name: kind
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - application_withdrawn
+            - authorised
+            - ec_decision
+            - ended
+            - evaluation_started
+            - indication_changed
+            - opinion_adopted
+            - opinion_negative
+            - opinion_positive
+            - refused
+            - rolling_review_started
+            - status_changed
+            - suspended
+        description: |-
+          One kind, or a comma-separated list that matches ANY of them, e.g. ?kind=opinion_positive,authorised. Unknown values return 400.
+
+          * `rolling_review_started` - Rolling review started
+          * `evaluation_started` - Evaluation started
+          * `opinion_positive` - CHMP positive opinion
+          * `opinion_negative` - CHMP negative opinion
+          * `opinion_adopted` - CHMP opinion adopted
+          * `authorised` - Authorised
+          * `ec_decision` - European Commission decision
+          * `indication_changed` - Indication changed
+          * `refused` - Refused
+          * `application_withdrawn` - Application withdrawn
+          * `suspended` - Suspended
+          * `ended` - Authorisation ended
+          * `status_changed` - Status changed
+        explode: false
+        style: form
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: site_id
+        schema:
+          type: number
+        description: 'Filter by Django Site ID: keep events of medicines linked to
+          a category that has a subject in that site''s scope (see CustomSetting.scope_subjects).
+          A site that does not show medicines (medicines_enabled off) returns nothing.
+          Only live links count.'
+      - in: query
+        name: subject_id
+        schema:
+          type: number
+        description: 'Keep events of medicines linked to a category that has this
+          subject (see /subjects/). Only live links count. Given together with category_id,
+          category_slug or site_id, all of them must hold on the same link: ?subject_id=1&category_id=6
+          means a live link to category 6, and category 6 has subject 1.'
+      tags:
+      - medicines
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineEventList'
+          description: ''
   /patents/:
     get:
       operationId: patents_list
@@ -8567,6 +9093,13 @@ components:
             Patent families in the category within the caller's patent scope
             (only sites with patents enabled count).
           readOnly: true
+        medicines_count:
+          type: integer
+          description: |-
+            EMA medicines linked to the category that the caller may see: live
+            links only, generics and biosimilars left out as on /medicines/, and 0
+            where the site's ``medicines_enabled`` is off.
+          readOnly: true
         authors_count:
           type: integer
           description: Optimized authors count avoiding complex JOINs
@@ -8587,6 +9120,7 @@ components:
       - authors_count
       - category_name
       - id
+      - medicines_count
       - monthly_counts
       - patents_count_total
       - top_authors
@@ -9746,6 +10280,466 @@ components:
       required:
       - id
       - subject_name
+    Medicine:
+      type: object
+      description: |-
+        One EMA centrally authorised human medicine (``/medicines/``).
+
+        Relies on MedicineViewSet attaching the caller's visible links as
+        ``_visible_links``, so a page costs a constant number of queries. Without it
+        (an instance built by hand) the same rule runs for that one medicine.
+
+        ``latest_ec_decision_date`` is the most recent European Commission decision,
+        usually a variation. It is NOT the approval date: ``authorisation_date`` is
+        the first approval.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        ema_product_number:
+          type: string
+          maxLength: 32
+        name:
+          type: string
+          maxLength: 255
+        inn:
+          type: string
+          description: International non-proprietary name, as EMA publishes it. Empty
+            for some products.
+          maxLength: 500
+        active_substance:
+          type: string
+        substances:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+          description: Lowercased substances split on ';', from the INN or, when that
+            is empty, the active substance.
+        is_combination:
+          type: boolean
+        status:
+          type: string
+          description: 'EMA''s wording, kept as published: new values must not break
+            the import.'
+          maxLength: 50
+        opinion_status:
+          type: string
+          description: Positive or Negative while the medicine is at the opinion stage;
+            EMA clears it once the EC decides.
+          maxLength: 20
+        therapeutic_areas:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+        atc_code:
+          type: string
+          maxLength: 20
+        pharmacotherapeutic_group:
+          type: string
+          maxLength: 255
+        indication:
+          type: string
+        holder:
+          type: string
+          maxLength: 255
+        advanced_therapy:
+          type: boolean
+        orphan_medicine:
+          type: boolean
+        conditional_approval:
+          type: boolean
+        exceptional_circumstances:
+          type: boolean
+        prime_priority_medicine:
+          type: boolean
+        accelerated_assessment:
+          type: boolean
+        additional_monitoring:
+          type: boolean
+        biosimilar:
+          type: boolean
+        generic:
+          type: boolean
+        patient_safety:
+          type: boolean
+        rolling_review_start_date:
+          type: string
+          format: date
+          nullable: true
+        evaluation_start_date:
+          type: string
+          format: date
+          nullable: true
+        opinion_date:
+          type: string
+          format: date
+          nullable: true
+          description: CHMP opinion.
+        authorisation_date:
+          type: string
+          format: date
+          nullable: true
+          description: The first approval.
+        latest_ec_decision_date:
+          type: string
+          format: date
+          nullable: true
+          title: Latest EC decision
+          description: The latest European Commission decision, usually a variation.
+            Not the approval date.
+        refusal_date:
+          type: string
+          format: date
+          nullable: true
+        application_withdrawal_date:
+          type: string
+          format: date
+          nullable: true
+        suspension_date:
+          type: string
+          format: date
+          nullable: true
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Withdrawn, expired, revoked or lapsed; the status says which.
+        ema_first_published:
+          type: string
+          format: date
+          nullable: true
+        ema_last_updated:
+          type: string
+          format: date
+          nullable: true
+        url:
+          description: The EPAR page on ema.europa.eu.
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 500
+          - type: string
+            maxLength: 0
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineCategory'
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+      required:
+      - categories
+      - ema_product_number
+      - id
+      - name
+      - source
+      - status
+    MedicineCategory:
+      type: object
+      description: A category a medicine is linked to, as ``categories`` on a medicine.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        category_name:
+          type: string
+          maxLength: 200
+        category_slug:
+          nullable: true
+          oneOf:
+          - type: string
+            maxLength: 50
+            pattern: ^[-a-zA-Z0-9_]+$
+          - type: string
+            maxLength: 0
+      required:
+      - category_name
+      - id
+    MedicineDetail:
+      type: object
+      description: '``MedicineSerializer`` plus the medicine''s events, newest first.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        ema_product_number:
+          type: string
+          maxLength: 32
+        name:
+          type: string
+          maxLength: 255
+        inn:
+          type: string
+          description: International non-proprietary name, as EMA publishes it. Empty
+            for some products.
+          maxLength: 500
+        active_substance:
+          type: string
+        substances:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+          description: Lowercased substances split on ';', from the INN or, when that
+            is empty, the active substance.
+        is_combination:
+          type: boolean
+        status:
+          type: string
+          description: 'EMA''s wording, kept as published: new values must not break
+            the import.'
+          maxLength: 50
+        opinion_status:
+          type: string
+          description: Positive or Negative while the medicine is at the opinion stage;
+            EMA clears it once the EC decides.
+          maxLength: 20
+        therapeutic_areas:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+        atc_code:
+          type: string
+          maxLength: 20
+        pharmacotherapeutic_group:
+          type: string
+          maxLength: 255
+        indication:
+          type: string
+        holder:
+          type: string
+          maxLength: 255
+        advanced_therapy:
+          type: boolean
+        orphan_medicine:
+          type: boolean
+        conditional_approval:
+          type: boolean
+        exceptional_circumstances:
+          type: boolean
+        prime_priority_medicine:
+          type: boolean
+        accelerated_assessment:
+          type: boolean
+        additional_monitoring:
+          type: boolean
+        biosimilar:
+          type: boolean
+        generic:
+          type: boolean
+        patient_safety:
+          type: boolean
+        rolling_review_start_date:
+          type: string
+          format: date
+          nullable: true
+        evaluation_start_date:
+          type: string
+          format: date
+          nullable: true
+        opinion_date:
+          type: string
+          format: date
+          nullable: true
+          description: CHMP opinion.
+        authorisation_date:
+          type: string
+          format: date
+          nullable: true
+          description: The first approval.
+        latest_ec_decision_date:
+          type: string
+          format: date
+          nullable: true
+          title: Latest EC decision
+          description: The latest European Commission decision, usually a variation.
+            Not the approval date.
+        refusal_date:
+          type: string
+          format: date
+          nullable: true
+        application_withdrawal_date:
+          type: string
+          format: date
+          nullable: true
+        suspension_date:
+          type: string
+          format: date
+          nullable: true
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: Withdrawn, expired, revoked or lapsed; the status says which.
+        ema_first_published:
+          type: string
+          format: date
+          nullable: true
+        ema_last_updated:
+          type: string
+          format: date
+          nullable: true
+        url:
+          description: The EPAR page on ema.europa.eu.
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 500
+          - type: string
+            maxLength: 0
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineCategory'
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineHistoryEvent'
+          readOnly: true
+      required:
+      - categories
+      - ema_product_number
+      - events
+      - id
+      - name
+      - source
+      - status
+    MedicineEvent:
+      type: object
+      description: |-
+        One event in a medicine's regulatory life (``/medicines/events/``).
+
+        ``kind_label`` is the same sentence the RSS feeds use (``MedicineEvent.in_words``),
+        so a kind is never worded two ways. Relies on MedicineEventViewSet selecting
+        the medicine.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/MedicineEventKindEnum'
+        kind_label:
+          type: string
+          readOnly: true
+        event_date:
+          type: string
+          format: date
+          description: EMA's date where it gives one, otherwise the day the sync saw
+            the change.
+        basis:
+          $ref: '#/components/schemas/MedicineEventBasisEnum'
+        from_value:
+          type: string
+        to_value:
+          type: string
+        medicine:
+          allOf:
+          - $ref: '#/components/schemas/MedicineEventMedicine'
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+      required:
+      - basis
+      - event_date
+      - id
+      - kind
+      - kind_label
+      - medicine
+      - source
+    MedicineEventBasisEnum:
+      enum:
+      - reconstructed
+      - observed
+      type: string
+      description: |-
+        * `reconstructed` - Reconstructed from EMA's dates
+        * `observed` - Observed between syncs
+    MedicineEventKindEnum:
+      enum:
+      - rolling_review_started
+      - evaluation_started
+      - opinion_positive
+      - opinion_negative
+      - opinion_adopted
+      - authorised
+      - ec_decision
+      - indication_changed
+      - refused
+      - application_withdrawn
+      - suspended
+      - ended
+      - status_changed
+      type: string
+      description: |-
+        * `rolling_review_started` - Rolling review started
+        * `evaluation_started` - Evaluation started
+        * `opinion_positive` - CHMP positive opinion
+        * `opinion_negative` - CHMP negative opinion
+        * `opinion_adopted` - CHMP opinion adopted
+        * `authorised` - Authorised
+        * `ec_decision` - European Commission decision
+        * `indication_changed` - Indication changed
+        * `refused` - Refused
+        * `application_withdrawn` - Application withdrawn
+        * `suspended` - Suspended
+        * `ended` - Authorisation ended
+        * `status_changed` - Status changed
+    MedicineEventMedicine:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        inn:
+          type: string
+        url:
+          type: string
+      required:
+      - id
+      - inn
+      - name
+      - url
+    MedicineHistoryEvent:
+      type: object
+      description: |-
+        An event inside a medicine's own detail: the medicine is the parent, so it
+        and its attribution are not repeated on each event.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/MedicineEventKindEnum'
+        kind_label:
+          type: string
+          readOnly: true
+        event_date:
+          type: string
+          format: date
+          description: EMA's date where it gives one, otherwise the day the sync saw
+            the change.
+        basis:
+          $ref: '#/components/schemas/MedicineEventBasisEnum'
+        from_value:
+          type: string
+        to_value:
+          type: string
+      required:
+      - basis
+      - event_date
+      - id
+      - kind
+      - kind_label
     ModalityEnum:
       enum:
       - small_molecule
@@ -9838,6 +10832,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedMedicineEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineEvent'
+    PaginatedMedicineList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Medicine'
     PaginatedPatentListList:
       type: object
       required:

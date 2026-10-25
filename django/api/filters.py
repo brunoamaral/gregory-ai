@@ -23,7 +23,11 @@ from gregory.models import (
 	Patents,
 	PatentApplicant,
 	PatentPublication,
+	Medicine,
+	MedicineCategoryAssignment,
+	MedicineEvent,
 )
+from api.medicine_scope import category_has_subject, visible_subject_ids_of
 from api.patent_links import visible_patent_trial_links_queryset
 from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -2211,3 +2215,335 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		wherever links are counted or shown. Declared so it is validated and
 		documented like any other parameter."""
 		return queryset
+
+
+class _IdField(forms.IntegerField):
+	"""A database id: a whole number from 1 up to what a 32-bit key can hold.
+
+	Out-of-range values are rejected with a 400 instead of reaching the query.
+	"""
+
+	def __init__(self, *args, **kwargs):
+		kwargs.setdefault("min_value", 1)
+		kwargs.setdefault("max_value", 2147483647)
+		super().__init__(*args, **kwargs)
+
+
+class IdFilter(filters.NumberFilter):
+	"""One database id; anything else is a 400, like every other ``*_id`` filter."""
+
+	field_class = _IdField
+
+
+class IdInFilter(filters.BaseInFilter, IdFilter):
+	"""One id or a comma-separated list, matching ANY of them (``__in``).
+
+	``?category_id=6`` is the single-id form every other endpoint takes and means
+	exactly what it did there. A list with a value that is not an id
+	(``?category_id=6,abc``) is a 400.
+	"""
+
+
+_CATEGORY_ID_HELP = (
+	"Filter by category ID (see /categories/). One ID, or a comma-separated list "
+	"that matches ANY of them, e.g. ?category_id=6,21. Only live links count: a "
+	"link an editor removed never matches."
+)
+_CATEGORY_SLUG_HELP = (
+	"Filter by category slug (see /categories/). Only live links count."
+)
+_SUBJECT_ID_HELP = (
+	"Keep {things} linked to a category that has this subject (see /subjects/). "
+	"Only live links count. Given together with category_id, category_slug or "
+	"site_id, all of them must hold on the same link: ?subject_id=1&category_id=6 "
+	"means a live link to category 6, and category 6 has subject 1."
+)
+_SITE_ID_HELP = (
+	"Filter by Django Site ID: keep {things} linked to a category that has a "
+	"subject in that site's scope (see CustomSetting.scope_subjects). A site that "
+	"does not show medicines (medicines_enabled off) returns nothing. Only live "
+	"links count."
+)
+_INCLUDE_GENERICS_HELP = (
+	"Generic and biosimilar products are left out unless this is true. They are "
+	"matched and stored like any other product; the default hides them so a "
+	"list shows the originators."
+)
+
+
+class MedicineLinkFilterMixin:
+	"""``category_id``, ``category_slug``, ``subject_id``, ``site_id`` and the
+	``include_generics`` default, shared by ``/medicines/`` and ``/medicines/events/``.
+
+	The four link filters are about a medicine's links to categories, and when
+	several are given they must all hold on the SAME link: ``?subject_id=1&
+	category_id=6`` is one live link to category 6, which has subject 1, not one
+	link to category 6 and another to some category of subject 1. Chaining a join
+	per filter would answer the second question, so the filters themselves do
+	nothing (``_link_filter``) and ``filter_queryset`` builds ONE ``Exists()`` over
+	``MedicineCategoryAssignment`` from every value given, plus the caller's own
+	visibility, so a link the caller cannot see never satisfies a filter. A
+	product in several matching categories is still one row.
+
+	``medicine_ref`` is the outer column holding the medicine's id and
+	``medicine_prefix`` the path from a filtered row to its medicine.
+	"""
+
+	medicine_ref = "pk"
+	medicine_prefix = ""
+
+	def _link_filter(self, queryset, name, value):
+		"""No-op: applied together in ``filter_queryset``. Declared so the
+		parameter is validated and documented like any other."""
+		return queryset
+
+	def filter_queryset(self, queryset):
+		queryset = super().filter_queryset(queryset)
+		queryset = self._apply_link_filters(queryset)
+		if self.form.cleaned_data.get("include_generics") is not True:
+			prefix = self.medicine_prefix
+			queryset = queryset.filter(
+				**{f"{prefix}generic": False, f"{prefix}biosimilar": False}
+			)
+		return queryset
+
+	def _apply_link_filters(self, queryset):
+		data = self.form.cleaned_data
+		category_ids = data.get("category_id")
+		category_slug = data.get("category_slug")
+		subject_id = data.get("subject_id")
+		site_id = data.get("site_id")
+		if not (category_ids or category_slug or subject_id or site_id):
+			return queryset
+
+		# Each subject condition is its own Exists(): the category may meet them
+		# with different subjects. Putting two of them in one filter() would make
+		# the join share one subject row, which asks for something stricter.
+		subject_conditions = []
+		if subject_id:
+			subject_conditions.append([int(subject_id)])
+		if site_id:
+			from gregory.visibility import site_scope_subject_ids
+
+			# Only settings rows with medicines_enabled on count, so naming a site
+			# that does not show medicines returns nothing rather than the
+			# medicines of some other site.
+			subject_conditions.append(
+				list(
+					site_scope_subject_ids(
+						int(site_id), public_only=False, medicines=True
+					)
+				)
+			)
+		visible = visible_subject_ids_of(self.request)
+		if visible is not None:
+			subject_conditions.append(visible)
+		if any(not ids for ids in subject_conditions):
+			return queryset.none()
+
+		links = MedicineCategoryAssignment.objects.filter(
+			medicine=OuterRef(self.medicine_ref), suppressed=False
+		)
+		if category_ids:
+			links = links.filter(teamcategory_id__in=[int(i) for i in category_ids])
+		if category_slug:
+			links = links.filter(teamcategory__category_slug=category_slug)
+		for ids in subject_conditions:
+			links = links.filter(category_has_subject(ids))
+		return queryset.filter(Exists(links))
+
+
+class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
+	"""
+	Filter class for EMA medicines (see /medicines/).
+
+	Every filter that reaches a medicine's category links uses one ``Exists()``
+	(see ``MedicineLinkFilterMixin``), so a product never appears twice and the
+	paginator's COUNT(*) needs no DISTINCT.
+	"""
+
+	category_id = IdInFilter(
+		method="_link_filter", label="Category ID(s)", help_text=_CATEGORY_ID_HELP
+	)
+	category_slug = filters.CharFilter(
+		method="_link_filter", label="Category Slug", help_text=_CATEGORY_SLUG_HELP
+	)
+	subject_id = IdFilter(
+		method="_link_filter",
+		label="Subject ID",
+		help_text=_SUBJECT_ID_HELP.format(things="medicines"),
+	)
+	site_id = IdFilter(
+		method="_link_filter",
+		label="Site ID",
+		help_text=_SITE_ID_HELP.format(things="medicines"),
+	)
+	substance = filters.CharFilter(
+		method="filter_substance",
+		label="Substance",
+		help_text=(
+			"A substance, as EMA names it (the INN, or the active substance when "
+			"the INN is empty). Matches one element of the product's `substances` "
+			"exactly, ignoring case and extra spaces, e.g. ?substance=ocrelizumab. "
+			"A combination product matches on any of its substances."
+		),
+	)
+	status = filters.CharFilter(
+		field_name="status",
+		lookup_expr="iexact",
+		label="Status",
+		help_text=(
+			"EMA's status wording, case-insensitive, e.g. Authorised, Withdrawn, "
+			"Refused, Opinion. EMA's own words are stored, so new values can appear."
+		),
+	)
+	opinion_status = filters.CharFilter(
+		field_name="opinion_status",
+		lookup_expr="iexact",
+		label="Opinion status",
+		help_text=(
+			"Positive or Negative. EMA fills it only while a medicine is at the "
+			"opinion stage and clears it once the Commission decides, so most "
+			"products have none."
+		),
+	)
+	advanced_therapy = filters.BooleanFilter(
+		label="Advanced therapy",
+		help_text="true: gene, cell and tissue-engineered products; false: the rest.",
+	)
+	orphan_medicine = filters.BooleanFilter(
+		label="Orphan medicine",
+		help_text="true: designated orphan medicines; false: the rest.",
+	)
+	is_combination = filters.BooleanFilter(
+		label="Combination product",
+		help_text="true: products with more than one substance; false: single-substance products.",
+	)
+	authorised_after = filters.DateFilter(
+		field_name="authorisation_date",
+		lookup_expr="gte",
+		label="Authorised on or after",
+		help_text=(
+			"Products first authorised on or after this date (YYYY-MM-DD, "
+			"inclusive). This is the first approval, not the latest EC decision. "
+			"Invalid dates return 400."
+		),
+	)
+	authorised_before = filters.DateFilter(
+		field_name="authorisation_date",
+		lookup_expr="lte",
+		label="Authorised on or before",
+		help_text=(
+			"Products first authorised on or before this date (YYYY-MM-DD, "
+			"inclusive). Invalid dates return 400."
+		),
+	)
+	include_generics = filters.BooleanFilter(
+		method="_link_filter",
+		label="Include generics and biosimilars",
+		help_text=_INCLUDE_GENERICS_HELP,
+	)
+
+	class Meta:
+		model = Medicine
+		fields = [
+			"category_id",
+			"category_slug",
+			"subject_id",
+			"site_id",
+			"substance",
+			"status",
+			"opinion_status",
+			"advanced_therapy",
+			"orphan_medicine",
+			"is_combination",
+			"authorised_after",
+			"authorised_before",
+			"include_generics",
+		]
+
+	def filter_substance(self, queryset, name, value):
+		from gregory.utils.ema import split_substances
+
+		substances = split_substances(value, "")
+		if not substances:
+			return queryset
+		return queryset.filter(substances__overlap=substances)
+
+
+class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
+	"""
+	Filter class for medicine events (see /medicines/events/).
+
+	The link filters and ``include_generics`` act on the event's medicine and
+	follow the same rules as on ``MedicineFilter``.
+	"""
+
+	medicine_ref = "medicine_id"
+	medicine_prefix = "medicine__"
+
+	category_id = IdInFilter(
+		method="_link_filter", label="Category ID(s)", help_text=_CATEGORY_ID_HELP
+	)
+	category_slug = filters.CharFilter(
+		method="_link_filter", label="Category Slug", help_text=_CATEGORY_SLUG_HELP
+	)
+	subject_id = IdFilter(
+		method="_link_filter",
+		label="Subject ID",
+		help_text=_SUBJECT_ID_HELP.format(things="events of medicines"),
+	)
+	site_id = IdFilter(
+		method="_link_filter",
+		label="Site ID",
+		help_text=_SITE_ID_HELP.format(things="events of medicines"),
+	)
+	kind = ChoiceInFilter(
+		field_name="kind",
+		choices=MedicineEvent.Kind.choices,
+		label="Kind",
+		help_text=(
+			"One kind, or a comma-separated list that matches ANY of them, e.g. "
+			"?kind=opinion_positive,authorised. Unknown values return 400."
+		),
+	)
+	basis = filters.ChoiceFilter(
+		field_name="basis",
+		choices=MedicineEvent.Basis.choices,
+		label="Basis",
+		help_text=(
+			"observed: Gregory saw the change between two syncs; reconstructed: "
+			"read off EMA's date fields the first time the product was seen."
+		),
+	)
+	event_date_after = filters.DateFilter(
+		field_name="event_date",
+		lookup_expr="gte",
+		label="Event on or after",
+		help_text="Events dated on or after this date (YYYY-MM-DD, inclusive). Invalid dates return 400.",
+	)
+	event_date_before = filters.DateFilter(
+		field_name="event_date",
+		lookup_expr="lte",
+		label="Event on or before",
+		help_text="Events dated on or before this date (YYYY-MM-DD, inclusive). Invalid dates return 400.",
+	)
+	include_generics = filters.BooleanFilter(
+		method="_link_filter",
+		label="Include generics and biosimilars",
+		help_text=_INCLUDE_GENERICS_HELP,
+	)
+
+	class Meta:
+		model = MedicineEvent
+		fields = [
+			"category_id",
+			"category_slug",
+			"subject_id",
+			"site_id",
+			"kind",
+			"basis",
+			"event_date_after",
+			"event_date_before",
+			"include_generics",
+		]

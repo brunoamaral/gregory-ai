@@ -166,6 +166,13 @@ class CachedCountMixin:
 			# Patent visibility is a second scope: two callers with the same
 			# subjects can differ in which of their sites show patents.
 			key_parts["patent_subjects"] = patent_scope
+		if getattr(view, "medicine_scoped", False):
+			# Medicine visibility is a third scope, for the same reason as patents:
+			# two callers with the same subjects can differ in which of their sites
+			# show medicines (medicines_enabled), so their counts differ too.
+			medicine_ids = getattr(request, "visible_medicine_subject_ids", None)
+			if medicine_ids is not None:
+				key_parts["medicine_subjects"] = sorted(medicine_ids)
 		if "has_takeaways" in request.query_params:
 			# has_takeaways counts rows with text written for the caller's own
 			# site (articles) or organisation (trials), which two callers with
@@ -336,6 +343,21 @@ class TrialSitePagination(PageNumberPagination):
 	page_size = 100
 	page_size_query_param = "page_size"
 	max_page_size = 500
+
+
+class MedicinePagination(FlexiblePagination):
+	"""Pagination for ``/medicines/`` and ``/medicines/events/``: FlexiblePagination
+	without ``all_results``.
+
+	Medicines are a small, slow-moving public list, so a page of 100 and a link to
+	the next is all a reader needs. ``all_results=true`` is accepted and ignored,
+	as on ``/patents/``, so a stray parameter gets an ordinary page rather than an
+	error. Offset cap and page_size limit are FlexiblePagination's.
+	"""
+
+	@property
+	def should_bypass_pagination(self):
+		return False
 
 
 class PatentPagination(FlexiblePagination):
