@@ -43,6 +43,7 @@ from .models import (
 	MeshTerm,
 	PublicationType,
 	Medicine,
+	MedicineCategoryAssignment,
 	MedicineEvent,
 	CategoryModality,
 	Trials,
@@ -71,6 +72,7 @@ from .models import (
 	TrialSite,
 	ArticleCategoryAssignment,
 	TrialCategoryAssignment,
+	CategoryAssignmentSource,
 	CategoryType,
 	Sponsor,
 	SponsorAlias,
@@ -3614,6 +3616,57 @@ class TeamCategoryAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
 		return instance
 
 
+class MedicineCategoryAssignmentForm(forms.ModelForm):
+	"""A saved link keeps its medicine: picking a different one would turn an automatic
+	link into something the matcher never made."""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		if self.instance.pk and "medicine" in self.fields:
+			self.fields["medicine"].disabled = True
+
+
+class MedicineCategoryAssignmentFormSet(forms.BaseInlineFormSet):
+	"""Removing an automatic link suppresses it instead of deleting it.
+
+	A deleted automatic row would come back on the next match_medicines run. A suppressed
+	one is never recreated. It is saved (not updated in bulk) so its history row names the
+	editor. Manual links are the editor's own and delete normally."""
+
+	def delete_existing(self, obj, commit=True):
+		if obj.source != CategoryAssignmentSource.AUTOMATIC:
+			return super().delete_existing(obj, commit=commit)
+		if commit and not obj.suppressed:
+			obj.suppressed = True
+			obj.save(update_fields=["suppressed"])
+		# The change message should say "changed", not "deleted": the row is still there.
+		if obj in self.deleted_objects:
+			self.deleted_objects.remove(obj)
+			self.changed_objects.append((obj, ["suppressed"]))
+
+
+class MedicineCategoryAssignmentInline(TeamEditInlineMixin, admin.TabularInline):
+	"""EMA medicines linked to a category. Editors of the category's team add manual links,
+	tick ``suppressed`` or remove a link; the matcher keeps the automatic ones current."""
+
+	model = MedicineCategoryAssignment
+	form = MedicineCategoryAssignmentForm
+	formset = MedicineCategoryAssignmentFormSet
+	extra = 0
+	autocomplete_fields = ["medicine"]
+	fields = ("medicine", "medicine_status", "matched_on", "source", "suppressed")
+	readonly_fields = ("medicine_status", "matched_on", "source")
+	verbose_name = "Medicine (EMA)"
+	verbose_name_plural = "Medicines (EMA)"
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("medicine").order_by("medicine__name")
+
+	@admin.display(description="EMA status")
+	def medicine_status(self, obj):
+		return obj.medicine.status if obj.medicine_id else "-"
+
+
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(
 	TeamEditMixin,
@@ -3640,8 +3693,10 @@ class TeamCategoryAdmin(
 		"article_count",
 		"trial_count",
 		"patent_count",
+		"medicine_count",
 		"display_subjects",
 	)
+	inlines = [MedicineCategoryAssignmentInline]
 	list_editable = ("modality",)
 	list_per_page = 100
 	search_fields = ("category_name", "team__name", "subjects__subject_name")
@@ -3689,6 +3744,23 @@ class TeamCategoryAdmin(
 					"thresholds let you tune both independently. Content containing any "
 					"excluded term in a searched field is never assigned automatically, "
 					"whatever its score."
+				),
+			},
+		),
+		(
+			"Medicines (EMA)",
+			{
+				"fields": ("medicine_terms", "medicine_include_combinations"),
+				"description": (
+					"Links EMA's authorised medicines to this category by substance name. "
+					"Intervention categories (small molecule, antibody / biologic, cell / "
+					"gene therapy, natural product) use their category terms; fill in the "
+					"patterns below to use different ones. Every other category gets "
+					"medicines only through these patterns. Use * for a wildcard over the "
+					"whole substance name, e.g. *cabtagene* and tisagenlecleucel for CAR-T. "
+					"A medicine links only when EMA approved it for one of the category's "
+					"subjects' EMA therapeutic areas, when they have any. Medicines are "
+					"matched on every pipeline run; remove a wrong link in the table below."
 				),
 			},
 		),
@@ -3781,7 +3853,18 @@ class TeamCategoryAdmin(
 
 	def get_queryset(self, request):
 		"""Add prefetch_related to avoid multiple DB queries"""
-		return super().get_queryset(request).prefetch_related("subjects", "articles")
+		return (
+			super()
+			.get_queryset(request)
+			.prefetch_related("subjects", "articles")
+			.annotate(
+				medicine_total=models.Count(
+					"medicine_assignments",
+					filter=Q(medicine_assignments__suppressed=False),
+					distinct=True,
+				)
+			)
+		)
 
 	def article_count(self, obj):
 		"""Display number of articles in this category"""
@@ -3796,6 +3879,10 @@ class TeamCategoryAdmin(
 	@admin.display(description="Patents")
 	def patent_count(self, obj):
 		return obj.patents.count()
+
+	@admin.display(description="Medicines", ordering="medicine_total")
+	def medicine_count(self, obj):
+		return obj.medicine_total
 
 	@admin.display(description="Match scope", ordering="match_scope")
 	def display_match_scope(self, obj):
@@ -5154,6 +5241,47 @@ class MedicineEventInline(ReadOnlyInlineMixin, admin.TabularInline):
 		return " → ".join(parts)
 
 
+class MedicineCategoryLinkInline(ReadOnlyInlineMixin, admin.TabularInline):
+	"""The categories a medicine is linked to. Links belong to teams, so staff see only
+	their own teams' (superusers see all); edit them from the category's page."""
+
+	model = MedicineCategoryAssignment
+	verbose_name = "Category link"
+	verbose_name_plural = "Category links"
+	fields = ("teamcategory", "source", "matched_on", "suppressed")
+	readonly_fields = fields
+
+	def has_view_permission(self, request, obj=None):
+		return request.user.is_active and request.user.is_staff
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related("teamcategory", "teamcategory__team")
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(teamcategory__team__in=user_team_ids(request.user))
+
+
+class HasCategoryLinkFilter(admin.SimpleListFilter):
+	"""Medicines with, or without, a live (not suppressed) link to one of the caller's
+	categories. Scoped like the inline, so it never reveals another team's links."""
+
+	title = "category link"
+	parameter_name = "has_link"
+
+	def lookups(self, request, model_admin):
+		return (("yes", "Linked to a category"), ("no", "Not linked"))
+
+	def queryset(self, request, queryset):
+		if self.value() not in ("yes", "no"):
+			return queryset
+		links = MedicineCategoryAssignment.objects.filter(
+			medicine=OuterRef("pk"), suppressed=False
+		)
+		if not request.user.is_superuser:
+			links = links.filter(teamcategory__team__in=user_team_ids(request.user))
+		return queryset.filter(Exists(links)) if self.value() == "yes" else queryset.exclude(Exists(links))
+
+
 @admin.register(Medicine)
 class MedicineAdmin(admin.ModelAdmin):
 	"""EMA's centrally authorised human medicines. Read-only: the sync is the only
@@ -5181,11 +5309,12 @@ class MedicineAdmin(admin.ModelAdmin):
 		"biosimilar",
 		"is_combination",
 		"in_latest_export",
+		HasCategoryLinkFilter,
 	)
 	search_fields = ("name", "inn", "active_substance", "ema_product_number")
 	ordering = ("name",)
 	list_per_page = 100
-	inlines = [MedicineEventInline]
+	inlines = [MedicineEventInline, MedicineCategoryLinkInline]
 	fieldsets = (
 		(
 			None,
@@ -5280,6 +5409,61 @@ class MedicineAdmin(admin.ModelAdmin):
 		if obj.url.startswith(("https://", "http://")):
 			return format_html('<a href="{0}" target="_blank" rel="noopener">{0}</a>', obj.url)
 		return obj.url or "-"
+
+
+@admin.register(MedicineCategoryAssignment)
+class MedicineCategoryAssignmentAdmin(TeamEditMixin, admin.ModelAdmin):
+	"""Every medicine-category link, for suppressing and restoring in bulk.
+
+	Staff see the links of their organisations' categories and change only their own
+	teams' (TeamEditMixin). Links are created by match_medicines or from a category's
+	page, and removed there too (an automatic link is suppressed, never deleted), so this
+	page adds and deletes nothing. OrganizationFilterMixin can't scope this model, which
+	has no team of its own, so get_queryset follows the category's team."""
+
+	list_display = ("medicine", "teamcategory", "source", "matched_on", "suppressed", "created_at")
+	list_filter = ("suppressed", "source", "medicine__status")
+	list_select_related = ("medicine", "teamcategory", "teamcategory__team")
+	search_fields = ("medicine__name", "medicine__inn", "teamcategory__category_name")
+	ordering = ("teamcategory__category_name", "medicine__name")
+	list_per_page = 100
+	readonly_fields = ("medicine", "teamcategory", "source", "matched_on", "created_at")
+	fields = readonly_fields + ("suppressed",)
+	actions = ["suppress_links", "restore_links"]
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			teamcategory__team__organization__id__in=get_user_organizations(request.user)
+		)
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	def _set_suppressed(self, request, queryset, suppressed):
+		"""Save each row so its history row records the editor. A queryset update would
+		write no history at all."""
+		changed = 0
+		for link in queryset.exclude(suppressed=suppressed):
+			link.suppressed = suppressed
+			link.save(update_fields=["suppressed"])
+			changed += 1
+		return changed
+
+	@admin.action(permissions=["change"], description="Suppress selected links (remove from the category)")
+	def suppress_links(self, request, queryset):
+		changed = self._set_suppressed(request, queryset, True)
+		self.message_user(request, f"Suppressed {changed} link(s).")
+
+	@admin.action(permissions=["change"], description="Restore selected suppressed links")
+	def restore_links(self, request, queryset):
+		changed = self._set_suppressed(request, queryset, False)
+		self.message_user(request, f"Restored {changed} link(s).")
 
 
 admin.site.register(Authors, AuthorsAdmin)

@@ -6,8 +6,8 @@ positive opinion, an authorisation, a new European Commission decision, a withdr
 data is global reference data, like PubMed's publication types. It has no team, subject
 or organisation of its own.
 
-This first stage brings the data in and shows it in the Django admin. It does not yet link
-medicines to categories or serve them through the API or RSS feeds.
+Gregory brings the data in, links each medicine to the team categories it belongs to, and
+shows both in the Django admin. It does not yet serve medicines through the API or RSS feeds.
 
 ## What the data is
 
@@ -66,6 +66,11 @@ present again. The sync state (`EmaSyncState`) is updated only after a successfu
 skipped (veterinary), unparseable dates, and events by kind and basis. A bad date is
 logged and stored as null; it never stops the run.
 
+**Matching.** After a successful write the sync runs `match_medicines`, so a sync that
+changed substances or therapeutic areas relinks categories in the same run (see
+[Matching medicines to categories](#matching-medicines-to-categories)). A `--dry-run`
+skips it.
+
 **First run.** Every medicine is new, so the sync writes `reconstructed` events from EMA's
 date fields and no `observed` ones. Check the numbers against the export you expect.
 
@@ -96,13 +101,100 @@ seen, and **observed** when a later sync sees a difference.
 
 The unique constraint on (medicine, kind, date) makes repeating a sync safe.
 
+## Matching medicines to categories
+
+```bash
+docker exec gregory python manage.py match_medicines
+docker exec gregory python manage.py match_medicines --category 49 --dry-run
+```
+
+`match_medicines` re-matches every category against every medicine, then adds, removes and
+relabels links so they agree with the rule below. It runs at the end of every
+`sync_ema_medicines` that wrote something, and as pipeline step 7c, after
+`rebuild_categories` has picked up category edits. About 2,400 products against a few
+hundred categories takes seconds, so there is no incremental window. `--category ID`
+matches one category; `--dry-run` reports and writes nothing.
+
+### The rule
+
+Per category, skipping categories whose type is *Manual* (those only ever get links an
+editor adds by hand):
+
+1. **Patterns.** The category's `medicine_terms` when it has any. Otherwise its ordinary
+   `category_terms`, but only when its modality is small molecule, antibody / biologic,
+   cell / gene therapy or natural product. A research topic, rehabilitation, device or
+   unclassified category gets no automatic links without `medicine_terms`.
+2. **Substance.** A pattern matches one of the product's `substances` when it is equal, or
+   equal plus one more word (`pixantrone` matches `pixantrone dimaleate`). A pattern with
+   `*` must match the whole substance, with `*` standing for any run of characters:
+   `*cabtagene*`, `*brutinib`. A pattern also matches the product's name exactly, which
+   covers products with no substance. Everything is compared lowercased, with whitespace
+   collapsed.
+3. **Combinations.** A product with more than one substance is skipped unless the category
+   ticks *Include EMA combination products*.
+4. **Exclusions.** The category's *terms to exclude* rule a product out when one appears as
+   a whole word in a substance or in the name (`*` is allowed).
+5. <a id="disease-check"></a>**Disease check.** Take the union of *EMA therapeutic areas*
+   over the category's subjects. If it is empty, skip this step. Otherwise keep a product
+   only when one of its therapeutic areas starts with one of those headings, ignoring case.
+   `Multiple Sclerosis` therefore covers `Multiple Sclerosis, Relapsing-Remitting` but not
+   `Amyotrophic Lateral Sclerosis`.
+
+The disease check is why sildenafil under an MS category does not link Viagra, and why a
+CAR-T category on an MS subject links nothing: EMA approved those products for other
+diseases. Put the category on a subject with no EMA areas and it links every product the
+patterns match. When EMA later extends a medicine to MS, its areas change and the next run
+links it, alongside the `ec_decision` and `indication_changed` events from the same sync.
+
+`matched_on` records the pattern and the area that matched (`ocrelizumab · Multiple
+Sclerosis`), or just the pattern when the disease check was skipped, so an editor can see
+why a link exists.
+
+Subject areas are filled in by hand, as the subjects' names vary between teams. Suggested
+values: `Multiple Sclerosis` for MS-like subjects, `Alzheimer Disease` and `Dementia` for
+Alzheimer's, `Parkinson Disease` for Parkinson's.
+
+### What the matcher touches
+
+| Link | Matcher does |
+|:-----|:-------------|
+| Automatic, not suppressed | Creates it when missing, deletes it when it no longer matches, refreshes `matched_on` |
+| Manual | Nothing. It skips every rule, the disease check included, so an editor can attach an off-label medicine on purpose |
+| Suppressed | Nothing. Never recreated, changed or restored, even if the medicine stops matching |
+
+The matcher's writes are pipeline writes: no editor is recorded, as with `rebuild_categories`.
+
+### Fixing links
+
+Editors of the category's team work from the category's page in the admin, under *Medicines
+(EMA)*:
+
+- **Add** a medicine (search by name, substance or product number). It becomes a manual link.
+- **Remove** a link with the delete box. A manual link is deleted. An *automatic* link is
+  **suppressed** instead, because a deleted one would reappear on the next run. The change
+  is recorded under the editor's name.
+- **Restore** a suppressed link by clearing its *suppressed* box. To put back a medicine that
+  was suppressed, restore the existing row; adding it again would collide with it.
+
+*Medicine category assignments* in the admin lists every link, filterable by *suppressed*
+and source, with *Suppress selected links* and *Restore selected suppressed links* actions
+for bulk work. Staff see their organisations' links and change only their own teams'. A
+medicine's own page lists its links to the user's teams' categories, and the medicine list
+can be filtered to medicines with or without a link.
+
+To give a broad category medicines, set its *EMA substance patterns* (`medicine_terms`) on the
+category form. CAR-T uses `*cabtagene*` and `tisagenlecleucel`, which together find the
+seven CAR-T products in EMA's export; a suffix such as `*leucel` would also catch Ebvallo and
+Amtagvi, which are not CAR-T.
+
 ## In the admin
 
 *Medicines* in the Django admin lists every medicine with its status, opinion status,
 authorisation date and flags, filterable by status and the flags and searchable by name,
 INN, active substance and product number. A medicine's page shows its events, newest first,
-and a link to its EPAR page on EMA's site. It is read-only, and every staff user can browse
-it, because the data is public and unscoped.
+its links to the user's teams' categories, and a link to its EPAR page on EMA's site. It is
+read-only, and every staff user can browse it, because the data is public and unscoped. The
+category links are the exception: they belong to teams, so they are scoped (see above).
 
 ## Source and attribution
 

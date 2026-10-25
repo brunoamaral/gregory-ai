@@ -69,6 +69,10 @@ class Command(BaseCommand):
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
 			(
+				"match_medicines",
+				{},
+			),  # 7c. Link EMA medicines to categories (after rebuild_categories has taken category edits)
+			(
 				"detect_patent_trial_links",
 				{},
 			),  # 7b. Sponsor-timing signal over all patents: links follow trials that finish or gain a category

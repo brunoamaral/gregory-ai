@@ -19,6 +19,7 @@ Run:
 import json
 from collections import Counter
 
+from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
 from django.db.models import Q
@@ -96,8 +97,10 @@ class Command(GregoryBaseCommand):
 				state.last_modified = last_modified
 			state.save()
 
-		# PR 2 calls match_medicines here (skipped on --dry-run), so a sync that
-		# changed substances or areas relinks categories in the same run.
+		# A sync that changed substances or areas relinks categories in the same run.
+		# Outside the transaction: a matching failure must not undo a good sync, and the
+		# pipeline's own match_medicines step retries it.
+		call_command("match_medicines", stdout=self.stdout, stderr=self.stderr)
 
 	# --- input ---------------------------------------------------------
 
