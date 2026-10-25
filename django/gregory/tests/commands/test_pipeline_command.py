@@ -67,6 +67,10 @@ class PipelineCommandTest(TestCase):
 		names = [name for name, _ in calls]
 		self.assertLess(names.index("feedreader_trials_ctis"), names.index("feedreader_patents_ops"))
 		self.assertLess(names.index("rebuild_categories"), names.index("detect_patent_trial_links"))
+		# 3d: EMA medicines, after the patent importer and before the DOI pass.
+		self.assertLess(names.index("feedreader_patents_ops"), names.index("sync_ema_medicines"))
+		self.assertLess(names.index("sync_ema_medicines"), names.index("find_doi"))
+		self.assertEqual(dict(calls)["sync_ema_medicines"], {})
 		self.assertEqual(dict(calls)["feedreader_patents_ops"], {"max_families": 500})
 		# A full detection pass, not --recent: links must follow trials that change.
 		self.assertEqual(dict(calls)["detect_patent_trial_links"], {})
