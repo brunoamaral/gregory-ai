@@ -37,7 +37,12 @@ ROW = {
 	"latest_ec_decision_date": "2026-06-01",
 	"ema_last_updated": "2026-10-01",
 	"url": "https://www.ema.europa.eu/en/medicines/human/EPAR/ocrevus",
+	"tracked": True,
+	"grouped_under": None,
 	"categories": [{"id": 6, "category_name": "Ocrelizumab", "category_slug": "ocrelizumab"}],
+	"subjects": [
+		{"id": 1, "subject_name": "Multiple Sclerosis", "subject_slug": "ms", "matched_on": "Multiple Sclerosis"}
+	],
 	"source": SOURCE,
 }
 
@@ -76,10 +81,25 @@ async def test_search_medicines_returns_compact_rows_with_the_source(mock_gregor
 			"is_combination": False,
 			"generic": False,
 			"biosimilar": False,
+			"tracked": True,
 			"categories": [{"category_id": 6, "category_name": "Ocrelizumab", "category_slug": "ocrelizumab"}],
+			"subjects": [
+				{"subject_id": 1, "subject_name": "Multiple Sclerosis", "matched_on": "Multiple Sclerosis"}
+			],
 			"link": "https://www.ema.europa.eu/en/medicines/human/EPAR/ocrevus",
 		}
 	]
+
+
+async def test_an_untracked_medicine_row_has_no_categories_and_its_subjects(mock_gregory):
+	row = dict(ROW, tracked=False, categories=[])
+	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [row]}))
+
+	compact = (await search_medicines(subject_id=1, tracked=False))["medicines"][0]
+
+	assert compact["tracked"] is False
+	assert compact["categories"] == []
+	assert [s["subject_id"] for s in compact["subjects"]] == [1]
 
 
 async def test_the_ec_decision_date_is_never_called_the_approval_date(mock_gregory):
@@ -106,6 +126,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 		authorised_after="2018-01-01",
 		authorised_before="2020-01-01",
 		include_generics=True,
+		tracked=False,
 		ordering="-authorisation_date",
 		page=2,
 		page_size=5,
@@ -123,6 +144,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 		"authorised_after": "2018-01-01",
 		"authorised_before": "2020-01-01",
 		"include_generics": "true",
+		"tracked": "false",
 		"ordering": "-authorisation_date",
 		"page": "2",
 		"page_size": "5",
@@ -302,3 +324,37 @@ async def test_other_errors_are_not_swallowed(mock_gregory):
 
 	with pytest.raises(GregoryAPIError):
 		await get_medicine(12)
+
+
+def test_the_docstring_explains_tracked_and_the_two_ways_a_medicine_shows():
+	doc = search_medicines.__doc__
+	assert "tracked=false" in doc
+	assert "approved it for one of" in doc
+	assert "duplicate products" in doc
+
+
+async def test_the_zero_hit_text_names_both_ways_a_medicine_shows(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(name="x", tracked=True, include_generics=True)
+
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "filed under its categories or approved for one of its conditions" in text
+	assert "`tracked=false` keeps only" in text
+	assert "duplicate products are already included" in text
+	assert "tracked" in result["guidance"]["applied_filters"]
+
+
+async def test_the_detail_keeps_subjects_and_grouped_products(mock_gregory):
+	detail = dict(
+		ROW,
+		grouped_products=[{"id": 13, "name": "Axura", "url": "https://x/axura"}],
+		events=[],
+	)
+	mock_gregory.set_handler(_json(detail))
+
+	result = await get_medicine(12)
+
+	assert result["subjects"] == ROW["subjects"]
+	assert result["tracked"] is True
+	assert result["grouped_products"] == [{"id": 13, "name": "Axura", "url": "https://x/axura"}]

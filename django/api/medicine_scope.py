@@ -2,21 +2,29 @@
 Who may see which EMA medicine in the JSON API (``/medicines/``, ``/medicines/events/``
 and ``medicines_count`` on ``/categories/``).
 
-A medicine is global reference data with no subject of its own. It is visible when it
-has a NON-SUPPRESSED link to a category that has a subject in
-``request.visible_medicine_subject_ids`` (``gregory.visibility``), which only counts
-sites with ``CustomSetting.medicines_enabled`` on. With the switch off the set is
-empty, so every list is empty and every detail is a 404.
+A medicine is global reference data with no subject of its own. It is visible by one
+of two routes, both counted against ``request.visible_medicine_subject_ids``
+(``gregory.visibility``), which only counts sites with ``CustomSetting.medicines_enabled``
+on. With the switch off the set is empty, so every list is empty and every detail is a
+404.
 
-Everything here is an ``Exists()`` over ``MedicineCategoryAssignment``, never a join plus
-``distinct()``: a medicine in several categories must not repeat, and the outer query
-must stay cheap to count, order and slice (the 946 ms DISTINCT count in the API
-performance diagnosis).
+- a NON-SUPPRESSED link to a category that has a subject in the scope (a medicine an
+  editor tracks), or
+- a NON-SUPPRESSED ``MedicineSubjectLink`` to a subject in the scope (a medicine EMA
+  approved for one of the subject's conditions, with or without a category).
+
+The two suppressions are independent: a suppressed subject link alone hides nothing that
+a live category link still shows, and a suppressed category link alone hides nothing that
+a live subject link still shows. A medicine is hidden only when neither route is live.
+
+Everything here is an ``Exists()``, never a join plus ``distinct()``: a medicine reached
+by several links must not repeat, and the outer query must stay cheap to count, order and
+slice (the 946 ms DISTINCT count in the API performance diagnosis).
 """
 
 from django.db.models import Exists, OuterRef
 
-from gregory.models import MedicineCategoryAssignment, TeamCategory
+from gregory.models import MedicineCategoryAssignment, MedicineSubjectLink, TeamCategory
 
 #: Shown on every medicine and event row, and in the API docs. EMA's terms for reusing
 #: its data ask for the source to be named wherever the data is shown.
@@ -64,8 +72,33 @@ def visible_links_queryset(request):
 	return links.filter(category_has_subject(ids))
 
 
+def visible_subject_links_queryset(request):
+	"""Non-suppressed subject links the caller may see: the subject is in the scope.
+
+	Feeds the ``subjects`` on a medicine row and the second visibility route. Same
+	``None`` / empty-scope contract as ``visible_links_queryset``.
+	"""
+	links = MedicineSubjectLink.objects.filter(suppressed=False)
+	ids = visible_subject_ids_of(request)
+	if ids is None:
+		return links
+	if not ids:
+		return links.none()
+	return links.filter(subject_id__in=ids)
+
+
+def tracked_condition(request, medicine_ref):
+	"""``Exists()``: the medicine has a live link to a category the caller can see.
+
+	What ``tracked`` filters on. It is exactly "the row's ``categories`` is not empty",
+	so another organisation's categories never decide whether a medicine looks tracked
+	to this caller.
+	"""
+	return Exists(visible_links_queryset(request).filter(medicine=OuterRef(medicine_ref)))
+
+
 def scope_to_visible(queryset, request, medicine_ref):
-	"""Keep rows whose medicine has a visible, non-suppressed link.
+	"""Keep rows whose medicine has a visible category link or a visible subject link.
 
 	``medicine_ref`` is the outer column holding the medicine's id: ``"pk"`` on
 	``Medicine``, ``"medicine_id"`` on ``MedicineEvent``.
@@ -76,5 +109,8 @@ def scope_to_visible(queryset, request, medicine_ref):
 	if not ids:
 		return queryset.none()
 	return queryset.filter(
-		Exists(visible_links_queryset(request).filter(medicine=OuterRef(medicine_ref)))
+		tracked_condition(request, medicine_ref)
+		| Exists(
+			visible_subject_links_queryset(request).filter(medicine=OuterRef(medicine_ref))
+		)
 	)

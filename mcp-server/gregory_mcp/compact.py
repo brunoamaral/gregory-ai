@@ -121,7 +121,8 @@ def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
 	ema.europa.eu. `latest_ec_decision_date` keeps that name on purpose: it is the
 	latest European Commission decision (usually a variation), never the approval,
 	which is `authorisation_date`. `categories` are the live links the caller may
-	see."""
+	see; `tracked` is true when there is at least one. `subjects` are the conditions
+	EMA approved it for, which is why an untracked medicine is listed at all."""
 	return {
 		"medicine_id": medicine.get("id"),
 		"name": medicine.get("name"),
@@ -138,6 +139,7 @@ def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
 		"is_combination": medicine.get("is_combination"),
 		"generic": medicine.get("generic"),
 		"biosimilar": medicine.get("biosimilar"),
+		"tracked": medicine.get("tracked"),
 		"categories": [
 			{
 				"category_id": c.get("id"),
@@ -145,6 +147,14 @@ def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
 				"category_slug": c.get("category_slug"),
 			}
 			for c in medicine.get("categories") or []
+		],
+		"subjects": [
+			{
+				"subject_id": s.get("id"),
+				"subject_name": s.get("subject_name"),
+				"matched_on": s.get("matched_on"),
+			}
+			for s in medicine.get("subjects") or []
 		],
 		"link": medicine.get("url"),
 	}

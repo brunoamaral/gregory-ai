@@ -415,6 +415,18 @@ def test_instructions_for_a_medicines_tenant_name_the_source_and_the_caveat():
 		assert "does not mean it is not approved" in text
 
 
+def test_instructions_explain_untracked_medicines_and_how_an_editor_tracks_one():
+	for session in (None, _editor(), _editor(can_edit=False), _editor(tier="public")):
+		text = instructions_for(_tenant(medicines_enabled=True), session)
+		assert "untracked" in text
+		assert "EMA approved it for one of the site's conditions" in text
+		assert "creating or updating a category" in text
+	# The tool is named only to a session that has it.
+	assert "not set_medicine_link" in instructions_for(_tenant(medicines_enabled=True), _editor())
+	for session in (None, _editor(can_edit=False), _editor(tier="public")):
+		assert "set_medicine_link" not in instructions_for(_tenant(medicines_enabled=True), session)
+
+
 def test_the_paragraph_count_is_unchanged_by_medicines():
 	assert instructions_for(_tenant(medicines_enabled=True)).count("\n\n") == instructions_for(_tenant()).count("\n\n")
 

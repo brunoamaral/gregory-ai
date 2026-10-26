@@ -25,7 +25,11 @@ from gregory.models import (
 	Medicine,
 	MedicineEvent,
 )
-from api.medicine_scope import EMA_SOURCE, visible_links_queryset
+from api.medicine_scope import (
+	EMA_SOURCE,
+	visible_links_queryset,
+	visible_subject_links_queryset,
+)
 from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
@@ -1295,6 +1299,27 @@ class MedicineCategorySerializer(serializers.ModelSerializer):
 		fields = ["id", "category_name", "category_slug"]
 
 
+class MedicineSubjectSerializer(serializers.Serializer):
+	"""A subject EMA approved a medicine for, as ``subjects`` on a medicine.
+
+	Built from a ``MedicineSubjectLink``: ``matched_on`` is the subject's EMA
+	therapeutic area that matched."""
+
+	id = serializers.IntegerField(source="subject_id")
+	subject_name = serializers.CharField(source="subject.subject_name")
+	subject_slug = serializers.CharField(source="subject.subject_slug")
+	matched_on = serializers.CharField()
+
+
+class MedicineGroupedProductSerializer(serializers.ModelSerializer):
+	"""A further EMA product for the same medicine, as ``grouped_products`` on the
+	lead product's detail."""
+
+	class Meta:
+		model = Medicine
+		fields = ["id", "name", "url"]
+
+
 class MedicineEventSerializer(serializers.ModelSerializer):
 	"""One event in a medicine's regulatory life (``/medicines/events/``).
 
@@ -1358,9 +1383,16 @@ class MedicineHistoryEventSerializer(MedicineEventSerializer):
 class MedicineSerializer(serializers.ModelSerializer):
 	"""One EMA centrally authorised human medicine (``/medicines/``).
 
-	Relies on MedicineViewSet attaching the caller's visible links as
-	``_visible_links``, so a page costs a constant number of queries. Without it
-	(an instance built by hand) the same rule runs for that one medicine.
+	Relies on MedicineViewSet attaching the caller's visible category links as
+	``_visible_links`` and visible subject links as ``_visible_subject_links``, so a
+	page costs a constant number of queries. Without them (an instance built by hand)
+	the same rule runs for that one medicine.
+
+	``tracked`` is true when the medicine is filed under at least one category the
+	caller can see (``categories`` is not empty). ``subjects`` lists the conditions
+	EMA approved it for, which is how an untracked medicine is visible at all.
+	``grouped_under`` is the id of the lead product when this row is a duplicate of
+	another EMA product, else null.
 
 	``latest_ec_decision_date`` is the most recent European Commission decision,
 	usually a variation. It is NOT the approval date: ``authorisation_date`` is
@@ -1368,6 +1400,8 @@ class MedicineSerializer(serializers.ModelSerializer):
 	"""
 
 	categories = serializers.SerializerMethodField()
+	tracked = serializers.SerializerMethodField()
+	subjects = serializers.SerializerMethodField()
 	source = serializers.SerializerMethodField()
 
 	class Meta:
@@ -1409,35 +1443,64 @@ class MedicineSerializer(serializers.ModelSerializer):
 			"ema_first_published",
 			"ema_last_updated",
 			"url",
+			"grouped_under",
+			"tracked",
 			"categories",
+			"subjects",
 			"source",
 		]
+
+	def _visible_links_of(self, obj):
+		links = getattr(obj, "_visible_links", None)
+		if links is None:
+			links = list(
+				visible_links_queryset(self.context.get("request"))
+				.filter(medicine=obj)
+				.select_related("teamcategory")
+				.order_by("teamcategory__category_name", "teamcategory_id")
+			)
+			obj._visible_links = links
+		return links
 
 	@extend_schema_field(MedicineCategorySerializer(many=True))
 	def get_categories(self, obj):
 		"""The categories this medicine is linked to that the caller may see.
 		Suppressed links, and links to categories outside the caller's scope,
 		are left out."""
-		links = getattr(obj, "_visible_links", None)
-		if links is None:
-			links = (
-				visible_links_queryset(self.context.get("request"))
-				.filter(medicine=obj)
-				.select_related("teamcategory")
-				.order_by("teamcategory__category_name", "teamcategory_id")
-			)
 		return MedicineCategorySerializer(
-			[link.teamcategory for link in links], many=True
+			[link.teamcategory for link in self._visible_links_of(obj)], many=True
 		).data
+
+	def get_tracked(self, obj) -> bool:
+		"""True when the medicine is filed under a category the caller can see."""
+		return bool(self._visible_links_of(obj))
+
+	@extend_schema_field(MedicineSubjectSerializer(many=True))
+	def get_subjects(self, obj):
+		"""The subjects EMA approved this medicine for that the caller may see.
+		Suppressed links, and subjects outside the caller's scope, are left out."""
+		links = getattr(obj, "_visible_subject_links", None)
+		if links is None:
+			links = list(
+				visible_subject_links_queryset(self.context.get("request"))
+				.filter(medicine=obj)
+				.select_related("subject")
+				.order_by("subject__subject_name", "subject_id")
+			)
+			obj._visible_subject_links = links
+		return MedicineSubjectSerializer(links, many=True).data
 
 	def get_source(self, obj) -> str:
 		return EMA_SOURCE
 
 
 class MedicineDetailSerializer(MedicineSerializer):
-	"""``MedicineSerializer`` plus the medicine's events, newest first."""
+	"""``MedicineSerializer`` plus the medicine's events, newest first, and, on a lead
+	product, the further EMA products for the same medicine (``grouped_products``,
+	ordered by name; only those the caller can see)."""
 
 	events = MedicineHistoryEventSerializer(many=True, read_only=True)
+	grouped_products = MedicineGroupedProductSerializer(many=True, read_only=True)
 
 	class Meta(MedicineSerializer.Meta):
-		fields = MedicineSerializer.Meta.fields + ["events"]
+		fields = MedicineSerializer.Meta.fields + ["grouped_products", "events"]

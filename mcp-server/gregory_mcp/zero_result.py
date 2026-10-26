@@ -228,9 +228,10 @@ _MEDICINE_NAME_RULE = (
 _MEDICINE_GENERICS_RULE = (
 	("substance", "name", "status", "category_id", "category_slug", "subject_id"),
 	lambda params: (
-		"Generics and biosimilars are already included, so they are not the cause."
+		"Generics, biosimilars and duplicate products are already included, so they are not the cause."
 		if params.get("include_generics")
-		else "Generic and biosimilar products are hidden unless `include_generics` is true: "
+		else "Generic and biosimilar products, and duplicate products (further EMA products for the "
+		"same medicine as a lead product), are hidden unless `include_generics` is true: "
 		"a substance whose only listed products are copies would otherwise look absent."
 	),
 )
@@ -251,8 +252,15 @@ _MEDICINE_DATE_RULE = (
 _MEDICINE_COVERAGE_RULE = (
 	("substance", "name"),
 	"EMA lists only medicines authorised centrally for the whole EU, and this site "
-	"shows only those linked to its categories. A drug that is not here may still be "
-	"authorised in individual countries: do not conclude it is not approved.",
+	"shows only those filed under its categories or approved for one of its conditions. "
+	"A drug that is not here may still be authorised in individual countries: do not "
+	"conclude it is not approved.",
+)
+
+_MEDICINE_TRACKED_RULE = (
+	("tracked",),
+	"`tracked=false` keeps only medicines that no category of this site covers, and "
+	"`tracked=true` only those filed under a category. Drop it to see both.",
 )
 
 # Checked in order per tool, so the categories most likely to silently zero
@@ -289,6 +297,7 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 		_MEDICINE_DATE_RULE,
 		_TAXONOMY_RULE,
 		_MEDICINE_STATUS_RULE,
+		_MEDICINE_TRACKED_RULE,
 		_MEDICINE_SUBSTANCE_RULE,
 		_MEDICINE_NAME_RULE,
 		_MEDICINE_GENERICS_RULE,
