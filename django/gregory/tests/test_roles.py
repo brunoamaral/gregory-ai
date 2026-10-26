@@ -39,6 +39,7 @@ SCOPED_WRITE_MODELS = {
 	"gregory.patentcategoryassignment": "as articlecategoryassignment",
 	"gregory.patenttriallink": "PatentTrialLinkAdmin.get_queryset via patent sources -> team -> org",
 	"gregory.medicinecategoryassignment": "inline on the category page, editable only by the category's team; changelist scoped via category -> team -> org, writes narrowed by team_editable (test_admin_medicine_links)",
+	"gregory.medicinesubjectlink": "changelist and change page only, scoped via subject -> team -> org, writes narrowed by team_editable, no add or delete (test_admin_medicine_links)",
 	"gregory.teamcategory": "OrganizationFilterMixin via team; team and subjects pickers scoped (EditorInTheAdminTest)",
 }
 

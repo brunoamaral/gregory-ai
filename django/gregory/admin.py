@@ -2909,11 +2909,12 @@ class SourcesInline(TeamEditInlineMixin, admin.StackedInline):
 
 class MedicineSubjectLinkInline(TeamEditInlineMixin, admin.TabularInline):
 	"""The EMA medicines approved for this subject's condition (see
-	``Subject.ema_therapeutic_areas``). match_medicines derives the rows, so an editor
-	can't add one, and can't delete one either: it would come back on the next run.
-	Ticking ``suppressed`` takes a medicine that doesn't fit off the subject. Generics and
-	grouped copies are listed too, so a whole family can be suppressed. Saved one row at a
-	time, so the history names the editor."""
+	``Subject.ema_therapeutic_areas``). match_medicines derives the rows, so nobody can add
+	one, or delete one either: it would come back on the next run. Ticking ``suppressed``
+	takes a medicine that doesn't fit off the subject. Generics and grouped copies are
+	listed too, so a whole family can be suppressed. Saved one row at a time, so the history
+	names the editor. Only users who may change the Subject can use it (superusers, and
+	staff given that permission); the Editor role suppresses from MedicineSubjectLinkAdmin."""
 
 	model = MedicineSubjectLink
 	extra = 0
@@ -5338,7 +5339,7 @@ class MedicineCategoryLinkInline(ReadOnlyInlineMixin, admin.TabularInline):
 class MedicineSubjectLinkReadInline(ReadOnlyInlineMixin, admin.TabularInline):
 	"""The subjects a medicine is approved for (its EMA areas match the subject's). Links
 	belong to teams through their subject, so staff see only their own teams' (superusers
-	see all); an editor suppresses one from the subject's page."""
+	see all); an editor suppresses one from the Medicine subject links page."""
 
 	model = MedicineSubjectLink
 	verbose_name = "Subject link"
@@ -5615,6 +5616,80 @@ class MedicineCategoryAssignmentAdmin(TeamEditMixin, admin.ModelAdmin):
 		return changed
 
 	@admin.action(permissions=["change"], description="Suppress selected links (remove from the category)")
+	def suppress_links(self, request, queryset):
+		changed = self._set_suppressed(request, queryset, True)
+		self.message_user(request, f"Suppressed {changed} link(s).")
+
+	@admin.action(permissions=["change"], description="Restore selected suppressed links")
+	def restore_links(self, request, queryset):
+		changed = self._set_suppressed(request, queryset, False)
+		self.message_user(request, f"Restored {changed} link(s).")
+
+
+@admin.register(MedicineSubjectLink)
+class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
+	"""Every medicine-subject link, for suppressing and restoring in bulk. This is how an
+	editor takes a medicine that doesn't fit off a subject: the Editor role can't change
+	the Subject page itself.
+
+	Staff see the links of their organisations' subjects and change only their own
+	teams' (TeamEditMixin). match_medicines derives the rows, so this page adds nothing,
+	and deletes nothing either: a deleted row would come back on the next run, so an
+	editor suppresses it instead. OrganizationFilterMixin can't scope this model, which
+	has no team of its own, so get_queryset follows the subject's team."""
+
+	list_display = (
+		"medicine",
+		"subject",
+		"matched_on",
+		"medicine_status",
+		"suppressed",
+		"created_at",
+	)
+	list_filter = (
+		"suppressed",
+		("subject", OrganizationRestrictedFieldListFilter),
+		"medicine__status",
+		"medicine__generic",
+		"medicine__biosimilar",
+	)
+	list_select_related = ("medicine", "subject", "subject__team")
+	search_fields = ("medicine__name", "medicine__inn", "subject__subject_name")
+	ordering = ("subject__subject_name", "medicine__name")
+	list_per_page = 100
+	readonly_fields = ("medicine", "subject", "matched_on", "created_at")
+	fields = readonly_fields + ("suppressed",)
+	actions = ["suppress_links", "restore_links"]
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(
+			subject__team__organization__id__in=get_user_organizations(request.user)
+		)
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	@admin.display(description="EMA status", ordering="medicine__status")
+	def medicine_status(self, obj):
+		return obj.medicine.status
+
+	def _set_suppressed(self, request, queryset, suppressed):
+		"""Save each row so its history row records the editor. A queryset update would
+		write no history at all."""
+		changed = 0
+		for link in queryset.exclude(suppressed=suppressed):
+			link.suppressed = suppressed
+			link.save(update_fields=["suppressed"])
+			changed += 1
+		return changed
+
+	@admin.action(permissions=["change"], description="Suppress selected links (take off the subject)")
 	def suppress_links(self, request, queryset):
 		changed = self._set_suppressed(request, queryset, True)
 		self.message_user(request, f"Suppressed {changed} link(s).")

@@ -181,7 +181,7 @@ products*), its medicines are linked as part of the save. That covers the catego
 the admin (the admin reports "N medicines linked", and a failure shows a warning that the
 pipeline will catch up) and the editor API behind the MCP `create_category` and
 `update_category` tools. A failure never fails the save, and a manual category is skipped.
-The links the save creates record no history, as with the pipeline's. Changing *modality* from the
+The links the save creates record no history, as with the pipeline's; a link it removes is recorded under the editor who saved. Changing *modality* from the
 categories list page, rather than the category's own form, waits for the next pipeline run.
 
 ### Subject links
@@ -194,10 +194,15 @@ in `matched_on`. Generics, biosimilars and grouped copies are linked too. A subj
 areas is a research area, not a condition, and gets no links; clearing a subject's areas
 removes its links on the next run.
 
-An editor takes a medicine that doesn't fit off a subject by ticking *suppressed* on the
-subject's page, under *Medicines (EMA) approved for this condition*. Only *suppressed* is
-editable: rows can't be added (the matcher derives them) or deleted (a deleted row would come
-back on the next run). A suppressed link is never recreated, changed or restored. The two
+An editor takes a medicine that doesn't fit off a subject from the **Medicine subject links**
+page in the admin: filter by subject, select the rows and run *Suppress selected links* (or
+open one and tick *suppressed*). *Restore selected suppressed links* puts it back. The
+change is recorded under the editor's name. The Editor role can change this page's rows, but
+not the Subject page, which has the same list under *Medicines (EMA) approved for this
+condition* for superusers and anyone given Subject change permission. Only *suppressed* is
+editable either way: rows can't be added (the matcher derives them) or deleted (a deleted
+row would come back on the next run). Staff see their organisations' links and change only
+their own teams'. A suppressed link is never recreated, changed or restored. The two
 suppressions are independent: suppressing a subject link doesn't remove the medicine from a
 category of that subject, and the reverse.
 
@@ -228,7 +233,7 @@ Memantine Merz (a salt) stays apart from Ebixa. Groups are re-derived on every r
 The same holds for subject links: a non-suppressed row is created, deleted and relabelled to
 agree with the subject's areas, and a suppressed row is never touched.
 
-The matcher's writes are pipeline writes: no editor is recorded, as with `rebuild_categories`.
+The matcher's creations and relabels are bulk writes and record no history, as with `rebuild_categories`. A removal is recorded: it names whoever made the request that ran the matcher (an admin or editor-API category save) and nobody for a pipeline run.
 
 ### Fixing links
 

@@ -3159,8 +3159,9 @@ class MedicineSubjectLink(models.Model):
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	# Records the editor who suppressed or restored a link. match_medicines creates rows with
-	# bulk_create, which records nothing, and removes them with a queryset delete, whose
-	# history row names no editor.
+	# bulk_create, which records nothing. It removes them with a queryset delete, which is
+	# recorded: the history row names whoever made the request that ran the matcher (a
+	# category saved in the admin or the editor API), and nobody for a pipeline run.
 	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):

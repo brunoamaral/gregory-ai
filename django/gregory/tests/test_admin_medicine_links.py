@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
@@ -33,6 +33,7 @@ from gregory.models import (
 	Team,
 	TeamCategory,
 )
+from gregory.roles import EDITOR_GROUP, sync_editor_group
 from gregory.services.medicine_linking import link_category, link_subject
 from gregory.tests.test_admin_subject_sources_inline import form_data
 
@@ -745,3 +746,162 @@ class CategorySaveLinkingTests(MedicineLinkAdminTestCase):
 		self.assertEqual(response.status_code, 200)
 		created = TeamCategory.objects.get(category_slug="natalizumab-new")
 		self.assertEqual(set(self.links(created)), {"Tysabri", "Tyruko", "Natalizumab Elan Pharma"})
+
+
+class SubjectLinkPageTests(SubjectLinkAdminTestCase):
+	"""The Medicine subject links page, as users who hold only the Editor role."""
+
+	changelist = "admin:gregory_medicinesubjectlink_changelist"
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		sync_editor_group()
+		group = Group.objects.get(name=EDITOR_GROUP)
+		cls.role_a = cls.role_user("role-a", cls.org, cls.team_a, group, first_name="Rita", last_name="Role")
+		cls.role_b = cls.role_user("role-b", cls.org, cls.team_b, group)
+		cls.role_c = cls.role_user("role-c", cls.other_org, cls.team_c, group)
+		cls.b_ms_link = MedicineSubjectLink.objects.get(subject=cls.team_b_subject, medicine=cls.ocrevus)
+		cls.foreign_ms_link = MedicineSubjectLink.objects.get(subject=cls.foreign_subject, medicine=cls.ocrevus)
+
+	@classmethod
+	def role_user(cls, username, org, team, group, **kwargs):
+		user = User.objects.create_user(username, f"{username}@example.com", "pw", is_staff=True, **kwargs)
+		org.add_user(user)
+		team.members.add(user)
+		user.groups.add(group)
+		return user
+
+	def run_action(self, user, action, *links):
+		self.client.force_login(user)
+		return self.client.post(
+			reverse(self.changelist),
+			{"action": action, "_selected_action": [str(link.pk) for link in links]},
+			follow=True,
+		)
+
+	def change_url(self, link):
+		return reverse("admin:gregory_medicinesubjectlink_change", args=[link.pk])
+
+	def test_the_editor_role_can_change_but_not_add_or_delete(self):
+		perms = set(self.role_a.get_all_permissions())
+		self.assertIn("gregory.view_medicinesubjectlink", perms)
+		self.assertIn("gregory.change_medicinesubjectlink", perms)
+		self.assertNotIn("gregory.add_medicinesubjectlink", perms)
+		self.assertNotIn("gregory.delete_medicinesubjectlink", perms)
+		# The Subject page itself stays view-only for the role.
+		self.assertNotIn("gregory.change_subject", perms)
+
+	def test_suppress_saves_each_row_so_history_names_the_editor(self):
+		before = self.ms_link.history.count()
+		response = self.run_action(self.role_a, "suppress_links", self.ms_link)
+		self.assertEqual(response.status_code, 200)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+		self.assertEqual(self.ms_link.history.count(), before + 1)
+		row = self.ms_link.history.latest("history_date", "history_id")
+		self.assertEqual(row.history_type, "~")
+		self.assertTrue(row.suppressed)
+		self.assertEqual(row.editor_user, self.role_a)
+		self.assertEqual(row.editor_label, "Rita Role <role-a@example.com>")
+		self.assertEqual(row.via, "admin")
+
+	def test_restore_clears_suppressed_and_records_the_editor(self):
+		self.ms_link.suppressed = True
+		self.ms_link.save()
+		self.run_action(self.role_a, "restore_links", self.ms_link)
+		self.ms_link.refresh_from_db()
+		self.assertFalse(self.ms_link.suppressed)
+		row = self.ms_link.history.latest("history_date", "history_id")
+		self.assertEqual(row.editor_user, self.role_a)
+		self.assertFalse(row.suppressed)
+
+	def test_the_matcher_does_not_bring_a_suppressed_link_back(self):
+		self.run_action(self.role_a, "suppress_links", self.ms_link)
+		link_subject(self.ms)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+
+	def test_the_change_page_edits_only_suppressed(self):
+		self.client.force_login(self.role_a)
+		response = self.client.post(
+			self.change_url(self.ms_link),
+			{"suppressed": "on", "medicine": self.viagra.pk, "subject": self.no_areas.pk, "matched_on": "forged"},
+		)
+		self.assertEqual(response.status_code, 302)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+		self.assertEqual(self.ms_link.medicine, self.ocrevus)
+		self.assertEqual(self.ms_link.subject, self.ms)
+		self.assertEqual(self.ms_link.matched_on, "Multiple Sclerosis")
+		row = self.ms_link.history.latest("history_date", "history_id")
+		self.assertEqual(row.editor_user, self.role_a)
+		# And back, from the same page: an unticked box restores it.
+		self.client.post(self.change_url(self.ms_link), {})
+		self.ms_link.refresh_from_db()
+		self.assertFalse(self.ms_link.suppressed)
+
+	def test_they_see_but_cannot_change_another_teams_link_in_their_organisation(self):
+		self.client.force_login(self.role_a)
+		shown = {link.pk for link in self.client.get(reverse(self.changelist)).context["cl"].result_list}
+		self.assertIn(self.b_ms_link.pk, shown)
+		self.assertEqual(self.client.get(self.change_url(self.b_ms_link)).status_code, 200)
+		self.assertEqual(self.client.post(self.change_url(self.b_ms_link), {"suppressed": "on"}).status_code, 403)
+		response = self.run_action(self.role_a, "suppress_links", self.ms_link, self.b_ms_link)
+		self.ms_link.refresh_from_db()
+		self.b_ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+		self.assertFalse(self.b_ms_link.suppressed)
+		self.assertContains(response, "belong to another team")
+
+	def test_another_organisations_links_are_invisible(self):
+		self.client.force_login(self.role_a)
+		shown = {link.pk for link in self.client.get(reverse(self.changelist)).context["cl"].result_list}
+		self.assertNotIn(self.foreign_ms_link.pk, shown)
+		self.assertTrue(shown)
+		# Django answers an object outside the queryset with a redirect, never its content.
+		self.assertEqual(self.client.get(self.change_url(self.foreign_ms_link)).status_code, 302)
+		self.assertEqual(self.client.post(self.change_url(self.foreign_ms_link), {"suppressed": "on"}).status_code, 302)
+		self.foreign_ms_link.refresh_from_db()
+		self.assertFalse(self.foreign_ms_link.suppressed)
+		# The other organisation's own editor sees theirs, and none of ours.
+		self.client.force_login(self.role_c)
+		own = {link.pk for link in self.client.get(reverse(self.changelist)).context["cl"].result_list}
+		self.assertEqual(
+			own, set(MedicineSubjectLink.objects.filter(subject=self.foreign_subject).values_list("pk", flat=True))
+		)
+		self.assertIn(self.foreign_ms_link.pk, own)
+
+	def test_the_subject_filter_offers_only_the_users_organisations_subjects(self):
+		self.client.force_login(self.role_a)
+		response = self.client.get(reverse(self.changelist))
+		spec = next(s for s in response.context["cl"].filter_specs if "subject" in str(s.title).lower())
+		offered = {pk for pk, _ in spec.lookup_choices if pk is not None}
+		self.assertIn(self.ms.pk, offered)
+		self.assertIn(self.team_b_subject.pk, offered)
+		self.assertNotIn(self.foreign_subject.pk, offered)
+
+	def test_the_list_shows_the_ema_status_and_filters_by_suppressed(self):
+		self.ms_link.suppressed = True
+		self.ms_link.save()
+		self.client.force_login(self.role_a)
+		response = self.client.get(reverse(self.changelist), {"suppressed__exact": "1"})
+		self.assertEqual({link.pk for link in response.context["cl"].result_list}, {self.ms_link.pk})
+		self.assertContains(response, "Authorised")
+
+	def test_superuser_sees_every_link(self):
+		self.client.force_login(self.superuser)
+		response = self.client.get(reverse(self.changelist))
+		self.assertEqual(response.context["cl"].result_count, MedicineSubjectLink.objects.count())
+
+	def test_nobody_adds_or_deletes_from_this_page(self):
+		self.client.force_login(self.superuser)
+		self.assertEqual(self.client.get(reverse("admin:gregory_medicinesubjectlink_add")).status_code, 403)
+		url = reverse("admin:gregory_medicinesubjectlink_delete", args=[self.ms_link.pk])
+		self.assertEqual(self.client.get(url).status_code, 403)
+		self.assertEqual(self.client.post(url, {"post": "yes"}).status_code, 403)
+		self.assertTrue(MedicineSubjectLink.objects.filter(pk=self.ms_link.pk).exists())
+		# The role has no delete permission either, so there is no delete action.
+		self.client.force_login(self.role_a)
+		response = self.client.get(reverse(self.changelist))
+		self.assertNotIn("delete_selected", dict(response.context["action_form"].fields["action"].choices))

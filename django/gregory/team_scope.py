@@ -16,7 +16,8 @@ What "belongs to a team" means per model:
 - Sources, subjects, team categories and prediction run logs have a ``team``.
 - Rows that hang off content (site content, trial organisation content,
   patent-trial links) follow their article, trial or patent.
-- Medicine-category links follow their category's team.
+- Medicine-category links follow their category's team, and medicine-subject links
+  their subject's team.
 
 Superusers edit everything. A staff user on no active team edits nothing.
 """
@@ -52,6 +53,7 @@ def team_editable(user, queryset):
 		ArticleSiteContent,
 		Articles,
 		MedicineCategoryAssignment,
+		MedicineSubjectLink,
 		PatentSiteContent,
 		PatentTrialLink,
 		Patents,
@@ -83,6 +85,8 @@ def team_editable(user, queryset):
 		return queryset.filter(patent__in=team_editable(user, Patents.objects.all()))
 	if model is MedicineCategoryAssignment:
 		return queryset.filter(teamcategory__team__in=team_ids)
+	if model is MedicineSubjectLink:
+		return queryset.filter(subject__team__in=team_ids)
 	try:
 		model._meta.get_field("team")
 	except FieldDoesNotExist:
