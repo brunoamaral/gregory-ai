@@ -3055,9 +3055,10 @@ paths:
         must all be in the editor''s site scope (404 otherwise) and belong to one
         team, which becomes the category''s team. An automatic category needs at least
         one term; the next pipeline run matches every article and trial against it,
-        so it starts empty. The slug defaults to the slugified name and is unique
-        across every team: a taken slug is 409, with the holder''s `category_id` when
-        that category is in scope. Recorded under the editor''s name.'
+        so it starts empty, but its EMA medicines are linked at once. The slug defaults
+        to the slugified name and is unique across every team: a taken slug is 409,
+        with the holder''s `category_id` when that category is in scope. Recorded
+        under the editor''s name.'
       summary: Create a category (editor)
       parameters:
       - in: query
@@ -3355,7 +3356,8 @@ paths:
         editor''s site scope, since the change shows wherever the category does: 404
         when none is, 403 when only some are. A change to terms, excluded terms, subjects
         or `match_scope` makes the next pipeline run re-match all content for the
-        category. Recorded under the editor''s name.'
+        category, and a change to terms, excluded terms, modality or subjects links
+        its EMA medicines at once. Recorded under the editor''s name.'
       summary: Change a category (editor)
       parameters:
       - in: query

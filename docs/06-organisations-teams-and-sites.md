@@ -171,7 +171,7 @@ The admin code above decides *which rows* a staff user sees and which of those t
 
 | Editors can | Models |
 |:------------|:-------|
-| View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links |
+| View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links. Medicine–subject links (the medicines approved for a subject's condition; they only suppress or restore one, from the *Medicine subject links* page) |
 | View, add and change | Per-site takeaways and summaries (articles, patents), trial organisation content, subject relevance |
 | View, add, change and delete | Category assignments (articles, trials, patents), medicine–category links, categories |
 | View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms, EMA medicines and their events (shared reference data). The read-only rows inside the article, trial and patent pages |

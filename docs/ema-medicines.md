@@ -103,19 +103,29 @@ seen, and **observed** when a later sync sees a difference.
 
 The unique constraint on (medicine, kind, date) makes repeating a sync safe.
 
-## Matching medicines to categories
+## Matching medicines to categories and subjects
 
 ```bash
 docker exec gregory python manage.py match_medicines
 docker exec gregory python manage.py match_medicines --category 49 --dry-run
+docker exec gregory python manage.py match_medicines --subject 13 --dry-run
 ```
 
-`match_medicines` re-matches every category against every medicine, then adds, removes and
-relabels links so they agree with the rule below. It runs at the end of every
-`sync_ema_medicines` that wrote something, and as pipeline step 7c, after
-`rebuild_categories` has picked up category edits. About 2,400 products against a few
-hundred categories takes seconds, so there is no incremental window. `--category ID`
-matches one category; `--dry-run` reports and writes nothing.
+`match_medicines` runs three passes, in this order, and adds, removes and relabels rows so
+they agree with the rules below:
+
+1. **Groups.** Copies of one medicine point at their lead (see
+   [Grouping copies of a medicine](#grouping-copies-of-a-medicine)).
+2. **Categories.** Every automatic category against every medicine.
+3. **Subjects.** Every subject with EMA therapeutic areas against every medicine (see
+   [Subject links](#subject-links)).
+
+It runs at the end of every `sync_ema_medicines` that wrote something, and as pipeline step
+7c, after `rebuild_categories` has picked up category edits. About 2,400 products against a
+few hundred categories takes seconds, so there is no incremental window. `--category ID`
+runs the category pass for that one category, and `--subject ID` the subject pass for that
+one subject; each skips the other passes, and the two can't be combined. `--dry-run` reports
+and writes nothing in any pass.
 
 ### The rule
 
@@ -141,6 +151,12 @@ editor adds by hand):
    only when one of its therapeutic areas starts with one of those headings, ignoring case.
    `Multiple Sclerosis` therefore covers `Multiple Sclerosis, Relapsing-Remitting` but not
    `Amyotrophic Lateral Sclerosis`.
+6. **Diagnostics.** A product whose ATC code starts with `V04` (diagnostic agents), `V08`
+   (contrast media) or `V09` (diagnostic radiopharmaceuticals) never matches. We don't track
+   diagnostics: in the Alzheimer's and Parkinson's areas that rules out Neuraceq, Vizamyl,
+   DaTSCAN, Striascan and Celsunax. An automatic link to a diagnostic that already exists is
+   removed on the next run, like any link that no longer matches; manual links are never
+   touched. A new product with no ATC code yet isn't caught until EMA assigns one.
 
 The disease check is why sildenafil under an MS category does not link Viagra, and why a
 CAR-T category on an MS subject links nothing: EMA approved those products for other
@@ -156,6 +172,56 @@ Subject areas are filled in by hand, as the subjects' names vary between teams. 
 values: `Multiple Sclerosis` for MS-like subjects, `Alzheimer Disease` and `Dementia` for
 Alzheimer's, `Parkinson Disease` for Parkinson's.
 
+### Linking when a category is saved
+
+A category edit takes effect straight away; an editor doesn't wait for the pipeline. When
+an **automatic** category is created, or one of the fields the rule reads changes (terms,
+excluded terms, subjects, type, modality, EMA substance patterns, *Include EMA combination
+products*), its medicines are linked as part of the save. That covers the category form in
+the admin (the admin reports "N medicines linked", and a failure shows a warning that the
+pipeline will catch up) and the editor API behind the MCP `create_category` and
+`update_category` tools. A failure never fails the save, and a manual category is skipped.
+The links the save creates record no history, as with the pipeline's; a link it removes is recorded under the editor who saved. Changing *modality* from the
+categories list page, rather than the category's own form, waits for the next pipeline run.
+
+### Subject links
+
+A medicine is also linked to the **subjects** whose condition it is approved for, with no
+category needed. For every subject with *EMA therapeutic areas*, each non-diagnostic product
+with a therapeutic area starting with one of them (same prefix rule as the
+[disease check](#disease-check)) gets a row in `medicines_subjects`, with the matching area
+in `matched_on`. Generics, biosimilars and grouped copies are linked too. A subject without
+areas is a research area, not a condition, and gets no links; clearing a subject's areas
+removes its links on the next run.
+
+An editor takes a medicine that doesn't fit off a subject from the **Medicine subject links**
+page in the admin: filter by subject, select the rows and run *Suppress selected links* (or
+open one and tick *suppressed*). *Restore selected suppressed links* puts it back. The
+change is recorded under the editor's name. The Editor role can change this page's rows, but
+not the Subject page, which has the same list under *Medicines (EMA) approved for this
+condition* for superusers and anyone given Subject change permission. Only *suppressed* is
+editable either way: rows can't be added (the matcher derives them) or deleted (a deleted
+row would come back on the next run). Staff see their organisations' links and change only
+their own teams'. A suppressed link is never recreated, changed or restored. The two
+suppressions are independent: suppressing a subject link doesn't remove the medicine from a
+category of that subject, and the reverse.
+
+### Grouping copies of a medicine
+
+EMA often authorises one medicine under several names (Exelon, Prometax and Rivastigmine
+Sandoz). Products that share their sorted `substances` **and** the same `indication` are
+copies. The indication is compared lowercased, with the product's own name removed
+(indications name their product: "Exelon is indicated for ...") and punctuation and
+whitespace collapsed. One product in each group leads: an `Authorised` product first, then the
+earliest `authorisation_date`, then the lowest EMA product number. The other products get
+`grouped_under` set to the lead; leads and singletons get none.
+
+Substances alone would merge different medicines (Avonex and Rebif, Tecfidera and Skilarence),
+so the indication has to match too. Generics, biosimilars, products never authorised (a refused
+or withdrawn application is its own news) and products with no indication aren't grouped. The
+rule is deliberately conservative: it only joins products whose texts are the same, so
+Memantine Merz (a salt) stays apart from Ebixa. Groups are re-derived on every run.
+
 ### What the matcher touches
 
 | Link | Matcher does |
@@ -164,7 +230,10 @@ Alzheimer's, `Parkinson Disease` for Parkinson's.
 | Manual | Nothing. It skips every rule, the disease check included, so an editor can attach an off-label medicine on purpose |
 | Suppressed | Nothing. Never recreated, changed or restored, even if the medicine stops matching |
 
-The matcher's writes are pipeline writes: no editor is recorded, as with `rebuild_categories`.
+The same holds for subject links: a non-suppressed row is created, deleted and relabelled to
+agree with the subject's areas, and a suppressed row is never touched.
+
+The matcher's creations and relabels are bulk writes and record no history, as with `rebuild_categories`. A removal is recorded: it names whoever made the request that ran the matcher (an admin or editor-API category save) and nobody for a pipeline run.
 
 ### Fixing links
 
@@ -181,8 +250,8 @@ Editors of the category's team work from the category's page in the admin, under
 *Medicine category assignments* in the admin lists every link, filterable by *suppressed*
 and source, with *Suppress selected links* and *Restore selected suppressed links* actions
 for bulk work. Staff see their organisations' links and change only their own teams'. A
-medicine's own page lists its links to the user's teams' categories, and the medicine list
-can be filtered to medicines with or without a link.
+medicine's own page lists its links to the user's teams' categories and subjects (see
+[In the admin](#in-the-admin)).
 
 Editors get these permissions from the Editor role: full access to medicine–category links,
 and view-only access to medicines and their events. Run `setup_roles` after deploying a
@@ -298,9 +367,23 @@ and curate medicines on the sites that have them.
 *Medicines* in the Django admin lists every medicine with its status, opinion status,
 authorisation date and flags, filterable by status and the flags and searchable by name,
 INN, active substance and product number. A medicine's page shows its events, newest first,
-its links to the user's teams' categories, and a link to its EPAR page on EMA's site. It is
-read-only, and every staff user can browse it, because the data is public and unscoped. The
-category links are the exception: they belong to teams, so they are scoped (see above).
+its links to the user's teams' categories and subjects, its group (the lead it is a copy of,
+or the copies it leads), and a link to its EPAR page on EMA's site. It is read-only, and every
+staff user can browse it, because the data is public and unscoped. The category and subject
+links are the exception: they belong to teams, so they are scoped (see above).
+
+Two filters on the list find the medicines nobody follows yet:
+
+- **Tracked**: *Tracked (in a category)* keeps medicines with a live link to one of your
+  teams' categories; *Untracked* keeps the rest.
+- **Condition**: medicines approved for one subject's condition. It offers the subjects with
+  EMA therapeutic areas that your teams own.
+
+To find the candidates for a new category, set **Condition** to the subject (say
+Alzheimer's) and **Tracked** to *Untracked*. When one is worth following, create or edit a
+category for it: give it an intervention modality (or EMA substance patterns) and the
+matching term, and the medicine is linked as soon as you save (see
+[Linking when a category is saved](#linking-when-a-category-is-saved)).
 
 ## Source and attribution
 

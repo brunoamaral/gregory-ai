@@ -71,6 +71,10 @@ EDITOR_PERMISSIONS = {
 	# EMA's medicines and their events: written only by sync_ema_medicines.
 	"gregory.medicine": VIEW,
 	"gregory.medicineevent": VIEW,
+	# The medicines approved for a subject's condition. Derived by match_medicines, so
+	# editors only suppress or restore one, from the Medicine subject links page; they
+	# can't add or delete a link, and the Subject page stays a superuser's.
+	"gregory.medicinesubjectlink": VIEW_CHANGE,
 }
 
 FORBIDDEN_APPS = frozenset(

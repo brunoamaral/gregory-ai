@@ -18,6 +18,14 @@ The rule, per category:
 5. Disease check. ``areas`` is the union of ``ema_therapeutic_areas`` over the category's
    subjects. When it is empty the check is skipped; otherwise one of the product's
    therapeutic areas must start with one of them, ignoring case.
+6. Diagnostics (ATC codes starting V04, V08 or V09) never match a category.
+
+The same module holds the two other rules ``match_medicines`` applies:
+
+- ``subject_match``: a subject's own EMA areas against a product, with no category. It
+  uses the same prefix rule as the disease check above, and skips diagnostics.
+- ``group_key`` and ``group_lead``: products that share their substances and their
+  indication are copies of one medicine; one leads and the others point at it.
 """
 
 import re
@@ -40,10 +48,25 @@ INTERVENTION_MODALITIES = frozenset(
 # matched_on is a CharField(255).
 MATCHED_ON_MAX = 255
 
+# ATC groups of diagnostics: V04 diagnostic agents, V08 contrast media, V09 diagnostic
+# radiopharmaceuticals. We don't track diagnostics.
+DIAGNOSTIC_ATC_PREFIXES = ("V04", "V08", "V09")
+
+# Everything that is not a letter, digit or underscore: replaced by a space when comparing
+# indications, so "contra-indication" and "contra indication" read the same.
+_PUNCTUATION = re.compile(r"[^\w\s]")
+
 
 def normalise(text):
 	"""Lowercase and collapse whitespace, the form substances are stored in."""
 	return " ".join((text or "").lower().split())
+
+
+def is_diagnostic(medicine):
+	"""Whether ``medicine`` is a diagnostic: its ATC code starts with V04, V08 or V09.
+
+	A product with no ATC code yet (new products often have none) isn't caught."""
+	return (medicine.atc_code or "").upper().startswith(DIAGNOSTIC_ATC_PREFIXES)
 
 
 def category_patterns(category):
@@ -130,6 +153,8 @@ def product_matches(category, medicine, areas):
 	``"<pattern>"`` when the check was skipped. It is what ``matched_on`` stores, so an
 	editor can see why a link exists.
 	"""
+	if is_diagnostic(medicine):
+		return None
 	patterns = category_patterns(category)
 	if not patterns:
 		return None
@@ -156,6 +181,64 @@ def product_matches(category, medicine, areas):
 	if area is None:
 		return None
 	return f"{matched} · {area}"[:MATCHED_ON_MAX]
+
+
+def subject_match(areas, medicine):
+	"""The subject area that ``medicine`` was approved for, or ``None`` if it wasn't.
+
+	``areas`` is the subject's ``ema_therapeutic_areas``. Same prefix rule as the disease
+	check of a category, with no pattern: any product approved for the area matches, except
+	a diagnostic. An empty ``areas`` matches nothing, since a subject without areas is a
+	research area, not a condition. The area is what ``matched_on`` stores.
+	"""
+	if not areas or is_diagnostic(medicine):
+		return None
+	area = _matching_area(areas, medicine)
+	if area is None:
+		return None
+	return area.strip()[:MATCHED_ON_MAX]
+
+
+def _indication_text(medicine):
+	"""The product's indication in a comparable form: lowercase, the product's own name
+	removed (indications name their product: "Exelon is indicated for ..."), punctuation
+	turned into spaces and whitespace collapsed."""
+	text = normalise(medicine.indication)
+	name = normalise(medicine.name)
+	if name:
+		text = text.replace(name, " ")
+	return " ".join(_PUNCTUATION.sub(" ", text).split())
+
+
+def group_key(medicine):
+	"""The key products must share to be copies of one medicine, or ``None`` when the
+	product is never grouped.
+
+	The key is the sorted substances plus the cleaned indication. Substances alone would
+	merge different medicines (Avonex and Rebif, Tecfidera and Skilarence); the same
+	substances with the same indication are one medicine sold under several names.
+	Generics and biosimilars keep their own flags and aren't grouped, nor is a product that
+	was never authorised (a refusal or a withdrawn application is its own news), nor one
+	with no indication, since an empty text would group unrelated products.
+	"""
+	if medicine.generic or medicine.biosimilar or not medicine.authorisation_date:
+		return None
+	indication = _indication_text(medicine)
+	if not indication:
+		return None
+	substances = tuple(sorted(normalise(s) for s in medicine.substances))
+	return (substances, indication)
+
+
+def group_lead(products):
+	"""The lead of a group of products with the same ``group_key``.
+
+	An authorised product (status exactly ``Authorised``) leads over a withdrawn one, then
+	the earliest authorisation, then the lowest EMA product number."""
+	return min(
+		products,
+		key=lambda p: (p.status != "Authorised", p.authorisation_date, p.ema_product_number),
+	)
 
 
 def category_areas(category):
