@@ -558,11 +558,13 @@ class Subject(models.Model):
 		blank=True,
 		verbose_name="EMA therapeutic areas (comma separated)",
 		help_text=(
-			"MeSH headings as EMA writes them, e.g. Multiple Sclerosis. A medicine links to this "
-			"subject's categories only when EMA approved it for an area starting with one of "
-			"these, ignoring case. Suggestions: Multiple Sclerosis; Alzheimer Disease, Dementia; "
-			"Parkinson Disease. Leave empty when the subject has no EMA equivalent: its "
-			"categories then link every medicine that matches by substance."
+			"MeSH headings as EMA writes them, e.g. Multiple Sclerosis. Every medicine EMA "
+			"approved for an area starting with one of these, ignoring case, is linked to this "
+			"subject (diagnostics aside), and a medicine links to this subject's categories only "
+			"when it was approved for one of them. Suggestions: Multiple Sclerosis; Alzheimer "
+			"Disease, Dementia; Parkinson Disease. Leave empty when the subject has no EMA "
+			"equivalent: it then lists no medicines of its own, and its categories link every "
+			"medicine that matches by substance."
 		),
 	)
 	auto_predict = models.BooleanField(
@@ -2884,8 +2886,9 @@ class Medicine(models.Model):
 	"""One EMA centrally authorised human medicine, keyed on its EMA product number.
 
 	Global reference data like PublicationType: no organisation, team or subject.
-	Written only by sync_ema_medicines from EMA's public JSON export; scoping
-	comes later from the categories a medicine is linked to. Not a row per
+	The row is written by sync_ema_medicines from EMA's public JSON export, apart from
+	``grouped_under``, which match_medicines derives. Scoping comes from the categories
+	a medicine is linked to and the subjects whose EMA areas it matches. Not a row per
 	substance: one substance can be several products (an originator, a
 	biosimilar, a refused application), each with its own status and dates."""
 
@@ -2975,6 +2978,14 @@ class Medicine(models.Model):
 		through="MedicineCategoryAssignment",
 		related_name="medicines",
 		blank=True,
+	)
+	grouped_under = models.ForeignKey(
+		"self",
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="grouped_products",
+		help_text="The lead product of this product's group: same substances and the same indication. Set by match_medicines.",
 	)
 
 	def __str__(self):
@@ -3118,6 +3129,49 @@ class MedicineCategoryAssignment(models.Model):
 		constraints = [
 			models.UniqueConstraint(
 				fields=["medicine", "teamcategory"], name="uniq_medicine_category"
+			)
+		]
+
+
+class MedicineSubjectLink(models.Model):
+	"""A medicine EMA approved for one of a subject's conditions.
+
+	Derived data written by match_medicines from ``Subject.ema_therapeutic_areas``: no
+	category is needed. An editor who finds that a medicine doesn't fit the subject sets
+	``suppressed`` (the Subject page); the matcher never recreates, changes or restores a
+	suppressed link. Editors never add or delete a row, since a deleted row would come back
+	on the next run."""
+
+	medicine = models.ForeignKey(
+		Medicine, on_delete=models.CASCADE, related_name="subject_links"
+	)
+	subject = models.ForeignKey(
+		"Subject", on_delete=models.CASCADE, related_name="medicine_links"
+	)
+	matched_on = models.CharField(
+		max_length=255,
+		blank=True,
+		help_text="The subject's EMA therapeutic area that matched this medicine.",
+	)
+	suppressed = models.BooleanField(
+		default=False,
+		help_text="Set by an editor when the medicine doesn't fit the subject's condition. The matcher never recreates, changes or restores a suppressed link.",
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	# Records the editor who suppressed or restored a link. match_medicines creates rows with
+	# bulk_create, which records nothing, and removes them with a queryset delete, whose
+	# history row names no editor.
+	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
+
+	def __str__(self):
+		return f"{self.medicine_id} → {self.subject_id}"
+
+	class Meta:
+		db_table = "medicines_subjects"
+		verbose_name = "medicine subject link"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["medicine", "subject"], name="uniq_medicine_subject"
 			)
 		]
 

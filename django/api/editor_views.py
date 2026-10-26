@@ -26,6 +26,8 @@ grant with ``can_manage_sources`` (``IsSourceManager``) for every method, and ha
 their own throttles. Their checks live in ``gregory.source_checks``.
 """
 
+import logging
+
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
@@ -119,6 +121,7 @@ from gregory.models import (
 	TeamCategory,
 	Trials,
 )
+from gregory.services.medicine_linking import link_category
 from gregory.utils.patent_numbers import publication_number_q
 from gregory.visibility import site_scope_subject_ids
 from mcpauth.editor_auth import (
@@ -127,6 +130,8 @@ from mcpauth.editor_auth import (
 	authenticate_editor,
 	check_service_credential,
 )
+
+logger = logging.getLogger(__name__)
 
 #: Preferred order when picking a trial's primary identifier for a manual link.
 PRIMARY_IDENTIFIER_KEYS = ("nct", "euct", "eudract", "euctr", "isrctn", "ctis")
@@ -727,6 +732,23 @@ class EditorArticleTrialDetailView(_EditorView):
 # --- Write: categories -------------------------------------------------
 
 
+# The category fields the EMA medicine rule reads (gregory/services/medicine_matching.py),
+# among the ones this API can change; the subjects count too. medicine_terms and
+# medicine_include_combinations are admin-only.
+_MEDICINE_MATCHING_FIELDS = frozenset({"category_terms", "category_exclude_terms", "modality"})
+
+
+def _link_medicines(category):
+	"""Link an automatic category's EMA medicines now, so the editor's change shows at
+	once instead of at the next pipeline run. Runs after the editor's own transaction, so a
+	failure here can never undo or fail the category write: it is logged and the pipeline
+	catches up. A manual category has no automatic links, so this does nothing for one."""
+	try:
+		link_category(category)
+	except Exception:
+		logger.exception("Could not link EMA medicines for category %s", category.pk)
+
+
 def _category_payload(category):
 	updated_by, updated_at = _last_change(TeamCategory.history, id=category.pk)
 	return {
@@ -782,7 +804,7 @@ _CATEGORY_WRITE_ERRORS = {
 			"in the editor's site scope (404 otherwise) and belong to one team, which "
 			"becomes the category's team. An automatic category needs at least one "
 			"term; the next pipeline run matches every article and trial against it, "
-			"so it starts empty. The slug defaults to the slugified name and is "
+			"so it starts empty, but its EMA medicines are linked at once. The slug defaults to the slugified name and is "
 			"unique across every team: a taken slug is 409, with the holder's "
 			"`category_id` when that category is in scope. Recorded under the "
 			"editor's name."
@@ -803,7 +825,9 @@ _CATEGORY_WRITE_ERRORS = {
 			"Every subject of the category must be in the editor's site scope, "
 			"since the change shows wherever the category does: 404 when none is, "
 			"403 when only some are. A change to terms, excluded terms, subjects or `match_scope` "
-			"makes the next pipeline run re-match all content for the category. "
+			"makes the next pipeline run re-match all content for the category, and a "
+			"change to terms, excluded terms, modality or subjects links its EMA "
+			"medicines at once. "
 			"Recorded under the editor's name."
 		),
 		request=EditorCategoryUpdateSerializer,
@@ -848,6 +872,8 @@ class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
 			# Two creates with the same slug at once: the loser gets the same 409.
 			self._refuse_taken_slug(slug)
 			raise
+		# Outside editing_as: the links it creates are bulk-created, so they record no history.
+		_link_medicines(category)
 		return Response(_category_payload(category), status=status.HTTP_201_CREATED)
 
 	def _refuse_taken_slug(self, slug):
@@ -905,9 +931,14 @@ class EditorCategoryViewSet(_CategoryScopeMixin, CategoryViewSet):
 				changed.append("category_exclude_terms")
 			if changed:
 				category.save(update_fields=changed)
-			if subjects is not None and {s.id for s in subjects} != {s.id for s in category.subjects.all()}:
+			subjects_changed = subjects is not None and {s.id for s in subjects} != {
+				s.id for s in category.subjects.all()
+			}
+			if subjects_changed:
 				category.subjects.set(subjects)
 		category = TeamCategory.objects.prefetch_related("subjects").get(pk=category.pk)
+		if subjects_changed or _MEDICINE_MATCHING_FIELDS & set(changed):
+			_link_medicines(category)
 		return Response(_category_payload(category))
 
 

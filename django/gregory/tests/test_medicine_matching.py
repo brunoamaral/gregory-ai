@@ -7,27 +7,40 @@ Nothing touches EMA.
 """
 
 import json
+import os
+from collections import defaultdict
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import skipUnless
 
 from django.test import SimpleTestCase, TestCase
 from organizations.models import Organization
 
 from gregory.models import CategoryModality, Medicine, Subject, Team, TeamCategory
+from gregory.services.medicine_linking import group_medicines
 from gregory.services.medicine_matching import (
+	MATCHED_ON_MAX,
 	category_areas,
 	category_patterns,
+	group_key,
+	group_lead,
+	is_diagnostic,
 	product_matches,
+	subject_match,
 	substance_matches,
 )
 from gregory.utils.ema import is_human, parse_row
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ema" / "medicines-base.json"
+UNTRACKED_FIXTURE = Path(__file__).parent / "fixtures" / "ema" / "medicines-untracked.json"
 MS = ["Multiple Sclerosis"]
+ALZHEIMERS = ["Alzheimer Disease", "Dementia"]
 
 
-def medicines():
+def medicines(fixture=FIXTURE):
 	"""The human fixture rows as unsaved Medicine objects, by name."""
-	with open(FIXTURE) as handle:
+	with open(fixture) as handle:
 		rows = json.load(handle)["data"]
 	return {
 		row["name_of_medicine"]: Medicine(**parse_row(row).model_values())
@@ -37,6 +50,8 @@ def medicines():
 
 
 MEDICINES = medicines()
+# Real rows for the subject and group rules (Alzheimer's, Parkinson's, interferons).
+UNTRACKED = medicines(UNTRACKED_FIXTURE)
 
 
 def category(terms=(), modality=CategoryModality.SMALL_MOLECULE, **kwargs):
@@ -280,3 +295,241 @@ class CategoryAreasTests(TestCase):
 		cat = TeamCategory.objects.create(team=team, category_name="Y", category_terms=["y"])
 		cat.subjects.add(subject)
 		self.assertEqual(category_areas(cat), [])
+
+
+class DiagnosticTests(SimpleTestCase):
+	def test_v04_v08_and_v09_are_diagnostics(self):
+		for code in ("V04CX01", "V08AB02", "V09AX06", "v09ab03"):
+			self.assertTrue(is_diagnostic(SimpleNamespace(atc_code=code)), code)
+
+	def test_other_atc_groups_and_no_code_are_not(self):
+		for code in ("N06DX04", "L03AB07", "V03AB01", "V10XX01", "", None):
+			self.assertFalse(is_diagnostic(SimpleNamespace(atc_code=code)), code)
+
+	def test_the_real_imaging_agents_are_diagnostics(self):
+		self.assertTrue(is_diagnostic(UNTRACKED["Neuraceq"]))
+		self.assertTrue(is_diagnostic(UNTRACKED["DaTSCAN"]))
+		self.assertFalse(is_diagnostic(UNTRACKED["Leqembi"]))
+
+	def test_a_category_never_matches_a_diagnostic(self):
+		cat = category(medicine_terms=["florbetaben*"])
+		neuraceq = UNTRACKED["Neuraceq"]
+		self.assertIsNone(product_matches(cat, neuraceq, ALZHEIMERS))
+		# The same product with no ATC code yet: the pattern and the disease check match,
+		# so it is the diagnostic rule that kept it out.
+		neuraceq.atc_code = ""
+		try:
+			self.assertEqual(product_matches(cat, neuraceq, ALZHEIMERS), "florbetaben* · Alzheimer Disease")
+		finally:
+			neuraceq.atc_code = "V09AX06"
+
+
+class SubjectMatchTests(SimpleTestCase):
+	def test_a_product_approved_for_the_area_matches_with_that_area(self):
+		self.assertEqual(subject_match(ALZHEIMERS, UNTRACKED["Leqembi"]), "Alzheimer Disease")
+
+	def test_the_first_listed_area_that_matches_wins(self):
+		# Exelon is listed for Dementia, Alzheimer Disease and Parkinson Disease.
+		self.assertEqual(subject_match(["Dementia", "Alzheimer Disease"], UNTRACKED["Exelon"]), "Dementia")
+		self.assertEqual(subject_match(["Alzheimer Disease", "Dementia"], UNTRACKED["Exelon"]), "Alzheimer Disease")
+
+	def test_the_area_is_a_case_insensitive_prefix(self):
+		self.assertEqual(subject_match(["parkinson"], UNTRACKED["Exelon"]), "parkinson")
+		self.assertEqual(subject_match(MS, UNTRACKED["Rebif"]), "Multiple Sclerosis")
+
+	def test_a_product_for_another_disease_does_not_match(self):
+		self.assertIsNone(subject_match(MS, UNTRACKED["Leqembi"]))
+		# Skilarence is dimethyl fumarate for psoriasis, not MS.
+		self.assertIsNone(subject_match(MS, UNTRACKED["Skilarence"]))
+
+	def test_a_diagnostic_never_matches(self):
+		self.assertIsNone(subject_match(ALZHEIMERS, UNTRACKED["Neuraceq"]))
+		self.assertIsNone(subject_match(["Parkinson Disease"], UNTRACKED["DaTSCAN"]))
+
+	def test_no_areas_matches_nothing(self):
+		self.assertIsNone(subject_match([], UNTRACKED["Leqembi"]))
+		self.assertIsNone(subject_match(["", "  "], UNTRACKED["Leqembi"]))
+
+	def test_refused_and_withdrawn_applications_still_match(self):
+		# The read side hides generics and copies; the link is made anyway.
+		self.assertEqual(subject_match(ALZHEIMERS, UNTRACKED["Aduhelm"]), "Alzheimer Disease")
+		self.assertEqual(subject_match(ALZHEIMERS, UNTRACKED["Acrescent"]), "Alzheimer Disease")
+
+	def test_the_label_fits_matched_on(self):
+		product = SimpleNamespace(atc_code="", therapeutic_areas=["x" * 300])
+		self.assertEqual(len(subject_match(["x" * 300], product)), MATCHED_ON_MAX)
+
+
+def product(name, indication, substances=("memantine",), **kwargs):
+	values = dict(
+		name=name,
+		indication=indication,
+		substances=list(substances),
+		generic=False,
+		biosimilar=False,
+		authorisation_date=date(2002, 5, 17),
+		status="Authorised",
+		ema_product_number="EMEA/H/C/000001",
+	)
+	values.update(kwargs)
+	return SimpleNamespace(**values)
+
+
+class GroupKeyTests(SimpleTestCase):
+	def test_the_rivastigmine_copies_share_a_key(self):
+		names = ("Exelon", "Prometax", "Rivastigmine Sandoz", "Rivastigmine 1 A Pharma", "Rivastigmine Hexal")
+		keys = {group_key(UNTRACKED[name]) for name in names}
+		self.assertEqual(len(keys), 1)
+		self.assertNotIn(None, keys)
+
+	def test_memantine_originator_and_copy_share_a_key(self):
+		self.assertEqual(group_key(UNTRACKED["Ebixa"]), group_key(UNTRACKED["Axura"]))
+
+	def test_a_salt_written_substance_stays_apart(self):
+		self.assertNotEqual(group_key(UNTRACKED["Ebixa"]), group_key(UNTRACKED["Memantine Merz"]))
+
+	def test_two_interferon_originators_stay_apart(self):
+		# Same substance, two companies, different indication texts.
+		self.assertEqual(UNTRACKED["Avonex"].substances, UNTRACKED["Rebif"].substances)
+		self.assertNotEqual(group_key(UNTRACKED["Avonex"]), group_key(UNTRACKED["Rebif"]))
+
+	def test_one_substance_for_two_diseases_stays_apart(self):
+		self.assertEqual(UNTRACKED["Tecfidera"].substances, UNTRACKED["Skilarence"].substances)
+		self.assertNotEqual(group_key(UNTRACKED["Tecfidera"]), group_key(UNTRACKED["Skilarence"]))
+
+	def test_interferon_beta_1b_copies_share_a_key(self):
+		self.assertEqual(group_key(UNTRACKED["Betaferon"]), group_key(UNTRACKED["Extavia"]))
+
+	def test_a_product_never_authorised_is_not_grouped(self):
+		self.assertIsNone(group_key(UNTRACKED["Aduhelm"]))
+		self.assertIsNone(group_key(UNTRACKED["Acrescent"]))
+
+	def test_generics_and_biosimilars_are_not_grouped(self):
+		self.assertIsNone(group_key(product("Zorvex", "Treats X.", generic=True)))
+		self.assertIsNone(group_key(product("Zorvex", "Treats X.", biosimilar=True)))
+
+	def test_an_empty_indication_is_never_grouped(self):
+		self.assertIsNone(group_key(product("Zorvex", "")))
+		# Nothing but the product's own name and punctuation is empty too.
+		self.assertIsNone(group_key(product("Axura", "Axura.")))
+
+	def test_the_products_own_name_is_removed_from_the_indication(self):
+		first = product("Exelon", "Exelon is indicated for mild dementia.")
+		second = product("Prometax", "Prometax is indicated for mild dementia.")
+		self.assertEqual(group_key(first), group_key(second))
+
+	def test_punctuation_case_and_spacing_do_not_separate_products(self):
+		first = product("Zorvex", "For  adults:  contra-indication, beta-blocker.")
+		second = product("Qinta", "for adults contra indication beta blocker")
+		self.assertEqual(group_key(first), group_key(second))
+
+	def test_different_substances_do_not_group_whatever_the_text(self):
+		self.assertNotEqual(
+			group_key(product("Zorvex", "Treats X.", substances=["memantine"])),
+			group_key(product("Qinta", "Treats X.", substances=["memantine hydrochloride"])),
+		)
+
+	def test_the_order_of_substances_does_not_matter(self):
+		self.assertEqual(
+			group_key(product("Zorvex", "Treats X.", substances=["a", "b"])),
+			group_key(product("Qinta", "Treats X.", substances=["b", "a"])),
+		)
+
+	def test_substances_are_compared_lowercased(self):
+		self.assertEqual(
+			group_key(product("Zorvex", "Treats X.", substances=["Memantine"])),
+			group_key(product("Qinta", "Treats X.", substances=["memantine"])),
+		)
+
+
+class GroupLeadTests(SimpleTestCase):
+	def test_an_authorised_product_leads_over_an_earlier_withdrawn_one(self):
+		withdrawn = product("Old", "x", status="Withdrawn", authorisation_date=date(1998, 1, 1))
+		authorised = product("New", "x", status="Authorised", authorisation_date=date(2010, 1, 1))
+		self.assertIs(group_lead([withdrawn, authorised]), authorised)
+		self.assertIs(group_lead([authorised, withdrawn]), authorised)
+
+	def test_the_earliest_authorisation_leads_among_equals(self):
+		later = product("Later", "x", authorisation_date=date(2012, 1, 1))
+		earlier = product("Earlier", "x", authorisation_date=date(2002, 1, 1))
+		self.assertIs(group_lead([later, earlier]), earlier)
+
+	def test_the_lowest_product_number_breaks_a_tie(self):
+		high = product("High", "x", ema_product_number="EMEA/H/C/000255")
+		low = product("Low", "x", ema_product_number="EMEA/H/C/000169")
+		self.assertIs(group_lead([high, low]), low)
+
+	def test_only_the_exact_word_authorised_counts_as_authorised(self):
+		odd = product("Odd", "x", status="authorised", authorisation_date=date(1990, 1, 1))
+		real = product("Real", "x", status="Authorised", authorisation_date=date(2010, 1, 1))
+		self.assertIs(group_lead([odd, real]), real)
+
+	def test_the_real_rivastigmine_group_is_led_by_exelon(self):
+		names = ("Prometax", "Rivastigmine Sandoz", "Rivastigmine 1 A Pharma", "Rivastigmine Hexal", "Exelon")
+		self.assertEqual(group_lead([UNTRACKED[name] for name in names]).name, "Exelon")
+
+	def test_the_real_memantine_group_is_led_by_ebixa(self):
+		self.assertEqual(group_lead([UNTRACKED["Axura"], UNTRACKED["Ebixa"]]).name, "Ebixa")
+
+	def test_a_withdrawn_betaferon_copy_does_not_lead(self):
+		self.assertEqual(UNTRACKED["Extavia"].status, "Withdrawn")
+		self.assertEqual(group_lead([UNTRACKED["Extavia"], UNTRACKED["Betaferon"]]).name, "Betaferon")
+
+
+# LOCAL ONLY. The full EMA export of 2026-10-25 lives in the gitignored specs/ folder, so
+# CI skips this test. Point EMA_FULL_EXPORT at another copy to run it elsewhere.
+FULL_EXPORT = Path(
+	os.environ.get(
+		"EMA_FULL_EXPORT",
+		"/Users/brunoamaral/Labs/gregory/specs/ema-medicines-refs/medicines-export-2026-10-25.json",
+	)
+)
+
+
+@skipUnless(FULL_EXPORT.is_file(), f"local-only: the full EMA export is not at {FULL_EXPORT}")
+class FullExportGroupingTests(SimpleTestCase):
+	"""The grouping rule on every real row of the 2026-10-25 export: 106 products fold into
+	78 groups. A count far from that means the key is wrong."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		with open(FULL_EXPORT) as handle:
+			rows = [row for row in json.load(handle)["data"] if is_human(row)]
+		cls.medicines = [
+			Medicine(pk=index, **parse_row(row).model_values()) for index, row in enumerate(rows, start=1)
+		]
+		by_key = defaultdict(list)
+		for medicine in cls.medicines:
+			key = group_key(medicine)
+			if key is not None:
+				by_key[key].append(medicine)
+		cls.groups = [products for products in by_key.values() if len(products) > 1]
+		cls.lead_of = {}
+		for products in cls.groups:
+			lead = group_lead(products)
+			for product_ in products:
+				cls.lead_of[product_.name] = lead.name
+
+	def test_106_products_fold_into_78_groups(self):
+		counts = group_medicines(self.medicines, dry_run=True)
+		self.assertEqual(counts["groups"], 78)
+		self.assertEqual(counts["grouped"], 106)
+		self.assertEqual(counts["changed"], 106)
+
+	def test_the_groups_in_our_subjects(self):
+		lead = self.lead_of
+		for name in ("Prometax", "Rivastigmine Sandoz", "Rivastigmine 1 A Pharma", "Rivastigmine Hexal"):
+			self.assertEqual(lead[name], "Exelon", name)
+		self.assertEqual(lead["Axura"], "Ebixa")
+		self.assertEqual(lead["Entacapone Orion"], "Comtan")
+		self.assertEqual(lead["Rasagiline ratiopharm"], "Azilect")
+		self.assertEqual(lead["Levodopa/Carbidopa/Entacapone Orion"], "Stalevo")
+		self.assertEqual(lead["Extavia"], "Betaferon")
+
+	def test_what_stays_apart(self):
+		grouped = set(self.lead_of)
+		for name in ("Avonex", "Rebif", "Tecfidera", "Skilarence", "Memantine Merz", "Sifrol", "Mirapexin"):
+			self.assertNotIn(name, grouped, name)
+		# Leads are in a group but lead themselves.
+		self.assertEqual(self.lead_of["Exelon"], "Exelon")

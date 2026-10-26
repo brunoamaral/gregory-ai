@@ -5,11 +5,14 @@
 - An editor on another team of the same organisation sees the inline read-only.
 - The links changelist suppresses and restores by saving each row, so history records the
   editor, and only on the editor's own teams' categories.
-- A medicine's page lists its category links scoped to the user's teams.
+- A medicine's page lists its category and subject links scoped to the user's teams.
+- The Tracked and Condition filters, the Subject page's medicine inline (only `suppressed`
+  is editable, no add, no delete) and linking a category's medicines when it is saved.
 """
 
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -19,16 +22,18 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from organizations.models import Organization
 
-from gregory.admin import MedicineCategoryAssignmentInline
+from gregory.admin import MedicineCategoryAssignmentInline, MedicineSubjectLinkInline
 from gregory.models import (
 	CategoryAssignmentSource,
 	CategoryModality,
 	Medicine,
 	MedicineCategoryAssignment,
+	MedicineSubjectLink,
 	Subject,
 	Team,
 	TeamCategory,
 )
+from gregory.services.medicine_linking import link_category, link_subject
 from gregory.tests.test_admin_subject_sources_inline import form_data
 
 User = get_user_model()
@@ -351,22 +356,22 @@ class MedicineAdminLinksTests(MedicineLinkAdminTestCase):
 		self.assertContains(response, "Ocrelizumab")
 		self.assertContains(response, "Foreign")
 
-	def test_the_linked_filter(self):
+	def test_the_tracked_filter(self):
 		self.client.force_login(self.editor_a)
 		url = reverse("admin:gregory_medicine_changelist")
-		linked = {m.name for m in self.client.get(url, {"has_link": "yes"}).context["cl"].result_list}
+		linked = {m.name for m in self.client.get(url, {"tracked": "yes"}).context["cl"].result_list}
 		# Team A's own categories link Ocrevus and Viagra; Tysabri is Team B's.
 		self.assertEqual(linked, {"Ocrevus", "Viagra"})
-		unlinked = {m.name for m in self.client.get(url, {"has_link": "no"}).context["cl"].result_list}
+		unlinked = {m.name for m in self.client.get(url, {"tracked": "no"}).context["cl"].result_list}
 		self.assertNotIn("Ocrevus", unlinked)
 		self.assertIn("Tysabri", unlinked)
 
-	def test_a_suppressed_link_does_not_count_as_linked(self):
+	def test_a_suppressed_link_does_not_count_as_tracked(self):
 		self.automatic.suppressed = True
 		self.automatic.save()
 		self.client.force_login(self.editor_a)
 		url = reverse("admin:gregory_medicine_changelist")
-		linked = {m.name for m in self.client.get(url, {"has_link": "yes"}).context["cl"].result_list}
+		linked = {m.name for m in self.client.get(url, {"tracked": "yes"}).context["cl"].result_list}
 		self.assertEqual(linked, {"Viagra"})
 
 	def test_subject_form_exposes_the_ema_areas(self):
@@ -380,3 +385,363 @@ class MedicineAdminLinksTests(MedicineLinkAdminTestCase):
 		response = self.client.get(self.change_url())
 		self.assertContains(response, "medicine_terms")
 		self.assertContains(response, "medicine_include_combinations")
+
+
+class SubjectLinkAdminTestCase(MedicineLinkAdminTestCase):
+	"""Subjects with EMA areas on three teams, their links made by the matcher's own function."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.ms = Subject.objects.get(subject_slug="ms")
+		cls.ms.ema_therapeutic_areas = ["Multiple Sclerosis"]
+		cls.ms.save()
+		cls.team_b_subject = Subject.objects.create(
+			subject_name="Team B condition", subject_slug="b-condition", team=cls.team_b,
+			ema_therapeutic_areas=["Multiple Sclerosis"],
+		)
+		cls.foreign_subject = Subject.objects.create(
+			subject_name="Foreign condition", subject_slug="f-condition", team=cls.team_c,
+			ema_therapeutic_areas=["Multiple Sclerosis"],
+		)
+		cls.no_areas = Subject.objects.create(subject_name="Research area", subject_slug="research", team=cls.team_a)
+		for subject in (cls.ms, cls.team_b_subject, cls.foreign_subject, cls.no_areas):
+			link_subject(subject)
+		cls.ms_link = MedicineSubjectLink.objects.get(subject=cls.ms, medicine=cls.ocrevus)
+		view_change = Permission.objects.filter(
+			content_type__app_label="gregory",
+			codename__in=[
+				"view_subject", "change_subject", "view_medicinesubjectlink", "change_medicinesubjectlink",
+			],
+		)
+		for user in (cls.editor_a, cls.editor_b):
+			user.user_permissions.add(*view_change)
+
+	def subject_url(self, subject=None):
+		return reverse("admin:gregory_subject_change", args=[(subject or self.ms).pk])
+
+	def condition_choices(self, user):
+		self.client.force_login(user)
+		response = self.client.get(reverse("admin:gregory_medicine_changelist"))
+		spec = next(s for s in response.context["cl"].filter_specs if s.title == "condition")
+		return {int(pk) for pk, _ in spec.lookup_choices}
+
+	def listed(self, user, **params):
+		self.client.force_login(user)
+		response = self.client.get(reverse("admin:gregory_medicine_changelist"), params)
+		self.assertEqual(response.status_code, 200)
+		return {m.name for m in response.context["cl"].result_list}
+
+
+class ConditionFilterTests(SubjectLinkAdminTestCase):
+	def test_it_offers_only_the_users_teams_subjects_with_areas(self):
+		self.assertEqual(self.condition_choices(self.editor_a), {self.ms.pk})
+		self.assertEqual(self.condition_choices(self.editor_b), {self.team_b_subject.pk})
+
+	def test_a_superuser_is_offered_every_subject_with_areas(self):
+		self.assertEqual(
+			self.condition_choices(self.superuser),
+			{self.ms.pk, self.team_b_subject.pk, self.foreign_subject.pk},
+		)
+
+	def test_it_keeps_the_medicines_approved_for_the_subject(self):
+		names = self.listed(self.editor_a, condition=self.ms.pk)
+		expected = set(
+			MedicineSubjectLink.objects.filter(subject=self.ms).values_list("medicine__name", flat=True)
+		)
+		self.assertIn("Ocrevus", names)
+		self.assertIn("Tysabri", names)
+		self.assertNotIn("Viagra", names)
+		self.assertEqual(names, expected)
+
+	def test_a_suppressed_subject_link_does_not_count(self):
+		self.ms_link.suppressed = True
+		self.ms_link.save()
+		self.assertNotIn("Ocrevus", self.listed(self.editor_a, condition=self.ms.pk))
+
+	def test_another_teams_subject_is_ignored(self):
+		self.assertEqual(self.listed(self.editor_a, condition=self.team_b_subject.pk), set())
+		self.assertEqual(self.listed(self.editor_a, condition=self.foreign_subject.pk), set())
+		self.assertEqual(self.listed(self.editor_a, condition="not-a-number"), set())
+
+	def test_it_combines_with_the_tracked_filter(self):
+		# Team A's category tracks Ocrevus (automatic) and Viagra (manual); Tysabri is Team B's.
+		untracked = self.listed(self.editor_a, condition=self.ms.pk, tracked="no")
+		tracked = self.listed(self.editor_a, condition=self.ms.pk, tracked="yes")
+		self.assertIn("Tysabri", untracked)
+		self.assertNotIn("Ocrevus", untracked)
+		self.assertEqual(tracked, {"Ocrevus"})
+
+
+class MedicinePageTests(SubjectLinkAdminTestCase):
+	def test_the_page_lists_only_the_users_teams_subject_links(self):
+		self.client.force_login(self.editor_a)
+		response = self.client.get(reverse("admin:gregory_medicine_change", args=[self.ocrevus.pk]))
+		self.assertContains(response, "Subject links")
+		self.assertContains(response, self.ms.subject_name)
+		self.assertNotContains(response, "Team B condition")
+		self.assertNotContains(response, "Foreign condition")
+
+	def test_a_superuser_sees_every_subject_link(self):
+		self.client.force_login(self.superuser)
+		response = self.client.get(reverse("admin:gregory_medicine_change", args=[self.ocrevus.pk]))
+		self.assertContains(response, "Team B condition")
+		self.assertContains(response, "Foreign condition")
+
+	def test_the_subject_links_are_read_only(self):
+		self.client.force_login(self.superuser)
+		response = self.client.get(reverse("admin:gregory_medicine_change", args=[self.ocrevus.pk]))
+		inline = next(
+			f for f in response.context["inline_admin_formsets"] if f.formset.model is MedicineSubjectLink
+		)
+		self.assertFalse(inline.has_change_permission)
+		self.assertFalse(inline.has_add_permission)
+		self.assertFalse(inline.has_delete_permission)
+
+	def test_a_copy_shows_its_lead_and_a_lead_its_copies(self):
+		self.tyruko = Medicine.objects.get(name="Tyruko")
+		self.tyruko.grouped_under = self.tysabri
+		self.tyruko.save()
+		self.client.force_login(self.editor_a)
+		copy_page = self.client.get(reverse("admin:gregory_medicine_change", args=[self.tyruko.pk]))
+		self.assertContains(copy_page, "Grouped under")
+		self.assertContains(copy_page, reverse("admin:gregory_medicine_change", args=[self.tysabri.pk]))
+		lead_page = self.client.get(reverse("admin:gregory_medicine_change", args=[self.tysabri.pk]))
+		self.assertContains(lead_page, "Grouped products")
+		self.assertContains(lead_page, reverse("admin:gregory_medicine_change", args=[self.tyruko.pk]))
+
+
+class SubjectInlineTests(SubjectLinkAdminTestCase):
+	def inline_post(self, user, edit=None, subject=None):
+		self.client.force_login(user)
+		url = self.subject_url(subject)
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, 200)
+		data = form_data(response)
+		formset = next(
+			f.formset for f in response.context["inline_admin_formsets"]
+			if f.formset.model is MedicineSubjectLink
+		)
+		index_of = {form.instance.medicine_id: i for i, form in enumerate(formset.forms) if form.instance.pk}
+		if edit:
+			edit(data, formset.prefix, index_of)
+		return self.client.post(url, data)
+
+	def inline(self, user, subject=None):
+		self.client.force_login(user)
+		response = self.client.get(self.subject_url(subject))
+		self.assertEqual(response.status_code, 200)
+		return next(
+			f for f in response.context["inline_admin_formsets"] if f.formset.model is MedicineSubjectLink
+		)
+
+	def test_the_inline_lists_the_subjects_medicines_by_name(self):
+		inline = self.inline(self.editor_a)
+		names = [form.instance.medicine.name for form in inline.formset.forms if form.instance.pk]
+		self.assertEqual(names, sorted(names))
+		self.assertIn("Ocrevus", names)
+
+	def test_ticking_suppressed_hides_the_medicine_and_unticking_restores_it(self):
+		response = self.inline_post(
+			self.editor_a,
+			edit=lambda data, prefix, index_of: data.update({f"{prefix}-{index_of[self.ocrevus.pk]}-suppressed": "on"}),
+		)
+		self.assertEqual(response.status_code, 302, getattr(response, "context", None) and response.context["adminform"].form.errors)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+
+		def untick(data, prefix, index_of):
+			data.pop(f"{prefix}-{index_of[self.ocrevus.pk]}-suppressed", None)
+
+		self.inline_post(self.editor_a, edit=untick)
+		self.ms_link.refresh_from_db()
+		self.assertFalse(self.ms_link.suppressed)
+
+	def test_the_suppression_is_in_history_under_the_editor(self):
+		self.inline_post(
+			self.editor_a,
+			edit=lambda data, prefix, index_of: data.update({f"{prefix}-{index_of[self.ocrevus.pk]}-suppressed": "on"}),
+		)
+		row = self.ms_link.history.latest("history_date", "history_id")
+		self.assertEqual(row.history_type, "~")
+		self.assertTrue(row.suppressed)
+		self.assertEqual(row.editor_user, self.editor_a)
+		self.assertEqual(row.editor_label, "Ana Editor <editor-a@example.com>")
+		self.assertEqual(row.via, "admin")
+
+	def test_only_suppressed_is_editable(self):
+		inline = self.inline(self.editor_a)
+		form = next(f for f in inline.formset.forms if f.instance.pk)
+		self.assertEqual(set(form.fields) - {"id", "subject"}, {"suppressed"})
+
+		def forge(data, prefix, index_of):
+			i = index_of[self.ocrevus.pk]
+			data[f"{prefix}-{i}-matched_on"] = "forged"
+			data[f"{prefix}-{i}-medicine"] = str(self.viagra.pk)
+			data[f"{prefix}-{i}-suppressed"] = "on"
+
+		self.inline_post(self.editor_a, edit=forge)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+		self.assertEqual(self.ms_link.matched_on, "Multiple Sclerosis")
+		self.assertEqual(self.ms_link.medicine_id, self.ocrevus.pk)
+
+	def test_there_is_no_add_and_no_delete(self):
+		for user in (self.editor_a, self.superuser):
+			inline = self.inline(user)
+			self.assertFalse(inline.has_add_permission)
+			self.assertFalse(inline.has_delete_permission)
+
+	def test_a_forged_delete_or_add_changes_nothing(self):
+		before = MedicineSubjectLink.objects.count()
+
+		def forge(data, prefix, index_of):
+			data[f"{prefix}-{index_of[self.ocrevus.pk]}-DELETE"] = "on"
+			total = int(data[f"{prefix}-TOTAL_FORMS"])
+			data[f"{prefix}-TOTAL_FORMS"] = str(total + 1)
+			data[f"{prefix}-{total}-medicine"] = str(self.viagra.pk)
+			data[f"{prefix}-{total}-matched_on"] = "forged"
+
+		self.inline_post(self.superuser, edit=forge)
+		self.assertEqual(MedicineSubjectLink.objects.count(), before)
+		self.assertTrue(MedicineSubjectLink.objects.filter(pk=self.ms_link.pk).exists())
+
+	def test_the_matcher_never_restores_a_suppressed_link(self):
+		self.inline_post(
+			self.editor_a,
+			edit=lambda data, prefix, index_of: data.update({f"{prefix}-{index_of[self.ocrevus.pk]}-suppressed": "on"}),
+		)
+		link_subject(self.ms)
+		self.ms_link.refresh_from_db()
+		self.assertTrue(self.ms_link.suppressed)
+
+	def test_an_editor_of_another_team_sees_it_read_only_and_cannot_post(self):
+		inline = self.inline(self.editor_b)
+		self.assertFalse(inline.has_change_permission)
+		response = self.inline_post(
+			self.editor_a,
+			subject=self.team_b_subject,
+		)
+		self.assertEqual(response.status_code, 403)
+
+	def test_the_inline_checks_the_parent_through_team_scope(self):
+		request = RequestFactory().get("/")
+		inline = MedicineSubjectLinkInline(Subject, admin.site)
+		request.user = self.editor_a
+		self.assertTrue(inline.has_change_permission(request, self.ms))
+		self.assertFalse(inline.has_change_permission(request, self.team_b_subject))
+		request.user = self.superuser
+		self.assertTrue(inline.has_change_permission(request, self.team_b_subject))
+		self.assertFalse(inline.has_add_permission(request, self.ms))
+		self.assertFalse(inline.has_delete_permission(request, self.ms))
+
+
+class CategorySaveLinkingTests(MedicineLinkAdminTestCase):
+	"""Saving an automatic category in the admin links its medicines at once."""
+
+	def form_data(self, response):
+		"""``form_data`` plus the hidden ``initial-`` inputs a browser also posts for the
+		array fields; without them every array field looks changed."""
+		data = form_data(response)
+		form = response.context["adminform"].form
+		for name, field in form.fields.items():
+			if field.show_hidden_initial:
+				bound = form[name]
+				data[bound.html_initial_name] = field.prepare_value(bound.initial)
+		return data
+
+	def edit(self, category, **changes):
+		self.client.force_login(self.editor_a)
+		url = self.change_url(category)
+		response = self.client.get(url)
+		self.assertEqual(response.status_code, 200)
+		data = self.form_data(response)
+		data.update(changes)
+		return self.client.post(url, data, follow=True)
+
+	def messages(self, response):
+		return [str(m) for m in response.context["messages"]]
+
+	def links(self, category):
+		return {
+			a.medicine.name: a
+			for a in MedicineCategoryAssignment.objects.filter(teamcategory=category).select_related("medicine")
+		}
+
+	def test_changing_the_terms_links_the_new_medicines_at_once(self):
+		response = self.edit(self.category, category_terms="natalizumab")
+		self.assertEqual(response.status_code, 200)
+		links = self.links(self.category)
+		# Ocrevus (automatic, no longer matching) is gone; Viagra (manual) stays.
+		self.assertEqual(set(links), {"Tysabri", "Tyruko", "Natalizumab Elan Pharma", "Viagra"})
+		self.assertEqual(links["Tysabri"].source, Source.AUTOMATIC)
+		self.assertEqual(links["Tysabri"].matched_on, "natalizumab")
+		self.assertIn("3 medicines linked to 'Ocrelizumab'.", self.messages(response))
+
+	def test_the_links_are_pipeline_writes_with_no_editor(self):
+		self.edit(self.category, category_terms="natalizumab")
+		link = MedicineCategoryAssignment.objects.get(teamcategory=self.category, medicine__name="Tysabri")
+		self.assertEqual(MedicineCategoryAssignment.history.filter(id=link.pk).count(), 0)
+
+	def test_a_medicine_only_field_links_without_re_matching_content(self):
+		# medicine_terms is not one of the fields rebuild_categories reads.
+		with patch("gregory.admin.link_category", wraps=link_category) as linked, \
+			patch("gregory.admin.call_command") as rebuilt:
+			response = self.edit(self.category, medicine_terms="natalizumab")
+		self.assertEqual(response.status_code, 200)
+		linked.assert_called_once()
+		rebuilt.assert_not_called()
+		self.assertEqual(set(self.links(self.category)), {"Tysabri", "Tyruko", "Natalizumab Elan Pharma", "Viagra"})
+
+	def test_a_content_only_field_re_matches_content_without_linking_medicines(self):
+		with patch("gregory.admin.link_category") as linked, patch("gregory.admin.call_command") as rebuilt:
+			self.edit(self.category, match_scope="title")
+		rebuilt.assert_called_once()
+		linked.assert_not_called()
+
+	def test_an_unrelated_change_does_not_run_the_matcher(self):
+		with patch("gregory.admin.link_category") as linked, patch("gregory.admin.call_command") as rebuilt:
+			response = self.edit(self.category, category_description="A new description")
+		self.assertEqual(response.status_code, 200)
+		linked.assert_not_called()
+		rebuilt.assert_not_called()
+		self.category.refresh_from_db()
+		self.assertEqual(self.category.category_description, "A new description")
+
+	def test_saving_a_manual_category_links_nothing(self):
+		self.category.category_type = "manual"
+		self.category.save()
+		self.edit(self.category, category_type="manual", category_terms="natalizumab")
+		self.assertEqual(set(self.links(self.category)), {"Ocrevus", "Viagra"})
+
+	def test_a_failure_warns_and_keeps_the_category_change(self):
+		with patch("gregory.admin.link_category", side_effect=RuntimeError("boom")):
+			response = self.edit(self.category, category_terms="natalizumab")
+		self.assertEqual(response.status_code, 200)
+		self.category.refresh_from_db()
+		self.assertEqual(self.category.category_terms, ["natalizumab"])
+		self.assertTrue(any("will link them on its next run" in m for m in self.messages(response)))
+		# The links were not touched.
+		self.assertEqual(set(self.links(self.category)), {"Ocrevus", "Viagra"})
+
+	def test_a_new_automatic_category_is_linked_when_created(self):
+		self.editor_a.user_permissions.add(Permission.objects.get(codename="add_teamcategory"))
+		self.client.force_login(self.editor_a)
+		response = self.client.get(reverse("admin:gregory_teamcategory_add"))
+		self.assertEqual(response.status_code, 200)
+		data = self.form_data(response)
+		data.update(
+			{
+				"team": str(self.team_a.pk),
+				"category_name": "Natalizumab new",
+				"category_slug": "natalizumab-new",
+				"subjects": [str(Subject.objects.get(subject_slug="ms").pk)],
+				"category_type": "automatic",
+				"modality": CategoryModality.BIOLOGIC_ANTIBODY,
+				"category_terms": "natalizumab",
+			}
+		)
+		response = self.client.post(reverse("admin:gregory_teamcategory_add"), data, follow=True)
+		self.assertEqual(response.status_code, 200)
+		created = TeamCategory.objects.get(category_slug="natalizumab-new")
+		self.assertEqual(set(self.links(created)), {"Tysabri", "Tyruko", "Natalizumab Elan Pharma"})

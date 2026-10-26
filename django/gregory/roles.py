@@ -71,6 +71,10 @@ EDITOR_PERMISSIONS = {
 	# EMA's medicines and their events: written only by sync_ema_medicines.
 	"gregory.medicine": VIEW,
 	"gregory.medicineevent": VIEW,
+	# The medicines approved for a subject's condition, listed on the subject's page.
+	# Derived by match_medicines; changing one (suppressing it) takes the subject's change
+	# permission, which the role leaves to a superuser.
+	"gregory.medicinesubjectlink": VIEW,
 }
 
 FORBIDDEN_APPS = frozenset(

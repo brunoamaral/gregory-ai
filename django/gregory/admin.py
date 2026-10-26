@@ -28,11 +28,12 @@ from .utils.pubmed_search import PUBMED_VOLUME_WARNING_PER_30_DAYS
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
+from .services.medicine_linking import link_category
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 from django import forms
-from django.utils.html import format_html, mark_safe
+from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.text import Truncator
 from organizations.models import Organization, OrganizationUser
 from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
@@ -45,6 +46,7 @@ from .models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	MedicineSubjectLink,
 	CategoryModality,
 	Trials,
 	Sources,
@@ -2905,6 +2907,36 @@ class SourcesInline(TeamEditInlineMixin, admin.StackedInline):
 	# save_formset is a ModelAdmin hook, so Django never calls it on an inline.
 
 
+class MedicineSubjectLinkInline(TeamEditInlineMixin, admin.TabularInline):
+	"""The EMA medicines approved for this subject's condition (see
+	``Subject.ema_therapeutic_areas``). match_medicines derives the rows, so an editor
+	can't add one, and can't delete one either: it would come back on the next run.
+	Ticking ``suppressed`` takes a medicine that doesn't fit off the subject. Generics and
+	grouped copies are listed too, so a whole family can be suppressed. Saved one row at a
+	time, so the history names the editor."""
+
+	model = MedicineSubjectLink
+	extra = 0
+	can_delete = False
+	fields = ("medicine", "medicine_status", "matched_on", "suppressed")
+	readonly_fields = ("medicine", "medicine_status", "matched_on")
+	verbose_name = "Medicine (EMA)"
+	verbose_name_plural = "Medicines (EMA) approved for this condition"
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("medicine").order_by("medicine__name")
+
+	def has_add_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	@admin.display(description="EMA status")
+	def medicine_status(self, obj):
+		return obj.medicine.status if obj.medicine_id else "-"
+
+
 class SubjectAdminForm(forms.ModelForm):
 	"""Custom form for Subject admin with organization-based team access"""
 
@@ -2917,8 +2949,9 @@ class SubjectAdminForm(forms.ModelForm):
 		self.request = kwargs.pop("request", None)
 		super().__init__(*args, **kwargs)
 
-		# Filter teams based on user's organization
-		if self.request:
+		# Filter teams based on user's organization. A subject the user may only view
+		# (another team's) is rendered read-only, with no team field to filter.
+		if self.request and "team" in self.fields:
 			if self.request.user.is_superuser:
 				self.fields["team"].queryset = Team.objects.all()
 			else:
@@ -2942,7 +2975,7 @@ class SubjectAdmin(TeamEditMixin, OrganizationFilterMixin, ReassignToTeamMixin, 
 		("team", OrganizationRestrictedFieldListFilter)
 	]  # Add the team filter
 	form = SubjectAdminForm
-	inlines = [SourcesInline]  # Add the inline for managing sources
+	inlines = [SourcesInline, MedicineSubjectLinkInline]
 	actions = ["reassign_to_team_action"]
 
 	def get_queryset(self, request):
@@ -3820,20 +3853,61 @@ class TeamCategoryAdmin(
 		"weight_trial_therapeutic_areas",
 	}
 
+	# Form fields the medicine rule reads (see gregory/services/medicine_matching.py):
+	# a change to any of them re-links the category's EMA medicines.
+	MEDICINE_MATCHING_FIELDS = {
+		"category_terms",
+		"category_exclude_terms",
+		"subjects",
+		"category_type",
+		"modality",
+		"medicine_terms",
+		"medicine_include_combinations",
+	}
+
 	def save_related(self, request, form, formsets, change):
 		"""Re-match an automatic category as soon as its configuration is saved.
 
 		Runs after the subjects M2M is saved, so the matcher sees the full
 		configuration. New automatic categories are backfilled immediately;
 		edited ones are re-matched only when a field that affects matching
-		changed. Manual categories are never touched.
+		changed. Manual categories are never touched. Articles and trials
+		(MATCHING_CONFIG_FIELDS) and EMA medicines (MEDICINE_MATCHING_FIELDS)
+		depend on different fields, so each is checked on its own.
 		"""
 		super().save_related(request, form, formsets, change)
 		category = form.instance
 		if category.category_type != CategoryType.AUTOMATIC:
 			return
-		if change and not self.MATCHING_CONFIG_FIELDS & set(form.changed_data):
+		changed = set(form.changed_data)
+		if not change or self.MATCHING_CONFIG_FIELDS & changed:
+			self._rematch_content(request, category, change)
+		if not change or self.MEDICINE_MATCHING_FIELDS & changed:
+			self._link_medicines(request, category)
+
+	def _link_medicines(self, request, category):
+		"""Link the category's EMA medicines now, inside a savepoint so a failure rolls
+		back only the links and never the category save."""
+		try:
+			with transaction.atomic():
+				counts = link_category(category)
+		except Exception as exc:
+			logger.exception("Could not link EMA medicines for category %s", category.pk)
+			self.message_user(
+				request,
+				f"Could not link the EMA medicines of '{category.category_name}' now ({exc}); "
+				"the pipeline will link them on its next run.",
+				messages.WARNING,
+			)
 			return
+		linked = counts["created"] + counts["kept"] + counts["updated"]
+		self.message_user(
+			request,
+			f"{linked} medicines linked to '{category.category_name}'.",
+			messages.SUCCESS,
+		)
+
+	def _rematch_content(self, request, category, change):
 		verb = "Re-matched" if change else "Backfilled"
 		try:
 			call_command("rebuild_categories", category=category.pk, stdout=StringIO())
@@ -5261,15 +5335,38 @@ class MedicineCategoryLinkInline(ReadOnlyInlineMixin, admin.TabularInline):
 		return qs.filter(teamcategory__team__in=user_team_ids(request.user))
 
 
-class HasCategoryLinkFilter(admin.SimpleListFilter):
-	"""Medicines with, or without, a live (not suppressed) link to one of the caller's
-	categories. Scoped like the inline, so it never reveals another team's links."""
+class MedicineSubjectLinkReadInline(ReadOnlyInlineMixin, admin.TabularInline):
+	"""The subjects a medicine is approved for (its EMA areas match the subject's). Links
+	belong to teams through their subject, so staff see only their own teams' (superusers
+	see all); an editor suppresses one from the subject's page."""
 
-	title = "category link"
-	parameter_name = "has_link"
+	model = MedicineSubjectLink
+	verbose_name = "Subject link"
+	verbose_name_plural = "Subject links"
+	fields = ("subject", "matched_on", "suppressed")
+	readonly_fields = fields
+
+	def has_view_permission(self, request, obj=None):
+		return request.user.is_active and request.user.is_staff
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request).select_related("subject", "subject__team")
+		if request.user.is_superuser:
+			return qs
+		return qs.filter(subject__team__in=user_team_ids(request.user))
+
+
+class TrackedFilter(admin.SimpleListFilter):
+	"""Medicines with, or without, a live (not suppressed) link to one of the caller's
+	categories. "Untracked" is the list an editor works from: medicines EMA approved that
+	no category follows yet. Scoped like the inline, so it never reveals another team's
+	links."""
+
+	title = "tracked"
+	parameter_name = "tracked"
 
 	def lookups(self, request, model_admin):
-		return (("yes", "Linked to a category"), ("no", "Not linked"))
+		return (("yes", "Tracked (in a category)"), ("no", "Untracked"))
 
 	def queryset(self, request, queryset):
 		if self.value() not in ("yes", "no"):
@@ -5282,11 +5379,46 @@ class HasCategoryLinkFilter(admin.SimpleListFilter):
 		return queryset.filter(Exists(links)) if self.value() == "yes" else queryset.exclude(Exists(links))
 
 
+class ConditionFilter(admin.SimpleListFilter):
+	"""Medicines approved for one subject's condition: those with a non-suppressed subject
+	link to it. Offers only subjects with EMA therapeutic areas that the caller's teams own
+	(superusers: all), and ignores any other subject id, so it never reveals another team's
+	links."""
+
+	title = "condition"
+	parameter_name = "condition"
+
+	def _subjects(self, request):
+		subjects = Subject.objects.exclude(ema_therapeutic_areas=[])
+		if not request.user.is_superuser:
+			subjects = subjects.filter(team__in=user_team_ids(request.user))
+		return subjects.order_by("subject_name", "pk")
+
+	def lookups(self, request, model_admin):
+		return [(subject.pk, subject.subject_name) for subject in self._subjects(request)]
+
+	def queryset(self, request, queryset):
+		value = self.value()
+		if not value:
+			return queryset
+		subject = self._subjects(request).filter(pk=value).first() if value.isdigit() else None
+		if subject is None:
+			return queryset.none()
+		return queryset.filter(
+			Exists(
+				MedicineSubjectLink.objects.filter(
+					medicine=OuterRef("pk"), subject=subject, suppressed=False
+				)
+			)
+		)
+
+
 @admin.register(Medicine)
 class MedicineAdmin(admin.ModelAdmin):
-	"""EMA's centrally authorised human medicines. Read-only: the sync is the only
-	writer. The data is public, so every staff user can browse it; it has no team or
-	organisation to scope by."""
+	"""EMA's centrally authorised human medicines. Read-only: sync_ema_medicines writes
+	the rows (match_medicines adds ``grouped_under``). The data is public, so every staff
+	user can browse it; it has no team or organisation to scope by. Tracked and Condition
+	filters pick out the medicines no category follows yet."""
 
 	list_display = (
 		"name",
@@ -5309,12 +5441,13 @@ class MedicineAdmin(admin.ModelAdmin):
 		"biosimilar",
 		"is_combination",
 		"in_latest_export",
-		HasCategoryLinkFilter,
+		TrackedFilter,
+		ConditionFilter,
 	)
 	search_fields = ("name", "inn", "active_substance", "ema_product_number")
 	ordering = ("name",)
 	list_per_page = 100
-	inlines = [MedicineEventInline, MedicineCategoryLinkInline]
+	inlines = [MedicineEventInline, MedicineCategoryLinkInline, MedicineSubjectLinkReadInline]
 	fieldsets = (
 		(
 			None,
@@ -5335,6 +5468,17 @@ class MedicineAdmin(admin.ModelAdmin):
 			},
 		),
 		("Indication", {"fields": ("therapeutic_areas", "indication")}),
+		(
+			"Grouping",
+			{
+				"fields": ("grouped_under", "grouped_products"),
+				"description": (
+					"Products with the same substances and the same indication are copies of "
+					"one medicine. match_medicines picks the lead, and re-derives the "
+					"groups on every run."
+				),
+			},
+		),
 		(
 			"Flags",
 			{
@@ -5403,6 +5547,21 @@ class MedicineAdmin(admin.ModelAdmin):
 
 	def has_delete_permission(self, request, obj=None):
 		return False
+
+	@admin.display(description="Grouped products")
+	def grouped_products(self, obj):
+		"""The copies that point at this product as their lead."""
+		products = list(obj.grouped_products.order_by("name"))
+		if not products:
+			return "-"
+		return format_html_join(
+			mark_safe("<br>"),
+			'<a href="{}">{}</a>',
+			(
+				(reverse("admin:gregory_medicine_change", args=[product.pk]), product.name)
+				for product in products
+			),
+		)
 
 	@admin.display(description="EPAR page")
 	def epar_link(self, obj):

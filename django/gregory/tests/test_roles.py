@@ -55,6 +55,7 @@ NEVER_ADD_OR_DELETE = {
 	"gregory.meshterm",
 	"gregory.medicine",
 	"gregory.medicineevent",
+	"gregory.medicinesubjectlink",
 	"gregory.sources",
 	"gregory.subject",
 	"gregory.team",
