@@ -274,12 +274,23 @@ tick the box and save; no deploy is needed.
 |:-----|:----|
 | Every category in the site's scope | `/feed/sites/{site_id}/medicines/` |
 | One category | `/feed/sites/{site_id}/medicines/category/{category_slug}/` |
+| One condition (subject), including untracked medicines | `/feed/sites/{site_id}/medicines/subject/{subject_slug}/` |
 
 What a feed contains:
 
-- **Medicines the category links to** and an editor has not suppressed. A category counts for a
+- **Category and site feeds: medicines the category links to** and an editor has not suppressed. A category counts for a
   site when at least one of its subjects is in the site's scope; one that is not is a 404.
-- **No generics or biosimilars.** The feed carries news about the originator.
+- **No generics, biosimilars or duplicate products.** The feed carries news about the originator.
+  A medicine EMA authorises under several names (Exelon, Prometax) is announced once, by its
+  lead product, not once per name (see [Grouping copies of a medicine](#grouping-copies-of-a-medicine)).
+- **The subject feed is the one feed that includes untracked medicines.** The first two feeds
+  are curated: category links only. The subject feed also lists the medicines EMA approved for
+  the subject's condition (a non-suppressed subject link) that no category tracks, so a site can
+  follow a condition such as Alzheimer's before anyone has made a category for lecanemab. It
+  lists a medicine with a live category link to a category of the subject too. Suppressing the
+  subject link drops the medicine from the feed unless a live category link to that subject's
+  category keeps it, the same rule as on the API. The subject has to be in the site's scope, or
+  the feed is a 404.
 - **Observed events, and recent reconstructed ones.** A reconstructed event is only listed when
   it is under 90 days old, because the first sync reconstructs every approval EMA has ever
   recorded. An event seen between two syncs is always listed.

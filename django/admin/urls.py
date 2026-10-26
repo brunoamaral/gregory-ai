@@ -81,7 +81,11 @@ from rss.views import (
 	redirect_articles_by_author_feed,
 	redirect_trials_by_subject_feed,
 )
-from rss.medicine_feeds import SiteMedicineEventsByCategoryFeed, SiteMedicineEventsFeed
+from rss.medicine_feeds import (
+	SiteMedicineEventsByCategoryFeed,
+	SiteMedicineEventsBySubjectFeed,
+	SiteMedicineEventsFeed,
+)
 from rss.patent_feeds import (
 	SitePatentsByCategoryFeed,
 	SitePatentsBySubjectFeed,
@@ -236,6 +240,11 @@ urlpatterns = (
 			"feed/sites/<int:site_id>/medicines/category/<str:category_slug>/",
 			cache_page(FEED_CACHE_SECONDS)(SiteMedicineEventsByCategoryFeed()),
 			name="site_medicines_by_category_feed",
+		),
+		path(
+			"feed/sites/<int:site_id>/medicines/subject/<str:subject_slug>/",
+			cache_page(FEED_CACHE_SECONDS)(SiteMedicineEventsBySubjectFeed()),
+			name="site_medicines_by_subject_feed",
 		),
 		path(
 			"feed/sites/<int:site_id>/medicines/",

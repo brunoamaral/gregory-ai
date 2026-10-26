@@ -5,6 +5,7 @@ EMA medicine event feeds, under /feed/sites/<site_id>/medicines/:
 
   category/<slug>/       regulatory events of the medicines linked to a category
   (the root)             the same, for every category in the site's scope
+  subject/<slug>/        regulatory events of every medicine approved for a condition
 
 An item is one MedicineEvent: a CHMP opinion, an authorisation, a new European
 Commission decision, a withdrawal. The feeds are how a partner hears about an
@@ -19,7 +20,14 @@ medicines:
   * Which medicines: those with a NON-SUPPRESSED link to the category, where
     the category has at least one subject in the site's scope. Feeds are
     editorial, so an editor's suppression hides a medicine, the same as on
-    the API. Generic and biosimilar products are left out.
+    the API. Generic and biosimilar products are left out, and so are grouped
+    copies (one medicine EMA authorises under several names): the lead of the
+    group reports the event for all of them.
+  * The subject feed is the one feed that includes UNTRACKED medicines: those
+    with a live category link to a category of the subject, or a non-suppressed
+    MedicineSubjectLink to it (EMA approved them for the subject's condition,
+    no category needed). The site and category feeds stay curated: category
+    links only. The subject must be in the site's scope (resolve_scoped_subject).
   * Which events: ``observed`` events always, ``reconstructed`` events only
     from the last 90 days. A reconstructed event is read off EMA's date fields
     the first time a medicine is seen, so without the cut-off the first sync
@@ -42,7 +50,9 @@ from rss.feed_items import MedicineEventFeedItemMixin, hydrate_medicine_events
 from rss.feed_scope import (
 	category_subject_map,
 	medicine_event_base_qs,
+	medicine_subject_event_base_qs,
 	resolve_scoped_category,
+	resolve_scoped_subject,
 	site_feed_scope,
 )
 from rss.views import _homepage, _page_ids, _SelfLinkMixin
@@ -86,6 +96,35 @@ class SiteMedicineEventsByCategoryFeed(_SelfLinkMixin, MedicineEventFeedItemMixi
 
 	def items(self, obj):
 		queryset = medicine_event_base_qs({obj.pk: obj._cat_subject_ids})
+		return hydrate_medicine_events(_page_ids(_event_order(queryset), MEDICINE_FEED_LIMIT))
+
+
+class SiteMedicineEventsBySubjectFeed(_SelfLinkMixin, MedicineEventFeedItemMixin, Feed):
+	"""feed/sites/<site_id>/medicines/subject/<subject_slug>/ -- see module docstring."""
+
+	def get_object(self, request, site_id, subject_slug):
+		site, _settings_row, scope = site_feed_scope(site_id, require_medicines=True)
+		subject = resolve_scoped_subject(scope, subject_slug)
+
+		# Per-request state goes on obj, not the shared Feed instance.
+		subject._site = site
+		subject._feed_url = self._request_url(request)
+		return subject
+
+	def title(self, obj):
+		return f"Medicines: {obj.subject_name} — {obj._site.name}"
+
+	def link(self, obj):
+		return _homepage(obj._site)
+
+	def description(self, obj):
+		return (
+			f"New regulatory events of the medicines approved for {obj.subject_name}, "
+			f"whether or not they're filed under a category. {_SOURCE_NOTE}"
+		)
+
+	def items(self, obj):
+		queryset = medicine_subject_event_base_qs(obj.pk)
 		return hydrate_medicine_events(_page_ids(_event_order(queryset), MEDICINE_FEED_LIMIT))
 
 

@@ -31,10 +31,12 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
+from api.medicine_scope import category_has_subject
 from gregory.models import (
 	Articles,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	MedicineSubjectLink,
 	Patents,
 	Subject,
 	TeamCategory,
@@ -181,6 +183,28 @@ def category_subject_map(subject_ids):
 	return mapping
 
 
+def _curated_medicine_events(*conditions):
+	"""Events of the medicines a feed may list, narrowed by ``conditions``.
+
+	The exclusions every medicine feed shares, in one place so a feed can't forget one:
+	  * generic and biosimilar products: the feed is for news about the originator, not
+	    for each copy of a drug that is already on the market;
+	  * grouped copies (``grouped_under`` set): EMA authorises one medicine under several
+	    names (Exelon, Prometax, Rivastigmine Sandoz), and only the lead reports an event,
+	    so one European Commission decision isn't announced once per copy;
+	  * ``reconstructed`` events older than RECONSTRUCTED_EVENT_DAYS (see above).
+
+	``conditions`` are the filters that say which medicines the feed is about.
+	"""
+	cutoff = timezone.localdate() - timedelta(days=RECONSTRUCTED_EVENT_DAYS)
+	return MedicineEvent.objects.filter(
+		*conditions,
+		medicine__generic=False,
+		medicine__biosimilar=False,
+		medicine__grouped_under__isnull=True,
+	).exclude(basis=MedicineEvent.Basis.RECONSTRUCTED, event_date__lt=cutoff)
+
+
 def medicine_event_base_qs(category_subject_map):
 	"""Medicine events a feed may list, for the categories in category_subject_map.
 
@@ -194,23 +218,53 @@ def medicine_event_base_qs(category_subject_map):
 	join + .distinct(), as for the other feeds, so a medicine in several of the
 	categories is not repeated and the outer query can order and slice cheaply.
 
-	Excluded:
-	  * generic and biosimilar products: the feed is for news about the
-	    originator, not for each copy of a drug that is already on the market;
-	  * ``reconstructed`` events older than RECONSTRUCTED_EVENT_DAYS (see above).
+	The site and category feeds are curated: a medicine EMA approved for a condition
+	but that no category tracks is not in them (medicine_subject_event_base_qs has it).
+	The shared exclusions (generics, biosimilars, grouped copies, old reconstructed
+	events) are those of _curated_medicine_events.
 	"""
 	category_ids = [
 		category_id for category_id, subjects in category_subject_map.items() if subjects
 	]
-	cutoff = timezone.localdate() - timedelta(days=RECONSTRUCTED_EVENT_DAYS)
-	return MedicineEvent.objects.filter(
+	return _curated_medicine_events(
 		Exists(
 			MedicineCategoryAssignment.objects.filter(
 				medicine=OuterRef("medicine"),
 				teamcategory__in=category_ids,
 				suppressed=False,
 			)
-		),
-		medicine__generic=False,
-		medicine__biosimilar=False,
-	).exclude(basis=MedicineEvent.Basis.RECONSTRUCTED, event_date__lt=cutoff)
+		)
+	)
+
+
+def medicine_subject_event_base_qs(subject_id):
+	"""Medicine events for one subject: every medicine EMA approved for its condition.
+
+	An event is in when its medicine has EITHER
+	  * a NON-SUPPRESSED link to a category that has this subject (a medicine an editor
+	    tracks), OR
+	  * a NON-SUPPRESSED MedicineSubjectLink to this subject (a medicine EMA approved for
+	    one of the subject's conditions, with or without a category).
+
+	The two suppressions are independent, as on the API (api/medicine_scope.py): a
+	suppressed subject link next to a live category link leaves the medicine in, and the
+	other way round. Both are Exists(), never a join + .distinct(), so a medicine reached
+	by both routes is listed once per event.
+
+	This is the one medicine feed that includes untracked medicines. The exclusions are
+	those of _curated_medicine_events.
+	"""
+	return _curated_medicine_events(
+		Exists(
+			MedicineCategoryAssignment.objects.filter(
+				category_has_subject([subject_id]),
+				medicine=OuterRef("medicine"),
+				suppressed=False,
+			)
+		)
+		| Exists(
+			MedicineSubjectLink.objects.filter(
+				medicine=OuterRef("medicine"), subject_id=subject_id, suppressed=False
+			)
+		)
+	)

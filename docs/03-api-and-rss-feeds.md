@@ -40,6 +40,7 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 | Patent search results | `GET /feed/sites/{site_id}/patents/search/?…` — see [Patent feeds](#patent-feeds) |
 | EMA medicine events, all categories | `GET /feed/sites/{site_id}/medicines/` — see [Medicine feeds](#medicine-feeds) |
 | EMA medicine events by topic (category) | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` — see [Medicine feeds](#medicine-feeds) |
+| EMA medicine events by condition (subject), including untracked medicines | `GET /feed/sites/{site_id}/medicines/subject/{subject_slug}/` — see [Medicine feeds](#medicine-feeds) |
 
 The variants of the subject, category and author feeds are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **On those feeds any query string is ignored** and does not change the response. The [search feeds](#search-feeds) are the one exception: a search is open-ended, so they take an allowlisted query string.
 
@@ -139,9 +140,11 @@ New regulatory events of medicines the European Medicines Agency (EMA) has handl
 |:-----|:----|
 | All categories | `GET /feed/sites/{site_id}/medicines/` |
 | By category | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` |
+| By condition (subject) | `GET /feed/sites/{site_id}/medicines/subject/{subject_slug}/` |
 
-- **Two switches.** A medicine feed needs the site's `CustomSetting.rss_enabled` **and** `CustomSetting.medicines_enabled`, which is **off** for every site until someone ticks it. With either off it is a **404**, even when the category is in scope. A category outside the site's scope (none of its subjects is in `scope_subjects`) is a **404** too. There are no `/relevant/` variants and no search feed.
-- **Which medicines.** Those with a link to the category that an editor has **not suppressed** (automatic or manual: see [Matching medicines to categories](ema-medicines.md#matching-medicines-to-categories)). The category feed uses one category, the site feed every category that has a subject in the site's scope. An event appears once in the site feed, however many of the site's categories its medicine is in. **Generic and biosimilar products are left out.**
+- **Two switches.** A medicine feed needs the site's `CustomSetting.rss_enabled` **and** `CustomSetting.medicines_enabled`, which is **off** for every site until someone ticks it. With either off it is a **404**, even when the category is in scope. A category outside the site's scope (none of its subjects is in `scope_subjects`) is a **404** too, and so is a subject that is not in `scope_subjects`. There are no `/relevant/` variants and no search feed.
+- **Which medicines.** Those with a link to the category that an editor has **not suppressed** (automatic or manual: see [Matching medicines to categories](ema-medicines.md#matching-medicines-to-categories)). The category feed uses one category, the site feed every category that has a subject in the site's scope. An event appears once in the site feed, however many of the site's categories its medicine is in. **Generic and biosimilar products are left out, and so are duplicate products** (one medicine EMA authorises under several names, such as Exelon, Prometax and Rivastigmine Sandoz: the lead product reports the event for all of them, see [Grouping copies of a medicine](ema-medicines.md#grouping-copies-of-a-medicine)). This holds for all three feeds.
+- **The subject feed includes untracked medicines.** The all-categories and category feeds are curated: only medicines filed under a category. The subject feed lists the events of every medicine that has a live link to a category of that subject **or** a non-suppressed subject link to it, that is, a medicine EMA approved for one of the subject's conditions whether or not a category covers it (the API's `?subject_id=` rule, see [Which sites show medicines](#which-sites-show-medicines)). The two suppressions are independent, as on the API: a suppressed subject link next to a live category link keeps the medicine in, and a suppressed category link next to a live subject link does too. A medicine reached by both routes is listed once per event. A research-area subject with no EMA therapeutic areas lists just its categories' medicines. An in-scope subject with nothing to show is an empty feed (200).
 - **Which events.** `observed` events (a change the sync saw between two downloads) always; `reconstructed` events (read off EMA's date fields when a medicine was first seen) only when their date is within the last **90 days**. Without that cut-off, the first sync would put every approval since 1995 in the feed. Events of a medicine that EMA no longer lists are still shown.
 - **Ordered by event date**, newest first (ties by newest event id), **50 items**. `<pubDate>` is the event date at midnight UTC.
 - **Item content.**
@@ -149,8 +152,8 @@ New regulatory events of medicines the European Medicines Agency (EMA) has handl
 	- `link`: the medicine's EPAR page on ema.europa.eu.
 	- `guid`: `ema-medicine-event-{event id}` (not a permalink).
 	- the HTML description: the medicine's cleaned indication (HTML-escaped), then `Source: European Medicines Agency`, which EMA's legal notice asks for wherever its data is served.
-- **Channel.** `Medicines: {Category} — {site}` and `Medicine approvals — {site}`; the description credits EMA. The `<link>` is the site's homepage.
-- **Cost.** One render uses a fixed number of queries (7 for a category feed, 6 for the site feed) whatever the number of items.
+- **Channel.** `Medicines: {Category} — {site}`, `Medicines: {Subject} — {site}` and `Medicine approvals — {site}`; the description credits EMA. The `<link>` is the site's homepage.
+- **Cost.** One render uses a fixed number of queries (7 for a category feed, 6 for the site feed and 6 for a subject feed) whatever the number of items.
 
 ### Old feed URLs — permanent redirect
 
