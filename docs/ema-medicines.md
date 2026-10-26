@@ -303,28 +303,44 @@ GET /categories/                 each category carries medicines_count
 The parameters, fields and examples are in [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines).
 The rules that matter when reading or changing the code:
 
-- **Visibility is the feeds' rule.** A medicine is shown when it has a link, which an editor has
-  not suppressed, to a category with a subject in the caller's scope, and only on sites with
-  `medicines_enabled` on. A site with it off gets an empty list, a 404 on a single medicine
-  and a `medicines_count` of 0. `request.visible_medicine_subject_ids` holds the scope; the
-  API's helpers are in `api/medicine_scope.py`.
+- **Two routes to visibility.** A medicine is shown when it has a link, which an editor has
+  not suppressed, to a category with a subject in the caller's scope (the feeds' rule), **or** a
+  [subject link](#subject-links) that is not suppressed to a subject in the scope, and only on
+  sites with `medicines_enabled` on. The second route is what shows a medicine EMA approved for
+  a condition before anyone has made a category for it. A site with the switch off gets an
+  empty list, a 404 on a single medicine and a `medicines_count` of 0.
+  `request.visible_medicine_subject_ids` holds the scope; the API's helpers are in
+  `api/medicine_scope.py`. Both routes are `Exists()` conditions, never a join plus
+  `distinct()`. The two suppressions are independent: a suppressed subject link next to a live
+  category link leaves the medicine visible, and so does the reverse.
 - **One link, not one join per filter.** `category_id` (one id or a comma-separated list),
-  `category_slug`, `subject_id` and `site_id` all go through a single `Exists()` over
-  `MedicineCategoryAssignment`, together with the visibility condition, so
-  `?subject_id=1&category_id=6` means one live link to category 6 *whose category has subject 1*.
-  A product in several matching categories is still one row, and a link the caller cannot see
+  `category_slug`, `subject_id` and `site_id` go through `Exists()` conditions together with the
+  visibility condition. With a category filter there is one `Exists()` over
+  `MedicineCategoryAssignment`, so `?subject_id=1&category_id=6` means one live link to category
+  6 *whose category has subject 1*. Without one, `subject_id` and `site_id` accept either a category
+  link or a subject link, as two `Exists()` joined by OR, each holding every condition on its own
+  link. A product reached by several links is still one row, and a link the caller cannot see
   or an editor suppressed never matches. A plain join per filter would answer a looser question
   and repeat products.
-- **Generics and biosimilars are hidden** from both lists unless `include_generics=true`. The
-  single-medicine route returns them, since it is asked for by id. `medicines_count` leaves them
-  out too, so a category's number matches what `/medicines/?category_id=` returns.
+- **`tracked`.** `tracked=false` keeps medicines with no live link to a category the caller can see,
+  `true` those with one. It is exactly "`categories` is empty", computed from the same
+  `visible_links_queryset`, so a category the caller cannot see never decides it. Rows carry
+  `tracked`, `subjects` (the visible subject links) and `grouped_under`; the detail adds
+  `grouped_products`. The list's `count` is cached per query string, so `tracked=true` and
+  `tracked=false` each have their own entry.
+- **Generics, biosimilars and duplicate products are hidden** from both lists unless
+  `include_generics=true`. A duplicate is a product with `grouped_under` set (see
+  [Grouping copies of a medicine](#grouping-copies-of-a-medicine)). The single-medicine route
+  returns them, since it is asked for by id. `medicines_count` leaves all three out too, so a
+  category's number matches what `/medicines/?category_id=` returns.
 - **`latest_ec_decision_date` is not the approval date.** It keeps that name in the API so
   nobody mistakes it for one; `authorisation_date` is the first approval.
 - **Every row says where it comes from:** `"source": "European Medicines Agency"`, with the
   EPAR page as `url`. See [Source and attribution](#source-and-attribution).
 - **No bulk export.** Both lists are JSON only; `all_results` is ignored.
-- **Cost.** A list costs a fixed number of queries whatever the page holds: the visible links of
-  the page's medicines come in one extra query, and the events' medicines are joined.
+- **Cost.** A list costs a fixed number of queries whatever the page holds: the visible category
+  links and the visible subject links of the page's medicines come in one extra query each, and
+  the events' medicines are joined.
 
 ## MCP
 
@@ -333,7 +349,7 @@ and curate medicines on the sites that have them.
 
 | Tool | Who | What it does |
 |:-----|:----|:-------------|
-| `search_medicines` | Everyone | Searches the medicines linked to the site's categories by `name` (brand or product name), `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates and `include_generics`. Compact rows with the dates, the categories and the EPAR link |
+| `search_medicines` | Everyone | Searches the medicines filed under the site's categories or approved for one of its conditions by `name` (brand or product name), `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates, `tracked` and `include_generics`. Compact rows with the dates, `tracked`, the categories, the subjects and the EPAR link |
 | `get_medicine` | Everyone | One product with its events, each worded by `kind_label` |
 | `set_medicine_link` | Editors with the edit scope | Puts a medicine in a category, or takes it out. Live immediately, applies to the whole category |
 
@@ -345,6 +361,11 @@ and curate medicines on the sites that have them.
   and that the list covers only centrally authorised medicines: a drug missing from it may still be
   authorised in individual countries, so "not in EMA's data" is not "not approved". The tool
   descriptions say the same, and tell the model to show the EPAR `link`.
+- **`tracked=false` is the editor's to-do list.** It lists the medicines that show only because EMA
+  approved them for one of the site's conditions. An editor tracks one by creating or updating a
+  category (a matching term with an intervention modality); the instructions say so, and tell an
+  editor not to use `set_medicine_link` for it, which only files a medicine that already has a
+  category to be filed in.
 - **`name` is for brand names, `substance` for the INN.** `name=ocrevus` is a case-insensitive
   substring of the product name (a former name in brackets counts); `substance=ocrelizumab` is an
   exact match on the active substance. A zero-hit response on one suggests the other.

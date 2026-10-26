@@ -45,14 +45,16 @@ async def search_medicines(
 	authorised_after: str | None = None,
 	authorised_before: str | None = None,
 	include_generics: bool | None = None,
+	tracked: bool | None = None,
 	ordering: str | None = None,
 	page: int = 1,
 	page_size: int = DEFAULT_PAGE_SIZE,
 ) -> dict:
 	"""Search the medicines the European Medicines Agency (EMA) has authorised for
-	human use in the EU, one record per EMA product, limited to those linked to this
-	site's categories. Returns a compact row each; use get_medicine for the full
-	record with its regulatory history.
+	human use in the EU, one record per EMA product. A medicine shows either because it
+	is filed under one of this site's categories, or because EMA approved it for one of
+	the site's conditions (its subjects). Returns a compact row each; use get_medicine
+	for the full record with its regulatory history.
 
 	The data is from the European Medicines Agency and covers only centrally
 	authorised medicines. A drug missing here may still be authorised in individual
@@ -67,7 +69,14 @@ async def search_medicines(
 	its substances. They combine with each other and with the filters below.
 	`category_id` / `category_slug` / `subject_id` (see
 	list_categories, list_subjects) keep products linked to that category, or to a
-	category of that subject.
+	category of that subject; `subject_id` on its own also keeps products EMA approved
+	for that subject's condition, whether or not a category covers them.
+
+	Each row has `tracked` (true when the medicine is filed under at least one of this
+	site's categories) and `subjects` (the conditions EMA approved it for). Pass
+	`tracked=false` to list only the medicines no category covers yet: they show
+	because EMA approved them for one of the site's conditions, and they are the
+	candidates for a new category. `tracked=true` lists only the filed ones.
 
 	`status` is EMA's own wording, ignoring case: Authorised, Withdrawn, Refused,
 	Opinion, ... `opinion_status` is Positive or Negative and is filled only while a
@@ -75,7 +84,8 @@ async def search_medicines(
 	`authorised_after` / `authorised_before` are YYYY-MM-DD and bound the date of
 	first authorisation.
 
-	Generic and biosimilar products are hidden unless `include_generics` is true.
+	Generic and biosimilar products, and duplicate products (a further EMA product for
+	the same medicine as a lead product), are hidden unless `include_generics` is true.
 
 	Each row has `authorisation_date` (the first approval) and
 	`latest_ec_decision_date`, the date of the most recent European Commission
@@ -102,6 +112,7 @@ async def search_medicines(
 		"authorised_after": authorised_after,
 		"authorised_before": authorised_before,
 		"include_generics": include_generics,
+		"tracked": tracked,
 		"ordering": ordering,
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
@@ -125,7 +136,10 @@ async def get_medicine(medicine_id: int) -> dict:
 	"""Fetch the full record for one EMA medicine: its substances, indication,
 	status, the flags EMA publishes (orphan, advanced therapy, conditional approval,
 	generic, biosimilar, ...), every date, the categories it is linked to on this
-	site (`categories`) and its regulatory history (`events`, newest first).
+	site (`categories`; `tracked` is true when there is at least one), the conditions
+	EMA approved it for (`subjects`), the lead product it duplicates (`grouped_under`)
+	or the duplicates it leads (`grouped_products`), and its regulatory history
+	(`events`, newest first).
 
 	Each event has `kind_label`, the sentence to use ("CHMP positive opinion",
 	"Authorised in the EU", "New EC decision", "Indication changed"), plus its
@@ -148,7 +162,7 @@ async def get_medicine(medicine_id: int) -> dict:
 		medicine = await get_client().get(f"/medicines/{medicine_id}/")
 	except GregoryAPIError as exc:
 		# Django's 404 deliberately doesn't distinguish "doesn't exist" from "not
-		# visible on this site" (no live link to one of its categories).
+		# visible on this site" (no live category link or subject link).
 		if exc.status_code == 404:
 			raise ToolError(f"Medicine {medicine_id} was not found.") from exc
 		raise

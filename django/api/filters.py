@@ -26,8 +26,13 @@ from gregory.models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	MedicineSubjectLink,
 )
-from api.medicine_scope import category_has_subject, visible_subject_ids_of
+from api.medicine_scope import (
+	category_has_subject,
+	tracked_condition,
+	visible_subject_ids_of,
+)
 from api.patent_links import visible_patent_trial_links_queryset
 from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -2253,37 +2258,59 @@ _CATEGORY_SLUG_HELP = (
 	"Filter by category slug (see /categories/). Only live links count."
 )
 _SUBJECT_ID_HELP = (
-	"Keep {things} linked to a category that has this subject (see /subjects/). "
-	"Only live links count. Given together with category_id, category_slug or "
-	"site_id, all of them must hold on the same link: ?subject_id=1&category_id=6 "
-	"means a live link to category 6, and category 6 has subject 1."
+	"Keep {things} for this subject (see /subjects/): linked to a category that has "
+	"it, or approved by EMA for one of its conditions (a subject link). Only live "
+	"links count. Given together with category_id or category_slug, only category "
+	"links count, and all the filters must hold on the same link: "
+	"?subject_id=1&category_id=6 means a live link to category 6, and category 6 "
+	"has subject 1."
 )
 _SITE_ID_HELP = (
 	"Filter by Django Site ID: keep {things} linked to a category that has a "
-	"subject in that site's scope (see CustomSetting.scope_subjects). A site that "
-	"does not show medicines (medicines_enabled off) returns nothing. Only live "
-	"links count."
+	"subject in that site's scope (see CustomSetting.scope_subjects), or approved "
+	"by EMA for one of those subjects. Given together with category_id or "
+	"category_slug, only category links count. A site that does not show medicines "
+	"(medicines_enabled off) returns nothing. Only live links count."
 )
 _INCLUDE_GENERICS_HELP = (
-	"Generic and biosimilar products are left out unless this is true. They are "
-	"matched and stored like any other product; the default hides them so a "
-	"list shows the originators."
+	"Generic and biosimilar products, and duplicate products (further EMA products "
+	"for the same medicine, grouped under a lead product: see `grouped_under`), are "
+	"left out unless this is true. They are matched and stored like any other "
+	"product; the default hides them so a list shows the originators."
+)
+_TRACKED_HELP = (
+	"false: no live link to a category you can see (the medicine shows only because "
+	"EMA approved it for one of the site's conditions); true: filed under at least "
+	"one category you can see. Exactly `categories` empty or not on each row."
 )
 
 
 class MedicineLinkFilterMixin:
-	"""``category_id``, ``category_slug``, ``subject_id``, ``site_id`` and the
-	``include_generics`` default, shared by ``/medicines/`` and ``/medicines/events/``.
+	"""``category_id``, ``category_slug``, ``subject_id``, ``site_id``, ``tracked`` and
+	the ``include_generics`` default, shared by ``/medicines/`` and
+	``/medicines/events/``.
 
-	The four link filters are about a medicine's links to categories, and when
-	several are given they must all hold on the SAME link: ``?subject_id=1&
-	category_id=6`` is one live link to category 6, which has subject 1, not one
-	link to category 6 and another to some category of subject 1. Chaining a join
-	per filter would answer the second question, so the filters themselves do
-	nothing (``_link_filter``) and ``filter_queryset`` builds ONE ``Exists()`` over
-	``MedicineCategoryAssignment`` from every value given, plus the caller's own
-	visibility, so a link the caller cannot see never satisfies a filter. A
-	product in several matching categories is still one row.
+	When several link filters are given they must all hold on the SAME link:
+	``?subject_id=1&category_id=6`` is one live link to category 6, which has subject
+	1, not one link to category 6 and another to some category of subject 1. Chaining
+	a join per filter would answer the second question, so the filters themselves do
+	nothing (``_link_filter``) and ``filter_queryset`` builds ``Exists()`` conditions
+	from every value given, plus the caller's own visibility, so a link the caller
+	cannot see never satisfies a filter. A product in several matching links is still
+	one row.
+
+	``subject_id`` and ``site_id`` have two routes to a medicine: a live category link
+	(a category with that subject) or a non-suppressed subject link (EMA approved the
+	medicine for one of the subject's conditions). Without ``category_id`` /
+	``category_slug`` either route satisfies them; with one of those only category
+	links count, since a subject link has no category. Each route is ONE ``Exists()``
+	that holds every condition on its own link.
+
+	``tracked`` is separate: it asks whether the medicine has a live link to a category
+	the caller can see, whichever route made the medicine visible.
+
+	By default grouped copies (``grouped_under`` set) are hidden along with generics
+	and biosimilars; ``include_generics=true`` shows all three.
 
 	``medicine_ref`` is the outer column holding the medicine's id and
 	``medicine_prefix`` the path from a filtered row to its medicine.
@@ -2300,12 +2327,24 @@ class MedicineLinkFilterMixin:
 	def filter_queryset(self, queryset):
 		queryset = super().filter_queryset(queryset)
 		queryset = self._apply_link_filters(queryset)
+		queryset = self._apply_tracked(queryset)
 		if self.form.cleaned_data.get("include_generics") is not True:
 			prefix = self.medicine_prefix
 			queryset = queryset.filter(
-				**{f"{prefix}generic": False, f"{prefix}biosimilar": False}
+				**{
+					f"{prefix}generic": False,
+					f"{prefix}biosimilar": False,
+					f"{prefix}grouped_under__isnull": True,
+				}
 			)
 		return queryset
+
+	def _apply_tracked(self, queryset):
+		tracked = self.form.cleaned_data.get("tracked")
+		if tracked is None:
+			return queryset
+		condition = tracked_condition(self.request, self.medicine_ref)
+		return queryset.filter(condition if tracked else ~condition)
 
 	def _apply_link_filters(self, queryset):
 		data = self.form.cleaned_data
@@ -2350,7 +2389,18 @@ class MedicineLinkFilterMixin:
 			links = links.filter(teamcategory__category_slug=category_slug)
 		for ids in subject_conditions:
 			links = links.filter(category_has_subject(ids))
-		return queryset.filter(Exists(links))
+		if category_ids or category_slug:
+			# A subject link has no category, so it cannot satisfy a category filter.
+			return queryset.filter(Exists(links))
+
+		# Second route: a medicine EMA approved for one of the subjects. Every
+		# condition holds on the same subject link, as on the category route.
+		subject_links = MedicineSubjectLink.objects.filter(
+			medicine=OuterRef(self.medicine_ref), suppressed=False
+		)
+		for ids in subject_conditions:
+			subject_links = subject_links.filter(subject_id__in=ids)
+		return queryset.filter(Exists(links) | Exists(subject_links))
 
 
 class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
@@ -2450,9 +2500,14 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"inclusive). Invalid dates return 400."
 		),
 	)
+	tracked = filters.BooleanFilter(
+		method="_link_filter",
+		label="Tracked",
+		help_text=_TRACKED_HELP,
+	)
 	include_generics = filters.BooleanFilter(
 		method="_link_filter",
-		label="Include generics and biosimilars",
+		label="Include generics, biosimilars and duplicates",
 		help_text=_INCLUDE_GENERICS_HELP,
 	)
 
@@ -2472,6 +2527,7 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"is_combination",
 			"authorised_after",
 			"authorised_before",
+			"tracked",
 			"include_generics",
 		]
 
@@ -2541,9 +2597,14 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Event on or before",
 		help_text="Events dated on or before this date (YYYY-MM-DD, inclusive). Invalid dates return 400.",
 	)
+	tracked = filters.BooleanFilter(
+		method="_link_filter",
+		label="Tracked",
+		help_text=_TRACKED_HELP,
+	)
 	include_generics = filters.BooleanFilter(
 		method="_link_filter",
-		label="Include generics and biosimilars",
+		label="Include generics, biosimilars and duplicates",
 		help_text=_INCLUDE_GENERICS_HELP,
 	)
 
@@ -2558,5 +2619,6 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"basis",
 			"event_date_after",
 			"event_date_before",
+			"tracked",
 			"include_generics",
 		]

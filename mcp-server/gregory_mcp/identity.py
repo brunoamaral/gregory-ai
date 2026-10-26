@@ -64,7 +64,16 @@ _MEDICINE_EDIT_TOOL = (
 _MEDICINES_NOTE = (
 	"Medicines come from the European Medicines Agency (EMA) and cover only those authorised centrally for "
 	"the EU. A drug missing from them may still be authorised in individual countries, so not being in "
-	"EMA's data does not mean it is not approved. Name EMA as the source when you present one."
+	"EMA's data does not mean it is not approved. Name EMA as the source when you present one. A medicine "
+	"shows if it is filed under one of the site's categories or if EMA approved it for one of the site's "
+	"conditions; one with no category is untracked (tracked=false in search_medicines), and an editor "
+	"tracks it by creating or updating a category (a matching term with an intervention modality)."
+)
+
+# Only for a session that has the tool: elsewhere the text must not point at what is absent.
+_MEDICINE_TRACKING_EDIT_NOTE = (
+	"To track an untracked medicine use create_category or update_category, not set_medicine_link: the "
+	"category's matching terms file it."
 )
 
 # Added for a sign-in with the sources scope only; every other session's text is
@@ -88,7 +97,12 @@ def _behavior_paragraph(session: EditorSession | None, patents: bool = False, me
 	and what a missing drug means, at the end of the same paragraph.
 	"""
 	text = _tier_paragraph(session, patents, medicines)
-	return f"{text} {_MEDICINES_NOTE}" if medicines else text
+	if not medicines:
+		return text
+	note = _MEDICINES_NOTE
+	if session is not None and session.is_editor and session.can_edit:
+		note = f"{note} {_MEDICINE_TRACKING_EDIT_NOTE}"
+	return f"{text} {note}"
 
 
 def _tier_paragraph(session: EditorSession | None, patents: bool, medicines: bool) -> str:

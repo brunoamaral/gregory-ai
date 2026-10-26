@@ -146,8 +146,8 @@ independent: a site can have either, both or neither.
 
 | Tool | What it does |
 |:---|:---|
-| `search_medicines` | One row per EMA product, limited to those linked to the site's categories. `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id`, `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `include_generics`, `ordering`. Generic and biosimilar products are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `categories` and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
-| `get_medicine` | One product by `medicine_id`: the full record plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off EMA's dates the first time the product was seen. A product the site cannot show is "not found", the same as one that does not exist. |
+| `search_medicines` | One row per EMA product. A medicine shows because it is filed under one of the site's categories, or because EMA approved it for one of the site's conditions. `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id` (`subject_id` alone also keeps the medicines approved for that subject's condition), `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `tracked` (`false`: only medicines no category of the site covers yet; `true`: only filed ones), `include_generics`, `ordering`. Generic and biosimilar products, and duplicate products (further EMA products for the same medicine), are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `tracked`, `categories`, `subjects` (the conditions EMA approved it for: `subject_id`, `subject_name`, `matched_on`) and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
+| `get_medicine` | One product by `medicine_id`: the full record (including `tracked`, `subjects`, `grouped_under` and, on a lead product, `grouped_products`) plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off EMA's dates the first time the product was seen. A product the site cannot show is "not found", the same as one that does not exist. |
 
 **Source and coverage.** Every response carries `source: "European Medicines Agency"` and a `note`, and
 both tools' descriptions say it: the data is EMA's, and it covers only medicines authorised centrally for
@@ -159,8 +159,12 @@ source. The tools' descriptions also tell the model to show the product's `link`
 European Commission decision, usually a variation (a new indication, a label change), and keeps that name
 in the compact rows so it is never read as "approved on".
 
-**Visibility.** A product is visible when it has a live (non-suppressed) link to a category of the site
-(see [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines)). An editor's reads go to
+**Visibility.** A product is visible when it has a live (non-suppressed) link to a category of the site,
+or a live subject link: EMA approved it for one of the site's conditions (see
+[03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines)). A medicine with no category is
+*untracked* (`tracked: false`); the site's instructions say an editor tracks one by creating or
+updating a category (a matching term with an intervention modality), and an editor who can edit is
+told not to use `set_medicine_link` for it. An editor's reads go to
 `/editor/medicines/`, which applies the same rule to the site's whole scope.
 
 ### `search` syntax
@@ -182,7 +186,7 @@ match only one field. `search_patents`'s reads title and summary only.
 
 When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
 response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
-`substance` being an exact INN (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), generics being hidden by default, `status` and
+`substance` being an exact INN (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` and
 `opinion_status`, the first-authorisation date range, and the reminder that a drug missing from EMA's data
 may be authorised nationally):
 
@@ -399,8 +403,9 @@ assistant"` — a client only ever sees these if no tenant resolved, which
   read-only and scoped to those subjects. Patents and medicines are named in the generated
   introduction, the `description` and the note only for a tenant that has them; a tenant with
   medicines also gets a sentence saying the medicines are the European Medicines Agency's, cover only
-  centrally authorised ones, and that a drug missing from them may still be authorised nationally, and
-  its editors are told about `set_medicine_link`. None of this text ever contains "GregoryAI",
+  centrally authorised ones, that a drug missing from them may still be authorised nationally, and that a
+  medicine with no category is untracked (an editor tracks it by creating or updating a category); its
+  editors are told about `set_medicine_link`, and that it is not how a medicine is tracked. None of this text ever contains "GregoryAI",
   "instance" or "tenant" — `tests/test_identity.py` checks every tenant's rendered text
   for that.
 

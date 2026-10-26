@@ -4439,16 +4439,36 @@ paths:
         on ema.europa.eu. Keep both wherever you display a medicine.
 
         Medicines are only visible through sites that have **medicines_enabled** on
-        (`CustomSetting.medicines_enabled`, off by default), and only the ones linked to
-        a category of that site's scope. A medicine has no subject of its own: it is
-        visible when it has a live (non-suppressed) link to a category that has a
-        subject in the caller's scope. A caller whose sites do not show medicines gets
-        an empty list, and a 404 on a single record. A link an editor removed never
-        counts, for visibility, for `categories` or for any filter.
+        (`CustomSetting.medicines_enabled`, off by default). A medicine has no subject of
+        its own. It is visible by either of two routes, each counted against the caller's
+        scope:
 
-        **Generics and biosimilars are hidden by default.** Products with `generic` or
-        `biosimilar` set are left out of the list unless `?include_generics=true`. A
-        single record is returned whatever it is.
+        - it has a live (non-suppressed) link to a **category** that has a subject in the
+          scope (a medicine an editor tracks), or
+        - it has a live **subject link**: EMA approved it for one of a subject's conditions
+          (the subject's EMA therapeutic areas), with or without a category.
+
+        The two suppressions are independent. A subject link an editor suppressed does not
+        hide a medicine that still has a live category link, and the other way round.
+        A caller whose sites do not show medicines gets an empty list, and a 404 on a
+        single record. A link an editor removed never counts, for visibility, for
+        `categories`, for `subjects` or for any filter.
+
+        **`tracked`** says whether the medicine is filed under a category the caller can
+        see: it is `true` exactly when `categories` is not empty. `tracked=false` lists
+        the medicines that show only because EMA approved them for one of the site's
+        conditions, which is where an editor finds candidates for a new category.
+        `subjects` lists the conditions EMA approved the medicine for (`id`,
+        `subject_name`, `subject_slug`, `matched_on`), limited to the subjects in the
+        caller's scope.
+
+        **Generics, biosimilars and duplicate products are hidden by default.** Products
+        with `generic` or `biosimilar` set are left out of the list unless
+        `?include_generics=true`. So are further EMA products for the same medicine (same
+        substances and indication): one product leads, the others carry `grouped_under`
+        (the lead's id) and are listed only with `include_generics=true`. The lead's
+        detail lists them as `grouped_products`. A single record is returned whatever it
+        is.
 
         **`latest_ec_decision_date` is not the approval date.** It is the date of the
         most recent European Commission decision, which is usually a variation (a new
@@ -4462,22 +4482,25 @@ paths:
         # Query Parameters:
         - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
         - **category_slug** - filter by category slug
-        - **subject_id** - medicines linked to a category that has this subject
-        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **subject_id** - medicines linked to a category that has this subject, or approved by EMA for one of its conditions
+        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
+        - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
         - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
         - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
-        - **include_generics** - `true` also lists generic and biosimilar products
+        - **include_generics** - `true` also lists generic and biosimilar products, and duplicate products
         - **page**, **page_size**, **ordering**
 
         The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
         count live links only. Given together they must all hold on the **same** link:
         `?subject_id=1&category_id=6` means a live link to category 6, and category 6
-        has subject 1. A medicine in several matching categories is still listed once,
-        and an invalid ID (`?category_id=6,abc`) returns 400.
+        has subject 1. `subject_id` and `site_id` on their own accept either route (a
+        category link, or a subject link); as soon as `category_id` or `category_slug` is
+        given, only category links count. A medicine reached by several links is still
+        listed once, and an invalid ID (`?category_id=6,abc`) returns 400.
 
         # Ordering:
         `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
@@ -4495,16 +4518,21 @@ paths:
         (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
         `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
         `application_withdrawal_date`, `suspension_date`, `end_date`,
-        `ema_first_published`, `ema_last_updated`), `url`, `categories` (the live links
-        the caller may see: `id`, `category_name`, `category_slug`) and `source`.
+        `ema_first_published`, `ema_last_updated`), `url`, `grouped_under`, `tracked`,
+        `categories` (the live links the caller may see: `id`, `category_name`,
+        `category_slug`), `subjects` (the conditions EMA approved it for the caller may
+        see: `id`, `subject_name`, `subject_slug`, `matched_on`) and `source`.
 
-        `GET /medicines/{id}/` adds `events`, the product's regulatory history newest
+        `GET /medicines/{id}/` adds `grouped_products` (the lead product's copies:
+        `id`, `name`, `url`) and `events`, the product's regulatory history newest
         first. The same events across all products are at `/medicines/events/`.
 
         # Examples:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - Every medicine EMA approved for a condition, filed or not: `/medicines/?subject_id=13`
+        - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
-        - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - One substance, with its biosimilars and duplicates: `/medicines/?substance=natalizumab&include_generics=true`
         - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
@@ -4550,9 +4578,10 @@ paths:
         name: include_generics
         schema:
           type: boolean
-        description: Generic and biosimilar products are left out unless this is true.
-          They are matched and stored like any other product; the default hides them
-          so a list shows the originators.
+        description: 'Generic and biosimilar products, and duplicate products (further
+          EMA products for the same medicine, grouped under a lead product: see `grouped_under`),
+          are left out unless this is true. They are matched and stored like any other
+          product; the default hides them so a list shows the originators.'
       - in: query
         name: include_public
         schema:
@@ -4624,9 +4653,10 @@ paths:
         schema:
           type: number
         description: 'Filter by Django Site ID: keep medicines linked to a category
-          that has a subject in that site''s scope (see CustomSetting.scope_subjects).
-          A site that does not show medicines (medicines_enabled off) returns nothing.
-          Only live links count.'
+          that has a subject in that site''s scope (see CustomSetting.scope_subjects),
+          or approved by EMA for one of those subjects. Given together with category_id
+          or category_slug, only category links count. A site that does not show medicines
+          (medicines_enabled off) returns nothing. Only live links count.'
       - in: query
         name: status
         schema:
@@ -4637,10 +4667,12 @@ paths:
         name: subject_id
         schema:
           type: number
-        description: 'Keep medicines linked to a category that has this subject (see
-          /subjects/). Only live links count. Given together with category_id, category_slug
-          or site_id, all of them must hold on the same link: ?subject_id=1&category_id=6
-          means a live link to category 6, and category 6 has subject 1.'
+        description: 'Keep medicines for this subject (see /subjects/): linked to
+          a category that has it, or approved by EMA for one of its conditions (a
+          subject link). Only live links count. Given together with category_id or
+          category_slug, only category links count, and all the filters must hold
+          on the same link: ?subject_id=1&category_id=6 means a live link to category
+          6, and category 6 has subject 1.'
       - in: query
         name: substance
         schema:
@@ -4649,6 +4681,14 @@ paths:
           when the INN is empty). Matches one element of the product's `substances`
           exactly, ignoring case and extra spaces, e.g. ?substance=ocrelizumab. A
           combination product matches on any of its substances.
+      - in: query
+        name: tracked
+        schema:
+          type: boolean
+        description: 'false: no live link to a category you can see (the medicine
+          shows only because EMA approved it for one of the site''s conditions); true:
+          filed under at least one category you can see. Exactly `categories` empty
+          or not on each row.'
       tags:
       - medicines
       security:
@@ -4676,16 +4716,36 @@ paths:
         on ema.europa.eu. Keep both wherever you display a medicine.
 
         Medicines are only visible through sites that have **medicines_enabled** on
-        (`CustomSetting.medicines_enabled`, off by default), and only the ones linked to
-        a category of that site's scope. A medicine has no subject of its own: it is
-        visible when it has a live (non-suppressed) link to a category that has a
-        subject in the caller's scope. A caller whose sites do not show medicines gets
-        an empty list, and a 404 on a single record. A link an editor removed never
-        counts, for visibility, for `categories` or for any filter.
+        (`CustomSetting.medicines_enabled`, off by default). A medicine has no subject of
+        its own. It is visible by either of two routes, each counted against the caller's
+        scope:
 
-        **Generics and biosimilars are hidden by default.** Products with `generic` or
-        `biosimilar` set are left out of the list unless `?include_generics=true`. A
-        single record is returned whatever it is.
+        - it has a live (non-suppressed) link to a **category** that has a subject in the
+          scope (a medicine an editor tracks), or
+        - it has a live **subject link**: EMA approved it for one of a subject's conditions
+          (the subject's EMA therapeutic areas), with or without a category.
+
+        The two suppressions are independent. A subject link an editor suppressed does not
+        hide a medicine that still has a live category link, and the other way round.
+        A caller whose sites do not show medicines gets an empty list, and a 404 on a
+        single record. A link an editor removed never counts, for visibility, for
+        `categories`, for `subjects` or for any filter.
+
+        **`tracked`** says whether the medicine is filed under a category the caller can
+        see: it is `true` exactly when `categories` is not empty. `tracked=false` lists
+        the medicines that show only because EMA approved them for one of the site's
+        conditions, which is where an editor finds candidates for a new category.
+        `subjects` lists the conditions EMA approved the medicine for (`id`,
+        `subject_name`, `subject_slug`, `matched_on`), limited to the subjects in the
+        caller's scope.
+
+        **Generics, biosimilars and duplicate products are hidden by default.** Products
+        with `generic` or `biosimilar` set are left out of the list unless
+        `?include_generics=true`. So are further EMA products for the same medicine (same
+        substances and indication): one product leads, the others carry `grouped_under`
+        (the lead's id) and are listed only with `include_generics=true`. The lead's
+        detail lists them as `grouped_products`. A single record is returned whatever it
+        is.
 
         **`latest_ec_decision_date` is not the approval date.** It is the date of the
         most recent European Commission decision, which is usually a variation (a new
@@ -4699,22 +4759,25 @@ paths:
         # Query Parameters:
         - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
         - **category_slug** - filter by category slug
-        - **subject_id** - medicines linked to a category that has this subject
-        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **subject_id** - medicines linked to a category that has this subject, or approved by EMA for one of its conditions
+        - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
+        - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
         - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
         - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
-        - **include_generics** - `true` also lists generic and biosimilar products
+        - **include_generics** - `true` also lists generic and biosimilar products, and duplicate products
         - **page**, **page_size**, **ordering**
 
         The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
         count live links only. Given together they must all hold on the **same** link:
         `?subject_id=1&category_id=6` means a live link to category 6, and category 6
-        has subject 1. A medicine in several matching categories is still listed once,
-        and an invalid ID (`?category_id=6,abc`) returns 400.
+        has subject 1. `subject_id` and `site_id` on their own accept either route (a
+        category link, or a subject link); as soon as `category_id` or `category_slug` is
+        given, only category links count. A medicine reached by several links is still
+        listed once, and an invalid ID (`?category_id=6,abc`) returns 400.
 
         # Ordering:
         `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
@@ -4732,16 +4795,21 @@ paths:
         (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
         `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
         `application_withdrawal_date`, `suspension_date`, `end_date`,
-        `ema_first_published`, `ema_last_updated`), `url`, `categories` (the live links
-        the caller may see: `id`, `category_name`, `category_slug`) and `source`.
+        `ema_first_published`, `ema_last_updated`), `url`, `grouped_under`, `tracked`,
+        `categories` (the live links the caller may see: `id`, `category_name`,
+        `category_slug`), `subjects` (the conditions EMA approved it for the caller may
+        see: `id`, `subject_name`, `subject_slug`, `matched_on`) and `source`.
 
-        `GET /medicines/{id}/` adds `events`, the product's regulatory history newest
+        `GET /medicines/{id}/` adds `grouped_products` (the lead product's copies:
+        `id`, `name`, `url`) and `events`, the product's regulatory history newest
         first. The same events across all products are at `/medicines/events/`.
 
         # Examples:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - Every medicine EMA approved for a condition, filed or not: `/medicines/?subject_id=13`
+        - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
-        - One substance, with its biosimilars: `/medicines/?substance=natalizumab&include_generics=true`
+        - One substance, with its biosimilars and duplicates: `/medicines/?substance=natalizumab&include_generics=true`
         - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
@@ -4789,9 +4857,12 @@ paths:
 
         Visibility is `/medicines/`'s, applied through the event's medicine: a medicine
         is visible when it has a live link to a category with a subject in the caller's
-        scope, and only on sites with **medicines_enabled** on. A caller whose sites do
-        not show medicines gets an empty list. **Generics and biosimilars are hidden by
-        default**; `?include_generics=true` lists their events too.
+        scope, or a live subject link (EMA approved it for one of a subject's conditions),
+        and only on sites with **medicines_enabled** on. A caller whose sites do not show
+        medicines gets an empty list. **Generics, biosimilars and duplicate products are
+        hidden by default**; `?include_generics=true` lists their events too. `tracked`
+        filters on whether the event's medicine is filed under a category the caller can
+        see.
 
         Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
         "Authorised in the EU"), `event_date`, `basis`, `from_value`, `to_value`, a small
@@ -4811,20 +4882,24 @@ paths:
         # Query Parameters:
         - **category_id** - one category ID, or a comma-separated list matching ANY of them (`?category_id=6,21`)
         - **category_slug** - filter by category slug
-        - **subject_id** - events of medicines linked to a category that has this subject
-        - **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope. A site with `medicines_enabled` off returns nothing
+        - **subject_id** - events of medicines linked to a category that has this subject, or approved by EMA for one of its conditions
+        - **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
+        - **tracked** - `false`: the event's medicine has no live link to a category you can see; `true`: it has one
         - **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, ...)
         - **basis** - `observed` or `reconstructed`
         - **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
-        - **include_generics** - `true` also lists events of generic and biosimilar products
+        - **include_generics** - `true` also lists events of generic and biosimilar products, and of duplicate products
         - **page**, **page_size**
 
         The link filters follow the single-link rule of `/medicines/`: given together they
-        must all hold on the same live link of the event's medicine.
+        must all hold on the same live link of the event's medicine. `subject_id` and
+        `site_id` without `category_id` / `category_slug` accept a category link or a
+        subject link; with a category filter only category links count.
 
         # Examples:
         - News for a condition page: `/medicines/events/?subject_id=1&category_id=6&basis=observed`
         - For one site: `/medicines/events/?site_id=3`
+        - News on medicines no category covers yet: `/medicines/events/?site_id=3&tracked=false`
         - Positive opinions since January: `/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01`
       parameters:
       - in: query
@@ -4873,9 +4948,10 @@ paths:
         name: include_generics
         schema:
           type: boolean
-        description: Generic and biosimilar products are left out unless this is true.
-          They are matched and stored like any other product; the default hides them
-          so a list shows the originators.
+        description: 'Generic and biosimilar products, and duplicate products (further
+          EMA products for the same medicine, grouped under a lead product: see `grouped_under`),
+          are left out unless this is true. They are matched and stored like any other
+          product; the default hides them so a list shows the originators.'
       - in: query
         name: include_public
         schema:
@@ -4939,17 +5015,28 @@ paths:
         schema:
           type: number
         description: 'Filter by Django Site ID: keep events of medicines linked to
-          a category that has a subject in that site''s scope (see CustomSetting.scope_subjects).
-          A site that does not show medicines (medicines_enabled off) returns nothing.
-          Only live links count.'
+          a category that has a subject in that site''s scope (see CustomSetting.scope_subjects),
+          or approved by EMA for one of those subjects. Given together with category_id
+          or category_slug, only category links count. A site that does not show medicines
+          (medicines_enabled off) returns nothing. Only live links count.'
       - in: query
         name: subject_id
         schema:
           type: number
-        description: 'Keep events of medicines linked to a category that has this
-          subject (see /subjects/). Only live links count. Given together with category_id,
-          category_slug or site_id, all of them must hold on the same link: ?subject_id=1&category_id=6
-          means a live link to category 6, and category 6 has subject 1.'
+        description: 'Keep events of medicines for this subject (see /subjects/):
+          linked to a category that has it, or approved by EMA for one of its conditions
+          (a subject link). Only live links count. Given together with category_id
+          or category_slug, only category links count, and all the filters must hold
+          on the same link: ?subject_id=1&category_id=6 means a live link to category
+          6, and category 6 has subject 1.'
+      - in: query
+        name: tracked
+        schema:
+          type: boolean
+        description: 'false: no live link to a category you can see (the medicine
+          shows only because EMA approved it for one of the site''s conditions); true:
+          filed under at least one category you can see. Exactly `categories` empty
+          or not on each row.'
       tags:
       - medicines
       security:
@@ -10538,9 +10625,16 @@ components:
       description: |-
         One EMA centrally authorised human medicine (``/medicines/``).
 
-        Relies on MedicineViewSet attaching the caller's visible links as
-        ``_visible_links``, so a page costs a constant number of queries. Without it
-        (an instance built by hand) the same rule runs for that one medicine.
+        Relies on MedicineViewSet attaching the caller's visible category links as
+        ``_visible_links`` and visible subject links as ``_visible_subject_links``, so a
+        page costs a constant number of queries. Without them (an instance built by hand)
+        the same rule runs for that one medicine.
+
+        ``tracked`` is true when the medicine is filed under at least one category the
+        caller can see (``categories`` is not empty). ``subjects`` lists the conditions
+        EMA approved it for, which is how an untracked medicine is visible at all.
+        ``grouped_under`` is the id of the lead product when this row is a duplicate of
+        another EMA product, else null.
 
         ``latest_ec_decision_date`` is the most recent European Commission decision,
         usually a variation. It is NOT the approval date: ``authorisation_date`` is
@@ -10675,10 +10769,25 @@ components:
             maxLength: 500
           - type: string
             maxLength: 0
+        grouped_under:
+          type: integer
+          nullable: true
+          description: 'The lead product of this product''s group: same substances
+            and the same indication. Set by match_medicines.'
+        tracked:
+          type: boolean
+          description: True when the medicine is filed under a category the caller
+            can see.
+          readOnly: true
         categories:
           type: array
           items:
             $ref: '#/components/schemas/MedicineCategory'
+          readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineSubject'
           readOnly: true
         source:
           type: string
@@ -10690,6 +10799,8 @@ components:
       - name
       - source
       - status
+      - subjects
+      - tracked
     MedicineCategory:
       type: object
       description: A category a medicine is linked to, as ``categories`` on a medicine.
@@ -10713,7 +10824,10 @@ components:
       - id
     MedicineDetail:
       type: object
-      description: '``MedicineSerializer`` plus the medicine''s events, newest first.'
+      description: |-
+        ``MedicineSerializer`` plus the medicine's events, newest first, and, on a lead
+        product, the further EMA products for the same medicine (``grouped_products``,
+        ordered by name; only those the caller can see).
       properties:
         id:
           type: integer
@@ -10844,13 +10958,33 @@ components:
             maxLength: 500
           - type: string
             maxLength: 0
+        grouped_under:
+          type: integer
+          nullable: true
+          description: 'The lead product of this product''s group: same substances
+            and the same indication. Set by match_medicines.'
+        tracked:
+          type: boolean
+          description: True when the medicine is filed under a category the caller
+            can see.
+          readOnly: true
         categories:
           type: array
           items:
             $ref: '#/components/schemas/MedicineCategory'
           readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineSubject'
+          readOnly: true
         source:
           type: string
+          readOnly: true
+        grouped_products:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineGroupedProduct'
           readOnly: true
         events:
           type: array
@@ -10861,10 +10995,13 @@ components:
       - categories
       - ema_product_number
       - events
+      - grouped_products
       - id
       - name
       - source
       - status
+      - subjects
+      - tracked
     MedicineEvent:
       type: object
       description: |-
@@ -10962,6 +11099,29 @@ components:
       - inn
       - name
       - url
+    MedicineGroupedProduct:
+      type: object
+      description: |-
+        A further EMA product for the same medicine, as ``grouped_products`` on the
+        lead product's detail.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        url:
+          description: The EPAR page on ema.europa.eu.
+          oneOf:
+          - type: string
+            format: uri
+            maxLength: 500
+          - type: string
+            maxLength: 0
+      required:
+      - id
+      - name
     MedicineHistoryEvent:
       type: object
       description: |-
@@ -10993,6 +11153,27 @@ components:
       - id
       - kind
       - kind_label
+    MedicineSubject:
+      type: object
+      description: |-
+        A subject EMA approved a medicine for, as ``subjects`` on a medicine.
+
+        Built from a ``MedicineSubjectLink``: ``matched_on`` is the subject's EMA
+        therapeutic area that matched.
+      properties:
+        id:
+          type: integer
+        subject_name:
+          type: string
+        subject_slug:
+          type: string
+        matched_on:
+          type: string
+      required:
+      - id
+      - matched_on
+      - subject_name
+      - subject_slug
     ModalityEnum:
       enum:
       - small_molecule
