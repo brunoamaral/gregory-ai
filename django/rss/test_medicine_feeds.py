@@ -1,6 +1,7 @@
 """
-EMA medicine event feeds (feed/sites/<site_id>/medicines/ and
-feed/sites/<site_id>/medicines/category/<slug>/).
+EMA medicine event feeds (feed/sites/<site_id>/medicines/,
+feed/sites/<site_id>/medicines/category/<slug>/ and
+feed/sites/<site_id>/medicines/subject/<slug>/).
 
 Reuses the fixtures of the reader-feed tests. Every class clears the cache in
 setUp: both feeds are cache_page'd in the default cache (a LocMemCache under
@@ -23,6 +24,7 @@ from gregory.models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	MedicineSubjectLink,
 	Subject,
 	TeamCategory,
 )
@@ -32,6 +34,7 @@ from rss.test_reader_feeds import FeedFixture
 
 ATOM = "{http://www.w3.org/2005/Atom}"
 BY_CATEGORY = "site_medicines_by_category_feed"
+BY_SUBJECT = "site_medicines_by_subject_feed"
 SITE_FEED = "site_medicines_feed"
 
 Kind = MedicineEvent.Kind
@@ -85,14 +88,29 @@ class MedicineFixture(FeedFixture):
 			**extra,
 		)
 
+	def subject_link(self, medicine, subject=None, suppressed=False):
+		return MedicineSubjectLink.objects.create(
+			medicine=medicine,
+			subject=subject or self.subject,
+			matched_on="Multiple Sclerosis",
+			suppressed=suppressed,
+		)
+
 	def category_feed(self, category=None):
 		return self.client.get(self.category_url(BY_CATEGORY, category))
+
+	def subject_feed(self, subject=None):
+		return self.client.get(self.subject_url(BY_SUBJECT, subject))
 
 	def site_feed(self):
 		return self.client.get(self.url(SITE_FEED))
 
 	def routes(self):
-		return [(BY_CATEGORY, self.category_url(BY_CATEGORY)), (SITE_FEED, self.url(SITE_FEED))]
+		return [
+			(BY_CATEGORY, self.category_url(BY_CATEGORY)),
+			(BY_SUBJECT, self.subject_url(BY_SUBJECT)),
+			(SITE_FEED, self.url(SITE_FEED)),
+		]
 
 
 class MedicineFeedScopeTests(MedicineFixture, TestCase):
@@ -140,8 +158,12 @@ class MedicineFeedScopeTests(MedicineFixture, TestCase):
 
 	def test_unknown_site_and_site_without_settings_are_404(self):
 		other = Site.objects.create(domain="nosettings.example.com", name="No settings")
-		for name in (BY_CATEGORY, SITE_FEED):
-			kwargs = {"category_slug": self.category.category_slug} if name == BY_CATEGORY else {}
+		for name in (BY_CATEGORY, BY_SUBJECT, SITE_FEED):
+			kwargs = {}
+			if name == BY_CATEGORY:
+				kwargs = {"category_slug": self.category.category_slug}
+			elif name == BY_SUBJECT:
+				kwargs = {"subject_slug": self.subject.subject_slug}
 			with self.subTest(route=name, case="no settings"):
 				self.assertEqual(self.client.get(self.url(name, site_id=other.pk, **kwargs)).status_code, 404)
 			with self.subTest(route=name, case="unknown site"):
@@ -156,6 +178,27 @@ class MedicineFeedScopeTests(MedicineFixture, TestCase):
 		self.assertEqual(self.category_feed(elsewhere).status_code, 404)
 		self.assertEqual(
 			self.client.get(self.url(BY_CATEGORY, category_slug="no-such-category")).status_code, 404
+		)
+
+	def test_subject_outside_scope_or_unknown_is_404(self):
+		# A subject the site doesn't cover is a 404 even when a medicine is linked to it.
+		hidden = self.make_medicine("Hidden", category=None)
+		self.subject_link(hidden, self.other_subject)
+		self.make_event(hidden)
+		self.assertEqual(self.subject_feed(self.other_subject).status_code, 404)
+		self.assertEqual(
+			self.client.get(self.url(BY_SUBJECT, subject_slug="no-such-subject")).status_code, 404
+		)
+
+	def test_a_subject_in_scope_with_nothing_to_show_is_an_empty_200(self):
+		response = self.subject_feed()
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(self.items(response), [])
+
+	def test_the_subject_route_resolves_before_the_site_root(self):
+		self.assertEqual(
+			self.subject_url(BY_SUBJECT),
+			f"/feed/sites/{self.site.pk}/medicines/subject/reader-subject/",
 		)
 
 	def test_category_with_no_subjects_is_404(self):
@@ -420,6 +463,225 @@ class MedicineFeedContentTests(MedicineFixture, TestCase):
 		self.assertEqual(len(self.get_titles(url)), 2)
 
 
+class MedicineSubjectFeedTests(MedicineFixture, TestCase):
+	"""The subject feed lists every medicine of a condition; the other feeds stay curated."""
+
+	def setUp(self):
+		self.build()
+		# Tracked: filed under the fixture category (which has self.subject).
+		self.tracked = self.make_medicine("Tracked")
+		# Untracked: EMA approved it for the condition, no category.
+		self.untracked = self.make_medicine("Untracked", category=None)
+		self.subject_link(self.untracked)
+
+	def subject_titles(self, subject=None):
+		return [t.split(" (")[0] for t in self.titles(self.subject_feed(subject))]
+
+	def test_lists_an_untracked_and_a_category_linked_medicine(self):
+		self.make_event(self.tracked, days_ago=2)
+		self.make_event(self.untracked, days_ago=1)
+		self.assertEqual(self.subject_titles(), ["Untracked", "Tracked"])
+
+	def test_the_site_and_category_feeds_do_not_list_the_untracked_medicine(self):
+		self.make_event(self.tracked, days_ago=2)
+		self.make_event(self.untracked, days_ago=1)
+		for response in (self.category_feed(), self.site_feed()):
+			self.assertEqual(
+				self.titles(response), ["Tracked (ocrelizumab): Authorised in the EU"]
+			)
+
+	def test_a_medicine_with_both_a_category_link_and_a_subject_link_is_listed_once(self):
+		self.subject_link(self.tracked)
+		event = self.make_event(self.tracked)
+		(item,) = self.items(self.subject_feed())
+		self.assertEqual(item.findtext("guid"), f"ema-medicine-event-{event.pk}")
+
+	def test_two_category_links_to_the_subject_still_list_an_event_once(self):
+		other = TeamCategory.objects.create(team=self.team, category_name="Other", category_slug="other")
+		other.subjects.add(self.subject)
+		self.link(self.tracked, other)
+		self.make_event(self.tracked)
+		self.assertEqual(len(self.items(self.subject_feed())), 1)
+
+	def test_a_suppressed_subject_link_drops_the_medicine(self):
+		MedicineSubjectLink.objects.filter(medicine=self.untracked).update(suppressed=True)
+		self.make_event(self.untracked)
+		self.assertEqual(self.items(self.subject_feed()), [])
+
+	def test_a_suppressed_subject_link_stays_in_through_a_live_category_link(self):
+		self.subject_link(self.tracked, suppressed=True)
+		self.make_event(self.tracked)
+		self.assertEqual(self.subject_titles(), ["Tracked"])
+
+	def test_a_suppressed_category_link_stays_in_through_a_live_subject_link(self):
+		MedicineCategoryAssignment.objects.filter(medicine=self.tracked).update(suppressed=True)
+		self.subject_link(self.tracked)
+		self.make_event(self.tracked)
+		self.assertEqual(self.subject_titles(), ["Tracked"])
+
+	def test_both_links_suppressed_drops_the_medicine(self):
+		MedicineCategoryAssignment.objects.filter(medicine=self.tracked).update(suppressed=True)
+		self.subject_link(self.tracked, suppressed=True)
+		self.make_event(self.tracked)
+		self.assertEqual(self.items(self.subject_feed()), [])
+
+	def test_a_category_or_link_of_another_subject_does_not_bring_a_medicine_in(self):
+		elsewhere = TeamCategory.objects.create(
+			team=self.team, category_name="Elsewhere", category_slug="elsewhere"
+		)
+		elsewhere.subjects.add(self.other_subject)
+		self.make_event(self.make_medicine("Other category", category=elsewhere))
+		other_link = self.make_medicine("Other link", category=None)
+		self.subject_link(other_link, self.other_subject)
+		self.make_event(other_link)
+		self.assertEqual(self.items(self.subject_feed()), [])
+
+	def test_a_medicine_with_no_link_to_the_subject_never_appears(self):
+		self.make_event(self.make_medicine("Unlinked", category=None))
+		self.assertEqual(self.items(self.subject_feed()), [])
+
+	def test_every_event_kind_is_listed(self):
+		for i, kind in enumerate(Kind.values):
+			self.make_event(self.untracked, kind, days_ago=1 + i)
+		words = {t.split(": ", 1)[1] for t in self.titles(self.subject_feed())}
+		self.assertEqual(len(self.items(self.subject_feed())), len(Kind.values))
+		self.assertEqual(len(words), len(Kind.values))
+
+	def test_old_reconstructed_events_do_not_appear_but_observed_ones_do(self):
+		old = RECONSTRUCTED_EVENT_DAYS + 1
+		self.make_event(self.untracked, Kind.OPINION_POSITIVE, days_ago=old, basis=Basis.RECONSTRUCTED)
+		self.make_event(self.untracked, Kind.REFUSED, days_ago=old, basis=Basis.OBSERVED)
+		self.make_event(
+			self.untracked, Kind.AUTHORISED, days_ago=RECONSTRUCTED_EVENT_DAYS, basis=Basis.RECONSTRUCTED
+		)
+		self.make_event(self.untracked, Kind.EC_DECISION, days_ago=2, basis=Basis.RECONSTRUCTED)
+		words = [t.split(": ", 1)[1] for t in self.titles(self.subject_feed())]
+		self.assertEqual(
+			words,
+			["New European Commission decision", "Authorised in the EU", "Authorisation refused"],
+		)
+
+	def test_ordered_by_event_date_then_newest_event_id_and_limited_to_fifty(self):
+		oldest = self.make_event(self.untracked, Kind.OPINION_POSITIVE, days_ago=10)
+		first_tie = self.make_event(self.tracked, Kind.AUTHORISED, days_ago=3)
+		second_tie = self.make_event(self.untracked, Kind.AUTHORISED, days_ago=3)
+		guids = [i.findtext("guid") for i in self.items(self.subject_feed())]
+		self.assertEqual(
+			guids, [f"ema-medicine-event-{e.pk}" for e in (second_tie, first_tie, oldest)]
+		)
+		for i in range(MEDICINE_FEED_LIMIT + 10):
+			bulk = self.make_medicine(f"Bulk {i}", category=None)
+			self.subject_link(bulk)
+			self.make_event(bulk, days_ago=1 + i % 40)
+		cache.clear()
+		self.assertEqual(len(self.items(self.subject_feed())), MEDICINE_FEED_LIMIT)
+
+	def test_channel_elements(self):
+		self.make_event(self.untracked)
+		root = ET.fromstring(self.subject_feed().content)
+		channel = root.find("./channel")
+		self.assertEqual(channel.findtext("title"), "Medicines: Reader Subject — Reader Site")
+		self.assertEqual(channel.findtext("link"), "https://reader.example.com/")
+		self.assertIn("whether or not they're filed under a category", channel.findtext("description"))
+		self.assertIn("European Medicines Agency", channel.findtext("description"))
+		self_link = [
+			link.get("href") for link in channel.findall(f"{ATOM}link") if link.get("rel") == "self"
+		]
+		self.assertEqual(self_link, ["http://testserver" + self.subject_url(BY_SUBJECT)])
+
+	def test_item_text_is_the_same_as_in_the_other_medicine_feeds(self):
+		self.make_event(self.untracked, Kind.EC_DECISION, days_ago=3)
+		(item,) = self.items(self.subject_feed())
+		self.assertEqual(
+			item.findtext("title"),
+			"Untracked (ocrelizumab): New European Commission decision",
+		)
+		self.assertEqual(item.findtext("link"), self.untracked.url)
+		self.assertEqual(
+			item.findtext("description"),
+			"<p>Indication of Untracked.</p><p>Source: European Medicines Agency</p>",
+		)
+
+	def test_cached_for_an_hour(self):
+		self.make_event(self.untracked, days_ago=2)
+		url = self.subject_url(BY_SUBJECT)
+		self.assertEqual(len(self.get_titles(url)), 1)
+		self.make_event(self.untracked, Kind.EC_DECISION, days_ago=1)
+		self.assertEqual(len(self.get_titles(url)), 1)
+		cache.clear()
+		self.assertEqual(len(self.get_titles(url)), 2)
+
+	def test_the_requested_sites_scope_decides_which_subjects_are_served(self):
+		site = Site.objects.create(domain="second.example.com", name="Second Site")
+		from sitesettings.models import CustomSetting
+
+		row = CustomSetting.objects.create(
+			site=site, title="Second", rss_enabled=True, medicines_enabled=True
+		)
+		row.scope_subjects.add(self.other_subject)
+		self.make_event(self.untracked)
+		own = self.url(BY_SUBJECT, site_id=site.pk, subject_slug=self.subject.subject_slug)
+		other = self.url(BY_SUBJECT, site_id=site.pk, subject_slug=self.other_subject.subject_slug)
+		self.assertEqual(self.client.get(own).status_code, 404)
+		self.assertEqual(self.client.get(other).status_code, 200)
+
+
+class MedicineFeedExclusionTests(MedicineFixture, TestCase):
+	"""Generics, biosimilars, grouped copies and diagnostics are left out of every medicine feed."""
+
+	def setUp(self):
+		self.build()
+		# A manual category link and a matching area, so running the matcher keeps both.
+		self.lead = self.make_medicine(
+			"Lead", source=CategoryAssignmentSource.MANUAL, therapeutic_areas=["Multiple Sclerosis"]
+		)
+		self.subject_link(self.lead)
+		self.make_event(self.lead)
+
+	def add(self, medicine):
+		"""Link a medicine both ways, so every feed would list it but for the exclusion."""
+		self.link(medicine, self.category)
+		self.subject_link(medicine)
+		self.make_event(medicine)
+		return medicine
+
+	def assertOnlyTheLead(self):
+		feeds = {
+			"subject": self.subject_feed(),
+			"category": self.category_feed(),
+			"site": self.site_feed(),
+		}
+		for name, response in feeds.items():
+			with self.subTest(feed=name):
+				self.assertEqual(self.titles(response), ["Lead (ocrelizumab): Authorised in the EU"])
+
+	def test_generics_and_biosimilars_are_left_out_of_every_feed(self):
+		self.add(self.make_medicine("Copy generic", category=None, generic=True))
+		self.add(self.make_medicine("Copy biosimilar", category=None, biosimilar=True))
+		self.assertOnlyTheLead()
+
+	def test_grouped_copies_are_left_out_of_every_feed(self):
+		# Three names, one EC decision each: only the lead's is announced.
+		for name in ("Copy A", "Copy B"):
+			self.add(self.make_medicine(name, category=None, grouped_under=self.lead))
+		self.assertOnlyTheLead()
+
+	def test_a_diagnostic_never_appears_because_it_gets_no_links(self):
+		from gregory.services.medicine_linking import link_category, link_subject
+
+		self.subject.ema_therapeutic_areas = ["Multiple Sclerosis"]
+		self.subject.save()
+		diagnostic = self.make_medicine(
+			"Scan", category=None, atc_code="V09AB01", therapeutic_areas=["Multiple Sclerosis"]
+		)
+		self.make_event(diagnostic)
+		link_subject(self.subject)
+		link_category(self.category)
+		self.assertFalse(MedicineSubjectLink.objects.filter(medicine=diagnostic).exists())
+		self.assertFalse(MedicineCategoryAssignment.objects.filter(medicine=diagnostic).exists())
+		self.assertOnlyTheLead()
+
+
 class MedicineFeedQueryCountTests(MedicineFixture, TestCase):
 	"""One render costs the same number of queries whatever the number of items."""
 
@@ -480,6 +742,24 @@ class MedicineFeedQueryCountTests(MedicineFixture, TestCase):
 		self.assertEqual((small_items, big_items), (1, 50))
 		self.assertEqual(small_queries, big_queries)
 
+	def test_subject_feed_is_flat_as_it_grows(self):
+		# A subject with one untracked medicine against one with a page of mixed
+		# tracked and untracked ones: the same number of queries.
+		lone_subject = Subject.objects.create(
+			subject_name="Lone", subject_slug="lone-subject", team=self.team
+		)
+		self.settings_row.scope_subjects.add(lone_subject)
+		lonely = self.make_medicine("Lonely", category=None)
+		self.subject_link(lonely, lone_subject)
+		self.make_event(lonely)
+		for i in range(30):
+			if i % 2:
+				self.subject_link(Medicine.objects.get(name=f"Bulk {i}"))
+		small_queries, small_items = self.count_queries(self.subject_url(BY_SUBJECT, lone_subject))
+		big_queries, big_items = self.count_queries(self.subject_url(BY_SUBJECT))
+		self.assertEqual((small_items, big_items), (1, 50))
+		self.assertEqual(small_queries, big_queries)
+
 	def test_the_count_is_small_and_fixed(self):
 		queries, items = self.count_queries(self.category_url(BY_CATEGORY, self.big))
 		self.assertEqual(items, 50)
@@ -491,3 +771,8 @@ class MedicineFeedQueryCountTests(MedicineFixture, TestCase):
 		# The same, with one query for every category in the scope instead of two
 		# for the one category.
 		self.assertEqual(site_queries, 6)
+		subject_queries, subject_items = self.count_queries(self.subject_url(BY_SUBJECT))
+		self.assertEqual(subject_items, 50)
+		# The site, its settings row, the scope subjects, the subject, the page of ids,
+		# and the events hydrated with their medicines.
+		self.assertEqual(subject_queries, 6)

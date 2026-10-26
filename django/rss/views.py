@@ -13,7 +13,8 @@ Site-scoped RSS feeds, all under /feed/sites/<site_id>/:
                                                 new patent families (rss/patent_feeds.py;
                                                 need patents_enabled too)
   medicines/, medicines/category/<slug>/        EMA medicine events (rss/medicine_feeds.py;
-                                                need medicines_enabled too)
+  medicines/subject/<slug>/                     need medicines_enabled too; only the
+                                                subject feed includes untracked medicines)
 
 The module is split three ways: rss/feed_scope.py decides WHO may see a feed
 (site scope, slug resolution, base querysets), rss/feed_items.py decides what
