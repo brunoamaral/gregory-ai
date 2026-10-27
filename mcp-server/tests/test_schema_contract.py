@@ -171,6 +171,9 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"source_register",  # niche — registry name (e.g. "ClinicalTrials.gov")
 		"internal_number",  # niche — WHO internal number
 		"identifiers",  # generic multi-registry filter; nct covers the common case
+		# Partial-acronym lookup for the BRO frontend's search box. The tool's
+		# `search` already covers free-text discovery; out of scope for MCP.
+		"acronym_contains",
 		# legacy raw-string fields superseded by a _normalized equivalent already exposed:
 		"phase",  # -> phase_normalized
 		"primary_sponsor",  # -> sponsor_id / sponsor_slug

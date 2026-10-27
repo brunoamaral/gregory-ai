@@ -2705,7 +2705,8 @@ class TrialViewSet(
 	- **eudract** - EudraCT number(s)
 	- **euct** - EU CT / EUCTR number(s) (matches either `euct` or `euctr` keys)
 	- **ctis** - CTIS number(s)
-	- **acronym** - trial acronym(s), e.g. `?acronym=ReCOVER,MODIF-MS`
+	- **acronym** - trial acronym(s), exact match, e.g. `?acronym=ReCOVER,MODIF-MS`
+	- **acronym_contains** - case-insensitive substring of the acronym (single value, not comma-separated), e.g. `?acronym_contains=prom`
 
 	# Trial-Specific Parameters:
 	- **internal_number** - filter by WHO internal number
