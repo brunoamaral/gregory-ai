@@ -13,7 +13,8 @@ class TrialIdentifierFilterTests(TestCase):
 	Exercises ?nct=, ?eudract=, ?euct=, ?ctis= (matched against the
 	``identifiers`` JSON) and ?acronym= (matched against the ``acronym``
 	column). Each accepts a comma-separated list and matches any value
-	case-insensitively.
+	case-insensitively. ?acronym_contains= is the exception: one value, matched
+	as a case-insensitive substring of the acronym.
 	"""
 
 	def setUp(self):
@@ -33,7 +34,7 @@ class TrialIdentifierFilterTests(TestCase):
 			subject_slug="identifier-subject",
 			team=self.team,
 		)
-		publish_subjects(self.subject, organization=self.org)
+		self.site = publish_subjects(self.subject, organization=self.org)
 
 		self.trial_nct = self._make_trial(
 			"Trial NCT one", identifiers={"nct": "NCT02521311"}, acronym="ReCOVER"
@@ -166,6 +167,150 @@ class TrialIdentifierFilterTests(TestCase):
 	def test_acronym_does_not_match_nct(self):
 		"""An NCT value passed to ?acronym= must not match via the identifiers JSON."""
 		response = self.client.get("/trials/?acronym=NCT02521311")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 0)
+
+	# ------------------------------------------------------------------
+	# acronym_contains
+	# ------------------------------------------------------------------
+
+	def _make_prom_trials(self):
+		self.trial_promise = self._make_trial("Trial PROMISE", acronym="PROMISE")
+		self.trial_promote = self._make_trial("Trial PROMOTE", acronym="PROMOTE")
+		self.trial_empty_acronym = self._make_trial("Trial empty acronym", acronym="")
+
+	def test_acronym_contains_partial_lowercase(self):
+		self._make_prom_trials()
+		response = self.client.get("/trials/?acronym_contains=prom")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_promise.trial_id, self.trial_promote.trial_id},
+		)
+
+	def test_acronym_contains_full_value(self):
+		self._make_prom_trials()
+		response = self.client.get("/trials/?acronym_contains=PROMISE")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_promise.trial_id})
+
+	def test_acronym_contains_mid_string(self):
+		response = self.client.get("/trials/?acronym_contains=dif")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_acronym.trial_id})
+
+	def test_acronym_exact_unchanged(self):
+		"""Regression guard: ?acronym= stays an exact match."""
+		self._make_prom_trials()
+		response = self.client.get("/trials/?acronym=PROM")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["count"], 0)
+		response = self.client.get("/trials/?acronym=PROMISE")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {self.trial_promise.trial_id})
+
+	def test_acronym_contains_excludes_null_and_empty(self):
+		self._make_prom_trials()
+		response = self.client.get("/trials/?acronym_contains=e")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		ids = self._ids(response)
+		self.assertNotIn(self.trial_empty_acronym.trial_id, ids)
+		self.assertNotIn(self.trial_nct_lower.trial_id, ids)  # acronym is NULL
+		self.assertNotIn(self.trial_eudract.trial_id, ids)  # acronym is NULL
+		self.assertIn(self.trial_promise.trial_id, ids)
+
+	def test_acronym_contains_blank_is_noop(self):
+		baseline = self.client.get("/trials/").data["count"]
+		for query in ("/trials/?acronym_contains=", "/trials/?acronym_contains=%20"):
+			response = self.client.get(query)
+			self.assertEqual(response.status_code, status.HTTP_200_OK)
+			self.assertEqual(response.data["count"], baseline)
+
+	def test_acronym_contains_composes_with_subject_and_team(self):
+		self._make_prom_trials()
+		other_team = Team.objects.create(
+			name="Other Team", slug="other-identifier-team", organization=self.org
+		)
+		other_subject = Subject.objects.create(
+			subject_name="Other Subject",
+			subject_slug="other-identifier-subject",
+			team=other_team,
+		)
+		# Add the second subject to the existing site's scope; a second
+		# publish_subjects call would create a second site and make the
+		# request's site ambiguous.
+		self.site.customsetting_set.get().scope_subjects.add(other_subject)
+		other = Trials.objects.create(
+			title="Trial PROMETHEUS",
+			link="https://example.com/trial-prometheus",
+			published_date=timezone.now(),
+			acronym="PROMETHEUS",
+		)
+		other.teams.add(other_team)
+		other.subjects.add(other_subject)
+
+		response = self.client.get("/trials/?acronym_contains=prom")
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			self._ids(response),
+			{
+				self.trial_promise.trial_id,
+				self.trial_promote.trial_id,
+				other.trial_id,
+			},
+		)
+
+		response = self.client.get(
+			f"/trials/?acronym_contains=prom&subject_id={other_subject.pk}"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {other.trial_id})
+
+		response = self.client.get(
+			f"/trials/?acronym_contains=prom&subject_id={self.subject.pk}"
+		)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_promise.trial_id, self.trial_promote.trial_id},
+		)
+
+		response = self.client.get(
+			f"/trials/?acronym_contains=prom&team_id={other_team.pk}"
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(self._ids(response), {other.trial_id})
+
+		response = self.client.get(
+			f"/trials/?acronym_contains=prom&team_id={self.team.pk}"
+		)
+		self.assertEqual(
+			self._ids(response),
+			{self.trial_promise.trial_id, self.trial_promote.trial_id},
+		)
+
+	def test_acronym_contains_count_and_pagination(self):
+		"""count equals the matches and pages are disjoint (no join, no duplicates)."""
+		made = {
+			self._make_trial(f"Trial BULK {i}", acronym=f"BULK-{i}").trial_id
+			for i in range(12)
+		}
+		seen = []
+		count = None
+		for page in (1, 2, 3):
+			response = self.client.get(
+				f"/trials/?acronym_contains=bulk&page_size=5&page={page}"
+			)
+			self.assertEqual(response.status_code, status.HTTP_200_OK)
+			count = response.data["count"]
+			seen.extend(r["trial_id"] for r in response.data["results"])
+		self.assertEqual(count, 12)
+		self.assertEqual(len(seen), 12)
+		self.assertEqual(len(set(seen)), 12)
+		self.assertEqual(set(seen), made)
+
+	def test_acronym_contains_no_match_via_identifiers(self):
+		"""An NCT fragment must not match via the identifiers JSON."""
+		response = self.client.get("/trials/?acronym_contains=NCT0252")
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data["count"], 0)
 

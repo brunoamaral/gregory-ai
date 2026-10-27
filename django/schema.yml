@@ -6556,7 +6556,8 @@ paths:
         - **eudract** - EudraCT number(s)
         - **euct** - EU CT / EUCTR number(s) (matches either `euct` or `euctr` keys)
         - **ctis** - CTIS number(s)
-        - **acronym** - trial acronym(s), e.g. `?acronym=ReCOVER,MODIF-MS`
+        - **acronym** - trial acronym(s), exact match, e.g. `?acronym=ReCOVER,MODIF-MS`
+        - **acronym_contains** - case-insensitive substring of the acronym (single value, not comma-separated), e.g. `?acronym_contains=prom`
 
         # Trial-Specific Parameters:
         - **internal_number** - filter by WHO internal number
@@ -6613,6 +6614,14 @@ paths:
           e.g. ?acronym=ReCOVER,MODIF-MS.
         explode: false
         style: form
+      - in: query
+        name: acronym_contains
+        schema:
+          type: string
+        description: Case-insensitive substring match against the trial acronym, e.g.
+          ?acronym_contains=prom finds PROMISE and PROMOTE. Single value (commas are
+          matched literally). Trials without an acronym never match. Use ?acronym=
+          for an exact match.
       - in: query
         name: age_eligible
         schema:
@@ -7276,7 +7285,8 @@ paths:
         - **eudract** - EudraCT number(s)
         - **euct** - EU CT / EUCTR number(s) (matches either `euct` or `euctr` keys)
         - **ctis** - CTIS number(s)
-        - **acronym** - trial acronym(s), e.g. `?acronym=ReCOVER,MODIF-MS`
+        - **acronym** - trial acronym(s), exact match, e.g. `?acronym=ReCOVER,MODIF-MS`
+        - **acronym_contains** - case-insensitive substring of the acronym (single value, not comma-separated), e.g. `?acronym_contains=prom`
 
         # Trial-Specific Parameters:
         - **internal_number** - filter by WHO internal number
@@ -7521,6 +7531,14 @@ paths:
           e.g. ?acronym=ReCOVER,MODIF-MS.
         explode: false
         style: form
+      - in: query
+        name: acronym_contains
+        schema:
+          type: string
+        description: Case-insensitive substring match against the trial acronym, e.g.
+          ?acronym_contains=prom finds PROMISE and PROMOTE. Single value (commas are
+          matched literally). Trials without an acronym never match. Use ?acronym=
+          for an exact match.
       - in: query
         name: age_eligible
         schema:
@@ -8334,6 +8352,12 @@ paths:
                   description: Comma-separated list of subject IDs with OR semantics
                     — returns trials tagged with *any* of the listed subjects, e.g.
                     ?subjects_any=1,2.
+                acronym_contains:
+                  type: string
+                  description: Case-insensitive substring match against the trial
+                    acronym, e.g. ?acronym_contains=prom finds PROMISE and PROMOTE.
+                    Single value (commas are matched literally). Trials without an
+                    acronym never match. Use ?acronym= for an exact match.
                 include:
                   type: string
                   enum:
@@ -8415,6 +8439,14 @@ paths:
           e.g. ?acronym=ReCOVER,MODIF-MS.
         explode: false
         style: form
+      - in: query
+        name: acronym_contains
+        schema:
+          type: string
+        description: Case-insensitive substring match against the trial acronym, e.g.
+          ?acronym_contains=prom finds PROMISE and PROMOTE. Single value (commas are
+          matched literally). Trials without an acronym never match. Use ?acronym=
+          for an exact match.
       - in: query
         name: age_eligible
         schema:

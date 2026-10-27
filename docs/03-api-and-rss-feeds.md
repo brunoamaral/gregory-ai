@@ -907,7 +907,8 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `subjects` / `subjects_any` | Comma-separated subject ids: tagged with **all** of them (AND) / with **any** of them (OR) |
 | `search` | Boolean search (bare terms AND-ed, uppercase `OR` / `NOT`, `"quoted phrases"`) over title, summary and scientific title — see [Search endpoints](#search-endpoints) for why the scientific title is included |
 | `title`, `summary` | Case-insensitive substring of that one field |
-| `acronym` | Trial acronym(s), comma-separated, matches any, case-insensitive, e.g. `?acronym=ReCOVER,MODIF-MS` |
+| `acronym` | Trial acronym(s), exact match, comma-separated, matches any, case-insensitive, e.g. `?acronym=ReCOVER,MODIF-MS` |
+| `acronym_contains` | Case-insensitive substring of the acronym, single value, e.g. `?acronym_contains=prom` finds PROMISE, PROMOTE. Trials without an acronym never match |
 | `has_takeaways` | `true`/`false`: whether the caller's own organisation has written takeaways for the trial (see [Editorial content](#editorial-content)) |
 | `include` | `editorial` adds the `editorial` list to each trial (see [Editorial content](#editorial-content)) |
 | `has_patent_link` | `true`/`false`: at least one visible, unsuppressed link to a patent family (see [Patents](#patents)). Category-basis links only unless `include_subject_links=true`. A caller whose sites don't show patents matches nothing |

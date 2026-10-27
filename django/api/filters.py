@@ -1030,6 +1030,16 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"e.g. ?acronym=ReCOVER,MODIF-MS."
 		),
 	)
+	acronym_contains = filters.CharFilter(
+		method="filter_acronym_contains",
+		label="Acronym contains",
+		help_text=(
+			"Case-insensitive substring match against the trial acronym, "
+			"e.g. ?acronym_contains=prom finds PROMISE and PROMOTE. Single "
+			"value (commas are matched literally). Trials without an acronym "
+			"never match. Use ?acronym= for an exact match."
+		),
+	)
 
 	# Trial-specific filters
 	recruitment_status = filters.CharFilter(
@@ -1535,6 +1545,17 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		return queryset.annotate(_uacronym=Upper("acronym")).filter(
 			_uacronym__in=wanted
 		)
+
+	def filter_acronym_contains(self, queryset, name, value):
+		"""Case-insensitive substring match on the ``acronym`` column.
+
+		Unlike ``?acronym=`` (exact, comma-separated list) this takes one value.
+		No index: a full scan of trials costs ~10 ms at current size.
+		"""
+		value = (value or "").strip()
+		if not value:
+			return queryset
+		return queryset.filter(acronym__icontains=value)
 
 	def filter_has_results(self, queryset, name, value):
 		"""
