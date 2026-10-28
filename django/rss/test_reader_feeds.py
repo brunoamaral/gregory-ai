@@ -30,9 +30,11 @@ from gregory.models import (
 	MLPredictions,
 	Organization,
 	OrganizationApiSettings,
+	OrganizationSite,
 	Subject,
 	Team,
 	TeamCategory,
+	TrialOrgContent,
 	Trials,
 )
 from sitesettings.models import CustomSetting
@@ -688,6 +690,48 @@ class EditorialContentTests(FeedFixture, TestCase):
 		self.assertIn("&lt;i&gt;cond&lt;/i&gt;", description)
 		# Our own markup is still there.
 		self.assertIn("<strong>Sponsor:</strong>", description)
+
+
+class TrialEditorialContentTests(FeedFixture, TestCase):
+	"""Trial editorial content is per organisation: the site's owner's only."""
+
+	def setUp(self):
+		self.build_fixture()
+		self.trial = self.make_trial("edited-trial", summary="Registry summary")
+		self.other_org = Organization.objects.create(name="Other Org", slug="other-org")
+		TrialOrgContent.objects.create(
+			trial=self.trial,
+			organization=self.org,
+			takeaways="Trial <b>takeaway</b>",
+			summary_plain_english="Trial plain english",
+		)
+		TrialOrgContent.objects.create(
+			trial=self.trial,
+			organization=self.other_org,
+			takeaways="OTHER-ORG-TAKEAWAY",
+			summary_plain_english="OTHER-ORG-PLAIN",
+		)
+
+	def description(self):
+		response = self.client.get(self.subject_url("site_trials_by_subject_feed"))
+		return self.items(response)[0].findtext("description")
+
+	def test_the_sites_organisation_content_comes_first_and_is_escaped(self):
+		OrganizationSite.objects.create(organization=self.org, site=self.site)
+		description = self.description()
+		self.assertNotIn("OTHER-ORG", description)
+		self.assertIn("&lt;b&gt;takeaway&lt;/b&gt;", description)
+		positions = [
+			description.index(marker)
+			for marker in ("In plain English", "Trial plain english", "Key takeaways", "Registry summary")
+		]
+		self.assertEqual(positions, sorted(positions))
+
+	def test_a_site_without_an_organisation_gets_no_editorial_content(self):
+		description = self.description()
+		self.assertNotIn("In plain English", description)
+		self.assertNotIn("Key takeaways", description)
+		self.assertIn("Registry summary", description)
 
 
 class ItemElementTests(FeedFixture, TestCase):

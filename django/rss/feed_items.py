@@ -37,11 +37,13 @@ from gregory.models import (
 	Articles,
 	ArticleSiteContent,
 	MedicineEvent,
+	OrganizationSite,
 	PatentApplicant,
 	Patents,
 	PatentSiteContent,
 	Subject,
 	TeamCategory,
+	TrialOrgContent,
 	Trials,
 )
 
@@ -132,8 +134,19 @@ def article_description(article):
 
 
 def trial_description(trial):
-	"""HTML description for a trial item. Every interpolated value is escaped."""
+	"""HTML description for a trial item. Every interpolated value is escaped.
+
+	Order: plain-English summary and key takeaways (the editorial content of
+	the organisation that owns the site, see hydrate_trials), the registry
+	summary, then the trial's details.
+	"""
 	parts = []
+
+	content = trial._feed_org_content[0] if trial._feed_org_content else None
+	if content and content.summary_plain_english:
+		parts.append(_section("In plain English", _text_block(content.summary_plain_english)))
+	if content and content.takeaways:
+		parts.append(_section("Key takeaways", _text_block(content.takeaways)))
 
 	if trial.summary:
 		summary = clean_abstract_html(trial.summary, drop_abstract_label=False)
@@ -273,14 +286,32 @@ def hydrate_articles(ids, site, subject_ids):
 
 
 def hydrate_trials(ids, site, settings_row, subject_ids):
-	"""Load the trials in `ids`, in that order, with a fixed number of queries."""
+	"""Load the trials in `ids`, in that order, with a fixed number of queries.
+
+	Trial editorial content is still per organisation (TrialOrgContent), not
+	per site. A site belongs to exactly one organisation (OrganizationSite),
+	so the feed shows that organisation's content and never another's. A
+	site with no organisation gets none.
+	"""
+	org_id = (
+		OrganizationSite.objects.filter(site=site)
+		.values_list("organization_id", flat=True)
+		.first()
+	)
 	trials = list(
 		Trials.objects.filter(pk__in=ids).prefetch_related(
 			Prefetch(
 				"subjects",
 				queryset=Subject.objects.filter(id__in=subject_ids).order_by("subject_name", "pk"),
 				to_attr="_feed_subjects",
-			)
+			),
+			Prefetch(
+				"org_contents",
+				queryset=TrialOrgContent.objects.filter(organization_id=org_id)
+				if org_id
+				else TrialOrgContent.objects.none(),
+				to_attr="_feed_org_content",
+			),
 		)
 	)
 	by_id = {trial.pk: trial for trial in trials}
@@ -368,7 +399,12 @@ class TrialFeedItemMixin:
 		return item.discovery_date
 
 	def item_updateddate(self, item):
-		return item.last_updated
+		# Later of the registry update and the editorial update (Atom only).
+		updated = item.last_updated
+		for content in item._feed_org_content:
+			if content.updated_at and (updated is None or content.updated_at > updated):
+				updated = content.updated_at
+		return updated
 
 	def item_categories(self, item):
 		categories = []
