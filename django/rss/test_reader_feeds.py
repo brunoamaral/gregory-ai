@@ -624,14 +624,40 @@ class EditorialContentTests(FeedFixture, TestCase):
 		self.assertEqual(positions, sorted(positions))
 		self.assertIn("Journal of Tests · 2024-03-09 · Open access", description)
 
-	def test_html_in_editorial_text_and_abstract_is_escaped(self):
+	def test_html_in_editorial_text_is_escaped_and_abstract_markup_is_cleaned(self):
 		description = self.description()
 		self.assertNotIn("<script>", description)
 		self.assertNotIn("<b>bold</b>", description)
-		self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", description)
+		# Editorial text is escaped as typed.
+		self.assertIn("&lt;script&gt;x&lt;/script&gt;", description)
 		self.assertIn("&lt;b&gt;bold&lt;/b&gt;", description)
-		# line breaks become <br>
-		self.assertIn("<br>second line", description)
+		# Abstract markup is rebuilt, not escaped: the script is gone entirely.
+		self.assertNotIn("alert(1)", description)
+		self.assertIn("<p>Abstract second line</p>", description)
+
+	def test_plain_text_abstract_keeps_its_line_breaks(self):
+		self.make_article("plain", summary="first line\nsecond line")
+		response = self.client.get(self.subject_url("site_articles_by_subject_feed"))
+		item = next(i for i in self.items(response) if i.findtext("title") == "plain")
+		self.assertIn("first line<br>second line", item.findtext("description"))
+
+	def test_jats_abstract_shows_no_tags(self):
+		self.make_article(
+			"jats",
+			summary=(
+				"<jats:title>Abstract</jats:title><jats:sec><jats:title>Background:</jats:title>"
+				"<jats:p>About <jats:italic toggle=\"yes\">n</jats:italic> = 5.</jats:p></jats:sec>"
+			),
+		)
+		response = self.client.get(self.subject_url("site_articles_by_subject_feed"))
+		item = next(i for i in self.items(response) if i.findtext("title") == "jats")
+		description = item.findtext("description")
+		self.assertNotIn("jats", description)
+		self.assertIn(
+			"<p><strong>Abstract</strong></p><p><strong>Background:</strong></p>"
+			"<p>About <i>n</i> = 5.</p>",
+			description,
+		)
 
 	def test_without_editorial_content_the_item_is_metadata_and_abstract(self):
 		bare = self.make_article("bare", summary="Just an abstract", container_title="J Bare")
@@ -656,7 +682,10 @@ class EditorialContentTests(FeedFixture, TestCase):
 		self.assertNotIn("<script>", description)
 		self.assertNotIn("<img", description)
 		self.assertNotIn("<i>cond</i>", description)
-		self.assertIn("&lt;script&gt;", description)
+		# Summary markup is cleaned (script dropped), other fields are escaped.
+		self.assertNotIn("alert(1)", description)
+		self.assertIn("<p>Summary</p>", description)
+		self.assertIn("&lt;i&gt;cond&lt;/i&gt;", description)
 		# Our own markup is still there.
 		self.assertIn("<strong>Sponsor:</strong>", description)
 

@@ -14,7 +14,9 @@ Patent items follow stricter licence rules than articles and trials (see the
 "Patent families" section below): processed fields only, never raw OPS text.
 
 Every piece of database text that ends up inside a description is
-HTML-escaped first. Editorial text is free text and registry/abstract text
+HTML-escaped first. Abstracts and trial summaries arrive with source markup
+(JATS, PubMed HTML); rss.abstract_html rebuilds them from escaped text and a
+few bare tags instead of escaping the markup into visible tags. Editorial text is free text and registry/abstract text
 comes from third parties; neither may be able to inject markup into a feed
 that readers render as HTML.
 """
@@ -30,6 +32,7 @@ from django.utils.safestring import mark_safe
 from django.utils.text import Truncator
 
 from api.patent_links import visible_patent_trial_links_queryset
+from rss.abstract_html import clean_abstract_html, has_markup
 from gregory.models import (
 	Articles,
 	ArticleSiteContent,
@@ -117,7 +120,13 @@ def article_description(article):
 		sections.append(format_html("<p>{}</p>", " · ".join(meta)))
 
 	if article.summary:
-		sections.append(_section("Abstract", _text_block(article.summary)))
+		abstract = clean_abstract_html(article.summary)
+		if has_markup(article.summary):
+			# Already a run of <p> blocks, which can't nest inside _section's <p>.
+			if abstract:
+				sections.append(format_html("<p><strong>Abstract</strong></p>{}", abstract))
+		else:
+			sections.append(_section("Abstract", abstract))
 
 	return _join_sections(sections)
 
@@ -127,7 +136,11 @@ def trial_description(trial):
 	parts = []
 
 	if trial.summary:
-		parts.append(format_html("<p>{}</p>", _text_block(trial.summary)))
+		summary = clean_abstract_html(trial.summary, drop_abstract_label=False)
+		if has_markup(trial.summary):
+			parts.append(summary)
+		else:
+			parts.append(format_html("<p>{}</p>", summary))
 
 	metadata = []
 
