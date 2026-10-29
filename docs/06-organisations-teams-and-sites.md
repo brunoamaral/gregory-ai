@@ -183,7 +183,7 @@ Editors get nothing from user accounts and groups, organisations, sites, API key
 
 ### Setting up an editor
 
-1. Sync the group, after any deploy that changes `gregory/roles.py`:
+1. Sync the group. The House deploy (`.github/workflows/build-push.yaml`) does this after every deploy, once the new container is healthy, so a change to `gregory/roles.py` takes effect on its own. On any other instance, or to sync by hand:
 
    ```bash
    docker exec gregory python manage.py setup_roles
@@ -192,7 +192,7 @@ Editors get nothing from user accounts and groups, organisations, sites, API key
 2. In **Users**, tick *Staff status*, add the person to the **Editor** group, and add them to their team under **Team memberships**. Joining a team also adds them to the team's organisation. The team is what they can edit: an editor on no team can only look.
 3. Don't give editors permissions directly on their account. Those bypass the role and never change when the role does.
 
-The first sync on an instance that already has an "Editor" group removes anything added to it by hand, so run `setup_roles --check` first to see what would change.
+Every sync sets the group to exactly the role, so anything added to the "Editor" group by hand is removed, on House at the next deploy. Change `gregory/roles.py` instead. Before the first sync on an instance, run `setup_roles --check` to see what would change.
 
 `setup_roles --check` writes nothing. It exits non-zero if the group has drifted from the code. It also lists active non-superuser staff accounts that are on no team, that hold permissions directly on the account, or that aren't in the Editor group.
 

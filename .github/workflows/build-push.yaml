@@ -93,3 +93,17 @@ jobs:
             # Restarted together so the MCP server never proxies an API build
             # it wasn't tested against. compose orders them via depends_on.
             docker compose up -d gregory gregory-mcp
+            # Sync the Editor group to gregory/roles.py. Only once the new container
+            # is healthy: entrypoint.sh migrates before gunicorn starts, and a
+            # permission a new model brings doesn't exist until migrate has run.
+            for i in $(seq 1 60); do
+              status=$(docker inspect -f '{{.State.Health.Status}}' gregory 2>/dev/null)
+              [ "$status" = "healthy" ] && break
+              echo "Waiting for gregory to be healthy ($status), 10s..."
+              sleep 10
+            done
+            if [ "$status" != "healthy" ]; then
+              echo "gregory is not healthy after 10 minutes; Editor role not synced."
+              exit 1
+            fi
+            docker exec gregory python manage.py setup_roles
