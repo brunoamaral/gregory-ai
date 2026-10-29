@@ -105,6 +105,7 @@ from subscriptions.views import (
 from organizations.backends import invitation_backend
 
 from admin.health import healthz
+from gregory.autocomplete import GregoryAutocompleteJsonView
 
 # Email template views (direct import to avoid module issues)
 from templates.emails.views import (
@@ -143,7 +144,12 @@ for _prefix, _viewset, _basename in EDITOR_READ_ROUTES:
 # Define URL patterns
 urlpatterns = (
 	[
-		# Admin routes
+		# Admin routes. The autocomplete endpoint comes first so trials get a readable
+		# label (see gregory/autocomplete.py); it is the admin's own view otherwise.
+		path(
+			"admin/autocomplete/",
+			admin.site.admin_view(GregoryAutocompleteJsonView.as_view(admin_site=admin.site)),
+		),
 		path("admin/", admin.site.urls),
 		# API auth route
 		path("api-auth/", include("rest_framework.urls")),

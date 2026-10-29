@@ -55,8 +55,10 @@ EDITOR_PERMISSIONS = {
 	"gregory.subject": VIEW,
 	"gregory.team": VIEW,
 	"gregory.predictionrunlog": VIEW,
+	# An article's trial links: editors add one by hand and remove one (an automatic link is
+	# hidden rather than deleted) from the article page. The inlines are team-edit gated.
+	"gregory.articletrialreference": FULL,
 	# Read-only rows shown in the article, trial and patent pages' inlines.
-	"gregory.articletrialreference": VIEW,
 	"gregory.articlemeshheading": VIEW,
 	"gregory.trialcountry": VIEW,
 	"gregory.trialsite": VIEW,

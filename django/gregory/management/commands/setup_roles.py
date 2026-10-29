@@ -3,8 +3,9 @@ Sync the Editor group to the role defined in gregory/roles.py, and report
 staff accounts that don't fit it.
 
 The group is set to exactly the role's permissions: missing ones are added,
-anything else is removed. Run it after every deploy that changes
-gregory/roles.py. With --check nothing is written, and it exits non-zero if
+anything else is removed. The House deploy (.github/workflows/build-push.yaml)
+runs it after every deploy, once the new container is healthy; run it by hand
+on other instances. With --check nothing is written, and it exits non-zero if
 the group has drifted from the role.
 
 It also lists active non-superuser staff accounts that:

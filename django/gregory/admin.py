@@ -29,10 +29,13 @@ from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from .services.medicine_linking import link_category
+from .services.trial_links import link_trial, remove_link, trial_label, visible_link
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models.functions import Cast
 from django.utils import timezone
 from django import forms
+from django.forms.formsets import DELETION_FIELD_NAME
 from django.utils.html import format_html, format_html_join, mark_safe
 from django.utils.text import Truncator
 from organizations.models import Organization, OrganizationUser
@@ -504,24 +507,147 @@ class SiteScopeFilter(admin.SimpleListFilter):
 		return queryset.filter(subjects__id__in=subject_ids).distinct()
 
 
-class ArticleTrialReferenceInline(admin.TabularInline):
+class ArticleTrialReferenceFormSet(forms.BaseInlineFormSet):
+	"""The article's trial links: every row is read-only, and ticking a row's delete box
+	unlinks it with the same rule as the editor API (gregory.services.trial_links): a
+	manual link is deleted, an auto-detected one is hidden so detection doesn't recreate
+	it. A row that is already hidden has nothing left to remove."""
+
+	def add_fields(self, form, index):
+		super().add_fields(form, index)
+		if form.instance.pk and form.instance.suppressed and DELETION_FIELD_NAME in form.fields:
+			# No box on a hidden row. Disabled as well, so a forged delete is ignored.
+			field = form.fields[DELETION_FIELD_NAME]
+			field.widget = forms.HiddenInput()
+			field.disabled = True
+
+	def delete_existing(self, obj, commit=True):
+		if obj.suppressed:
+			return
+		if commit:
+			remove_link(obj)
+		if obj.source != ArticleTrialReference.SOURCE_MANUAL and obj in self.deleted_objects:
+			# The row stays, so the change message should say "changed", not "deleted".
+			self.deleted_objects.remove(obj)
+			self.changed_objects.append((obj, ["suppressed"]))
+
+
+class ArticleTrialReferenceInline(TeamEditInlineMixin, admin.TabularInline):
+	"""The article's trial links, every row shown, hidden ones included. Read-only: new
+	links go through ArticleTrialLinkAddInline. The delete box is shown on a visible row
+	of an article the user may edit."""
+
 	model = ArticleTrialReference
+	formset = ArticleTrialReferenceFormSet
 	extra = 0
-	readonly_fields = [
-		"trial",
+	fields = [
+		"trial_label",
 		"identifier_type",
 		"identifier_value",
 		"source",
 		"suppressed",
 		"discovered_date",
 	]
-	can_delete = False
+	readonly_fields = fields
 	verbose_name_plural = "Referenced Trials"
 	verbose_name = "Trial Reference"
 	classes = ["collapse"]
 
+	def get_queryset(self, request):
+		return super().get_queryset(request).select_related("trial").order_by("id")
+
 	def has_add_permission(self, request, obj=None):
-		return False  # Prevent manual adding, should be done by the detect_trial_references command
+		return False  # New links come from ArticleTrialLinkAddInline.
+
+	@admin.display(description="Trial")
+	def trial_label(self, obj):
+		return trial_label(obj.trial)
+
+
+class ArticleTrialLinkFormSet(forms.BaseInlineFormSet):
+	"""Blank "add" rows only. Saving a row links the trial through trial_links.link_trial
+	(a manual link, attributed to the user) instead of saving the form, and a trial the
+	article already has a visible link to is a form error."""
+
+	# Set by the inline: who is saving, and whether they may add.
+	link_user = None
+	link_allowed = False
+
+	def get_queryset(self):
+		return self.model._default_manager.none()
+
+	def initial_form_count(self):
+		# Whatever a crafted POST says, every submitted row is a new one.
+		return 0
+
+	def clean(self):
+		super().clean()
+		seen = set()
+		for form in self.forms:
+			trial = getattr(form, "cleaned_data", {}).get("trial")
+			if trial is None:
+				continue
+			if trial.pk in seen:
+				form.add_error("trial", "This trial is listed twice.")
+			elif self.instance.pk and visible_link(self.instance, trial) is not None:
+				form.add_error("trial", "This trial is already linked to the article.")
+			seen.add(trial.pk)
+
+	def save_new(self, form, commit=True):
+		if not self.link_allowed:
+			raise PermissionDenied
+		reference, _created = link_trial(self.instance, form.cleaned_data["trial"], self.link_user)
+		return reference
+
+
+class ArticleTrialLinkAddInline(TeamEditInlineMixin, admin.TabularInline):
+	"""Add a trial to an article by hand. Shown only to someone who may edit the article,
+	and only as blank rows (the existing links are in ArticleTrialReferenceInline, which
+	can't be both locked and have an editable new row).
+
+	The trial picker is the Trials autocomplete, which scopes to the user's organisation
+	but can't stop a forged id, so the field validates against the same scope.
+	"""
+
+	model = ArticleTrialReference
+	formset = ArticleTrialLinkFormSet
+	fields = ["trial"]
+	autocomplete_fields = ["trial"]
+	extra = 0
+	can_delete = False
+	verbose_name = "trial link"
+	verbose_name_plural = "Add a trial link"
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).none()
+
+	def has_view_permission(self, request, obj=None):
+		return False  # There is nothing to view: existing links are in the list above.
+
+	def has_change_permission(self, request, obj=None):
+		return self.has_add_permission(request, obj)
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		if db_field.name == "trial" and not request.user.is_superuser:
+			# The same trials the Trials admin shows this user (source -> team ->
+			# organisation). The autocomplete endpoint applies it too, but this field
+			# validates against its own queryset: without it a forged id gets through.
+			kwargs["queryset"] = self.admin_site._registry[Trials].get_queryset(request)
+		field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+		if db_field.name == "trial":
+			field.label_from_instance = trial_label
+		return field
+
+	def get_formset(self, request, obj=None, **kwargs):
+		formset = super().get_formset(request, obj, **kwargs)
+		return type(
+			formset.__name__,
+			(formset,),
+			{"link_user": request.user, "link_allowed": self.has_add_permission(request, obj)},
+		)
 
 
 class TrialArticleReferenceInline(admin.TabularInline):
@@ -541,7 +667,9 @@ class TrialArticleReferenceInline(admin.TabularInline):
 	classes = ["collapse"]
 
 	def has_add_permission(self, request, obj=None):
-		return False  # Prevent manual adding, should be done by the detect_trial_references command
+		# Links are added from the article page (ArticleTrialLinkAddInline), by an editor
+		# who may edit the article; this list stays read-only.
+		return False
 
 
 class TrialCountryInline(admin.TabularInline):
@@ -1357,6 +1485,7 @@ class ArticleAdmin(
 		ArticleSiteContentInline,
 		ArticleSubjectRelevanceInline,
 		ArticleTrialReferenceInline,
+		ArticleTrialLinkAddInline,
 		ArticleCategoryAssignmentInline,
 		ArticlePublicationTypeInline,
 		ArticleMeshHeadingInline,
@@ -2039,6 +2168,34 @@ class TrialAdmin(
 		"identifiers",
 		"ctg_detailed_description",
 	]
+
+	def get_search_results(self, request, queryset, search_term):
+		"""The changelist searches ~30 fields. The trial picker (the admin autocomplete
+		endpoint, e.g. on the article page's "Add a trial link") runs on every keystroke
+		over the whole table, so it searches a few: the database id when numeric, the
+		title, the acronym, and the identifiers as text, so a pasted NCT, EudraCT or
+		ISRCTN id finds the trial."""
+		if request.path != reverse("admin:autocomplete"):
+			return super().get_search_results(request, queryset, search_term)
+		terms = search_term.split()
+		if not terms:
+			return queryset.order_by("-trial_id"), False
+		queryset = queryset.annotate(
+			identifiers_text=Cast("identifiers", output_field=models.TextField())
+		)
+		# Every word must match somewhere, as in the changelist search.
+		for term in terms:
+			match = (
+				Q(title__icontains=term)
+				| Q(acronym__icontains=term)
+				| Q(identifiers_text__icontains=term)
+			)
+			if term.isdigit() and len(term) <= 9:  # fits the integer id
+				match |= Q(trial_id=int(term))
+			queryset = queryset.filter(match)
+		# Newest first, and a stable order for the picker's pages.
+		return queryset.order_by("-trial_id"), False
+
 	list_filter = [
 		SiteScopeFilter,
 		UnpublishedContentFilter,

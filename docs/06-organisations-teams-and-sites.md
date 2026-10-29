@@ -94,7 +94,7 @@ A staff user **sees** their organisations' content, as above, but **edits** only
 |:-----|:----------------------|
 | Articles, trials, patents | One of their sources is the team's, or they are tagged with the team (**Teams** field) |
 | Sources, subjects, categories, prediction run logs | Their **team** is the team |
-| Site takeaways and summaries, trial organisation content, patent–trial links | Their article, trial or patent belongs to the team. They are edited from the article, trial or patent page; their standalone pages are superuser-only for writes |
+| Site takeaways and summaries, trial links (article–trial), trial organisation content, patent–trial links | Their article, trial or patent belongs to the team. They are edited from the article, trial or patent page (an article's trial links: **Add a trial link** and the delete box on the *Referenced Trials* list); their standalone pages are superuser-only for writes |
 | Teams | Never: a team's settings and members are superuser-only, because membership is what grants editing |
 
 In practice:
@@ -103,6 +103,7 @@ In practice:
 - Bulk actions run only on the selected rows the user may edit. Any others are left alone, with a warning. Exports and other view-only actions still cover the whole selection.
 - In a list with editable columns (categories' modality), other teams' rows are shown but locked.
 - Pickers offer only the user's own teams' rows: **teams**, **subjects** and **sources** on content, categories, the team of a category, source or subject, and the target of **Reassign to another team**.
+- **Add a trial link** on an article offers every trial the user's organisations can see (broader than the MCP tool, which stays inside the site's subjects). The picker searches the trial's title, acronym, database id and identifiers (paste an NCT or EudraCT number), not the long text fields the trials list searches.
 - A staff user on no active team can see their organisation but edit or add nothing. `setup_roles --check` lists such accounts.
 - **Add by DOI** on a DOI that's already in the database attaches the user's source, team and subject to that article, which makes it their team's too. It needs the *add articles* permission, which the Editor role doesn't have.
 - Newsletters (lists, subscribers, announcements) are outside this rule: they stay organisation-scoped and outside the Editor role.
@@ -173,8 +174,8 @@ The admin code above decides *which rows* a staff user sees and which of those t
 |:------------|:-------|
 | View and change, but not add or delete | Articles, trials, patents (shared between organisations). Patent–trial links. Medicine–subject links (the medicines approved for a subject's condition; they only suppress or restore one, from the *Medicine subject links* page) |
 | View, add and change | Per-site takeaways and summaries (articles, patents), trial organisation content, subject relevance |
-| View, add, change and delete | Category assignments (articles, trials, patents), medicine–category links, categories |
-| View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms, EMA medicines and their events (shared reference data). The read-only rows inside the article, trial and patent pages |
+| View, add, change and delete | Category assignments (articles, trials, patents), article–trial links (added by hand, or removed from the article page; an automatic link is hidden instead of deleted), medicine–category links, categories |
+| View only | Sources, subjects, teams, prediction run logs. Authors, sponsors, entities, publication types, MeSH terms, EMA medicines and their events (shared reference data). The read-only rows inside the article, trial and patent pages (MeSH headings, trial countries and sites, patent publications and applicants) |
 
 Editors get nothing from user accounts and groups, organisations, sites, API keys, OAuth and MCP grants, or newsletters. Anyone who can edit user accounts can make themselves a superuser. Several newsletter pages are not organisation-scoped yet and show subscribers' personal data.
 
@@ -182,7 +183,7 @@ Editors get nothing from user accounts and groups, organisations, sites, API key
 
 ### Setting up an editor
 
-1. Sync the group, after any deploy that changes `gregory/roles.py`:
+1. Sync the group. The House deploy (`.github/workflows/build-push.yaml`) does this after every deploy, once the new container is healthy, so a change to `gregory/roles.py` takes effect on its own. On any other instance, or to sync by hand:
 
    ```bash
    docker exec gregory python manage.py setup_roles
@@ -191,7 +192,7 @@ Editors get nothing from user accounts and groups, organisations, sites, API key
 2. In **Users**, tick *Staff status*, add the person to the **Editor** group, and add them to their team under **Team memberships**. Joining a team also adds them to the team's organisation. The team is what they can edit: an editor on no team can only look.
 3. Don't give editors permissions directly on their account. Those bypass the role and never change when the role does.
 
-The first sync on an instance that already has an "Editor" group removes anything added to it by hand, so run `setup_roles --check` first to see what would change.
+Every sync sets the group to exactly the role, so anything added to the "Editor" group by hand is removed, on House at the next deploy. Change `gregory/roles.py` instead. Before the first sync on an instance, run `setup_roles --check` to see what would change.
 
 `setup_roles --check` writes nothing. It exits non-zero if the group has drifted from the code. It also lists active non-superuser staff accounts that are on no team, that hold permissions directly on the account, or that aren't in the Editor group.
 

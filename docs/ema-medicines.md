@@ -254,8 +254,8 @@ medicine's own page lists its links to the user's teams' categories and subjects
 [In the admin](#in-the-admin)).
 
 Editors get these permissions from the Editor role: full access to medicine–category links,
-and view-only access to medicines and their events. Run `setup_roles` after deploying a
-change to the role. See [The Editor role](06-organisations-teams-and-sites.md#the-editor-role).
+and view-only access to medicines and their events. The deploy runs `setup_roles`, so a
+change to the role applies on its own. See [The Editor role](06-organisations-teams-and-sites.md#the-editor-role).
 
 To give a broad category medicines, set its *EMA substance patterns* (`medicine_terms`) on the
 category form. CAR-T uses `*cabtagene*` and `tisagenlecleucel`, which together find the
