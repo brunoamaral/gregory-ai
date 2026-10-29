@@ -31,7 +31,7 @@ import logging
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db import IntegrityError, transaction
-from django.db.models import Case, Exists, OuterRef, When
+from django.db.models import Exists, OuterRef
 from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.text import slugify
@@ -122,6 +122,7 @@ from gregory.models import (
 	Trials,
 )
 from gregory.services.medicine_linking import link_category
+from gregory.services.trial_links import link_trial, unlink_trial
 from gregory.utils.patent_numbers import publication_number_q
 from gregory.visibility import site_scope_subject_ids
 from mcpauth.editor_auth import (
@@ -133,8 +134,6 @@ from mcpauth.editor_auth import (
 
 logger = logging.getLogger(__name__)
 
-#: Preferred order when picking a trial's primary identifier for a manual link.
-PRIMARY_IDENTIFIER_KEYS = ("nct", "euct", "eudract", "euctr", "isrctn", "ctis")
 HISTORY_DEFAULT_LIMIT = 50
 #: DRF validation bodies are keyed by field (or ``non_field_errors``), not ``detail``.
 EDITOR_VALIDATION_ERROR = OpenApiResponse(
@@ -604,18 +603,6 @@ class EditorArticleRelevanceView(_EditorView):
 # --- Write: trial links -------------------------------------------------
 
 
-def primary_identifier(trial) -> str:
-	"""The identifier stored on a manual link: the trial's registry id."""
-	identifiers = trial.identifiers or {}
-	for key in PRIMARY_IDENTIFIER_KEYS:
-		if identifiers.get(key):
-			return str(identifiers[key])[:100]
-	for value in identifiers.values():
-		if value:
-			return str(value)[:100]
-	return f"trial:{trial.trial_id}"
-
-
 def _link_payload(reference, trial):
 	updated_by, updated_at = _last_change(ArticleTrialReference.history, id=reference.id)
 	return {
@@ -660,29 +647,7 @@ class EditorArticleTrialsView(_EditorView):
 		trial = self.get_trial(body.validated_data["trial_id"])
 
 		with transaction.atomic(), editing_as(request.user, "mcp"):
-			existing = (
-				ArticleTrialReference.objects.filter(article=article, trial=trial, suppressed=False)
-				# A manual link first: it carries the editor's attribution.
-				.order_by(
-					Case(When(source=ArticleTrialReference.SOURCE_MANUAL, then=0), default=1),
-					"id",
-				)
-				.first()
-			)
-			if existing is not None:
-				return Response(_link_payload(existing, trial))
-			# get_or_create on the unique (article, trial, identifier_type) key,
-			# so two identical POSTs at once both answer instead of one 500ing.
-			reference, created = ArticleTrialReference.objects.get_or_create(
-				article=article,
-				trial=trial,
-				identifier_type="manual",
-				defaults={
-					"identifier_value": primary_identifier(trial),
-					"source": ArticleTrialReference.SOURCE_MANUAL,
-					"created_by": request.user,
-				},
-			)
+			reference, created = link_trial(article, trial, request.user)
 		return Response(
 			_link_payload(reference, trial),
 			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -714,16 +679,8 @@ class EditorArticleTrialDetailView(_EditorView):
 		article = self.get_article(article_id)
 		trial = self.get_trial(trial_id)
 
-		removed = []
 		with transaction.atomic(), editing_as(request.user, "mcp"):
-			links = list(ArticleTrialReference.objects.filter(article=article, trial=trial, suppressed=False))
-			for link in links:
-				if link.source == ArticleTrialReference.SOURCE_MANUAL:
-					link.delete()
-				else:
-					link.suppressed = True
-					link.save()
-				removed.append(link.source)
+			removed = unlink_trial(article, trial)
 		if not removed:
 			raise NotFound("The article and trial are not linked.")
 		return Response({"article_id": article.article_id, "trial_id": trial.trial_id, "removed": sorted(set(removed))})
