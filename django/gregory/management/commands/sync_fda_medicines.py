@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from gregory.management.base import GregoryBaseCommand
@@ -52,6 +53,7 @@ from gregory.utils.fda import (
 
 BATCH_SIZE = 500
 MAX_COUNT_DROP = 0.05
+MAX_LISTED_MISSING = 20
 
 CDER = "CDER"
 CBER = "CBER"
@@ -73,15 +75,20 @@ DRUGSFDA_FIELDS = [
 	"fda_application_type", "fda_center", "name", "inn", "active_substance", "substances",
 	"is_combination", "status", "pharmacotherapeutic_group", "fda_pharm_classes", "holder",
 	"authorisation_date", "brand_names", "fda_original_class", "fda_priority_review", "url",
-	"raw",
+	"raw", "raw_digest",
 ]
 PURPLEBOOK_FIELDS = [
 	"fda_application_type", "fda_center", "name", "inn", "active_substance", "substances",
 	"is_combination", "status", "holder", "biosimilar", "interchangeable",
-	"authorisation_date", "brand_names", "raw",
+	"authorisation_date", "brand_names", "raw", "raw_digest",
 ]
-# Columns bulk_update writes on a changed row; the second list is what decides "changed".
+# Columns bulk_update writes on a changed row. Rows are loaded without ``raw`` (about 40 MB
+# of JSON), so "changed" compares ``raw_digest`` instead; raw is still written when it moves.
 BOOKKEEPING = ["in_latest_export", "last_synced_at"]
+
+
+def compared(fields):
+	return [name for name in fields if name != "raw"]
 
 
 class Command(GregoryBaseCommand):
@@ -125,6 +132,9 @@ class Command(GregoryBaseCommand):
 	def handle(self, *args, **options):
 		self.dry_run = options["dry_run"]
 		self.planned_cder = set()
+		# Set when the Drugs@FDA half creates a BLA row, so the Purple Book half has to read
+		# its file whatever the server says: that is where the row's biosimilar flag is.
+		self.new_bla = False
 		halves = self._halves(options)
 
 		failed = False
@@ -192,6 +202,7 @@ class Command(GregoryBaseCommand):
 		with transaction.atomic():
 			self._write(plan)
 			self._save_state(state, len(parsed_rows), headers)
+		self.new_bla = any(row.fda_application_type == "BLA" for row, _ in plan["new"])
 		return True
 
 	def _load(self, path, download, state, force, label):
@@ -284,26 +295,39 @@ class Command(GregoryBaseCommand):
 			stored[medicine_id].add((kind, event_date))
 		return stored
 
-	def _plan_drugsfda(self, parsed_rows):
-		"""Compare the file with the stored rows, in memory. Nothing is written."""
-		existing = {
-			m.fda_application_number: m for m in Medicine.objects.filter(regulator=Regulator.FDA)
-		}
-		stored = self._stored_events()
-		today = timezone.localdate()
-		now = timezone.now()
-		compare = DRUGSFDA_FIELDS
-
-		plan = {
+	def _new_plan(self, fields):
+		return {
 			"new": [],  # (Medicine, [event dicts])
 			"changed": [],  # (Medicine, [event dicts])
 			"events": [],  # (Medicine, [event dicts]) of unchanged rows
-			"update_fields": DRUGSFDA_FIELDS + BOOKKEEPING,
+			"update_fields": fields + BOOKKEEPING,
 			"unchanged": 0,
 			"gone": [],
 			"returned": 0,
+			"flags": [],
 			"notes": [],
 		}
+
+	def _stored_fda_medicines(self):
+		# raw is deferred: the digest says whether it changed, and a changed row gets the
+		# new raw assigned before it is written.
+		return {
+			m.fda_application_number: m
+			for m in Medicine.objects.filter(regulator=Regulator.FDA).defer("raw")
+		}
+
+	def _diff(self, plan, parsed_rows, existing, fields, skip=None):
+		"""Compare ``parsed_rows`` with the stored ``existing`` rows, in memory, and fill
+		``plan``: new rows with reconstructed events, changed rows (or rows back in the file)
+		with their observed events, and unchanged rows (which may still have a new event).
+
+		Events are read off the stored row before it is overwritten. ``skip(medicine)`` leaves
+		a stored row alone and counts it; returns that count."""
+		stored = self._stored_events()
+		today = timezone.localdate()
+		now = timezone.now()
+		compare = compared(fields)
+		skipped = 0
 		for number, parsed in parsed_rows.items():
 			values = parsed.model_values()
 			medicine = existing.get(number)
@@ -311,8 +335,10 @@ class Command(GregoryBaseCommand):
 				row = Medicine(**values, in_latest_export=True, last_synced_at=now)
 				plan["new"].append((row, reconstructed_events(parsed)))
 				continue
+			if skip is not None and skip(medicine):
+				skipped += 1
+				continue
 
-			# Events are read off the stored row before it is overwritten.
 			events = observed_status_events(medicine, parsed, today) + new_dated_events(
 				parsed, stored.get(medicine.pk, set()), today
 			)
@@ -323,14 +349,20 @@ class Command(GregoryBaseCommand):
 				if events:
 					plan["events"].append((medicine, events))
 				continue
-			for name in compare:
+			for name in fields:
 				setattr(medicine, name, values[name])
 			if reappeared:
 				plan["returned"] += 1
 			medicine.in_latest_export = True
 			medicine.last_synced_at = now
 			plan["changed"].append((medicine, events))
+		return skipped
 
+	def _plan_drugsfda(self, parsed_rows):
+		"""Compare the file with the stored rows, in memory. Nothing is written."""
+		existing = self._stored_fda_medicines()
+		plan = self._new_plan(DRUGSFDA_FIELDS)
+		self._diff(plan, parsed_rows, existing, DRUGSFDA_FIELDS)
 		for number, medicine in existing.items():
 			if (
 				number not in parsed_rows
@@ -350,7 +382,8 @@ class Command(GregoryBaseCommand):
 			options["purplebook_file"],
 			lambda st: download_purplebook(st, url=url),
 			state,
-			options["force"],
+			# Conditional headers off, but the count check stays: only --force skips that.
+			options["force"] or self.new_bla,
 			"Purple Book",
 		)
 		if loaded is None:
@@ -375,56 +408,12 @@ class Command(GregoryBaseCommand):
 		return True
 
 	def _plan_purplebook(self, parsed_rows, cder_flags):
-		existing = {
-			m.fda_application_number: m for m in Medicine.objects.filter(regulator=Regulator.FDA)
-		}
-		stored = self._stored_events()
-		today = timezone.localdate()
-		now = timezone.now()
-		compare = PURPLEBOOK_FIELDS
-
-		plan = {
-			"new": [],
-			"changed": [],
-			"events": [],
-			"update_fields": PURPLEBOOK_FIELDS + BOOKKEEPING,
-			"unchanged": 0,
-			"gone": [],
-			"returned": 0,
-			"flags": [],
-			"notes": [],
-		}
-		in_drugsfda = 0
-		for number, parsed in parsed_rows.items():
-			values = parsed.model_values()
-			medicine = existing.get(number)
-			if medicine is None:
-				row = Medicine(**values, in_latest_export=True, last_synced_at=now)
-				plan["new"].append((row, reconstructed_events(parsed)))
-				continue
-			if medicine.fda_center != CBER:
-				# Drugs@FDA has the history of a CDER row; the Purple Book must not take it over.
-				in_drugsfda += 1
-				continue
-
-			events = observed_status_events(medicine, parsed, today) + new_dated_events(
-				parsed, stored.get(medicine.pk, set()), today
-			)
-			changed = any(getattr(medicine, name) != values[name] for name in compare)
-			reappeared = not medicine.in_latest_export
-			if not changed and not reappeared:
-				plan["unchanged"] += 1
-				if events:
-					plan["events"].append((medicine, events))
-				continue
-			for name in compare:
-				setattr(medicine, name, values[name])
-			if reappeared:
-				plan["returned"] += 1
-			medicine.in_latest_export = True
-			medicine.last_synced_at = now
-			plan["changed"].append((medicine, events))
-
+		existing = self._stored_fda_medicines()
+		plan = self._new_plan(PURPLEBOOK_FIELDS)
+		# Drugs@FDA has the history of a CDER row; the Purple Book must not take it over.
+		in_drugsfda = self._diff(
+			plan, parsed_rows, existing, PURPLEBOOK_FIELDS, skip=lambda m: m.fda_center != CBER
+		)
 		for number, medicine in existing.items():
 			if number not in parsed_rows and medicine.fda_center == CBER and medicine.in_latest_export:
 				medicine.in_latest_export = False
@@ -432,12 +421,16 @@ class Command(GregoryBaseCommand):
 
 		# CDER BLAs: the Purple Book only says whether a biologic is biosimilar or
 		# interchangeable. Setting those two is not an event.
+		now = timezone.now()
 		matched = 0
+		missing = []
 		for number, flags in cder_flags.items():
 			medicine = existing.get(number)
 			if medicine is None or medicine.fda_center != CDER:
 				if number in self.planned_cder:
 					matched += 1  # a dry run: Drugs@FDA would have created it
+				elif medicine is None:
+					missing.append(number)
 				continue
 			matched += 1
 			if (medicine.biosimilar, medicine.interchangeable) != (
@@ -452,6 +445,14 @@ class Command(GregoryBaseCommand):
 			f"CDER BLAs: {len(cder_flags)} in the file, {matched} with a Drugs@FDA row, "
 			f"{len(plan['flags'])} with biosimilar or interchangeable flags changed."
 		)
+		if missing:
+			listed = ", ".join(missing[:MAX_LISTED_MISSING]) + (
+				", …" if len(missing) > MAX_LISTED_MISSING else ""
+			)
+			plan["notes"].append(
+				f"{len(missing)} CDER BLAs are in the Purple Book but not in Drugs@FDA, so they "
+				f"were not imported: {listed}."
+			)
 		if in_drugsfda:
 			plan["notes"].append(
 				f"{in_drugsfda} CBER BLAs already have a Drugs@FDA row and were left to it."
@@ -469,13 +470,25 @@ class Command(GregoryBaseCommand):
 		Medicine.objects.bulk_update(changed_medicines, plan["update_fields"], batch_size=BATCH_SIZE)
 		Medicine.objects.bulk_update(plan["gone"], ["in_latest_export"], batch_size=BATCH_SIZE)
 		Medicine.objects.bulk_update(
-			plan.get("flags", []),
+			plan["flags"],
 			["biosimilar", "interchangeable", "last_synced_at"],
 			batch_size=BATCH_SIZE,
 		)
 
+		# A corrected one-off milestone (the approval date) replaces the event for its old date.
+		stale = Q()
+		for medicine, medicine_events in plan["changed"] + plan["events"]:
+			for event in medicine_events:
+				if "replaces" in event:
+					stale |= Q(medicine=medicine, kind=event["kind"], event_date__in=event["replaces"])
+		if stale:
+			MedicineEvent.objects.filter(stale).delete()
+
 		events = [
-			MedicineEvent(medicine=medicine, **event)
+			MedicineEvent(
+				medicine=medicine,
+				**{key: value for key, value in event.items() if key != "replaces"},
+			)
 			for medicine, medicine_events in plan["new"] + plan["changed"] + plan["events"]
 			for event in medicine_events
 		]

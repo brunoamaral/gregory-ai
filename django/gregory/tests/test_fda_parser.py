@@ -194,6 +194,37 @@ class ParseApplicationTests(TestCase):
 		self.assertEqual(naprosyn.brand_names, ["NAPROSYN"])
 		self.assertEqual(naprosyn.status, "Approved")
 
+	def test_a_tentative_cmc_or_labeling_supplement_is_not_an_event(self):
+		record = json.loads(json.dumps(RECORDS["BLA761053"]))
+		for number, code in (("90", "MANUF (CMC)"), ("91", "LABELING"), ("92", "EFFICACY")):
+			record["submissions"].append(
+				{
+					"submission_type": "SUPPL",
+					"submission_number": number,
+					"submission_status": "TA",
+					"submission_status_date": "20250101",
+					"submission_class_code": code,
+				}
+			)
+		keys = event_keys(fda.parse_application(record))
+		# Only the efficacy supplement counts, as a tentative approval.
+		self.assertEqual(keys[(fda.FDA_TENTATIVE_APPROVAL, date(2025, 1, 1))], "S-92")
+		self.assertEqual(
+			len([k for k in keys if k[0] == fda.FDA_TENTATIVE_APPROVAL]), 1
+		)
+		record["submissions"] = [s for s in record["submissions"] if s["submission_number"] != "92"]
+		self.assertNotIn(
+			fda.FDA_TENTATIVE_APPROVAL, {k[0] for k in event_keys(fda.parse_application(record))}
+		)
+
+	def test_the_raw_digest_follows_the_record(self):
+		parsed = parse("BLA761053")
+		self.assertEqual(len(parsed.raw_digest), 64)
+		self.assertEqual(parsed.raw_digest, fda.raw_digest(json.loads(json.dumps(RECORDS["BLA761053"]))))
+		self.assertEqual(fda.raw_digest({"a": 1, "b": 2}), fda.raw_digest({"b": 2, "a": 1}))
+		self.assertNotEqual(parsed.raw_digest, parse("BLA761371").raw_digest)
+		self.assertIn("raw_digest", parsed.model_values())
+
 	def test_a_contrast_agent_carries_its_class(self):
 		agent = parse("NDA205764")
 		self.assertTrue(any("Contrast" in c for c in agent.fda_pharm_classes))
@@ -405,14 +436,14 @@ INDEX = {
 }
 
 
-@patch("gregory.utils.fda.time.sleep")
+@patch("gregory.utils.regulator_http.time.sleep")
 class DownloadDrugsFdaTests(TestCase):
 	def index_response(self):
 		mock = response(200)
 		mock.json.return_value = INDEX
 		return mock
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_reads_the_path_from_the_index_and_returns_the_validators(self, get, sleep):
 		get.side_effect = [
 			self.index_response(),
@@ -429,7 +460,7 @@ class DownloadDrugsFdaTests(TestCase):
 		self.assertNotIn("If-Modified-Since", file_headers)
 		self.assertEqual(get.call_args_list[1].kwargs["timeout"], 60)
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_sends_both_validators_and_passes_a_304_through(self, get, sleep):
 		get.side_effect = [self.index_response(), response(304)]
 		state = State("Fri, 23 Oct 2026 12:00:00 GMT", '"abc"')
@@ -439,37 +470,37 @@ class DownloadDrugsFdaTests(TestCase):
 		self.assertEqual(sent["If-Modified-Since"], "Fri, 23 Oct 2026 12:00:00 GMT")
 		self.assertEqual(sent["If-None-Match"], '"abc"')
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_retries_a_server_error_twice_then_succeeds(self, get, sleep):
 		get.side_effect = [self.index_response(), response(503), response(502), response(200, b"ok")]
 		self.assertEqual(fda.download_drugsfda()[:2], (200, b"ok"))
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_gives_up_after_the_retries(self, get, sleep):
 		get.side_effect = [self.index_response(), response(500), response(500), response(500)]
 		with self.assertRaises(requests.RequestException):
 			fda.download_drugsfda()
 
 
-@patch("gregory.utils.fda.time.sleep")
+@patch("gregory.utils.regulator_http.time.sleep")
 class DownloadPurplebookTests(TestCase):
 	URL = "https://www.accessdata.fda.gov/drugsatfda_docs/PurpleBook/2026/purplebook-search-October-data-download.csv"
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_finds_the_newest_file_on_the_downloads_page(self, get, sleep):
 		get.side_effect = [response(200, text=f'<a href="{self.URL}">x</a>'), response(200, b"csv")]
 		status, body, headers = fda.download_purplebook()
 		self.assertEqual((status, body, headers["url"]), (200, b"csv", self.URL))
 		self.assertEqual(get.call_args_list[0].args[0], fda.PURPLEBOOK_DOWNLOADS_URL)
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_an_explicit_url_skips_the_page(self, get, sleep):
 		get.return_value = response(200, b"csv")
 		fda.download_purplebook(url=self.URL)
 		self.assertEqual(get.call_count, 1)
 		self.assertEqual(get.call_args.args[0], self.URL)
 
-	@patch("gregory.utils.fda.requests.get")
+	@patch("gregory.utils.regulator_http.requests.get")
 	def test_validators_are_sent_only_for_the_same_file(self, get, sleep):
 		get.return_value = response(304)
 		same = State("Wed, 28 Oct 2026 12:00:00 GMT", '"x"', source_url=self.URL)

@@ -206,6 +206,38 @@ class FdaMedicineAdminTests(TestCase):
 		self.assertContains(response, "OCREVUS (BLA761053)")
 		self.assertContains(response, "FDA")
 
+	def test_the_category_autocomplete_offers_only_ema_medicines_for_now(self):
+		admin_user = User.objects.create_superuser("fda-auto", "fda-auto@example.org", "x")
+		self.client.force_login(admin_user)
+		params = {
+			"app_label": "gregory",
+			"model_name": "medicinecategoryassignment",
+			"field_name": "medicine",
+		}
+		url = reverse("admin:autocomplete")
+		results = self.client.get(url, {**params, "term": "ocrevus"}).json()["results"]
+		self.assertEqual([r["id"] for r in results], [str(self.ema.pk)])
+		self.assertEqual(self.client.get(url, {**params, "term": "kymriah"}).json()["results"], [])
+
+	def test_the_medicine_list_search_still_finds_fda_rows(self):
+		# Only the category picker is limited.
+		url = reverse("admin:gregory_medicine_changelist")
+		self.assertEqual(self.client.get(url, {"q": "kymriah"}).context["cl"].result_count, 1)
+
+	def test_a_posted_fda_medicine_is_rejected_on_a_category_link(self):
+		from django.forms import modelform_factory
+
+		from gregory.admin import MedicineCategoryAssignmentForm
+		from gregory.models import MedicineCategoryAssignment
+
+		form_class = modelform_factory(
+			MedicineCategoryAssignment, form=MedicineCategoryAssignmentForm, fields=["medicine", "suppressed"]
+		)
+		form = form_class(data={"medicine": self.fda.pk})
+		self.assertFalse(form.is_valid())
+		self.assertIn("Only EMA medicines", form.errors["medicine"][0])
+		self.assertTrue(form_class(data={"medicine": self.ema.pk}).is_valid())
+
 	def test_an_ema_page_hides_the_fda_fields(self):
 		response = self.change_page(self.ema)
 		self.assertContains(response, "EPAR page")

@@ -16,24 +16,21 @@ here defaults to empty.
 """
 
 import csv
+import hashlib
 import io
 import json
 import logging
 import re
-import time
 import zipfile
 from dataclasses import dataclass, field, fields
 from datetime import date, datetime
 
-import requests
+from gregory.utils.regulator_http import USER_AGENT, clip as _clip, get_with_retries
 
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_INDEX_URL = "https://api.fda.gov/download.json"
 PURPLEBOOK_DOWNLOADS_URL = "https://purplebooksearch.fda.gov/downloads"
-USER_AGENT = "gregory-ai (+https://gregory-ai.com)"
-DOWNLOAD_TIMEOUT = 60
-DOWNLOAD_RETRIES = 2
 
 DRUGS_AT_FDA_OVERVIEW = (
 	"https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo={digits}"
@@ -102,8 +99,11 @@ def normalise_substance(name):
 	return _SUFFIX.sub("", text)
 
 
-def _clip(value, length):
-	return _WHITESPACE.sub(" ", value or "").strip()[:length]
+def raw_digest(raw):
+	"""sha256 of ``raw`` as canonical JSON. A sync compares this instead of loading and
+	comparing the stored ``raw``, which is about 40 MB of JSON across the Drugs@FDA rows."""
+	canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"))
+	return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _distinct(values):
@@ -148,6 +148,7 @@ class ParsedFdaMedicine:
 	fda_priority_review: bool = None
 	url: str = ""
 	raw: dict = field(default_factory=dict)
+	raw_digest: str = ""
 	events: list = field(default_factory=list)
 	bad_dates: list = field(default_factory=list)
 
@@ -254,13 +255,12 @@ def parse_application(record):
 				approvals.append((sub_date, submission))
 		if sub_date is None:
 			continue
-		if status == "TA":
+		# Decision 5: only an original and an efficacy supplement are events. A tentatively
+		# approved labeling or manufacturing (CMC) supplement is not.
+		is_efficacy = (submission.get("submission_class_code") or "").strip().upper() == "EFFICACY"
+		if status == "TA" and (sub_type == "ORIG" or (sub_type == "SUPPL" and is_efficacy)):
 			events.append(_event(FDA_TENTATIVE_APPROVAL, sub_date, _submission_to_value(submission)))
-		elif (
-			status == "AP"
-			and sub_type == "SUPPL"
-			and (submission.get("submission_class_code") or "").strip().upper() == "EFFICACY"
-		):
+		elif status == "AP" and sub_type == "SUPPL" and is_efficacy:
 			events.append(_event(FDA_EFFICACY_SUPPLEMENT, sub_date, _submission_to_value(submission)))
 
 	# The original approval is the earliest approved ORIG that carries a date.
@@ -297,6 +297,7 @@ def parse_application(record):
 		fda_priority_review=True if priority == "PRIORITY" else False if priority == "STANDARD" else None,
 		url=DRUGS_AT_FDA_OVERVIEW.format(digits=number[len(kind):]),
 		raw=record,
+		raw_digest=raw_digest(record),
 		events=_fold_same_day(events),
 		bad_dates=bad_dates,
 	)
@@ -470,6 +471,7 @@ def _cber_medicine(key, rows):
 		# The Purple Book has no per-product page; a later step fills it from DailyMed.
 		url="",
 		raw={"rows": rows},
+		raw_digest=raw_digest({"rows": rows}),
 		events=[_event(FDA_APPROVED, authorisation_date)] if authorisation_date else [],
 		bad_dates=bad_dates,
 	)
@@ -538,24 +540,7 @@ def find_purplebook_url(html):
 
 
 def _get(url, headers):
-	"""GET with two retries on a 5xx or a connection problem. Any other status comes back
-	for the caller to judge."""
-	last_error = None
-	for attempt in range(DOWNLOAD_RETRIES + 1):
-		if attempt:
-			time.sleep(2 * attempt)
-		try:
-			response = requests.get(url, headers=headers, timeout=DOWNLOAD_TIMEOUT)
-		except (requests.ConnectionError, requests.Timeout) as exc:
-			last_error = exc
-			logger.warning("FDA download of %s failed (attempt %d): %s", url, attempt + 1, exc)
-			continue
-		if response.status_code >= 500:
-			last_error = RuntimeError(f"HTTP {response.status_code}")
-			logger.warning("FDA download of %s returned HTTP %d (attempt %d)", url, response.status_code, attempt + 1)
-			continue
-		return response
-	raise requests.RequestException(f"{url} unavailable after retries: {last_error}")
+	return get_with_retries(url, headers, "FDA download of " + url)
 
 
 def _conditional_headers(state):

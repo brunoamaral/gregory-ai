@@ -10,7 +10,8 @@ reference data with no team, subject or organisation of its own.
 > **Where this stands.** The FDA data is imported and visible in the Django admin, and
 > nothing more. Matching FDA medicines to categories, the API, the RSS feeds and the MCP
 > tools come in later releases, so no FDA medicine is linked to a category or served anywhere
-> yet. The matcher skips FDA rows on purpose: they have no EMA therapeutic areas, so a
+> yet. The category page's medicine picker offers EMA medicines only, and a hand-made link to
+> an FDA medicine is refused, for the same reason. The matcher skips FDA rows on purpose: they have no EMA therapeutic areas, so a
 > category without subjects would otherwise link them with no disease check.
 
 ## What the data is
@@ -87,12 +88,16 @@ list under a second copy of it; only the rows after the last header are read, gr
 number (zero-padded to six digits). It stops when the columns are not the expected ones or
 the CBER BLA count has fallen more than 5%. CBER BLAs become rows. For a CDER BLA the file
 only sets `biosimilar` and `interchangeable` on the row Drugs@FDA made; changing those is not
-an event. The halves run in that order, so the flags land on rows created in the same run. A
-CBER BLA that already has a Drugs@FDA row is left to it.
+an event. The halves run in that order, so the flags land on rows created in the same run: when
+Drugs@FDA creates a BLA row, the Purple Book file is downloaded without conditional headers even
+if it has not changed, so a new biosimilar is flagged at once instead of next month (the count
+check still applies). A CDER BLA that is in the Purple Book but not in Drugs@FDA is not imported;
+the summary counts them and lists the first 20. A CBER BLA that already has a Drugs@FDA row is
+left to it.
 
 **Writing.** Each half goes in one transaction. Existing rows are loaded once, compared in
 memory, and written in batches of 500; a row counts as changed only when a stored field
-differs. Rows missing from a file get `in_latest_export = False`, never deleted, and a row
+differs. Rows are loaded without `raw`, and the sync compares `raw_digest` (a hash of it) instead. Rows missing from a file get `in_latest_export = False`, never deleted, and a row
 that comes back is flagged present again. `FdaSyncState` (one row per file) is updated
 only after a successful write. A bad date is logged and stored as null.
 
@@ -101,7 +106,7 @@ nothing for FDA rows (see above).
 
 **First run.** Every row is new, so the sync reconstructs history from the FDA's dates: about
 6,400 Drugs@FDA rows, about 380 CBER rows, and roughly 6,200 approvals, 5,100 efficacy supplements
-and 150 tentative approvals as events. Check the summary against those.
+and 130 tentative approvals as events. Check the summary against those.
 
 ## Events
 
@@ -109,8 +114,8 @@ and 150 tentative approvals as events. Check the summary against those.
 
 | Kind | In words | Set by |
 |:-----|:---------|:-------|
-| `fda_approved` | Approved by the FDA | The original approval, or a CBER BLA's first approval date |
-| `fda_tentative_approval` | Tentatively approved by the FDA | A submission with status `TA` |
+| `fda_approved` | Approved by the FDA | The original approval, or a CBER BLA's first approval date. Once per application: a corrected date replaces the stored event, as a `reconstructed` one |
+| `fda_tentative_approval` | Tentatively approved by the FDA | An original or an efficacy supplement with status `TA` (not a labeling or manufacturing supplement) |
 | `fda_efficacy_supplement` | FDA approved a new indication or use | An approved supplement of class `EFFICACY` |
 | `fda_discontinued` | Discontinued in the US | Observed only: every product became discontinued between two syncs |
 | `fda_revoked` | US licence revoked | Observed only: a Purple Book licence became revoked or voluntarily revoked |

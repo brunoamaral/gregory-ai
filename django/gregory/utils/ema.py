@@ -11,21 +11,25 @@ a string. Dates are ``DD/MM/YYYY`` (empty when unknown) and flags are
 import html
 import logging
 import re
-import time
+import time  # noqa: F401  (tests patch gregory.utils.ema.time.sleep)
 from dataclasses import dataclass, field, fields
 from datetime import date, datetime
 
-import requests
+import requests  # noqa: F401  (tests patch gregory.utils.ema.requests.get)
+
+from gregory.utils.regulator_http import (  # noqa: F401  (re-exported)
+	DOWNLOAD_RETRIES,
+	DOWNLOAD_TIMEOUT,
+	USER_AGENT,
+	clip as _clip,
+	get_with_retries,
+)
 
 logger = logging.getLogger(__name__)
 
 EXPORT_URL = (
 	"https://www.ema.europa.eu/en/documents/report/medicines-output-medicines_json-report_en.json"
 )
-USER_AGENT = "gregory-ai (+https://gregory-ai.com)"
-DOWNLOAD_TIMEOUT = 60
-DOWNLOAD_RETRIES = 2
-
 HUMAN = "Human"
 
 _TAG_BLOCK = re.compile(r"</?(?:p|br|li|ul|ol|div|tr|td|th|h[1-6])\b[^<>]*>", re.IGNORECASE)
@@ -104,10 +108,6 @@ def split_areas(value):
 		if part and part not in areas:
 			areas.append(part)
 	return areas
-
-
-def _clip(value, length):
-	return _WHITESPACE.sub(" ", value or "").strip()[:length]
 
 
 def _int_or_none(value):
@@ -248,25 +248,11 @@ def download_export(last_modified=""):
 	headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 	if last_modified:
 		headers["If-Modified-Since"] = last_modified
-	last_error = None
-	for attempt in range(DOWNLOAD_RETRIES + 1):
-		if attempt:
-			time.sleep(2 * attempt)
-		try:
-			response = requests.get(EXPORT_URL, headers=headers, timeout=DOWNLOAD_TIMEOUT)
-		except (requests.ConnectionError, requests.Timeout) as exc:
-			last_error = exc
-			logger.warning("EMA export download failed (attempt %d): %s", attempt + 1, exc)
-			continue
-		if response.status_code >= 500:
-			last_error = RuntimeError(f"HTTP {response.status_code}")
-			logger.warning("EMA export returned HTTP %d (attempt %d)", response.status_code, attempt + 1)
-			continue
-		if response.status_code == 304:
-			return 304, b"", last_modified
-		return (
-			response.status_code,
-			response.content,
-			response.headers.get("Last-Modified", ""),
-		)
-	raise requests.RequestException(f"EMA export unavailable after retries: {last_error}")
+	response = get_with_retries(EXPORT_URL, headers, "EMA export")
+	if response.status_code == 304:
+		return 304, b"", last_modified
+	return (
+		response.status_code,
+		response.content,
+		response.headers.get("Last-Modified", ""),
+	)

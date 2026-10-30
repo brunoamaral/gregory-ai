@@ -354,6 +354,108 @@ class StatusChangeTests(SyncTestCase):
 		self.assertEqual(event.in_words, "Status changed: Discontinued → Approved")
 
 
+class MovedApprovalTests(SyncTestCase):
+	"""fda_approved happens once: a corrected approval date replaces the stored event."""
+
+	def test_a_cber_bla_gaining_an_earlier_original_row_keeps_one_approval(self):
+		self.sync()
+		self.assertEqual(set(self.events("BLA125789")), {(Kind.FDA_APPROVED, date(2024, 8, 1))})
+		path = self.tmp / "pb.csv"
+		path.write_text(PB_BASE.read_text().replace('"August 1, 2024"', '"July 1, 2024"', 1))
+		with patch(f"{MODULE}.timezone.localdate", return_value=date(2024, 7, 15)):
+			self.sync(purplebook=path)
+		events = self.events("BLA125789")
+		self.assertEqual(set(events), {(Kind.FDA_APPROVED, date(2024, 7, 1))})
+		# A correction is not news.
+		self.assertEqual(events[(Kind.FDA_APPROVED, date(2024, 7, 1))].basis, Basis.RECONSTRUCTED)
+		self.assertEqual(self.medicine("BLA125789").authorisation_date, date(2024, 7, 1))
+
+	def test_a_corrected_drugsfda_original_date_replaces_the_event(self):
+		self.sync()
+		payload = load(DRUGS_BASE)
+		ocrevus = next(r for r in payload["results"] if r["application_number"] == "BLA761053")
+		original = next(s for s in ocrevus["submissions"] if s["submission_type"] == "ORIG")
+		original["submission_status_date"] = "20261201"
+		with patch(f"{MODULE}.timezone.localdate", return_value=TODAY):
+			self.sync(self.write_drugs(payload))
+		approvals = MedicineEvent.objects.filter(
+			medicine__fda_application_number="BLA761053", kind=Kind.FDA_APPROVED
+		)
+		self.assertEqual([e.event_date for e in approvals], [date(2026, 12, 1)])
+		# Even a recent corrected date stays reconstructed.
+		self.assertEqual(approvals.get().basis, Basis.RECONSTRUCTED)
+		# The other events are untouched.
+		self.assertIn((Kind.FDA_EFFICACY_SUPPLEMENT, date(2026, 5, 8)), self.events("BLA761053"))
+
+	def test_an_unmoved_date_changes_nothing(self):
+		self.sync()
+		ids = list(MedicineEvent.objects.order_by("id").values_list("id", flat=True))
+		self.sync()
+		self.assertEqual(list(MedicineEvent.objects.order_by("id").values_list("id", flat=True)), ids)
+
+
+class RawDigestTests(SyncTestCase):
+	def test_every_row_gets_a_digest(self):
+		self.sync()
+		self.assertFalse(Medicine.objects.filter(raw_digest="").exists())
+		self.assertEqual(len(self.medicine("BLA761053").raw_digest), 64)
+		self.assertEqual(len(self.medicine("BLA125646").raw_digest), 64)
+
+	def test_stored_rows_are_loaded_without_raw(self):
+		from gregory.management.commands.sync_fda_medicines import Command
+
+		self.sync()
+		rows = Command()._stored_fda_medicines()
+		self.assertTrue(rows)
+		self.assertTrue(all("raw" in row.get_deferred_fields() for row in rows.values()))
+
+	def test_an_empty_digest_counts_as_changed_once(self):
+		self.sync()
+		Medicine.objects.update(raw_digest="")
+		output = self.sync()
+		self.assertIn("0 new, 12 changed", output)
+		self.assertIn("0 new, 5 changed", output)
+		self.assertFalse(Medicine.objects.filter(raw_digest="").exists())
+		self.assertIn("12 unchanged", self.sync())
+
+	def test_a_changed_record_rewrites_raw_and_the_digest(self):
+		self.sync()
+		before = self.medicine("BLA761053").raw_digest
+		payload = load(DRUGS_BASE)
+		ocrevus = next(r for r in payload["results"] if r["application_number"] == "BLA761053")
+		ocrevus["sponsor_name"] = "GENENTECH, INC. (RENAMED)"
+		output = self.sync(self.write_drugs(payload))
+		self.assertIn("0 new, 1 changed", output)
+		ocrevus_row = self.medicine("BLA761053")
+		self.assertNotEqual(ocrevus_row.raw_digest, before)
+		self.assertEqual(ocrevus_row.raw["sponsor_name"], "GENENTECH, INC. (RENAMED)")
+		self.assertEqual(ocrevus_row.holder, "GENENTECH, INC. (RENAMED)")
+
+
+class MissingCderBlaTests(SyncTestCase):
+	def test_cder_blas_only_in_the_purple_book_are_reported_not_imported(self):
+		output = self.sync(drugs=None, source="purplebook")
+		self.assertIn("3 CDER BLAs are in the Purple Book but not in Drugs@FDA", output)
+		for key in ("BLA761322", "BLA761053", "BLA761371"):
+			self.assertIn(key, output)
+		self.assertEqual(Medicine.objects.filter(fda_center="CDER").count(), 0)
+
+	def test_nothing_is_reported_when_drugsfda_has_them(self):
+		self.assertNotIn("not in Drugs@FDA", self.sync())
+
+	def test_the_list_stops_at_twenty(self):
+		lines = PB_BASE.read_text().splitlines()
+		tyruko = next(line for line in lines if "Tyruko" in line)
+		extra = [tyruko.replace("761322", str(800000 + i)) for i in range(22)]
+		path = self.tmp / "pb.csv"
+		path.write_text("\n".join(lines + extra) + "\n")
+		output = self.sync(drugs=None, purplebook=path, source="purplebook")
+		self.assertIn("25 CDER BLAs are in the Purple Book but not in Drugs@FDA", output)
+		self.assertIn("…", output)
+		self.assertIn("BLA800016", output)
+		self.assertNotIn("BLA800021", output)
+
+
 class GuardTests(SyncTestCase):
 	def test_a_drugsfda_count_drop_stops_that_half_and_lets_the_purple_book_run(self):
 		FdaSyncState.objects.create(source="drugsfda", last_count=100)
@@ -505,6 +607,75 @@ class DownloadTests(SyncTestCase):
 		self.assertIn("Purple Book file unchanged (HTTP 304)", out.getvalue())
 		matcher.assert_not_called()
 		self.assertEqual(Medicine.objects.count(), 17)
+
+	def test_a_new_bla_makes_the_purple_book_download_unconditionally(self):
+		FdaSyncState.objects.create(
+			source="purplebook",
+			last_modified="Wed, 28 Oct 2026 12:00:00 GMT",
+			etag='"def"',
+			source_url=self.pb_headers()["url"],
+			last_count=5,
+		)
+		sent = []
+
+		def purple_download(state, url=None):
+			sent.append(state)
+			return 200, PB_BASE.read_bytes(), self.pb_headers()
+
+		with patch(DOWNLOAD_DRUGS, return_value=(200, self.zip_bytes(), self.drugs_headers())), patch(
+			DOWNLOAD_PB, side_effect=purple_download
+		):
+			call_command("sync_fda_medicines", stdout=StringIO())
+		# No state means no If-Modified-Since or If-None-Match goes out.
+		self.assertEqual(sent, [None])
+		self.assertTrue(self.medicine("BLA761322").biosimilar)
+
+	def test_the_count_check_still_applies_when_the_download_is_unconditional(self):
+		FdaSyncState.objects.create(source="purplebook", last_count=100)
+		with patch(DOWNLOAD_DRUGS, return_value=(200, self.zip_bytes(), self.drugs_headers())), patch(
+			DOWNLOAD_PB, return_value=(200, PB_BASE.read_bytes(), self.pb_headers())
+		):
+			with self.assertRaises(CommandError):
+				call_command("sync_fda_medicines", stdout=StringIO(), stderr=StringIO())
+		self.assertFalse(Medicine.objects.filter(fda_center="CBER").exists())
+
+	def test_without_a_new_bla_the_purple_book_keeps_its_validators(self):
+		self.sync()  # every application is stored now
+		sent = []
+
+		def purple_download(state, url=None):
+			sent.append(state)
+			return 304, b"", {}
+
+		with patch(DOWNLOAD_DRUGS, return_value=(200, self.zip_bytes(), self.drugs_headers())), patch(
+			DOWNLOAD_PB, side_effect=purple_download
+		):
+			call_command("sync_fda_medicines", stdout=StringIO())
+		self.assertEqual(len(sent), 1)
+		self.assertIsNotNone(sent[0])
+
+	def test_a_new_nda_alone_does_not_force_the_purple_book(self):
+		self.sync()
+		payload = load(DRUGS_BASE)
+		clone = json.loads(json.dumps(self.base_record("NDA022561")))
+		clone["application_number"] = "NDA999999"
+		payload["results"].append(clone)
+		payload["meta"]["results"]["total"] += 1
+		buffer = io.BytesIO()
+		with zipfile.ZipFile(buffer, "w") as archive:
+			archive.writestr("drug.json", json.dumps(payload))
+		sent = []
+
+		def purple_download(state, url=None):
+			sent.append(state)
+			return 304, b"", {}
+
+		with patch(DOWNLOAD_DRUGS, return_value=(200, buffer.getvalue(), self.drugs_headers())), patch(
+			DOWNLOAD_PB, side_effect=purple_download
+		):
+			call_command("sync_fda_medicines", stdout=StringIO())
+		self.assertEqual(Medicine.objects.filter(fda_application_number="NDA999999").count(), 1)
+		self.assertIsNotNone(sent[0])
 
 	def test_a_304_on_both_exits_cleanly_with_an_empty_database(self):
 		with patch(DOWNLOAD_DRUGS, return_value=(304, b"", {})), patch(

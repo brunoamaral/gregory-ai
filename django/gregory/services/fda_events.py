@@ -19,6 +19,11 @@ The functions return plain dicts (``kind``, ``event_date``, ``basis``, ``from_va
 A dated event first seen on an existing medicine is ``observed`` only when its date is
 within ``OBSERVED_WINDOW_DAYS`` of today. Drugs@FDA sometimes lists an old submission
 late, and an old event marked ``observed`` would surface in the feeds as news.
+
+``fda_approved`` happens once per application, so a moved approval date is a correction:
+the new event is ``reconstructed`` (a correction is not news) and carries ``replaces``, the
+stored dates to delete first, as in ``ema_events``. The caller must not pass ``replaces`` to
+``MedicineEvent``.
 """
 
 from datetime import timedelta
@@ -55,11 +60,15 @@ def new_dated_events(parsed, stored, today):
 
 	``stored`` is the set of ``(kind, event_date)`` pairs already in the table. A new one is
 	``observed`` when its date is within 90 days of ``today`` (or later), otherwise
-	``reconstructed``."""
+	``reconstructed``. An ``fda_approved`` on a new date replaces the stored one."""
 	recent_since = today - timedelta(days=OBSERVED_WINDOW_DAYS)
+	stored_approvals = sorted(d for kind, d in stored if kind == Kind.FDA_APPROVED)
 	events = []
 	for event in dated_events(parsed):
 		if (event["kind"], event["event_date"]) in stored:
+			continue
+		if event["kind"] == Kind.FDA_APPROVED and stored_approvals:
+			events.append({**_with_basis(event, Basis.RECONSTRUCTED), "replaces": stored_approvals})
 			continue
 		basis = Basis.OBSERVED if event["event_date"] >= recent_since else Basis.RECONSTRUCTED
 		events.append(_with_basis(event, basis))

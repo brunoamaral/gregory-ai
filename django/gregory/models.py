@@ -3047,6 +3047,11 @@ class Medicine(models.Model):
 		blank=True,
 		help_text="The regulator's whole record (an EMA export row, a Drugs@FDA application, or a BLA's Purple Book rows), so a parsing fix can be re-applied without downloading again.",
 	)
+	raw_digest = models.CharField(
+		max_length=64,
+		blank=True,
+		help_text="sha256 of raw as canonical JSON, set by the FDA syncs. They compare it instead of loading raw. FDA rows only.",
+	)
 	in_latest_export = models.BooleanField(
 		default=True,
 		help_text="False when the latest sync no longer found the product in the regulator's file. Rows are never deleted.",
