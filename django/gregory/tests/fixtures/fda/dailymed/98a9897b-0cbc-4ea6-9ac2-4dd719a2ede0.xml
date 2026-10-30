@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<document xmlns="urn:hl7-org:v3">
+  <setId root="98a9897b-0cbc-4ea6-9ac2-4dd719a2ede0" />
+  <versionNumber value="10" />
+  <component>
+    <structuredBody>
+      <component>
+        <section ID="ID_4CACED83-784C-4BC3-9CEE-D6A0B492FD23">
+          <id root="1c9ae4c4-b2fa-4cef-aea6-959f684800e4" />
+          <code code="34067-9" codeSystem="2.16.840.1.113883.6.1" displayName="INDICATIONS &amp; USAGE SECTION" />
+          <title>1 INDICATIONS AND USAGE </title>
+          <text>
+            <paragraph>Sildenafil citrate tablets are indicated for the treatment of erectile dysfunction.</paragraph>
+          </text>
+          <effectiveTime value="20240829" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>Sildenafil citrate tablets are a phosphodiesterase-5 (PDE5) inhibitor indicated for the treatment of erectile dysfunction (ED) (<linkHtml href="#ID_4CACED83-784C-4BC3-9CEE-D6A0B492FD23">1</linkHtml>)</paragraph>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</document>

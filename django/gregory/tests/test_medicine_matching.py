@@ -1,9 +1,12 @@
-"""Tests for gregory.services.medicine_matching, the rule that links EMA medicines to
-categories.
+"""Tests for gregory.services.medicine_matching, the rule that links EMA and FDA medicines
+to categories.
 
-The medicines are the real rows in fixtures/ema/medicines-base.json (cut from EMA's
-export of 2026-10-25), parsed with the production parser. The categories are built here.
-Nothing touches EMA.
+The EMA medicines are the real rows in fixtures/ema/medicines-base.json (cut from EMA's
+export of 2026-10-25), parsed with the production parser. The FDA medicines are the real
+applications in fixtures/fda/drugsfda-base.json and the CBER rows of purplebook-base.csv,
+with the indications of the trimmed DailyMed labels in fixtures/fda/dailymed/ (a few
+labels are written here instead, marked as such). The categories are built here. Nothing
+touches EMA, the FDA or DailyMed.
 """
 
 import json
@@ -22,16 +25,19 @@ from gregory.services.medicine_linking import group_medicines
 from gregory.services.medicine_matching import (
 	MATCHED_ON_MAX,
 	category_areas,
+	category_fda_terms,
 	category_patterns,
 	group_key,
 	group_lead,
 	is_diagnostic,
+	pattern_match,
 	product_matches,
 	subject_match,
 	substance_matches,
 )
 from gregory.utils.ema import is_human, parse_row
-from gregory.utils.fda import parse_application
+from gregory.utils.dailymed import parse_indications
+from gregory.utils.fda import parse_application, parse_purplebook
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ema" / "medicines-base.json"
 FDA_FIXTURE = Path(__file__).parent / "fixtures" / "fda" / "drugsfda-base.json"
@@ -479,49 +485,359 @@ class GroupLeadTests(SimpleTestCase):
 		self.assertEqual(group_lead([UNTRACKED["Extavia"], UNTRACKED["Betaferon"]]).name, "Betaferon")
 
 
+DAILYMED = Path(__file__).parent / "fixtures" / "fda" / "dailymed"
+PURPLEBOOK_FIXTURE = Path(__file__).parent / "fixtures" / "fda" / "purplebook-base.csv"
+
+
 def fda_medicines():
-	"""The real Drugs@FDA fixture applications as unsaved Medicine objects, by brand name."""
+	"""The real Drugs@FDA fixture applications as unsaved Medicine objects, by brand name.
+	The Purple Book's CBER rows are added by their brand name too (Kymriah, Yescarta, ...)."""
 	with open(FDA_FIXTURE) as handle:
 		records = json.load(handle)["results"]
 	parsed = [parse_application(record) for record in records]
-	return {p.brand_names[0]: Medicine(**p.model_values()) for p in parsed if p is not None}
+	cber, _ = parse_purplebook(PURPLEBOOK_FIXTURE.read_text())
+	return {p.brand_names[0]: Medicine(**p.model_values()) for p in parsed + cber if p is not None}
 
 
-class FdaRowsAreNotMatchedYetTests(SimpleTestCase):
-	"""An FDA row has no EMA areas, so the disease check cannot run on it and a category with
-	no areas would link it unchecked. Until the FDA rules exist, no rule matches one."""
+def label(setid, title, indication, published="2026-01-01", version="1"):
+	return {
+		"setid": setid,
+		"version": version,
+		"title": title,
+		"published": published,
+		"indication": indication,
+	}
+
+
+def real_indication(name):
+	"""The indications text of a trimmed DailyMed label, read with the production parser."""
+	return parse_indications((DAILYMED / f"{name}.xml").read_bytes())
+
+
+# Indications of real labels (fetched from DailyMed on 2026-10-30 and trimmed), read below
+# with the production parser.
+OCREVUS_TEXT = real_indication("9da42362-3bb5-4b83-b4bb-b59fd4e55f0d")
+KESIMPTA_TEXT = real_indication("6a8a3f53-2062-48ff-9dbe-b939df133ca3")
+VIAGRA_TEXT = real_indication("0b0be196-0c62-461c-94f4-9a35339b4501")
+# Written for these tests, short and not copied from a label: only the disease words matter.
+ARZERRA_TEXT = "ARZERRA is indicated for chronic lymphocytic leukemia."
+TYSABRI_TEXT = "TYSABRI is indicated for relapsing forms of multiple sclerosis and Crohn's disease."
+TYRUKO_TEXT = "TYRUKO is indicated for relapsing forms of multiple sclerosis (MS)."
+MAVENCLAD_TEXT = "MAVENCLAD is indicated for relapsing forms of multiple sclerosis (MS)."
+LEUSTATIN_TEXT = "Leustatin is indicated for hairy cell leukemia."
+
+
+def with_labels(medicine, *entries):
+	medicine.label_indications = list(entries)
+	if entries:
+		medicine.indication = entries[0]["indication"]
+	return medicine
+
+
+def fda_ms_medicines():
+	"""The fixture medicines with the labels DailyMed holds for them (or, where a test
+	stands in for a label, the text written above)."""
+	fda = fda_medicines()
+	with_labels(fda["OCREVUS"], label("ocrevus", "OCREVUS (OCRELIZUMAB) INJECTION", OCREVUS_TEXT))
+	# Zunovo has its own application and its own label, which names MS: only its substance,
+	# "ocrelizumab and hyaluronidase", keeps it out of an ocrelizumab category.
+	with_labels(fda["OCREVUS ZUNOVO"], label("zunovo", "OCREVUS ZUNOVO INJECTION", OCREVUS_TEXT))
+	with_labels(
+		fda["KESIMPTA"],
+		label("kesimpta", "KESIMPTA (OFATUMUMAB) INJECTION", KESIMPTA_TEXT),
+		label("arzerra", "ARZERRA (OFATUMUMAB) INJECTION", ARZERRA_TEXT),
+	)
+	with_labels(fda["TYSABRI"], label("tysabri", "TYSABRI (NATALIZUMAB) INJECTION", TYSABRI_TEXT))
+	with_labels(fda["TYRUKO"], label("tyruko", "TYRUKO (NATALIZUMAB-SZTN) INJECTION", TYRUKO_TEXT))
+	with_labels(fda["MAVENCLAD"], label("mavenclad", "MAVENCLAD (CLADRIBINE) TABLET", MAVENCLAD_TEXT))
+	with_labels(fda["LEUSTATIN"], label("leustatin", "LEUSTATIN (CLADRIBINE) INJECTION", LEUSTATIN_TEXT))
+	with_labels(fda["VIAGRA"], label("viagra", "VIAGRA (SILDENAFIL CITRATE) TABLET", VIAGRA_TEXT))
+	return fda
+
+
+FDA_MS = ["multiple sclerosis"]
+
+
+class FdaMatchingTests(SimpleTestCase):
+	"""The FDA branch of the rule: the disease check reads the DailyMed labels."""
 
 	def setUp(self):
-		self.fda = fda_medicines()
+		self.fda = fda_ms_medicines()
 
-	def test_a_category_with_no_areas_does_not_link_an_fda_row(self):
-		cat = category(["ocrelizumab", "natalizumab", "kesimpta"], modality=CategoryModality.BIOLOGIC_ANTIBODY)
-		for name in ("OCREVUS", "TYRUKO", "KESIMPTA"):
+	def match(self, cat, terms, *names):
+		return {name: product_matches(cat, self.fda[name], [], terms) for name in names}
+
+	def test_ocrelizumab_links_ocrevus_on_its_label_and_not_zunovo(self):
+		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		result = self.match(cat, FDA_MS, "OCREVUS", "OCREVUS ZUNOVO")
+		self.assertEqual(result["OCREVUS"], "ocrelizumab · multiple sclerosis")
+		self.assertIsNone(result["OCREVUS ZUNOVO"])
+
+	def test_zunovo_is_one_ingredient_name_not_a_combination(self):
+		# Drugs@FDA lists "OCRELIZUMAB AND HYALURONIDASE-OCSQ" as one ingredient, so the
+		# combination rule does not stop it. Its substance is the pattern plus two words.
+		zunovo = self.fda["OCREVUS ZUNOVO"]
+		self.assertFalse(zunovo.is_combination)
+		self.assertEqual(zunovo.substances, ["ocrelizumab and hyaluronidase"])
+		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY, medicine_include_combinations=True)
+		self.assertIsNone(product_matches(cat, zunovo, [], []))
+
+	def test_ofatumumab_links_kesimpta_through_its_own_label_though_arzerras_has_no_ms(self):
+		cat = category(["ofatumumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		kesimpta = self.fda["KESIMPTA"]
+		self.assertEqual(kesimpta.brand_names, ["KESIMPTA", "ARZERRA"])
+		self.assertEqual(product_matches(cat, kesimpta, [], FDA_MS), "ofatumumab · multiple sclerosis")
+		# Without the Kesimpta label the Arzerra one cannot link it.
+		kesimpta.label_indications = [kesimpta.label_indications[1]]
+		self.assertIsNone(product_matches(cat, kesimpta, [], FDA_MS))
+
+	def test_a_pattern_matches_any_brand_on_an_fda_row(self):
+		cat = category([], CategoryModality.RESEARCH_TOPIC, medicine_terms=["arzerra"])
+		self.assertEqual(
+			product_matches(cat, self.fda["KESIMPTA"], [], FDA_MS), "arzerra · multiple sclerosis"
+		)
+		partial = category([], CategoryModality.RESEARCH_TOPIC, medicine_terms=["arz"])
+		self.assertIsNone(product_matches(partial, self.fda["KESIMPTA"], [], []))
+
+	def test_natalizumab_links_tysabri_and_tyruko(self):
+		cat = category(["natalizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		result = self.match(cat, FDA_MS, "TYSABRI", "TYRUKO")
+		self.assertEqual(result["TYSABRI"], "natalizumab · multiple sclerosis")
+		# The FDA's four-letter suffix is gone from the substance.
+		self.assertEqual(self.fda["TYRUKO"].substances, ["natalizumab"])
+		self.assertEqual(result["TYRUKO"], "natalizumab · multiple sclerosis")
+
+	def test_cladribine_links_mavenclad_and_not_leustatin(self):
+		cat = category(["cladribine"])
+		result = self.match(cat, FDA_MS, "MAVENCLAD", "LEUSTATIN")
+		self.assertEqual(result["MAVENCLAD"], "cladribine · multiple sclerosis")
+		self.assertIsNone(result["LEUSTATIN"])
+
+	def test_leustatin_without_a_label_gets_nothing_either(self):
+		cat = category(["cladribine"])
+		self.fda["LEUSTATIN"].label_indications = []
+		self.assertIsNone(product_matches(cat, self.fda["LEUSTATIN"], [], FDA_MS))
+
+	def test_sildenafil_on_ms_drops_viagra_and_without_terms_links_it(self):
+		cat = category(["sildenafil"])
+		self.assertIsNone(product_matches(cat, self.fda["VIAGRA"], [], FDA_MS))
+		self.assertEqual(product_matches(cat, self.fda["VIAGRA"], [], []), "sildenafil")
+
+	def test_a_candidate_with_no_label_gets_nothing(self):
+		cat = category(["natalizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		self.fda["TYSABRI"].label_indications = []
+		self.assertIsNone(product_matches(cat, self.fda["TYSABRI"], [], FDA_MS))
+
+	def test_a_category_with_no_terms_links_a_medicine_with_no_label(self):
+		cat = category(["natalizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		self.fda["TYSABRI"].label_indications = []
+		self.assertEqual(product_matches(cat, self.fda["TYSABRI"], [], []), "natalizumab")
+
+	def test_the_ema_areas_do_not_apply_to_an_fda_row_nor_the_fda_terms_to_an_ema_row(self):
+		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		# Areas that would reject Ocrevus on EMA's side are ignored on the FDA row.
+		self.assertEqual(
+			product_matches(cat, self.fda["OCREVUS"], ["Parkinson Disease"], []), "ocrelizumab"
+		)
+		# Terms that would reject the EMA row are ignored on it.
+		self.assertEqual(
+			product_matches(cat, MEDICINES["Ocrevus"], MS, ["parkinson"]),
+			"ocrelizumab · Multiple Sclerosis",
+		)
+
+	def test_the_first_term_that_appears_in_any_label_is_named(self):
+		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		label_ = product_matches(cat, self.fda["OCREVUS"], [], ["parkinson", "Multiple Sclerosis", "MS"])
+		self.assertEqual(label_, "ocrelizumab · Multiple Sclerosis")
+
+	def test_the_label_fits_matched_on(self):
+		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		self.fda["OCREVUS"].label_indications = [label("x", "t", "word " + "x" * 300)]
+		self.assertEqual(len(product_matches(cat, self.fda["OCREVUS"], [], ["x" * 300])), MATCHED_ON_MAX)
+
+	def test_exclude_terms_apply_to_an_fda_row(self):
+		cat = category(["natalizumab"], category_exclude_terms=["Tyruko"])
+		result = self.match(cat, FDA_MS, "TYSABRI", "TYRUKO")
+		self.assertIsNotNone(result["TYSABRI"])
+		self.assertIsNone(result["TYRUKO"])
+
+	def test_combinations_are_skipped_unless_the_category_opts_in(self):
+		off = category(["metformin"])
+		on = category(["metformin"], medicine_include_combinations=True)
+		self.assertTrue(self.fda["SYNJARDY"].is_combination)
+		self.assertIsNone(product_matches(off, self.fda["SYNJARDY"], [], []))
+		self.assertEqual(product_matches(on, self.fda["SYNJARDY"], [], []), "metformin")
+
+	def test_car_t_gets_nothing_on_an_ms_subject(self):
+		cat = category(
+			["car-t"], CategoryModality.RESEARCH_TOPIC, medicine_terms=["*cabtagene*", "tisagenlecleucel"]
+		)
+		for name in ("Yescarta", "Kymriah", "AMTAGVI"):
 			with self.subTest(name=name):
-				self.assertIsNone(product_matches(cat, self.fda[name], []))
-		# The EMA row of the same substance does link, so the guard is the only difference.
-		self.assertIsNotNone(product_matches(cat, MEDICINES["Ocrevus"], []))
+				self.assertIsNone(product_matches(cat, self.fda[name], [], FDA_MS))
 
-	def test_a_category_with_areas_does_not_link_an_fda_row_either(self):
-		cat = category(["ocrelizumab"], modality=CategoryModality.BIOLOGIC_ANTIBODY)
-		self.assertIsNone(product_matches(cat, self.fda["OCREVUS"], MS))
+	def test_car_t_on_a_subject_with_no_terms_gets_kymriah_and_yescarta_not_amtagvi(self):
+		cat = category(
+			["car-t"], CategoryModality.RESEARCH_TOPIC, medicine_terms=["*cabtagene*", "tisagenlecleucel"]
+		)
+		result = self.match(cat, [], "Yescarta", "Kymriah", "AMTAGVI", "tecelra")
+		self.assertEqual(result["Yescarta"], "*cabtagene*")
+		self.assertEqual(result["Kymriah"], "tisagenlecleucel")
+		self.assertIsNone(result["AMTAGVI"])
+		self.assertIsNone(result["tecelra"])
+
+	def test_a_contrast_agent_never_links(self):
+		agent = self.fda["CARBON DIOXIDE, USP"]
+		self.assertEqual(agent.fda_pharm_classes, ["Radiographic Contrast Agent [EPC]"])
+		cat = category(["carbon dioxide"])
+		self.assertTrue(is_diagnostic(agent))
+		self.assertIsNone(product_matches(cat, agent, [], []))
+		self.assertIsNone(pattern_match(cat, agent))
+		# Without the class it would link, so the class is what keeps it out.
+		agent.fda_pharm_classes = []
+		self.assertEqual(product_matches(cat, agent, [], []), "carbon dioxide")
+
+	def test_the_diagnostic_rule_reads_every_class_and_ignores_case(self):
+		row = self.fda["OCREVUS"]
+		row.fda_pharm_classes = ["Something [EPC]", "Radioactive DIAGNOSTIC Agent [EPC]"]
+		self.assertTrue(is_diagnostic(row))
+		row.fda_pharm_classes = ["gadolinium-based CONTRAST agent"]
+		self.assertTrue(is_diagnostic(row))
+		row.fda_pharm_classes = ["CD20-directed Cytolytic Antibody [EPC]"]
+		self.assertFalse(is_diagnostic(row))
+		row.fda_pharm_classes = []
+		self.assertFalse(is_diagnostic(row))
+
+	def test_an_fda_row_is_not_judged_by_an_atc_code(self):
+		row = self.fda["OCREVUS"]
+		row.atc_code = "V08AB01"
+		self.assertFalse(is_diagnostic(row))
+
+	def test_pattern_match_is_the_check_without_the_disease_step(self):
+		cat = category(["natalizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+		self.fda["TYSABRI"].label_indications = []
+		self.assertEqual(pattern_match(cat, self.fda["TYSABRI"]), "natalizumab")
+		self.assertIsNone(pattern_match(cat, self.fda["OCREVUS"]))
+		# EMA rows go through it too.
+		self.assertEqual(pattern_match(cat, MEDICINES["Tysabri"]), "natalizumab")
 
 	def test_an_fda_row_never_gets_a_subject_link(self):
 		ocrevus = self.fda["OCREVUS"]
 		ocrevus.therapeutic_areas = ["Multiple Sclerosis"]
 		self.assertIsNone(subject_match(MS, ocrevus))
 
-	def test_an_fda_row_is_never_grouped(self):
-		ocrevus = self.fda["OCREVUS"]
-		ocrevus.indication = "Ocrevus is indicated for relapsing multiple sclerosis."
-		self.assertIsNotNone(ocrevus.authorisation_date)
-		self.assertIsNone(group_key(ocrevus))
 
-	def test_an_fda_row_without_an_ema_number_does_not_break_the_lead_sort(self):
-		fda_row = product("Fda", "x", regulator="fda", ema_product_number=None)
-		ema_row = product("Ema", "x")
-		# Nothing groups an FDA row, but the sort must not compare None with a string.
-		self.assertIn(group_lead([fda_row, ema_row]), (fda_row, ema_row))
+class FdaTermTests(SimpleTestCase):
+	"""Terms are whole words, ignoring case."""
+
+	def setUp(self):
+		self.row = fda_medicines()["OCREVUS"]
+		self.cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY)
+
+	def check(self, term, text):
+		self.row.label_indications = [label("x", "OCREVUS", text)]
+		return product_matches(self.cat, self.row, [], [term])
+
+	def test_parkinson_does_not_match_parkinsonism(self):
+		self.assertIsNone(self.check("parkinson", "Indicated for drug-induced parkinsonism."))
+		self.assertIsNotNone(self.check("parkinson", "Indicated for Parkinson's disease."))
+
+	def test_alzheimer_matches_both_apostrophes(self):
+		self.assertIsNotNone(self.check("alzheimer", "for dementia of the Alzheimer's type"))
+		self.assertIsNotNone(self.check("alzheimer", "for dementia of the Alzheimer’s type"))
+		self.assertIsNotNone(self.check("alzheimer", "for ALZHEIMER disease"))
+
+	def test_a_term_inside_a_longer_word_does_not_match(self):
+		self.assertIsNone(self.check("ms", "indicated for symptoms of disease"))
+		self.assertIsNotNone(self.check("ms", "relapsing forms of MS."))
+
+	def test_a_multi_word_term_matches_across_the_text(self):
+		self.assertIsNotNone(self.check("multiple sclerosis", "relapsing Multiple   Sclerosis"))
+		self.assertIsNone(self.check("multiple sclerosis", "multiple myeloma and sclerosis"))
+
+	def test_a_term_with_punctuation_at_its_edge_still_matches(self):
+		self.assertIsNotNone(self.check("(ms)", "multiple sclerosis (MS) in adults"))
+
+	def test_blank_terms_and_malformed_entries_are_ignored(self):
+		self.row.label_indications = ["junk", {"setid": "x"}, label("y", "OCREVUS", "multiple sclerosis")]
+		self.assertEqual(
+			product_matches(self.cat, self.row, [], [" ", "multiple sclerosis"]),
+			"ocrelizumab · multiple sclerosis",
+		)
+
+
+class FdaGroupingTests(SimpleTestCase):
+	def test_an_ema_and_an_fda_product_with_the_same_text_do_not_group(self):
+		ema = product("Zorvex", "Treats X.", substances=["memantine"])
+		fda = product(
+			"Qinta",
+			"Treats X.",
+			substances=["memantine"],
+			regulator="fda",
+			ema_product_number=None,
+			fda_application_number="NDA000001",
+			brand_names=["Qinta"],
+		)
+		self.assertNotEqual(group_key(ema), group_key(fda))
+		self.assertEqual(group_key(fda)[0], "fda")
+
+	def test_two_fda_products_with_the_same_text_group(self):
+		first = fda_product("Zorvex", "Zorvex is indicated for X.", "NDA000001")
+		second = fda_product("Qinta", "Qinta is indicated for X.", "NDA000002")
+		self.assertEqual(group_key(first), group_key(second))
+
+	def test_every_brand_of_an_fda_row_is_removed_from_its_indication(self):
+		first = fda_product("Kesimpta / Arzerra", "Kesimpta, Arzerra treats X.", "NDA000001", brands=["Kesimpta", "Arzerra"])
+		second = fda_product("Other", "Other treats X.", "NDA000002")
+		self.assertEqual(group_key(first), group_key(second))
+
+	def test_fda_biosimilars_and_rows_without_a_date_or_indication_are_not_grouped(self):
+		self.assertIsNone(group_key(fda_product("A", "A treats X.", "NDA000001", biosimilar=True)))
+		self.assertIsNone(group_key(fda_product("A", "A treats X.", "NDA000001", authorisation_date=None)))
+		self.assertIsNone(group_key(fda_product("A", "", "NDA000001")))
+
+	def test_an_approved_fda_product_leads_over_an_earlier_discontinued_one(self):
+		discontinued = fda_product("Old", "x", "NDA000009", status="Discontinued", authorisation_date=date(1998, 1, 1))
+		approved = fda_product("New", "x", "NDA000008", status="Approved", authorisation_date=date(2010, 1, 1))
+		self.assertIs(group_lead([discontinued, approved]), approved)
+
+	def test_the_earliest_approval_then_the_lowest_application_number_leads(self):
+		later = fda_product("Later", "x", "NDA000001", authorisation_date=date(2012, 1, 1))
+		earlier = fda_product("Earlier", "x", "NDA000009", authorisation_date=date(2002, 1, 1))
+		self.assertIs(group_lead([later, earlier]), earlier)
+		high = fda_product("High", "x", "NDA000009")
+		low = fda_product("Low", "x", "NDA000002")
+		self.assertIs(group_lead([high, low]), low)
+
+	def test_only_the_word_approved_counts_on_an_fda_row(self):
+		odd = fda_product("Odd", "x", "NDA000001", status="Authorised", authorisation_date=date(1990, 1, 1))
+		real = fda_product("Real", "x", "NDA000002", status="Approved", authorisation_date=date(2010, 1, 1))
+		self.assertIs(group_lead([odd, real]), real)
+
+
+def fda_product(name, indication, number, brands=None, **kwargs):
+	return product(
+		name,
+		indication,
+		substances=["memantine"],
+		regulator="fda",
+		ema_product_number=None,
+		fda_application_number=number,
+		brand_names=brands or [name],
+		**kwargs,
+	)
+
+
+class CategoryFdaTermsTests(SimpleTestCase):
+	def test_the_terms_of_every_subject_are_joined_without_duplicates(self):
+		first = Subject(pk=1, subject_name="A", fda_indication_terms=["Multiple Sclerosis", " "])
+		second = Subject(pk=2, subject_name="B", fda_indication_terms=["multiple sclerosis", "alzheimer"])
+		cat = SimpleNamespace(subjects=SimpleNamespace(all=lambda: [second, first]))
+		self.assertEqual(category_fda_terms(cat), ["Multiple Sclerosis", "alzheimer"])
+
+	def test_no_subjects_no_terms(self):
+		cat = SimpleNamespace(subjects=SimpleNamespace(all=lambda: []))
+		self.assertEqual(category_fda_terms(cat), [])
 
 
 # LOCAL ONLY. The full EMA export of 2026-10-25 lives in the gitignored specs/ folder, so

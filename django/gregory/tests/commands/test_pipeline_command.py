@@ -71,6 +71,10 @@ class PipelineCommandTest(TestCase):
 		self.assertLess(names.index("feedreader_patents_ops"), names.index("sync_ema_medicines"))
 		self.assertLess(names.index("sync_ema_medicines"), names.index("find_doi"))
 		self.assertEqual(dict(calls)["sync_ema_medicines"], {})
+		# 7c: the FDA labels after the categories are rebuilt, then the matcher that reads them.
+		self.assertLess(names.index("rebuild_categories"), names.index("sync_fda_labels"))
+		self.assertLess(names.index("sync_fda_labels"), names.index("match_medicines"))
+		self.assertEqual(dict(calls)["sync_fda_labels"], {})
 		self.assertEqual(dict(calls)["feedreader_patents_ops"], {"max_families": 500})
 		# A full detection pass, not --recent: links must follow trials that change.
 		self.assertEqual(dict(calls)["detect_patent_trial_links"], {})

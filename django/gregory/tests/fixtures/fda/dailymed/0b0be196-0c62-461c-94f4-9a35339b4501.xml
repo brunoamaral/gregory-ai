@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<document xmlns="urn:hl7-org:v3">
+  <setId root="0b0be196-0c62-461c-94f4-9a35339b4501" />
+  <versionNumber value="32" />
+  <component>
+    <structuredBody>
+      <component>
+        <section ID="S1">
+          <id root="8c89adfb-1d4a-43d4-88b2-5b8d51eeffe2" />
+          <code code="34067-9" codeSystem="2.16.840.1.113883.6.1" displayName="INDICATIONS &amp; USAGE SECTION" />
+          <title>1 INDICATIONS AND USAGE</title>
+          <text>
+            <paragraph>VIAGRA is indicated for the treatment of erectile dysfunction.</paragraph>
+          </text>
+          <effectiveTime value="20171215" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>VIAGRA is a phosphodiesterase-5 (PDE5) inhibitor indicated for the treatment of erectile dysfunction (ED) (<linkHtml href="#S1">1</linkHtml>)</paragraph>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</document>

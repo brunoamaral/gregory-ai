@@ -148,8 +148,13 @@ class Command(GregoryBaseCommand):
 				self.stderr.write(f"{self._label(source)}: {exc}")
 
 		if wrote and not self.dry_run:
-			# sync_fda_labels runs here once it exists, before the matcher reads the labels.
-			#
+			# New or changed medicines may be candidates for a category, so their labels come
+			# first: the matcher reads the labels. sync_fda_labels reports its own DailyMed
+			# errors and never fails the run; a bug in it must not stop the matcher either.
+			try:
+				call_command("sync_fda_labels", stdout=self.stdout, stderr=self.stderr)
+			except Exception as exc:
+				self.stderr.write(f"sync_fda_labels failed: {exc}")
 			# A sync that changed substances relinks categories in the same run. Outside the
 			# transactions: a matching failure must not undo a good sync, and the pipeline's
 			# own match_medicines step retries it.

@@ -32,6 +32,7 @@ from gregory.models import (
 )
 from gregory.services.medicine_matching import (
 	category_areas,
+	category_fda_terms,
 	group_key,
 	group_lead,
 	product_matches,
@@ -56,6 +57,12 @@ MEDICINE_FIELDS = (
 	"authorisation_date",
 	"ema_product_number",
 	"grouped_under",
+	"fda_application_number",
+	"brand_names",
+	"fda_pharm_classes",
+	# Only filled on the candidates sync_fda_labels downloaded, so loading it for every
+	# row stays small.
+	"label_indications",
 )
 
 
@@ -136,9 +143,10 @@ def link_category(category, medicines=None, dry_run=False):
 	if medicines is None:
 		medicines = load_medicines()
 	areas = category_areas(category)
+	terms = category_fda_terms(category)
 	expected = {}
 	for medicine in medicines:
-		label = product_matches(category, medicine, areas)
+		label = product_matches(category, medicine, areas, terms)
 		if label is not None:
 			expected[medicine.pk] = label
 	return _apply_links(

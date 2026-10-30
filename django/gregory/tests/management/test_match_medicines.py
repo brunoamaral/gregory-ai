@@ -694,3 +694,214 @@ class PassOptionTests(UntrackedTestCase):
 	def test_dry_run_with_subject_writes_nothing(self):
 		self.match(subject=self.alz.pk, dry_run=True)
 		self.assertFalse(MedicineSubjectLink.objects.exists())
+
+
+FDA_FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "fda"
+
+
+class FdaMatchTests(MatchMedicinesTestCase):
+	"""FDA rows through match_medicines. The rows are the real applications in
+	fixtures/fda/drugsfda-base.json and purplebook-base.csv; their labels are set here (short
+	texts written for the tests) instead of fetched, since DailyMed is never called."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.ms.fda_indication_terms = ["multiple sclerosis"]
+		cls.ms.save()
+		call_command(
+			"sync_fda_medicines",
+			file=str(FDA_FIXTURES / "drugsfda-base.json"),
+			purplebook_file=str(FDA_FIXTURES / "purplebook-base.csv"),
+			stdout=StringIO(),
+		)
+		cls.labelled = {
+			"BLA761053": "OCREVUS is indicated for relapsing forms of multiple sclerosis (MS).",
+			"BLA125326": "KESIMPTA is indicated for relapsing forms of multiple sclerosis (MS).",
+			"BLA125104": "TYSABRI is indicated for multiple sclerosis and Crohn's disease.",
+			"BLA761322": "TYRUKO is indicated for relapsing multiple sclerosis.",
+			"NDA022561": "MAVENCLAD is indicated for relapsing multiple sclerosis.",
+			"NDA020229": "Leustatin is indicated for hairy cell leukemia.",
+			"NDA020895": "VIAGRA is indicated for erectile dysfunction.",
+		}
+		for number, text in cls.labelled.items():
+			Medicine.objects.filter(fda_application_number=number).update(
+				indication=text,
+				label_indications=[
+					{"setid": number, "version": "1", "title": "T", "published": "2026-01-01", "indication": text}
+				],
+			)
+
+	def fda_links(self, category):
+		return {
+			a.medicine.fda_application_number: a
+			for a in MedicineCategoryAssignment.objects.filter(
+				teamcategory=category, medicine__regulator="fda"
+			).select_related("medicine")
+		}
+
+	def ema_links(self, category):
+		return {
+			a.medicine.name
+			for a in MedicineCategoryAssignment.objects.filter(
+				teamcategory=category, medicine__regulator="ema"
+			).select_related("medicine")
+		}
+
+	def test_an_fda_row_links_on_its_label_next_to_the_ema_row(self):
+		category = self.category("Antibodies", ["ocrelizumab", "natalizumab"])
+		self.match()
+		links = self.fda_links(category)
+		self.assertEqual(set(links), {"BLA761053", "BLA125104", "BLA761322"})
+		self.assertEqual(links["BLA761053"].matched_on, "ocrelizumab · multiple sclerosis")
+		self.assertEqual(links["BLA761053"].source, Source.AUTOMATIC)
+		# The EMA rows of the same substances link as before.
+		self.assertEqual(self.ema_links(category), {"Ocrevus", "Tysabri", "Tyruko"})
+
+	def test_the_disease_check_keeps_leustatin_and_viagra_out(self):
+		cladribine = self.category("Cladribine", ["cladribine"], modality=CategoryModality.SMALL_MOLECULE)
+		sildenafil = self.category("Sildenafil", ["sildenafil"], modality=CategoryModality.SMALL_MOLECULE)
+		self.match()
+		self.assertEqual(set(self.fda_links(cladribine)), {"NDA022561"})
+		self.assertEqual(self.fda_links(sildenafil), {})
+
+	def test_an_unmapped_subject_skips_the_check_and_links_viagra(self):
+		sildenafil = self.category(
+			"Sildenafil", ["sildenafil"], subject=self.unmapped, modality=CategoryModality.SMALL_MOLECULE
+		)
+		self.match()
+		self.assertEqual(self.fda_links(sildenafil)["NDA020895"].matched_on, "sildenafil")
+
+	def test_an_ema_only_subject_does_not_check_the_fda_label(self):
+		# Areas but no FDA terms: the EMA row is checked, the FDA row is not.
+		ema_only = Subject.objects.create(
+			subject_name="EMA only", subject_slug="ema-only", team=self.team,
+			ema_therapeutic_areas=["Multiple Sclerosis"],
+		)
+		category = self.category(
+			"Sildenafil", ["sildenafil"], subject=ema_only, modality=CategoryModality.SMALL_MOLECULE
+		)
+		self.match()
+		self.assertEqual(set(self.fda_links(category)), {"NDA020895"})
+		self.assertNotIn("Viagra", self.ema_links(category))
+
+	def test_a_candidate_with_no_label_gets_no_link(self):
+		category = self.category("Natalizumab", ["natalizumab"])
+		Medicine.objects.filter(fda_application_number="BLA125104").update(label_indications=[])
+		self.match()
+		self.assertEqual(set(self.fda_links(category)), {"BLA761322"})
+
+	def test_removing_the_ms_label_removes_the_link_on_the_next_run(self):
+		category = self.category("Ocrelizumab", ["ocrelizumab"])
+		self.match()
+		self.assertEqual(set(self.fda_links(category)), {"BLA761053"})
+		Medicine.objects.filter(fda_application_number="BLA761053").update(
+			label_indications=[{"setid": "x", "indication": "OCREVUS is indicated for lupus."}]
+		)
+		self.match()
+		self.assertEqual(self.fda_links(category), {})
+
+	def test_a_second_run_changes_nothing(self):
+		self.category("Antibodies", ["ocrelizumab", "natalizumab"])
+		self.match()
+		before = list(
+			MedicineCategoryAssignment.objects.order_by("pk").values_list("pk", "created_at", "matched_on")
+		)
+		history_before = MedicineCategoryAssignment.history.count()
+		output = self.match()
+		self.assertEqual(
+			list(MedicineCategoryAssignment.objects.order_by("pk").values_list("pk", "created_at", "matched_on")),
+			before,
+		)
+		self.assertEqual(MedicineCategoryAssignment.history.count(), history_before)
+		self.assertIn("0 added, 0 removed, 0 relabelled, 6 unchanged", output)
+
+	def test_fda_rows_never_get_subject_links(self):
+		self.category("Ocrelizumab", ["ocrelizumab"])
+		self.match()
+		self.assertEqual(MedicineSubjectLink.objects.filter(medicine__regulator="fda").count(), 0)
+		# The EMA rows of the subject's area still do.
+		self.assertTrue(MedicineSubjectLink.objects.filter(subject=self.ms, medicine=self.ocrevus).exists())
+
+	def test_a_suppressed_fda_link_is_never_recreated_or_changed(self):
+		category = self.category("Ocrelizumab", ["ocrelizumab"])
+		self.match()
+		link = self.fda_links(category)["BLA761053"]
+		link.suppressed = True
+		link.matched_on = "edited by hand"
+		link.save()
+		history = MedicineCategoryAssignment.history.count()
+		self.match()
+		self.match()
+		link.refresh_from_db()
+		self.assertTrue(link.suppressed)
+		self.assertEqual(link.matched_on, "edited by hand")
+		self.assertEqual(
+			MedicineCategoryAssignment.objects.filter(
+				teamcategory=category, medicine__fda_application_number="BLA761053"
+			).count(),
+			1,
+		)
+		self.assertEqual(MedicineCategoryAssignment.history.count(), history)
+
+	def test_a_manual_link_to_an_fda_medicine_is_kept_whatever_the_rules_say(self):
+		category = self.category("Sildenafil", ["sildenafil"], modality=CategoryModality.SMALL_MOLECULE)
+		viagra = Medicine.objects.get(fda_application_number="NDA020895")
+		manual = MedicineCategoryAssignment.objects.create(
+			medicine=viagra, teamcategory=category, source=Source.MANUAL, matched_on=""
+		)
+		self.match()
+		manual.refresh_from_db()
+		self.assertEqual(manual.source, Source.MANUAL)
+		self.assertFalse(manual.suppressed)
+
+	def test_a_contrast_agent_never_links(self):
+		category = self.category(
+			"CO2", ["carbon dioxide"], subject=self.unmapped, modality=CategoryModality.SMALL_MOLECULE
+		)
+		self.match()
+		self.assertEqual(self.fda_links(category), {})
+
+	def test_cart_on_an_unmapped_subject_links_the_cber_rows_but_not_amtagvi(self):
+		category = self.category(
+			"CAR-T", ["car-t"], subject=self.unmapped, modality=CategoryModality.RESEARCH_TOPIC,
+			medicine_terms=["*cabtagene*", "tisagenlecleucel"],
+		)
+		self.match()
+		self.assertEqual(set(self.fda_links(category)), {"BLA125643", "BLA125646"})
+
+	def test_cart_on_the_ms_subject_links_nothing(self):
+		category = self.category(
+			"CAR-T on MS", ["car-t"], modality=CategoryModality.RESEARCH_TOPIC,
+			medicine_terms=["*cabtagene*", "tisagenlecleucel"],
+		)
+		self.match()
+		self.assertEqual(self.fda_links(category), {})
+
+	def test_an_ema_and_an_fda_product_with_the_same_indication_are_not_grouped(self):
+		text = "Treats relapsing multiple sclerosis in adults."
+		Medicine.objects.filter(pk=self.ocrevus.pk).update(indication=text)
+		Medicine.objects.filter(fda_application_number="BLA761053").update(indication=text)
+		self.match()
+		self.assertIsNone(Medicine.objects.get(fda_application_number="BLA761053").grouped_under)
+		self.assertIsNone(Medicine.objects.get(pk=self.ocrevus.pk).grouped_under)
+
+	def test_fda_copies_with_the_same_indication_group_within_the_regulator(self):
+		text = "Treats relapsing multiple sclerosis in adults."
+		for number in ("BLA125104", "NDA022561"):
+			Medicine.objects.filter(fda_application_number=number).update(
+				indication=text, substances=["natalizumab"], brand_names=["X"], name="X"
+			)
+		output = self.match()
+		grouped = Medicine.objects.filter(regulator="fda").exclude(grouped_under=None)
+		self.assertEqual(grouped.count(), 1)
+		self.assertEqual(grouped.get().grouped_under.regulator, "fda")
+		self.assertIn("1 products grouped under a lead", output)
+
+	def test_link_category_alone_uses_the_stored_labels(self):
+		from gregory.services.medicine_linking import link_category
+
+		category = self.category("Ocrelizumab", ["ocrelizumab"])
+		counts = link_category(category)
+		self.assertEqual(counts["created"], 2)  # the EMA row and the FDA row
+		self.assertEqual(set(self.fda_links(category)), {"BLA761053"})

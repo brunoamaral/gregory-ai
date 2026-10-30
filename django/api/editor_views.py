@@ -696,14 +696,14 @@ _MEDICINE_MATCHING_FIELDS = frozenset({"category_terms", "category_exclude_terms
 
 
 def _link_medicines(category):
-	"""Link an automatic category's EMA medicines now, so the editor's change shows at
+	"""Link an automatic category's medicines now, so the editor's change shows at
 	once instead of at the next pipeline run. Runs after the editor's own transaction, so a
 	failure here can never undo or fail the category write: it is logged and the pipeline
 	catches up. A manual category has no automatic links, so this does nothing for one."""
 	try:
 		link_category(category)
 	except Exception:
-		logger.exception("Could not link EMA medicines for category %s", category.pk)
+		logger.exception("Could not link medicines for category %s", category.pk)
 
 
 def _category_payload(category):

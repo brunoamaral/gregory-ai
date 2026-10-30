@@ -574,6 +574,21 @@ class Subject(models.Model):
 			"medicine that matches by substance."
 		),
 	)
+	fda_indication_terms = ArrayField(
+		models.CharField(max_length=255),
+		default=list,
+		blank=True,
+		verbose_name="FDA indication terms (comma separated)",
+		help_text=(
+			"Phrases looked for, as whole words and ignoring case, in the indications of an FDA "
+			"medicine's DailyMed label. A medicine links to this subject's categories only when "
+			"one of them appears in a label. They differ from the EMA areas on purpose: a label "
+			"says \"Alzheimer's disease\", never \"Alzheimer Disease\", so the term is the word "
+			"that appears in the text. Suggestions: multiple sclerosis; alzheimer; parkinson. "
+			"Leave empty to skip the check: the subject's categories then link every FDA "
+			"medicine that matches by substance."
+		),
+	)
 	auto_predict = models.BooleanField(
 		default=False, help_text="Enable automatic ML prediction for new articles"
 	)

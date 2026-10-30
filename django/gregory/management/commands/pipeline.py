@@ -73,9 +73,13 @@ class Command(BaseCommand):
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
 			(
+				"sync_fda_labels",
+				{},
+			),  # 7c-i. DailyMed labels of the FDA medicines that could belong in a category (after rebuild_categories has taken category edits; a label is downloaded only when its version changed)
+			(
 				"match_medicines",
 				{},
-			),  # 7c. Link EMA medicines to categories (after rebuild_categories has taken category edits)
+			),  # 7c-ii. Link EMA and FDA medicines to categories (after the labels, which the FDA disease check reads)
 			(
 				"detect_patent_trial_links",
 				{},

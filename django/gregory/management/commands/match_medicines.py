@@ -1,20 +1,21 @@
 """
-Link EMA medicines to the team categories and subjects they belong to.
+Link EMA and FDA medicines to the team categories and subjects they belong to.
 
 Three passes, in this order, each re-derived from scratch on every run (about 2,400
 products against a few hundred categories takes seconds, so there is no incremental
 window). The rules live in gregory/services/medicine_matching.py and the database writes
 in gregory/services/medicine_linking.py.
 
-1. Groups. Products that share their substances and their indication are copies of one
-   medicine. One leads (an authorised product first, then the earliest authorisation) and
-   the others get ``grouped_under`` set to it. Generics, biosimilars and products never
-   authorised aren't grouped.
+1. Groups. Products of one regulator that share their substances and their indication are
+   copies of one medicine. One leads (an authorised or approved product first, then the
+   earliest authorisation) and the others get ``grouped_under`` set to it. Generics,
+   biosimilars and products never authorised aren't grouped.
 2. Categories. Every automatic category is matched against every product (a diagnostic
-   never matches).
+   never matches). An FDA product's disease check reads the DailyMed labels that
+   sync_fda_labels stored, so that command runs first.
 3. Subjects. Every subject with ``ema_therapeutic_areas`` is linked to the non-diagnostic
    products EMA approved for one of its areas, with no category needed. A subject whose
-   areas were cleared loses its links.
+   areas were cleared loses its links. FDA products get no subject links.
 
 Only derived rows are managed here:
 
@@ -55,7 +56,7 @@ from gregory.services.medicine_linking import (
 
 
 class Command(GregoryBaseCommand):
-	help = "Group EMA medicines and link them to the automatic team categories and subjects they match."
+	help = "Group EMA and FDA medicines and link them to the automatic team categories and subjects they match."
 
 	def add_arguments(self, parser):
 		parser.add_argument(
