@@ -1,0 +1,28 @@
+{
+ "data": [
+  {
+   "spl_version": 32,
+   "published_date": "Feb 13, 2026",
+   "title": "VIAGRA (SILDENAFIL CITRATE) TABLET, FILM COATED [PFIZER LABORATORIES DIV PFIZER INC]",
+   "setid": "0b0be196-0c62-461c-94f4-9a35339b4501"
+  },
+  {
+   "spl_version": 10,
+   "published_date": "May 05, 2025",
+   "title": "SILDENAFIL CITRATE TABLET, FILM COATED [MYLAN PHARMACEUTICALS INC.]",
+   "setid": "98a9897b-0cbc-4ea6-9ac2-4dd719a2ede0"
+  }
+ ],
+ "metadata": {
+  "db_published_date": "Oct 29, 2026 08:25:26PM EST",
+  "elements_per_page": 100,
+  "current_url": "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?application_number=NDA020895&pagesize=100",
+  "next_page_url": "null",
+  "total_elements": 2,
+  "total_pages": 1,
+  "current_page": 1,
+  "previous_page": "null",
+  "previous_page_url": "null",
+  "next_page": "null"
+ }
+}

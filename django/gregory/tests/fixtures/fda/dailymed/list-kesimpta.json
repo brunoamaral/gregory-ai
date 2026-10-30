@@ -1,0 +1,22 @@
+{
+ "data": [
+  {
+   "spl_version": 11,
+   "published_date": "Apr 10, 2026",
+   "title": "KESIMPTA (OFATUMUMAB) INJECTION, SOLUTION [NOVARTIS PHARMACEUTICALS CORPORATION]",
+   "setid": "6a8a3f53-2062-48ff-9dbe-b939df133ca3"
+  }
+ ],
+ "metadata": {
+  "db_published_date": "Oct 29, 2026 08:25:26PM EST",
+  "elements_per_page": 100,
+  "current_url": "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?application_number=BLA125326&pagesize=100",
+  "next_page_url": "null",
+  "total_elements": 1,
+  "total_pages": 1,
+  "current_page": 1,
+  "previous_page": "null",
+  "previous_page_url": "null",
+  "next_page": "null"
+ }
+}

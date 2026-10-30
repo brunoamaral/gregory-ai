@@ -1,0 +1,22 @@
+{
+ "data": [
+  {
+   "spl_version": 25,
+   "published_date": "Oct 30, 2026",
+   "title": "OCREVUS (OCRELIZUMAB) INJECTION [GENENTECH, INC.]",
+   "setid": "9da42362-3bb5-4b83-b4bb-b59fd4e55f0d"
+  }
+ ],
+ "metadata": {
+  "db_published_date": "Oct 29, 2026 08:25:26PM EST",
+  "elements_per_page": 100,
+  "current_url": "https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?application_number=BLA761053&pagesize=100",
+  "next_page_url": "null",
+  "total_elements": 1,
+  "total_pages": 1,
+  "current_page": 1,
+  "previous_page": "null",
+  "previous_page_url": "null",
+  "next_page": "null"
+ }
+}
