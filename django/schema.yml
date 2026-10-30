@@ -4912,7 +4912,7 @@ paths:
         description: |-
           observed: Gregory saw the change between two syncs; reconstructed: read off EMA's date fields the first time the product was seen.
 
-          * `reconstructed` - Reconstructed from EMA's dates
+          * `reconstructed` - Reconstructed from the regulator's dates
           * `observed` - Observed between syncs
       - in: query
         name: category_id
@@ -4972,6 +4972,11 @@ paths:
             - ec_decision
             - ended
             - evaluation_started
+            - fda_approved
+            - fda_discontinued
+            - fda_efficacy_supplement
+            - fda_revoked
+            - fda_tentative_approval
             - indication_changed
             - opinion_adopted
             - opinion_negative
@@ -4996,6 +5001,11 @@ paths:
           * `suspended` - Suspended
           * `ended` - Authorisation ended
           * `status_changed` - Status changed
+          * `fda_approved` - FDA approved
+          * `fda_tentative_approval` - FDA tentative approval
+          * `fda_efficacy_supplement` - FDA efficacy supplement approved
+          * `fda_discontinued` - Discontinued in the US
+          * `fda_revoked` - US licence revoked
         explode: false
         style: form
       - name: page
@@ -10677,14 +10687,17 @@ components:
           readOnly: true
         ema_product_number:
           type: string
+          nullable: true
+          description: EMA's product number. Set on EMA rows only.
           maxLength: 32
         name:
           type: string
           maxLength: 255
         inn:
           type: string
-          description: International non-proprietary name, as EMA publishes it. Empty
-            for some products.
+          description: International non-proprietary name, as the regulator publishes
+            it. Empty for some EMA products. On FDA rows, the ingredient names joined
+            with '; '.
           maxLength: 500
         active_substance:
           type: string
@@ -10693,14 +10706,16 @@ components:
           items:
             type: string
             maxLength: 255
-          description: Lowercased substances split on ';', from the INN or, when that
-            is empty, the active substance.
+          description: 'Lowercased substances. EMA rows: split on '';'', from the
+            INN or, when that is empty, the active substance. FDA rows: the ingredient
+            names, with the FDA''s four-letter suffix removed.'
         is_combination:
           type: boolean
         status:
           type: string
-          description: 'EMA''s wording, kept as published: new values must not break
-            the import.'
+          description: 'The regulator''s wording, kept as published: new values must
+            not break the import. FDA rows: Approved, Tentatively approved, Discontinued
+            or Revoked.'
           maxLength: 50
         opinion_status:
           type: string
@@ -10760,7 +10775,8 @@ components:
           type: string
           format: date
           nullable: true
-          description: The first approval.
+          description: 'The first approval. FDA rows: the original approval, or for
+            a CBER biologic the earliest approval date among its original rows.'
         latest_ec_decision_date:
           type: string
           format: date
@@ -10794,7 +10810,8 @@ components:
           format: date
           nullable: true
         url:
-          description: The EPAR page on ema.europa.eu.
+          description: 'The EPAR page on ema.europa.eu, or the Drugs@FDA overview
+            page (a CBER biologic: its DailyMed label once there is one).'
           oneOf:
           - type: string
             format: uri
@@ -10826,7 +10843,6 @@ components:
           readOnly: true
       required:
       - categories
-      - ema_product_number
       - id
       - name
       - source
@@ -10866,14 +10882,17 @@ components:
           readOnly: true
         ema_product_number:
           type: string
+          nullable: true
+          description: EMA's product number. Set on EMA rows only.
           maxLength: 32
         name:
           type: string
           maxLength: 255
         inn:
           type: string
-          description: International non-proprietary name, as EMA publishes it. Empty
-            for some products.
+          description: International non-proprietary name, as the regulator publishes
+            it. Empty for some EMA products. On FDA rows, the ingredient names joined
+            with '; '.
           maxLength: 500
         active_substance:
           type: string
@@ -10882,14 +10901,16 @@ components:
           items:
             type: string
             maxLength: 255
-          description: Lowercased substances split on ';', from the INN or, when that
-            is empty, the active substance.
+          description: 'Lowercased substances. EMA rows: split on '';'', from the
+            INN or, when that is empty, the active substance. FDA rows: the ingredient
+            names, with the FDA''s four-letter suffix removed.'
         is_combination:
           type: boolean
         status:
           type: string
-          description: 'EMA''s wording, kept as published: new values must not break
-            the import.'
+          description: 'The regulator''s wording, kept as published: new values must
+            not break the import. FDA rows: Approved, Tentatively approved, Discontinued
+            or Revoked.'
           maxLength: 50
         opinion_status:
           type: string
@@ -10949,7 +10970,8 @@ components:
           type: string
           format: date
           nullable: true
-          description: The first approval.
+          description: 'The first approval. FDA rows: the original approval, or for
+            a CBER biologic the earliest approval date among its original rows.'
         latest_ec_decision_date:
           type: string
           format: date
@@ -10983,7 +11005,8 @@ components:
           format: date
           nullable: true
         url:
-          description: The EPAR page on ema.europa.eu.
+          description: 'The EPAR page on ema.europa.eu, or the Drugs@FDA overview
+            page (a CBER biologic: its DailyMed label once there is one).'
           oneOf:
           - type: string
             format: uri
@@ -11025,7 +11048,6 @@ components:
           readOnly: true
       required:
       - categories
-      - ema_product_number
       - events
       - grouped_products
       - id
@@ -11054,8 +11076,8 @@ components:
         event_date:
           type: string
           format: date
-          description: EMA's date where it gives one, otherwise the day the sync saw
-            the change.
+          description: The regulator's date where it gives one, otherwise the day
+            the sync saw the change.
         basis:
           $ref: '#/components/schemas/MedicineEventBasisEnum'
         from_value:
@@ -11083,7 +11105,7 @@ components:
       - observed
       type: string
       description: |-
-        * `reconstructed` - Reconstructed from EMA's dates
+        * `reconstructed` - Reconstructed from the regulator's dates
         * `observed` - Observed between syncs
     MedicineEventKindEnum:
       enum:
@@ -11100,6 +11122,11 @@ components:
       - suspended
       - ended
       - status_changed
+      - fda_approved
+      - fda_tentative_approval
+      - fda_efficacy_supplement
+      - fda_discontinued
+      - fda_revoked
       type: string
       description: |-
         * `rolling_review_started` - Rolling review started
@@ -11115,6 +11142,11 @@ components:
         * `suspended` - Suspended
         * `ended` - Authorisation ended
         * `status_changed` - Status changed
+        * `fda_approved` - FDA approved
+        * `fda_tentative_approval` - FDA tentative approval
+        * `fda_efficacy_supplement` - FDA efficacy supplement approved
+        * `fda_discontinued` - Discontinued in the US
+        * `fda_revoked` - US licence revoked
     MedicineEventMedicine:
       type: object
       properties:
@@ -11144,7 +11176,8 @@ components:
           type: string
           maxLength: 255
         url:
-          description: The EPAR page on ema.europa.eu.
+          description: 'The EPAR page on ema.europa.eu, or the Drugs@FDA overview
+            page (a CBER biologic: its DailyMed label once there is one).'
           oneOf:
           - type: string
             format: uri
@@ -11171,8 +11204,8 @@ components:
         event_date:
           type: string
           format: date
-          description: EMA's date where it gives one, otherwise the day the sync saw
-            the change.
+          description: The regulator's date where it gives one, otherwise the day
+            the sync saw the change.
         basis:
           $ref: '#/components/schemas/MedicineEventBasisEnum'
         from_value:

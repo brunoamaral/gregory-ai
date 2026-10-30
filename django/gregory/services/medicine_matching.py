@@ -20,6 +20,11 @@ The rule, per category:
    therapeutic areas must start with one of them, ignoring case.
 6. Diagnostics (ATC codes starting V04, V08 or V09) never match a category.
 
+Only EMA products are matched for now. An FDA row (``regulator`` is not ``ema``) has no
+therapeutic areas, so the disease check could not run on it and a category with no areas
+would link it unchecked: ``product_matches``, ``subject_match`` and ``group_key`` return
+``None`` for it until the FDA rules arrive.
+
 The same module holds the two other rules ``match_medicines`` applies:
 
 - ``subject_match``: a subject's own EMA areas against a product, with no category. It
@@ -31,7 +36,7 @@ The same module holds the two other rules ``match_medicines`` applies:
 import re
 from functools import lru_cache
 
-from gregory.models import CategoryModality
+from gregory.models import CategoryModality, Regulator
 
 # Only these modalities match on their ordinary category terms. A research topic such as
 # "BTK inhibitors" or "Stem cell research" names no product, so it gets medicines only
@@ -153,7 +158,7 @@ def product_matches(category, medicine, areas):
 	``"<pattern>"`` when the check was skipped. It is what ``matched_on`` stores, so an
 	editor can see why a link exists.
 	"""
-	if is_diagnostic(medicine):
+	if medicine.regulator != Regulator.EMA or is_diagnostic(medicine):
 		return None
 	patterns = category_patterns(category)
 	if not patterns:
@@ -191,7 +196,7 @@ def subject_match(areas, medicine):
 	a diagnostic. An empty ``areas`` matches nothing, since a subject without areas is a
 	research area, not a condition. The area is what ``matched_on`` stores.
 	"""
-	if not areas or is_diagnostic(medicine):
+	if medicine.regulator != Regulator.EMA or not areas or is_diagnostic(medicine):
 		return None
 	area = _matching_area(areas, medicine)
 	if area is None:
@@ -221,7 +226,12 @@ def group_key(medicine):
 	was never authorised (a refusal or a withdrawn application is its own news), nor one
 	with no indication, since an empty text would group unrelated products.
 	"""
-	if medicine.generic or medicine.biosimilar or not medicine.authorisation_date:
+	if (
+		medicine.regulator != Regulator.EMA
+		or medicine.generic
+		or medicine.biosimilar
+		or not medicine.authorisation_date
+	):
 		return None
 	indication = _indication_text(medicine)
 	if not indication:
@@ -237,7 +247,7 @@ def group_lead(products):
 	the earliest authorisation, then the lowest EMA product number."""
 	return min(
 		products,
-		key=lambda p: (p.status != "Authorised", p.authorisation_date, p.ema_product_number),
+		key=lambda p: (p.status != "Authorised", p.authorisation_date, p.ema_product_number or ""),
 	)
 
 

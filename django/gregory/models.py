@@ -132,6 +132,13 @@ class CategoryModality(models.TextChoices):
 	OTHER = "other", "Other"
 
 
+class Regulator(models.TextChoices):
+	"""Which regulator a Medicine row comes from."""
+
+	EMA = "ema", "EMA"
+	FDA = "fda", "FDA"
+
+
 class CategoryMatchScope(models.TextChoices):
 	TITLE = "title", "Title only"
 	TITLE_SUMMARY = "title_summary", "Title and summary"
@@ -2883,34 +2890,103 @@ class PatentSiteContent(models.Model):
 
 
 class Medicine(models.Model):
-	"""One EMA centrally authorised human medicine, keyed on its EMA product number.
+	"""One medicine from a regulator: an EMA centrally authorised human medicine, keyed on
+	its EMA product number, or an FDA application (an NDA or a BLA), keyed on its
+	application number. ``regulator`` says which; the check constraint
+	``medicine_regulator_key`` requires the matching key.
 
 	Global reference data like PublicationType: no organisation, team or subject.
-	The row is written by sync_ema_medicines from EMA's public JSON export, apart from
-	``grouped_under``, which match_medicines derives. Scoping comes from the categories
-	a medicine is linked to and the subjects whose EMA areas it matches. Not a row per
-	substance: one substance can be several products (an originator, a
-	biosimilar, a refused application), each with its own status and dates."""
+	EMA rows are written by sync_ema_medicines from EMA's public JSON export, FDA rows by
+	sync_fda_medicines from Drugs@FDA and the Purple Book; ``grouped_under`` is derived by
+	match_medicines. Scoping comes from the categories a medicine is linked to and, for EMA
+	rows, the subjects whose EMA areas it matches. Not a row per substance: one substance
+	can be several products (an originator, a biosimilar, a refused application), each
+	with its own status and dates. The ``ema_*`` columns, the opinion and EC dates and the
+	EMA flags stay empty on FDA rows, and the ``fda_*`` columns on EMA rows."""
 
-	ema_product_number = models.CharField(max_length=32, unique=True)
+	regulator = models.CharField(
+		max_length=10,
+		choices=Regulator.choices,
+		default=Regulator.EMA,
+		db_index=True,
+		help_text="Which regulator's record this is.",
+	)
+	ema_product_number = models.CharField(
+		max_length=32,
+		unique=True,
+		null=True,
+		blank=True,
+		help_text="EMA's product number. Set on EMA rows only.",
+	)
+	fda_application_number = models.CharField(
+		max_length=12,
+		unique=True,
+		null=True,
+		blank=True,
+		help_text="The FDA application, e.g. NDA022561 or BLA125646. Set on FDA rows only.",
+	)
+	fda_application_type = models.CharField(
+		max_length=4, blank=True, help_text="NDA or BLA. FDA rows only."
+	)
+	fda_center = models.CharField(
+		max_length=4,
+		blank=True,
+		help_text="The FDA centre that regulates the product: CDER or CBER. FDA rows only.",
+	)
+	brand_names = ArrayField(
+		models.CharField(max_length=255),
+		default=list,
+		blank=True,
+		help_text="Every brand sold under the application, distinct and in product order. FDA rows only; name is these joined with ' / '.",
+	)
+	fda_original_class = models.CharField(
+		max_length=30,
+		blank=True,
+		help_text="The original submission's class as the FDA gives it, e.g. TYPE 1 (a new molecular entity). FDA rows only.",
+	)
+	fda_priority_review = models.BooleanField(
+		null=True,
+		blank=True,
+		help_text="Whether the original submission had priority review. Null when the FDA does not say. FDA rows only.",
+	)
+	interchangeable = models.BooleanField(
+		default=False,
+		help_text="A biosimilar the FDA licensed as interchangeable (Purple Book 351(k) Interchangeable).",
+	)
+	fda_pharm_classes = ArrayField(
+		models.CharField(max_length=255),
+		default=list,
+		blank=True,
+		help_text="Every openFDA established pharmacologic class, e.g. 'CD20-directed Cytolytic Antibody [EPC]'. The diagnostic rule reads the whole list. FDA rows only.",
+	)
+	label_indications = models.JSONField(
+		default=list,
+		blank=True,
+		help_text="The indications of each DailyMed label on the application: [{setid, version, title, published, indication}]. FDA rows only.",
+	)
+	label_checked_at = models.DateTimeField(
+		null=True,
+		blank=True,
+		help_text="The last time DailyMed was asked about this application. FDA rows only.",
+	)
 	name = models.CharField(max_length=255)
 	inn = models.CharField(
 		max_length=500,
 		blank=True,
-		help_text="International non-proprietary name, as EMA publishes it. Empty for some products.",
+		help_text="International non-proprietary name, as the regulator publishes it. Empty for some EMA products. On FDA rows, the ingredient names joined with '; '.",
 	)
 	active_substance = models.TextField(blank=True)
 	substances = ArrayField(
 		models.CharField(max_length=255),
 		default=list,
 		blank=True,
-		help_text="Lowercased substances split on ';', from the INN or, when that is empty, the active substance.",
+		help_text="Lowercased substances. EMA rows: split on ';', from the INN or, when that is empty, the active substance. FDA rows: the ingredient names, with the FDA's four-letter suffix removed.",
 	)
 	is_combination = models.BooleanField(default=False)
 	status = models.CharField(
 		max_length=50,
 		db_index=True,
-		help_text="EMA's wording, kept as published: new values must not break the import.",
+		help_text="The regulator's wording, kept as published: new values must not break the import. FDA rows: Approved, Tentatively approved, Discontinued or Revoked.",
 	)
 	opinion_status = models.CharField(
 		max_length=20,
@@ -2938,7 +3014,10 @@ class Medicine(models.Model):
 	evaluation_start_date = models.DateField(null=True, blank=True)
 	opinion_date = models.DateField(null=True, blank=True, help_text="CHMP opinion.")
 	authorisation_date = models.DateField(
-		null=True, blank=True, db_index=True, help_text="The first approval."
+		null=True,
+		blank=True,
+		db_index=True,
+		help_text="The first approval. FDA rows: the original approval, or for a CBER biologic the earliest approval date among its original rows.",
 	)
 	latest_ec_decision_date = models.DateField(
 		null=True,
@@ -2958,15 +3037,24 @@ class Medicine(models.Model):
 	revision_number = models.PositiveIntegerField(null=True, blank=True)
 	ema_first_published = models.DateField(null=True, blank=True)
 	ema_last_updated = models.DateField(null=True, blank=True)
-	url = models.URLField(max_length=500, blank=True, help_text="The EPAR page on ema.europa.eu.")
+	url = models.URLField(
+		max_length=500,
+		blank=True,
+		help_text="The EPAR page on ema.europa.eu, or the Drugs@FDA overview page (a CBER biologic: its DailyMed label once there is one).",
+	)
 	raw = models.JSONField(
 		default=dict,
 		blank=True,
-		help_text="EMA's whole row, so a parsing fix can be re-applied without downloading again.",
+		help_text="The regulator's whole record (an EMA export row, a Drugs@FDA application, or a BLA's Purple Book rows), so a parsing fix can be re-applied without downloading again.",
+	)
+	raw_digest = models.CharField(
+		max_length=64,
+		blank=True,
+		help_text="sha256 of raw as canonical JSON, set by the FDA syncs. They compare it instead of loading raw. FDA rows only.",
 	)
 	in_latest_export = models.BooleanField(
 		default=True,
-		help_text="False when the latest sync no longer found the product in EMA's export. Rows are never deleted.",
+		help_text="False when the latest sync no longer found the product in the regulator's file. Rows are never deleted.",
 	)
 	first_seen_at = models.DateTimeField(auto_now_add=True)
 	last_synced_at = models.DateTimeField(
@@ -2989,7 +3077,8 @@ class Medicine(models.Model):
 	)
 
 	def __str__(self):
-		return f"{self.name} ({self.ema_product_number})"
+		key = self.fda_application_number if self.regulator == Regulator.FDA else self.ema_product_number
+		return f"{self.name} ({key})"
 
 	class Meta:
 		db_table = "medicines"
@@ -2997,12 +3086,22 @@ class Medicine(models.Model):
 		indexes = [
 			GinIndex(fields=["substances"], name="medicines_substances_gin"),
 		]
+		constraints = [
+			models.CheckConstraint(
+				condition=(
+					Q(regulator="ema", ema_product_number__isnull=False)
+					| Q(regulator="fda", fda_application_number__isnull=False)
+				),
+				name="medicine_regulator_key",
+			),
+		]
 
 
 class MedicineEvent(models.Model):
 	"""One change in a medicine's regulatory life: an opinion, an authorisation, a new
-	EC decision, a withdrawal. ``reconstructed`` events come from EMA's date fields on
-	the first sync; ``observed`` events come from a difference between two syncs."""
+	EC decision, a withdrawal, an FDA approval. ``reconstructed`` events come from the
+	regulator's dates (EMA's date fields, the FDA's submission dates); ``observed`` events
+	come from a difference between two syncs."""
 
 	class Kind(models.TextChoices):
 		ROLLING_REVIEW_STARTED = "rolling_review_started", "Rolling review started"
@@ -3020,6 +3119,11 @@ class MedicineEvent(models.Model):
 		SUSPENDED = "suspended", "Suspended"
 		ENDED = "ended", "Authorisation ended"
 		STATUS_CHANGED = "status_changed", "Status changed"
+		FDA_APPROVED = "fda_approved", "FDA approved"
+		FDA_TENTATIVE_APPROVAL = "fda_tentative_approval", "FDA tentative approval"
+		FDA_EFFICACY_SUPPLEMENT = "fda_efficacy_supplement", "FDA efficacy supplement approved"
+		FDA_DISCONTINUED = "fda_discontinued", "Discontinued in the US"
+		FDA_REVOKED = "fda_revoked", "US licence revoked"
 
 	# The event as a reader's sentence ("Authorised in the EU"), where Kind's labels
 	# are for the admin. One dict, shared by the RSS feeds and the API, so a kind is
@@ -3038,10 +3142,15 @@ class MedicineEvent(models.Model):
 		Kind.SUSPENDED: "Authorisation suspended",
 		Kind.ENDED: "Authorisation ended",
 		Kind.STATUS_CHANGED: "Status changed",
+		Kind.FDA_APPROVED: "Approved by the FDA",
+		Kind.FDA_TENTATIVE_APPROVAL: "Tentatively approved by the FDA",
+		Kind.FDA_EFFICACY_SUPPLEMENT: "FDA approved a new indication or use",
+		Kind.FDA_DISCONTINUED: "Discontinued in the US",
+		Kind.FDA_REVOKED: "US licence revoked",
 	}
 
 	class Basis(models.TextChoices):
-		RECONSTRUCTED = "reconstructed", "Reconstructed from EMA's dates"
+		RECONSTRUCTED = "reconstructed", "Reconstructed from the regulator's dates"
 		OBSERVED = "observed", "Observed between syncs"
 
 	medicine = models.ForeignKey(
@@ -3050,7 +3159,7 @@ class MedicineEvent(models.Model):
 	kind = models.CharField(max_length=30, choices=Kind.choices)
 	event_date = models.DateField(
 		db_index=True,
-		help_text="EMA's date where it gives one, otherwise the day the sync saw the change.",
+		help_text="The regulator's date where it gives one, otherwise the day the sync saw the change.",
 	)
 	basis = models.CharField(max_length=15, choices=Basis.choices)
 	from_value = models.TextField(blank=True)
@@ -3193,3 +3302,36 @@ class EmaSyncState(models.Model):
 
 	class Meta:
 		db_table = "ema_sync_state"
+
+
+class FdaSyncState(models.Model):
+	"""What the last accepted sync of one FDA file saw, so the next one can send
+	``If-Modified-Since`` / ``If-None-Match`` and notice a truncated file. One row per
+	``source``: ``drugsfda`` (the Drugs@FDA bulk file) and ``purplebook`` (the monthly
+	Purple Book CSV)."""
+
+	class Source(models.TextChoices):
+		DRUGSFDA = "drugsfda", "Drugs@FDA"
+		PURPLEBOOK = "purplebook", "Purple Book"
+
+	source = models.CharField(max_length=20, unique=True, choices=Source.choices)
+	last_modified = models.CharField(
+		max_length=100, blank=True, help_text="The file's Last-Modified header, as sent."
+	)
+	etag = models.CharField(max_length=200, blank=True, help_text="The file's ETag header, as sent.")
+	last_count = models.PositiveIntegerField(
+		default=0,
+		help_text="Drugs@FDA: NDA and BLA applications in the last accepted file. Purple Book: CBER BLAs.",
+	)
+	source_url = models.URLField(
+		max_length=500,
+		blank=True,
+		help_text="The file the last sync read (the Purple Book file changes every month).",
+	)
+	last_run_at = models.DateTimeField(null=True, blank=True)
+
+	def __str__(self):
+		return f"FDA sync state ({self.source})"
+
+	class Meta:
+		db_table = "fda_sync_state"

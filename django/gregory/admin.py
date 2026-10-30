@@ -50,6 +50,7 @@ from .models import (
 	MedicineCategoryAssignment,
 	MedicineEvent,
 	MedicineSubjectLink,
+	Regulator,
 	CategoryModality,
 	Trials,
 	Sources,
@@ -3816,6 +3817,16 @@ class MedicineCategoryAssignmentForm(forms.ModelForm):
 		if self.instance.pk and "medicine" in self.fields:
 			self.fields["medicine"].disabled = True
 
+	def clean_medicine(self):
+		medicine = self.cleaned_data.get("medicine")
+		# Until the FDA feeds and API ship (PR 3), a hand-made link to an FDA medicine would
+		# show it there labelled as EMA. The autocomplete already hides FDA rows
+		# (MedicineAdmin.get_search_results); this catches a pk posted by hand. PR 3 removes
+		# both. A saved link keeps its medicine, so an existing row is never blocked here.
+		if medicine is not None and not self.instance.pk and medicine.regulator != Regulator.EMA:
+			raise forms.ValidationError("Only EMA medicines can be linked to a category for now.")
+		return medicine
+
 
 class MedicineCategoryAssignmentFormSet(forms.BaseInlineFormSet):
 	"""Removing an automatic link suppresses it instead of deleting it.
@@ -3837,23 +3848,27 @@ class MedicineCategoryAssignmentFormSet(forms.BaseInlineFormSet):
 
 
 class MedicineCategoryAssignmentInline(TeamEditInlineMixin, admin.TabularInline):
-	"""EMA medicines linked to a category. Editors of the category's team add manual links,
-	tick ``suppressed`` or remove a link; the matcher keeps the automatic ones current."""
+	"""EMA and FDA medicines linked to a category. Editors of the category's team add manual
+	links, tick ``suppressed`` or remove a link; the matcher keeps the automatic ones current."""
 
 	model = MedicineCategoryAssignment
 	form = MedicineCategoryAssignmentForm
 	formset = MedicineCategoryAssignmentFormSet
 	extra = 0
 	autocomplete_fields = ["medicine"]
-	fields = ("medicine", "medicine_status", "matched_on", "source", "suppressed")
-	readonly_fields = ("medicine_status", "matched_on", "source")
-	verbose_name = "Medicine (EMA)"
-	verbose_name_plural = "Medicines (EMA)"
+	fields = ("medicine", "medicine_regulator", "medicine_status", "matched_on", "source", "suppressed")
+	readonly_fields = ("medicine_regulator", "medicine_status", "matched_on", "source")
+	verbose_name = "Medicine"
+	verbose_name_plural = "Medicines"
 
 	def get_queryset(self, request):
 		return super().get_queryset(request).select_related("medicine").order_by("medicine__name")
 
-	@admin.display(description="EMA status")
+	@admin.display(description="Regulator")
+	def medicine_regulator(self, obj):
+		return obj.medicine.get_regulator_display() if obj.medicine_id else "-"
+
+	@admin.display(description="Status")
 	def medicine_status(self, obj):
 		return obj.medicine.status if obj.medicine_id else "-"
 
@@ -5455,7 +5470,7 @@ class MeshTermAdmin(ReadOnlyReferenceAdmin):
 
 
 class MedicineEventInline(ReadOnlyInlineMixin, admin.TabularInline):
-	"""A medicine's regulatory history, newest first. Written only by the EMA sync."""
+	"""A medicine's regulatory history, newest first. Written only by the EMA and FDA syncs."""
 
 	model = MedicineEvent
 	verbose_name_plural = "Events"
@@ -5573,13 +5588,16 @@ class ConditionFilter(admin.SimpleListFilter):
 
 @admin.register(Medicine)
 class MedicineAdmin(admin.ModelAdmin):
-	"""EMA's centrally authorised human medicines. Read-only: sync_ema_medicines writes
-	the rows (match_medicines adds ``grouped_under``). The data is public, so every staff
-	user can browse it; it has no team or organisation to scope by. Tracked and Condition
-	filters pick out the medicines no category follows yet."""
+	"""EMA's centrally authorised human medicines and the FDA's NDA and BLA approvals.
+	Read-only: sync_ema_medicines and sync_fda_medicines write the rows (match_medicines adds
+	``grouped_under``). The data is public, so every staff user can browse it; it has no team
+	or organisation to scope by. Tracked and Condition filters pick out the medicines no
+	category follows yet. The detail page shows the EMA fields on an EMA row and the FDA
+	fields on an FDA row."""
 
 	list_display = (
 		"name",
+		"regulator",
 		"inn",
 		"status",
 		"opinion_status",
@@ -5591,6 +5609,7 @@ class MedicineAdmin(admin.ModelAdmin):
 		"in_latest_export",
 	)
 	list_filter = (
+		"regulator",
 		"status",
 		"opinion_status",
 		"advanced_therapy",
@@ -5602,14 +5621,31 @@ class MedicineAdmin(admin.ModelAdmin):
 		TrackedFilter,
 		ConditionFilter,
 	)
-	search_fields = ("name", "inn", "active_substance", "ema_product_number")
+	# brand_names is an array: the admin's default icontains lookup searches its text.
+	search_fields = (
+		"name",
+		"inn",
+		"active_substance",
+		"ema_product_number",
+		"fda_application_number",
+		"brand_names",
+	)
 	ordering = ("name",)
 	list_per_page = 100
 	inlines = [MedicineEventInline, MedicineCategoryLinkInline, MedicineSubjectLinkReadInline]
-	fieldsets = (
+	ema_fieldsets = (
 		(
 			None,
-			{"fields": ("name", "ema_product_number", "status", "opinion_status", "epar_link")},
+			{
+				"fields": (
+					"name",
+					"regulator",
+					"ema_product_number",
+					"status",
+					"opinion_status",
+					"epar_link",
+				)
+			},
 		),
 		(
 			"Substance",
@@ -5687,9 +5723,87 @@ class MedicineAdmin(admin.ModelAdmin):
 			},
 		),
 	)
-	readonly_fields = tuple(
-		name for _, options in fieldsets for name in options["fields"]
+	fda_fieldsets = (
+		(
+			None,
+			{
+				"fields": (
+					"name",
+					"regulator",
+					"fda_application_number",
+					"fda_application_type",
+					"fda_center",
+					"status",
+					"fda_link",
+				)
+			},
+		),
+		(
+			"Substance",
+			{
+				"fields": (
+					"brand_names",
+					"inn",
+					"active_substance",
+					"substances",
+					"is_combination",
+					"holder",
+					"pharmacotherapeutic_group",
+					"fda_pharm_classes",
+				)
+			},
+		),
+		("Indication", {"fields": ("indication",)}),
+		(
+			"Approval",
+			{
+				"fields": (
+					"authorisation_date",
+					"fda_original_class",
+					"fda_priority_review",
+					"biosimilar",
+					"interchangeable",
+				)
+			},
+		),
+		(
+			"FDA record",
+			{
+				"fields": (
+					"in_latest_export",
+					"first_seen_at",
+					"last_synced_at",
+					"label_checked_at",
+					"raw",
+				),
+				"classes": ("collapse",),
+			},
+		),
 	)
+	fieldsets = ema_fieldsets
+	readonly_fields = tuple(
+		dict.fromkeys(
+			name for _, options in ema_fieldsets + fda_fieldsets for name in options["fields"]
+		)
+	)
+
+	def get_search_results(self, request, queryset, search_term):
+		queryset, may_have_duplicates = super().get_search_results(request, queryset, search_term)
+		# The category page's medicine picker must not offer FDA rows until PR 3 (see
+		# MedicineCategoryAssignmentForm.clean_medicine); PR 3 removes this filter.
+		get = request.GET
+		if (
+			get.get("app_label") == MedicineCategoryAssignment._meta.app_label
+			and get.get("model_name") == MedicineCategoryAssignment._meta.model_name
+			and get.get("field_name") == "medicine"
+		):
+			queryset = queryset.filter(regulator=Regulator.EMA)
+		return queryset, may_have_duplicates
+
+	def get_fieldsets(self, request, obj=None):
+		if obj is not None and obj.regulator == Regulator.FDA:
+			return self.fda_fieldsets
+		return self.ema_fieldsets
 
 	def has_module_permission(self, request):
 		return request.user.is_active and request.user.is_staff
@@ -5727,6 +5841,14 @@ class MedicineAdmin(admin.ModelAdmin):
 			return format_html('<a href="{0}" target="_blank" rel="noopener">{0}</a>', obj.url)
 		return obj.url or "-"
 
+	@admin.display(description="Public page")
+	def fda_link(self, obj):
+		"""The Drugs@FDA overview page, or DailyMed's label for a CBER biologic."""
+		if obj.url.startswith(("https://", "http://")):
+			site = "DailyMed" if "dailymed" in obj.url else "Drugs@FDA"
+			return format_html('<a href="{}" target="_blank" rel="noopener">{}</a>', obj.url, site)
+		return obj.url or "-"
+
 
 @admin.register(MedicineCategoryAssignment)
 class MedicineCategoryAssignmentAdmin(TeamEditMixin, admin.ModelAdmin):
@@ -5738,8 +5860,16 @@ class MedicineCategoryAssignmentAdmin(TeamEditMixin, admin.ModelAdmin):
 	page adds and deletes nothing. OrganizationFilterMixin can't scope this model, which
 	has no team of its own, so get_queryset follows the category's team."""
 
-	list_display = ("medicine", "teamcategory", "source", "matched_on", "suppressed", "created_at")
-	list_filter = ("suppressed", "source", "medicine__status")
+	list_display = (
+		"medicine",
+		"medicine_regulator",
+		"teamcategory",
+		"source",
+		"matched_on",
+		"suppressed",
+		"created_at",
+	)
+	list_filter = ("suppressed", "source", "medicine__regulator", "medicine__status")
 	list_select_related = ("medicine", "teamcategory", "teamcategory__team")
 	search_fields = ("medicine__name", "medicine__inn", "teamcategory__category_name")
 	ordering = ("teamcategory__category_name", "medicine__name")
@@ -5747,6 +5877,10 @@ class MedicineCategoryAssignmentAdmin(TeamEditMixin, admin.ModelAdmin):
 	readonly_fields = ("medicine", "teamcategory", "source", "matched_on", "created_at")
 	fields = readonly_fields + ("suppressed",)
 	actions = ["suppress_links", "restore_links"]
+
+	@admin.display(description="Regulator", ordering="medicine__regulator")
+	def medicine_regulator(self, obj):
+		return obj.medicine.get_regulator_display()
 
 	def get_queryset(self, request):
 		qs = super().get_queryset(request)
@@ -5797,6 +5931,7 @@ class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 
 	list_display = (
 		"medicine",
+		"medicine_regulator",
 		"subject",
 		"matched_on",
 		"medicine_status",
@@ -5806,6 +5941,7 @@ class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 	list_filter = (
 		"suppressed",
 		("subject", OrganizationRestrictedFieldListFilter),
+		"medicine__regulator",
 		"medicine__status",
 		"medicine__generic",
 		"medicine__biosimilar",
@@ -5832,7 +5968,11 @@ class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 	def has_delete_permission(self, request, obj=None):
 		return False
 
-	@admin.display(description="EMA status", ordering="medicine__status")
+	@admin.display(description="Regulator", ordering="medicine__regulator")
+	def medicine_regulator(self, obj):
+		return obj.medicine.get_regulator_display()
+
+	@admin.display(description="Status", ordering="medicine__status")
 	def medicine_status(self, obj):
 		return obj.medicine.status
 

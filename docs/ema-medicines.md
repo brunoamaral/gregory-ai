@@ -1,5 +1,9 @@
 # EMA medicines
 
+> The FDA's approvals share the same table, events and admin; see [fda-medicines.md](fda-medicines.md).
+> This page describes the EMA side. Until the FDA rules arrive, the matcher, the API and the
+> feeds only handle EMA medicines.
+
 Gregory keeps a copy of the European Medicines Agency's list of centrally authorised
 human medicines, so an editor can see where a medicine stands with the regulator: a
 positive opinion, an authorisation, a new European Commission decision, a withdrawal. The
@@ -22,7 +26,7 @@ One `Medicine` row is one EMA **product**, identified by its product number
 (`EMEA/H/C/004043`), not one substance. The same substance is often several products with
 different fates: Tysabri (the originator), Tyruko (a biosimilar) and Natalizumab Elan
 Pharma (a refused application). The columns are described in
-[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#medicines-ema).
+[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#medicines-ema-and-fda).
 
 Things worth knowing before using the dates:
 
