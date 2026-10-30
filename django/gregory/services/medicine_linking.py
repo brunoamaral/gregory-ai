@@ -43,6 +43,7 @@ BATCH_SIZE = 500
 # Only the fields the rules read.
 MEDICINE_FIELDS = (
 	"id",
+	"regulator",
 	"name",
 	"substances",
 	"is_combination",

@@ -53,6 +53,10 @@ class Command(BaseCommand):
 				"sync_ema_medicines",
 				{},
 			),  # 3d. EMA medicines (one conditional download; a 304 costs nothing)
+			(
+				"sync_fda_medicines",
+				{},
+			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing)
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors

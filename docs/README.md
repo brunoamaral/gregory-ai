@@ -31,6 +31,7 @@ walkthrough (read in order); everything else is reference or design material.
 | [pubmed-sources.md](pubmed-sources.md) | PubMed search sources: writing the search, excluded publication types, the volume warning, and how they differ from PubMed RSS sources. |
 | [patents.md](patents.md) | Patent families: what a record is, setting up an EPO OPS source, the importer and its options. |
 | [ema-medicines.md](ema-medicines.md) | EMA medicine approvals: what the data is, the `sync_ema_medicines` command, events, and attribution. |
+| [fda-medicines.md](fda-medicines.md) | FDA medicine approvals: Drugs@FDA and the Purple Book, the `sync_fda_medicines` command, events, and attribution. |
 | [glossary.md](glossary.md) | Definitions of core terms. |
 | [ctis-public-api-schema.md](ctis-public-api-schema.md) | Observed schema of the EU CTIS public API. |
 | [clinicaltrialsgov-api/](clinicaltrialsgov-api/) | Reference snapshots of the ClinicalTrials.gov API. |

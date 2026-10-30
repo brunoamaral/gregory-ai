@@ -26,7 +26,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from gregory.management.base import GregoryBaseCommand
-from gregory.models import EmaSyncState, Medicine, MedicineEvent
+from gregory.models import EmaSyncState, Medicine, MedicineEvent, Regulator
 from gregory.services.ema_events import observed_events, reconstructed_events
 from gregory.utils.ema import download_export, is_human, parse_row
 
@@ -185,7 +185,10 @@ class Command(GregoryBaseCommand):
 
 	def _plan(self, parsed_rows):
 		"""Compare the export with the stored rows, in memory. Nothing is written."""
-		existing = {m.ema_product_number: m for m in Medicine.objects.all()}
+		# FDA rows share the table but are not in EMA's export; they must not be flagged gone.
+		existing = {
+			m.ema_product_number: m for m in Medicine.objects.filter(regulator=Regulator.EMA)
+		}
 		today = timezone.localdate()
 		now = timezone.now()
 

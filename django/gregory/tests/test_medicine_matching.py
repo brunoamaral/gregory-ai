@@ -31,8 +31,10 @@ from gregory.services.medicine_matching import (
 	substance_matches,
 )
 from gregory.utils.ema import is_human, parse_row
+from gregory.utils.fda import parse_application
 
 FIXTURE = Path(__file__).parent / "fixtures" / "ema" / "medicines-base.json"
+FDA_FIXTURE = Path(__file__).parent / "fixtures" / "fda" / "drugsfda-base.json"
 UNTRACKED_FIXTURE = Path(__file__).parent / "fixtures" / "ema" / "medicines-untracked.json"
 MS = ["Multiple Sclerosis"]
 ALZHEIMERS = ["Alzheimer Disease", "Dementia"]
@@ -356,12 +358,13 @@ class SubjectMatchTests(SimpleTestCase):
 		self.assertEqual(subject_match(ALZHEIMERS, UNTRACKED["Acrescent"]), "Alzheimer Disease")
 
 	def test_the_label_fits_matched_on(self):
-		product = SimpleNamespace(atc_code="", therapeutic_areas=["x" * 300])
+		product = SimpleNamespace(regulator="ema", atc_code="", therapeutic_areas=["x" * 300])
 		self.assertEqual(len(subject_match(["x" * 300], product)), MATCHED_ON_MAX)
 
 
 def product(name, indication, substances=("memantine",), **kwargs):
 	values = dict(
+		regulator="ema",
 		name=name,
 		indication=indication,
 		substances=list(substances),
@@ -474,6 +477,51 @@ class GroupLeadTests(SimpleTestCase):
 	def test_a_withdrawn_betaferon_copy_does_not_lead(self):
 		self.assertEqual(UNTRACKED["Extavia"].status, "Withdrawn")
 		self.assertEqual(group_lead([UNTRACKED["Extavia"], UNTRACKED["Betaferon"]]).name, "Betaferon")
+
+
+def fda_medicines():
+	"""The real Drugs@FDA fixture applications as unsaved Medicine objects, by brand name."""
+	with open(FDA_FIXTURE) as handle:
+		records = json.load(handle)["results"]
+	parsed = [parse_application(record) for record in records]
+	return {p.brand_names[0]: Medicine(**p.model_values()) for p in parsed if p is not None}
+
+
+class FdaRowsAreNotMatchedYetTests(SimpleTestCase):
+	"""An FDA row has no EMA areas, so the disease check cannot run on it and a category with
+	no areas would link it unchecked. Until the FDA rules exist, no rule matches one."""
+
+	def setUp(self):
+		self.fda = fda_medicines()
+
+	def test_a_category_with_no_areas_does_not_link_an_fda_row(self):
+		cat = category(["ocrelizumab", "natalizumab", "kesimpta"], modality=CategoryModality.BIOLOGIC_ANTIBODY)
+		for name in ("OCREVUS", "TYRUKO", "KESIMPTA"):
+			with self.subTest(name=name):
+				self.assertIsNone(product_matches(cat, self.fda[name], []))
+		# The EMA row of the same substance does link, so the guard is the only difference.
+		self.assertIsNotNone(product_matches(cat, MEDICINES["Ocrevus"], []))
+
+	def test_a_category_with_areas_does_not_link_an_fda_row_either(self):
+		cat = category(["ocrelizumab"], modality=CategoryModality.BIOLOGIC_ANTIBODY)
+		self.assertIsNone(product_matches(cat, self.fda["OCREVUS"], MS))
+
+	def test_an_fda_row_never_gets_a_subject_link(self):
+		ocrevus = self.fda["OCREVUS"]
+		ocrevus.therapeutic_areas = ["Multiple Sclerosis"]
+		self.assertIsNone(subject_match(MS, ocrevus))
+
+	def test_an_fda_row_is_never_grouped(self):
+		ocrevus = self.fda["OCREVUS"]
+		ocrevus.indication = "Ocrevus is indicated for relapsing multiple sclerosis."
+		self.assertIsNotNone(ocrevus.authorisation_date)
+		self.assertIsNone(group_key(ocrevus))
+
+	def test_an_fda_row_without_an_ema_number_does_not_break_the_lead_sort(self):
+		fda_row = product("Fda", "x", regulator="fda", ema_product_number=None)
+		ema_row = product("Ema", "x")
+		# Nothing groups an FDA row, but the sort must not compare None with a string.
+		self.assertIn(group_lead([fda_row, ema_row]), (fda_row, ema_row))
 
 
 # LOCAL ONLY. The full EMA export of 2026-10-25 lives in the gitignored specs/ folder, so
