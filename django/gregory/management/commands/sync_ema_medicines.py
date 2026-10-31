@@ -29,13 +29,14 @@ from gregory.management.base import GregoryBaseCommand
 from gregory.models import EmaSyncState, Medicine, MedicineEvent, Regulator
 from gregory.services.ema_events import observed_events, reconstructed_events
 from gregory.utils.ema import download_export, is_human, parse_row
+from gregory.utils.substance_key import standalone_keys, substance_key
 
 BATCH_SIZE = 500
 MAX_HUMAN_DROP = 0.05
 
 # The columns bulk_update writes on a changed row (everything parsed but the key).
 UPDATE_FIELDS = [
-	"name", "inn", "active_substance", "substances", "is_combination", "status",
+	"name", "inn", "active_substance", "substances", "substance_key", "is_combination", "status",
 	"opinion_status", "therapeutic_areas", "atc_code", "pharmacotherapeutic_group",
 	"indication", "holder", "advanced_therapy", "orphan_medicine",
 	"conditional_approval", "exceptional_circumstances", "prime_priority_medicine",
@@ -47,7 +48,12 @@ UPDATE_FIELDS = [
 	"in_latest_export", "last_synced_at",
 ]
 # Columns that decide whether a row counts as changed (last_synced_at never does).
-COMPARE_FIELDS = [f for f in UPDATE_FIELDS if f not in ("last_synced_at", "in_latest_export")]
+# substance_key is derived from substances by rules in code, so a change to those rules is
+# not a change in EMA's data: refresh_substance_keys carries it to unchanged rows, and a row
+# the sync writes anyway gets the current key.
+COMPARE_FIELDS = [
+	f for f in UPDATE_FIELDS if f not in ("last_synced_at", "in_latest_export", "substance_key")
+]
 
 
 class Command(GregoryBaseCommand):
@@ -202,6 +208,8 @@ class Command(GregoryBaseCommand):
 		for number, parsed in parsed_rows.items():
 			values = parsed.model_values()
 			medicine = existing.get(number)
+			if medicine is not None:
+				values["substance_key"] = substance_key(parsed.substances, pk=medicine.pk)
 			if medicine is None:
 				row = Medicine(**values, in_latest_export=True, last_synced_at=now)
 				plan["new"].append((row, reconstructed_events(parsed)))
@@ -216,6 +224,7 @@ class Command(GregoryBaseCommand):
 				continue
 			for name in COMPARE_FIELDS:
 				setattr(medicine, name, values[name])
+			medicine.substance_key = values["substance_key"]
 			if reappeared:
 				plan["returned"] += 1
 			medicine.in_latest_export = True
@@ -234,6 +243,10 @@ class Command(GregoryBaseCommand):
 		new_medicines = [medicine for medicine, _ in plan["new"]]
 		# PostgreSQL returns the new primary keys, which the events need.
 		Medicine.objects.bulk_create(new_medicines, batch_size=BATCH_SIZE)
+		# A new row with no substances is keyed by its id, which exists only now.
+		Medicine.objects.bulk_update(
+			standalone_keys(new_medicines), ["substance_key"], batch_size=BATCH_SIZE
+		)
 
 		changed_medicines = [medicine for medicine, _ in plan["changed"]]
 		Medicine.objects.bulk_update(changed_medicines, UPDATE_FIELDS, batch_size=BATCH_SIZE)

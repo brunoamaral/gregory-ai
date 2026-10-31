@@ -1,3 +1,5 @@
+import re
+
 from django_filters import rest_framework as filters
 from django.db import models
 from django.db.models import Exists, F, Func, OuterRef, Q, Value
@@ -2472,8 +2474,21 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"A substance, as the regulator names it (the INN, or the active substance "
 			"when the INN is empty; for the FDA, the ingredient). Matches one element "
 			"of the product's `substances` exactly, ignoring case and extra spaces, "
-			"e.g. ?substance=ocrelizumab. A combination product matches on any of its "
-			"substances."
+			"e.g. ?substance=ocrelizumab, and also ignores the salt: ?substance=fingolimod "
+			"and ?substance=fingolimod hydrochloride both find the EMA and the FDA "
+			"records of Gilenya. A combination product matches on any of its "
+			"substances (the parts of its `substance_key`)."
+		),
+	)
+	substance_key = filters.CharFilter(
+		method="filter_substance_key",
+		label="Substance key",
+		help_text=(
+			"The drug's `substance_key`, exactly (ignoring case): the substances without "
+			"their salt, sorted and joined with '+', e.g. ?substance_key=fingolimod or "
+			"?substance_key=amlodipine%2Bvalsartan (encode the + as %2B). Every record of "
+			"one drug has the same key at either regulator, so this lists the EMA and the "
+			"FDA records of a drug together."
 		),
 	)
 	name = filters.CharFilter(
@@ -2565,6 +2580,7 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"site_id",
 			"regulator",
 			"substance",
+			"substance_key",
 			"name",
 			"status",
 			"opinion_status",
@@ -2586,12 +2602,29 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		return queryset.filter(**{"regulator": Regulator.EMA, name: value})
 
 	def filter_substance(self, queryset, name, value):
+		"""Today's exact match on ``substances``, or the salt-less name as one part of
+		``substance_key``. The second route is what makes ``fingolimod`` find the FDA's
+		``fingolimod hydrochloride`` and the other way round; the first stays so that a
+		name the key rules change (a delivery enzyme) still matches itself."""
 		from gregory.utils.ema import split_substances
+		from gregory.utils.substance_key import strip_salt
 
 		substances = split_substances(value, "")
 		if not substances:
 			return queryset
-		return queryset.filter(substances__overlap=substances)
+		condition = Q(substances__overlap=substances)
+		for part in {strip_salt(s) for s in substances}:
+			# One '+'-separated part of the key. re.escape output (backslash before +, -,
+			# a space or a bracket) is valid in PostgreSQL's regex syntax: a backslash
+			# before a non-letter stands for that character.
+			condition |= Q(substance_key__iregex=rf"(^|\+){re.escape(part)}(\+|$)")
+		return queryset.filter(condition)
+
+	def filter_substance_key(self, queryset, name, value):
+		value = " ".join((value or "").lower().split())
+		if not value:
+			return queryset
+		return queryset.filter(substance_key=value)
 
 
 class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
@@ -2661,6 +2694,16 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Event on or before",
 		help_text="Events dated on or before this date (YYYY-MM-DD, inclusive). Invalid dates return 400.",
 	)
+	substance_key = filters.CharFilter(
+		method="filter_substance_key",
+		label="Substance key",
+		help_text=(
+			"Events of the medicines with this `substance_key`, exactly (ignoring case): "
+			"the substances without their salt, sorted and joined with '+', e.g. "
+			"?substance_key=fingolimod. Every record of one drug has the same key at "
+			"either regulator, so this lists the events of its EMA and FDA records together."
+		),
+	)
 	tracked = filters.BooleanFilter(
 		method="_link_filter",
 		label="Tracked",
@@ -2684,6 +2727,13 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"basis",
 			"event_date_after",
 			"event_date_before",
+			"substance_key",
 			"tracked",
 			"include_generics",
 		]
+
+	def filter_substance_key(self, queryset, name, value):
+		value = " ".join((value or "").lower().split())
+		if not value:
+			return queryset
+		return queryset.filter(medicine__substance_key=value)

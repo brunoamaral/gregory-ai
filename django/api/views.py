@@ -3732,7 +3732,10 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 
 	**One medicine can appear twice**, once per regulator, since each regulator
 	authorises its own product. They are separate records (separate ids, never
-	grouped together); group them by `substances` if you want one entry per drug.
+	merged), but every record of one drug has the same `substance_key` (the
+	substances without their salt: `fingolimod hydrochloride` at the FDA and
+	`fingolimod` at EMA are both `fingolimod`), so group on it if you want one entry
+	per drug. `?substance_key=` lists the records of one drug.
 
 	**Fields that belong to the other regulator are `null`**, not `false` or `[]`.
 	On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
@@ -3793,7 +3796,8 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
 	- **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
 	- **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
-	- **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+	- **substance** - one substance. Matches the product's `substances` exactly (ignoring case), or its `substance_key` with the salt ignored: `fingolimod` and `fingolimod hydrochloride` both find EMA's Gilenya and the FDA's
+	- **substance_key** - the drug's key, exactly (ignoring case): `?substance_key=fingolimod` lists the records of that drug at both regulators; a combination is `amlodipine+valsartan`
 	- **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
 	- **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
 	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
@@ -3822,7 +3826,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	# Fields:
 	`id`, `regulator`, `ema_product_number`, `fda_application_number`,
 	`fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
-	`active_substance`, `substances`,
+	`active_substance`, `substances`, `substance_key`,
 	`is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
 	`pharmacotherapeutic_group`, `indication`, `holder`, the flags
 	(`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
@@ -3848,6 +3852,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
 	- In either of two categories: `/medicines/?category_id=6,21`
 	- One substance, with its biosimilars and duplicates: `/medicines/?substance=natalizumab&include_generics=true`
+	- Both regulators' records of one drug: `/medicines/?substance_key=fingolimod`
 	- By brand name: `/medicines/?name=ocrevus`
 	- Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
 	- With its events: `/medicines/123/`
@@ -3953,7 +3958,7 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
 	"Authorised in the EU" or "Approved by the FDA"), `event_date`, `basis`,
 	`from_value`, `to_value`, a small `medicine` (`id`, `regulator`, `name`, `inn`,
-	`url`) and `source`. `basis` says where the event comes from. `observed` means
+	`substance_key`, `url`) and `source`. `basis` says where the event comes from. `observed` means
 	Gregory saw the change between two syncs, and its `event_date` is the regulator's
 	date or the day the change was seen. `reconstructed` means it was read off the
 	regulator's dates (EMA's date fields, the FDA's submission dates) the first time
@@ -3978,6 +3983,7 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	- **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, `fda_approved`, `fda_efficacy_supplement`, ...)
 	- **basis** - `observed` or `reconstructed`
 	- **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
+	- **substance_key** - events of the medicines with this key, exactly (ignoring case): `?substance_key=fingolimod` covers the EMA and the FDA records of a drug
 	- **include_generics** - `true` also lists events of generic and biosimilar products, and of duplicate products
 	- **page**, **page_size**
 

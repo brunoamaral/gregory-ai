@@ -57,6 +57,10 @@ class Command(BaseCommand):
 				"sync_fda_medicines",
 				{"skip_follow_up": True},
 			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing). Its labels and matching run once, at 7c
+			(
+				"refresh_substance_keys",
+				{},
+			),  # 3f. Recompute every medicine's substance_key (a change to the salt rules reaches rows the syncs skip as unchanged); writes nothing on an ordinary run
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors

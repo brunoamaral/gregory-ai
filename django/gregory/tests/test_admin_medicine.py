@@ -96,6 +96,19 @@ class MedicineAdminTests(TestCase):
 		response = self.client.get(reverse("admin:gregory_medicine_changelist"), {"q": "zzz"})
 		self.assertNotContains(response, "Ocrevus")
 
+	def test_the_substance_key_is_shown_read_only_and_searchable(self):
+		Medicine.objects.filter(pk=self.medicine.pk).update(substance_key="ocrelizumab-key")
+		self.client.force_login(self.staff)
+		response = self.client.get(
+			reverse("admin:gregory_medicine_change", args=[self.medicine.pk])
+		)
+		self.assertContains(response, "ocrelizumab-key")
+		self.assertNotContains(response, 'name="substance_key"')
+		response = self.client.get(
+			reverse("admin:gregory_medicine_changelist"), {"q": "ocrelizumab-key"}
+		)
+		self.assertContains(response, "Ocrevus")
+
 
 class FdaMedicineAdminTests(TestCase):
 	"""The same read-only admin shows FDA rows: their own fields, a regulator column and

@@ -24,6 +24,7 @@ from gregory.utils.regulator_http import (  # noqa: F401  (re-exported)
 	clip as _clip,
 	get_with_retries,
 )
+from gregory.utils.substance_key import substance_key
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +127,8 @@ class ParsedMedicine:
 	inn: str = ""
 	active_substance: str = ""
 	substances: list = field(default_factory=list)
+	# "" when there are no substances: the sync gives the stored row medicine-<pk>.
+	substance_key: str = ""
 	is_combination: bool = False
 	status: str = ""
 	opinion_status: str = ""
@@ -222,6 +225,7 @@ def parse_row(row):
 		inn=inn,
 		active_substance=active_substance,
 		substances=substances,
+		substance_key=substance_key(substances),
 		is_combination=len(substances) > 1,
 		status=_clip(row.get("medicine_status"), 50),
 		opinion_status=_clip(row.get("opinion_status"), 20),

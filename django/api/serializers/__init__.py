@@ -1355,6 +1355,7 @@ class MedicineEventSerializer(serializers.ModelSerializer):
 				"regulator": serializers.ChoiceField(choices=Regulator.choices),
 				"name": serializers.CharField(),
 				"inn": serializers.CharField(),
+				"substance_key": serializers.CharField(),
 				"url": serializers.CharField(),
 			},
 		)
@@ -1366,6 +1367,7 @@ class MedicineEventSerializer(serializers.ModelSerializer):
 			"regulator": medicine.regulator,
 			"name": medicine.name,
 			"inn": medicine.inn,
+			"substance_key": medicine.substance_key,
 			"url": medicine.url,
 		}
 
@@ -1447,6 +1449,11 @@ class MedicineSerializer(serializers.ModelSerializer):
 	``latest_ec_decision_date`` is the most recent European Commission decision,
 	usually a variation. It is NOT the approval date: ``authorisation_date`` is
 	the first approval.
+
+	``substance_key`` is the same for every record of one drug, whichever regulator
+	it comes from: the substances without their salt (``fingolimod hydrochloride`` and
+	``fingolimod`` are both ``fingolimod``), sorted and joined with ``+``. Group on it
+	to show one entry per drug. It is read-only.
 	"""
 
 	categories = serializers.SerializerMethodField()
@@ -1468,6 +1475,7 @@ class MedicineSerializer(serializers.ModelSerializer):
 			"inn",
 			"active_substance",
 			"substances",
+			"substance_key",
 			"is_combination",
 			"status",
 			"opinion_status",
@@ -1511,6 +1519,7 @@ class MedicineSerializer(serializers.ModelSerializer):
 			name: {"allow_null": True}
 			for name in MEDICINE_EMA_ONLY_FIELDS + MEDICINE_FDA_ONLY_FIELDS
 		}
+		extra_kwargs["substance_key"] = {"read_only": True}
 
 	def _visible_links_of(self, obj):
 		links = getattr(obj, "_visible_links", None)

@@ -664,9 +664,9 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
-| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines and FDA-approved drugs and biologics (NDAs and BLAs) — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines and FDA-approved drugs and biologics (NDAs and BLAs) — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
 | Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `grouped_products` and `events`, newest first |
-| Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `kind`, `basis`, `event_date_after`, `event_date_before`, `substance_key`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | Rendered template |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | The template's context as JSON |
@@ -1118,7 +1118,7 @@ Takes the same parameters as the list and the same scope. Returns `total`, `with
 
 **What the FDA data leaves out.** Only NDAs and BLAs: generic drugs (ANDAs) are not covered, nor are applications still under review or unapproved products. A missing record does not mean a product is unapproved. The FDA also has no EMA-style opinion or designation fields, so those are `null` on its rows (below).
 
-**One medicine can appear twice**, once per regulator: Ocrevus has an EMA record and an FDA one, with separate ids, categories and histories. Records of different regulators are never grouped (`grouped_under` points at a product of the same regulator). Group by `substances` to show one entry per drug, and use `regulator` to tell them apart.
+**One medicine can appear twice**, once per regulator: Ocrevus has an EMA record and an FDA one, with separate ids, categories and histories. Records of different regulators are never grouped (`grouped_under` points at a product of the same regulator). Every record of one drug has the same `substance_key` (below), so group on it to show one entry per drug, and use `regulator` to tell the records apart. `?substance_key=fingolimod` lists the records of one drug at both regulators.
 
 ### Which sites show medicines
 
@@ -1147,7 +1147,8 @@ Every parameter is optional.
 | `site_id` | Linked to a category that has a subject in that site's scope, **or** approved for one of those subjects. With `category_id` or `category_slug`, only category links count. A site with `medicines_enabled` off returns nothing |
 | `tracked` | `false`: no live link to a category you can see, so the medicine shows only because EMA approved it for one of the site's conditions. `true`: filed under at least one category you can see. Omitted: both. Every visible FDA medicine is tracked |
 | `regulator` | `ema` or `fda`. Omitted: both. Any other value is `400` |
-| `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances. FDA substances are the application's ingredients, lowercased, without the FDA's four-letter suffix (`natalizumab-sztn` is `natalizumab`) |
+| `substance` | One substance, ignoring case and extra spaces and **ignoring the salt**. A product matches when one of its `substances` equals the value (as before), or when the value without its salt is one part of its `substance_key`. So `?substance=fingolimod` and `?substance=fingolimod hydrochloride` both find EMA's Gilenya (`fingolimod`) and the FDA's (`fingolimod hydrochloride`). A combination product matches on any of its substances. FDA substances are the application's ingredients, lowercased, without the FDA's four-letter suffix (`natalizumab-sztn` is `natalizumab`) |
+| `substance_key` | The drug's `substance_key`, exactly, ignoring case: `?substance_key=fingolimod`, or `?substance_key=amlodipine%2Bvalsartan` for a combination (encode the `+`). Lists the records of one drug at both regulators. The same filter is on `/medicines/events/` |
 | `name` | Part of the product's `name` (the brand name; for an FDA application every brand, joined with ` / `), case-insensitive: `?name=ocrevus`, or `?name=corbilta` for "Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)". A plain column filter; it combines with every other filter and changes nothing about visibility or generics |
 | `status` | The regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`. Values are the regulators' own, so new ones can appear |
 | `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none. **EMA-only:** using it leaves FDA rows out |
@@ -1179,6 +1180,7 @@ JSON only: there is no CSV, `?format=csv` is `404`, and `?all_results=true` is i
 | `name`, `inn`, `active_substance` | As the regulator publishes them. `inn` is empty for some EMA products. On an FDA row, `name` is the brand names joined with ` / `, and `inn` and `active_substance` are the ingredient names (upper case, with the salt) |
 | `brand_names` | Every brand sold under an FDA application, distinct (`["KESIMPTA", "ARZERRA"]`). `null` on EMA rows |
 | `substances` | Lowercased substances. EMA: from the INN or, when that is empty, the active substance. FDA: the application's ingredients without the FDA's four-letter suffix |
+| `substance_key` | The same for every record of one drug, at either regulator, so you can group on it. The substances without their salt (`fingolimod hydrochloride` and `fingolimod` are both `fingolimod`) and without a delivery enzyme (Ocrevus Zunovo, which the FDA lists with hyaluronidase, is `ocrelizumab` like Ocrevus), sorted and joined with `+` (`amlodipine+valsartan`). A name that is part of the drug keeps its salt word (`dimethyl fumarate`), and an electrolyte stays whole (`sodium chloride`). A record with no substances is `medicine-<id>`, so it stands alone. Read-only; also on the `medicine` of every event. One key can cover several uses of the same molecule (cladribine is Mavenclad and Leustatin): each record keeps its own name and indication |
 | `is_combination` | More than one substance |
 | `status`, `opinion_status` | The regulator's wording. FDA `status`: `Approved`, `Tentatively approved`, `Discontinued` or `Revoked`. `opinion_status` is `null` on FDA rows |
 | `therapeutic_areas`, `atc_code` | EMA's classification. `null` on FDA rows |
@@ -1214,6 +1216,7 @@ Newest first (`event_date`, then newest id). Visibility is the event's medicine'
 | `kind` | One kind or a comma-separated list (`?kind=opinion_positive,authorised`). Unknown values are `400` |
 | `basis` | `observed` or `reconstructed` |
 | `event_date_after`, `event_date_before` | Inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
+| `substance_key` | The event's medicine's `substance_key`, exactly, ignoring case: `?substance_key=fingolimod` lists the events of the EMA and the FDA records of that drug together |
 | `include_generics` | `true` also lists events of generic, biosimilar and duplicate products |
 | `page`, `page_size` | As above |
 
@@ -1225,7 +1228,7 @@ Newest first (`event_date`, then newest id). Visibility is the event's medicine'
 | `event_date` | The regulator's date where it gives one (EMA's date fields, the FDA's submission date), otherwise the day Gregory saw the change |
 | `basis` | `observed`: Gregory saw the change between two syncs. `reconstructed`: read off the regulator's dates the first time the product was seen, so it is real history but not news. Filter on `basis=observed` for a "what's new" list. The FDA's first sync reconstructs thousands of approvals, so an FDA list without `basis=observed` is mostly history |
 | `from_value`, `to_value` | The old and new text for status and indication changes; `to_value` holds the status for `ended`. On `fda_approved`, `fda_tentative_approval` and `fda_efficacy_supplement`, `to_value` is the FDA submission number (`S-38`), which can be looked up on Drugs@FDA |
-| `medicine` | `id`, `regulator`, `name`, `inn`, `url` |
+| `medicine` | `id`, `regulator`, `name`, `inn`, `substance_key`, `url` |
 | `source` | `European Medicines Agency` or `U.S. Food and Drug Administration`, matching the medicine's `regulator` |
 
 An `ec_decision` event is the date of EMA's latest Commission decision, not the approval: that is the `authorised` event. `/medicines/events/` is its own route: `events` is never read as a medicine id.
@@ -1242,6 +1245,8 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/?subject_id=13&tracked=false             the ones no category covers yet
 /medicines/?category_id=6,21                        either category
 /medicines/?substance=natalizumab&include_generics=true   with biosimilars and duplicates
+/medicines/?substance_key=fingolimod                      both regulators' records of one drug
+/medicines/events/?substance_key=fingolimod              the events of those records
 /medicines/?regulator=fda&ordering=-authorisation_date    only the FDA's, newest approvals first
 /medicines/?ordering=-authorisation_date                  both regulators in one list
 /medicines/?orphan_medicine=false                         EMA only: FDA rows are left out

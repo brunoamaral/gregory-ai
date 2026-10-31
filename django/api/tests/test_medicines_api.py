@@ -690,6 +690,7 @@ class MedicineEventTests(MedicineFixture):
 				"regulator": "ema",
 				"name": "Exservan",
 				"inn": "riluzole",
+				"substance_key": "",
 				"url": self.als_only.url,
 			},
 		)
@@ -1126,6 +1127,7 @@ class FdaEventApiTests(FdaFixture):
 				"regulator": "fda",
 				"name": "OCREVUS FDA",
 				"inn": "OCRELIZUMAB",
+				"substance_key": "",
 				"url": self.fda.url,
 			},
 		)

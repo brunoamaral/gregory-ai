@@ -2997,6 +2997,12 @@ class Medicine(models.Model):
 		blank=True,
 		help_text="Lowercased substances. EMA rows: split on ';', from the INN or, when that is empty, the active substance. FDA rows: the ingredient names, with the FDA's four-letter suffix removed.",
 	)
+	substance_key = models.CharField(
+		max_length=500,
+		blank=True,
+		db_index=True,
+		help_text="Groups one drug's records across regulators: the substances with the salt removed (fingolimod hydrochloride -> fingolimod) and delivery enzymes dropped, sorted and joined with '+'. A record with no substances has 'medicine-<id>'. Computed by gregory.utils.substance_key; refresh_substance_keys keeps it current.",
+	)
 	is_combination = models.BooleanField(default=False)
 	status = models.CharField(
 		max_length=50,

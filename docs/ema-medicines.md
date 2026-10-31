@@ -42,6 +42,11 @@ Things worth knowing before using the dates:
   stage and clears it once the Commission decides. See [Events](#events).
 - **Substances.** `substances` is the INN split on `;`, lowercased. When EMA leaves the INN
   empty, the active substance is used. A few withdrawn applications have neither.
+- **`substance_key`.** `substance_key` is `substances` without any salt, joined with `+`, and it is what
+  puts an EMA product and the FDA's records of the same drug under one name (EMA's Gilenya is
+  `fingolimod`; the FDA's is `fingolimod hydrochloride`, and both keys are `fingolimod`). The rules are in
+  `gregory/utils/substance_key.py`; see [fda-medicines.md](fda-medicines.md#substance-key). The sync sets it on every
+  row it writes. A product with no substances is keyed `medicine-<id>`.
 - **Status wording is EMA's own** and is stored as given. A value Gregory has not seen
   before is imported like any other.
 

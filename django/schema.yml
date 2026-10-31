@@ -4450,7 +4450,10 @@ paths:
 
         **One medicine can appear twice**, once per regulator, since each regulator
         authorises its own product. They are separate records (separate ids, never
-        grouped together); group them by `substances` if you want one entry per drug.
+        merged), but every record of one drug has the same `substance_key` (the
+        substances without their salt: `fingolimod hydrochloride` at the FDA and
+        `fingolimod` at EMA are both `fingolimod`), so group on it if you want one entry
+        per drug. `?substance_key=` lists the records of one drug.
 
         **Fields that belong to the other regulator are `null`**, not `false` or `[]`.
         On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
@@ -4511,7 +4514,8 @@ paths:
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
         - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
         - **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
-        - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **substance** - one substance. Matches the product's `substances` exactly (ignoring case), or its `substance_key` with the salt ignored: `fingolimod` and `fingolimod hydrochloride` both find EMA's Gilenya and the FDA's
+        - **substance_key** - the drug's key, exactly (ignoring case): `?substance_key=fingolimod` lists the records of that drug at both regulators; a combination is `amlodipine+valsartan`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
@@ -4540,7 +4544,7 @@ paths:
         # Fields:
         `id`, `regulator`, `ema_product_number`, `fda_application_number`,
         `fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
-        `active_substance`, `substances`,
+        `active_substance`, `substances`, `substance_key`,
         `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
         `pharmacotherapeutic_group`, `indication`, `holder`, the flags
         (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
@@ -4566,6 +4570,7 @@ paths:
         - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
         - One substance, with its biosimilars and duplicates: `/medicines/?substance=natalizumab&include_generics=true`
+        - Both regulators' records of one drug: `/medicines/?substance_key=fingolimod`
         - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
@@ -4734,11 +4739,22 @@ paths:
         name: substance
         schema:
           type: string
-        description: A substance, as the regulator names it (the INN, or the active
+        description: 'A substance, as the regulator names it (the INN, or the active
           substance when the INN is empty; for the FDA, the ingredient). Matches one
-          element of the product's `substances` exactly, ignoring case and extra spaces,
-          e.g. ?substance=ocrelizumab. A combination product matches on any of its
-          substances.
+          element of the product''s `substances` exactly, ignoring case and extra
+          spaces, e.g. ?substance=ocrelizumab, and also ignores the salt: ?substance=fingolimod
+          and ?substance=fingolimod hydrochloride both find the EMA and the FDA records
+          of Gilenya. A combination product matches on any of its substances (the
+          parts of its `substance_key`).'
+      - in: query
+        name: substance_key
+        schema:
+          type: string
+        description: 'The drug''s `substance_key`, exactly (ignoring case): the substances
+          without their salt, sorted and joined with ''+'', e.g. ?substance_key=fingolimod
+          or ?substance_key=amlodipine%2Bvalsartan (encode the + as %2B). Every record
+          of one drug has the same key at either regulator, so this lists the EMA
+          and the FDA records of a drug together.'
       - in: query
         name: tracked
         schema:
@@ -4785,7 +4801,10 @@ paths:
 
         **One medicine can appear twice**, once per regulator, since each regulator
         authorises its own product. They are separate records (separate ids, never
-        grouped together); group them by `substances` if you want one entry per drug.
+        merged), but every record of one drug has the same `substance_key` (the
+        substances without their salt: `fingolimod hydrochloride` at the FDA and
+        `fingolimod` at EMA are both `fingolimod`), so group on it if you want one entry
+        per drug. `?substance_key=` lists the records of one drug.
 
         **Fields that belong to the other regulator are `null`**, not `false` or `[]`.
         On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
@@ -4846,7 +4865,8 @@ paths:
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
         - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
         - **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
-        - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
+        - **substance** - one substance. Matches the product's `substances` exactly (ignoring case), or its `substance_key` with the salt ignored: `fingolimod` and `fingolimod hydrochloride` both find EMA's Gilenya and the FDA's
+        - **substance_key** - the drug's key, exactly (ignoring case): `?substance_key=fingolimod` lists the records of that drug at both regulators; a combination is `amlodipine+valsartan`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
         - **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
         - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
@@ -4875,7 +4895,7 @@ paths:
         # Fields:
         `id`, `regulator`, `ema_product_number`, `fda_application_number`,
         `fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
-        `active_substance`, `substances`,
+        `active_substance`, `substances`, `substance_key`,
         `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
         `pharmacotherapeutic_group`, `indication`, `holder`, the flags
         (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
@@ -4901,6 +4921,7 @@ paths:
         - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
         - One substance, with its biosimilars and duplicates: `/medicines/?substance=natalizumab&include_generics=true`
+        - Both regulators' records of one drug: `/medicines/?substance_key=fingolimod`
         - By brand name: `/medicines/?name=ocrevus`
         - Authorised since 2024: `/medicines/?authorised_after=2024-01-01&ordering=-authorisation_date`
         - With its events: `/medicines/123/`
@@ -4963,7 +4984,7 @@ paths:
         Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
         "Authorised in the EU" or "Approved by the FDA"), `event_date`, `basis`,
         `from_value`, `to_value`, a small `medicine` (`id`, `regulator`, `name`, `inn`,
-        `url`) and `source`. `basis` says where the event comes from. `observed` means
+        `substance_key`, `url`) and `source`. `basis` says where the event comes from. `observed` means
         Gregory saw the change between two syncs, and its `event_date` is the regulator's
         date or the day the change was seen. `reconstructed` means it was read off the
         regulator's dates (EMA's date fields, the FDA's submission dates) the first time
@@ -4988,6 +5009,7 @@ paths:
         - **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, `fda_approved`, `fda_efficacy_supplement`, ...)
         - **basis** - `observed` or `reconstructed`
         - **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
+        - **substance_key** - events of the medicines with this key, exactly (ignoring case): `?substance_key=fingolimod` covers the EMA and the FDA records of a drug
         - **include_generics** - `true` also lists events of generic and biosimilar products, and of duplicate products
         - **page**, **page_size**
 
@@ -5153,6 +5175,15 @@ paths:
           or category_slug, only category links count, and all the filters must hold
           on the same link: ?subject_id=1&category_id=6 means a live link to category
           6, and category 6 has subject 1.'
+      - in: query
+        name: substance_key
+        schema:
+          type: string
+        description: 'Events of the medicines with this `substance_key`, exactly (ignoring
+          case): the substances without their salt, sorted and joined with ''+'',
+          e.g. ?substance_key=fingolimod. Every record of one drug has the same key
+          at either regulator, so this lists the events of its EMA and FDA records
+          together.'
       - in: query
         name: tracked
         schema:
@@ -10801,6 +10832,11 @@ components:
         ``latest_ec_decision_date`` is the most recent European Commission decision,
         usually a variation. It is NOT the approval date: ``authorisation_date`` is
         the first approval.
+
+        ``substance_key`` is the same for every record of one drug, whichever regulator
+        it comes from: the substances without their salt (``fingolimod hydrochloride`` and
+        ``fingolimod`` are both ``fingolimod``), sorted and joined with ``+``. Group on it
+        to show one entry per drug. It is read-only.
       properties:
         id:
           type: integer
@@ -10862,6 +10898,14 @@ components:
           description: 'Lowercased substances. EMA rows: split on '';'', from the
             INN or, when that is empty, the active substance. FDA rows: the ingredient
             names, with the FDA''s four-letter suffix removed.'
+        substance_key:
+          type: string
+          readOnly: true
+          description: 'Groups one drug''s records across regulators: the substances
+            with the salt removed (fingolimod hydrochloride -> fingolimod) and delivery
+            enzymes dropped, sorted and joined with ''+''. A record with no substances
+            has ''medicine-<id>''. Computed by gregory.utils.substance_key; refresh_substance_keys
+            keeps it current.'
         is_combination:
           type: boolean
         status:
@@ -11030,6 +11074,7 @@ components:
       - source
       - status
       - subjects
+      - substance_key
       - tracked
     MedicineCategory:
       type: object
@@ -11119,6 +11164,14 @@ components:
           description: 'Lowercased substances. EMA rows: split on '';'', from the
             INN or, when that is empty, the active substance. FDA rows: the ingredient
             names, with the FDA''s four-letter suffix removed.'
+        substance_key:
+          type: string
+          readOnly: true
+          description: 'Groups one drug''s records across regulators: the substances
+            with the salt removed (fingolimod hydrochloride -> fingolimod) and delivery
+            enzymes dropped, sorted and joined with ''+''. A record with no substances
+            has ''medicine-<id>''. Computed by gregory.utils.substance_key; refresh_substance_keys
+            keeps it current.'
         is_combination:
           type: boolean
         status:
@@ -11299,6 +11352,7 @@ components:
       - source
       - status
       - subjects
+      - substance_key
       - tracked
     MedicineEvent:
       type: object
@@ -11403,6 +11457,8 @@ components:
           type: string
         inn:
           type: string
+        substance_key:
+          type: string
         url:
           type: string
       required:
@@ -11410,6 +11466,7 @@ components:
       - inn
       - name
       - regulator
+      - substance_key
       - url
     MedicineGroupedProduct:
       type: object
