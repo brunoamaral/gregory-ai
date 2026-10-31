@@ -24,9 +24,10 @@ from gregory.models import (
 	PatentTrialLink,
 	Medicine,
 	MedicineEvent,
+	Regulator,
 )
 from api.medicine_scope import (
-	EMA_SOURCE,
+	source_for,
 	visible_links_queryset,
 	visible_subject_links_queryset,
 )
@@ -1300,7 +1301,7 @@ class MedicineCategorySerializer(serializers.ModelSerializer):
 
 
 class MedicineSubjectSerializer(serializers.Serializer):
-	"""A subject EMA approved a medicine for, as ``subjects`` on a medicine.
+	"""A subject EMA approved a medicine for, as ``subjects`` on an EMA medicine.
 
 	Built from a ``MedicineSubjectLink``: ``matched_on`` is the subject's EMA
 	therapeutic area that matched."""
@@ -1312,8 +1313,8 @@ class MedicineSubjectSerializer(serializers.Serializer):
 
 
 class MedicineGroupedProductSerializer(serializers.ModelSerializer):
-	"""A further EMA product for the same medicine, as ``grouped_products`` on the
-	lead product's detail."""
+	"""A further product of the same regulator for the same medicine, as
+	``grouped_products`` on the lead product's detail."""
 
 	class Meta:
 		model = Medicine
@@ -1321,7 +1322,7 @@ class MedicineGroupedProductSerializer(serializers.ModelSerializer):
 
 
 class MedicineEventSerializer(serializers.ModelSerializer):
-	"""One event in a medicine's regulatory life (``/medicines/events/``).
+	"""One event in a medicine's regulatory life (``/medicines/events/``), EMA's or the FDA's.
 
 	``kind_label`` is the same sentence the RSS feeds use (``MedicineEvent.in_words``),
 	so a kind is never worded two ways. Relies on MedicineEventViewSet selecting
@@ -1351,6 +1352,7 @@ class MedicineEventSerializer(serializers.ModelSerializer):
 			"MedicineEventMedicine",
 			{
 				"id": serializers.IntegerField(),
+				"regulator": serializers.ChoiceField(choices=Regulator.choices),
 				"name": serializers.CharField(),
 				"inn": serializers.CharField(),
 				"url": serializers.CharField(),
@@ -1361,13 +1363,15 @@ class MedicineEventSerializer(serializers.ModelSerializer):
 		medicine = obj.medicine
 		return {
 			"id": medicine.id,
+			"regulator": medicine.regulator,
 			"name": medicine.name,
 			"inn": medicine.inn,
 			"url": medicine.url,
 		}
 
 	def get_source(self, obj) -> str:
-		return EMA_SOURCE
+		"""The attribution of the event's medicine: its own regulator."""
+		return source_for(obj.medicine)
 
 
 class MedicineHistoryEventSerializer(MedicineEventSerializer):
@@ -1380,19 +1384,65 @@ class MedicineHistoryEventSerializer(MedicineEventSerializer):
 		]
 
 
+#: Columns that only mean something for one regulator. The other regulator's rows
+#: carry ``null`` for them (``MedicineSerializer.to_representation``), and the schema
+#: marks them nullable. EMA-only: EMA's product number, opinion and Commission
+#: procedure, therapeutic areas, ATC code, designation flags and dates. FDA-only: the
+#: application, centre, brands, priority review, original class and interchangeability.
+MEDICINE_EMA_ONLY_FIELDS = (
+	"ema_product_number",
+	"opinion_status",
+	"therapeutic_areas",
+	"atc_code",
+	"advanced_therapy",
+	"orphan_medicine",
+	"conditional_approval",
+	"exceptional_circumstances",
+	"prime_priority_medicine",
+	"accelerated_assessment",
+	"additional_monitoring",
+	"patient_safety",
+	"rolling_review_start_date",
+	"evaluation_start_date",
+	"opinion_date",
+	"latest_ec_decision_date",
+	"refusal_date",
+	"application_withdrawal_date",
+	"suspension_date",
+	"end_date",
+	"ema_first_published",
+	"ema_last_updated",
+)
+MEDICINE_FDA_ONLY_FIELDS = (
+	"fda_application_number",
+	"fda_application_type",
+	"fda_center",
+	"brand_names",
+	"fda_priority_review",
+	"fda_original_class",
+	"interchangeable",
+)
+
+
 class MedicineSerializer(serializers.ModelSerializer):
-	"""One EMA centrally authorised human medicine (``/medicines/``).
+	"""One medicine from a regulator (``/medicines/``): an EMA centrally authorised human
+	medicine, or an FDA application (an NDA, or a BLA from CDER or CBER).
 
 	Relies on MedicineViewSet attaching the caller's visible category links as
 	``_visible_links`` and visible subject links as ``_visible_subject_links``, so a
 	page costs a constant number of queries. Without them (an instance built by hand)
 	the same rule runs for that one medicine.
 
+	``regulator`` says which (``ema`` or ``fda``) and ``source`` names it. A column that
+	belongs to the other regulator is ``null``: see ``MEDICINE_EMA_ONLY_FIELDS`` and
+	``MEDICINE_FDA_ONLY_FIELDS``. ``authorisation_date`` is the first approval: EMA's
+	authorisation, or the FDA's original approval.
+
 	``tracked`` is true when the medicine is filed under at least one category the
 	caller can see (``categories`` is not empty). ``subjects`` lists the conditions
-	EMA approved it for, which is how an untracked medicine is visible at all.
-	``grouped_under`` is the id of the lead product when this row is a duplicate of
-	another EMA product, else null.
+	EMA approved it for, which is how an untracked EMA medicine is visible at all (the
+	FDA rows have none). ``grouped_under`` is the id of the lead product when this row
+	is a duplicate of another product of the same regulator, else null.
 
 	``latest_ec_decision_date`` is the most recent European Commission decision,
 	usually a variation. It is NOT the approval date: ``authorisation_date`` is
@@ -1408,8 +1458,13 @@ class MedicineSerializer(serializers.ModelSerializer):
 		model = Medicine
 		fields = [
 			"id",
+			"regulator",
 			"ema_product_number",
+			"fda_application_number",
+			"fda_application_type",
+			"fda_center",
 			"name",
+			"brand_names",
 			"inn",
 			"active_substance",
 			"substances",
@@ -1430,6 +1485,9 @@ class MedicineSerializer(serializers.ModelSerializer):
 			"additional_monitoring",
 			"biosimilar",
 			"generic",
+			"interchangeable",
+			"fda_priority_review",
+			"fda_original_class",
 			"patient_safety",
 			"rolling_review_start_date",
 			"evaluation_start_date",
@@ -1449,6 +1507,10 @@ class MedicineSerializer(serializers.ModelSerializer):
 			"subjects",
 			"source",
 		]
+		extra_kwargs = {
+			name: {"allow_null": True}
+			for name in MEDICINE_EMA_ONLY_FIELDS + MEDICINE_FDA_ONLY_FIELDS
+		}
 
 	def _visible_links_of(self, obj):
 		links = getattr(obj, "_visible_links", None)
@@ -1491,13 +1553,27 @@ class MedicineSerializer(serializers.ModelSerializer):
 		return MedicineSubjectSerializer(links, many=True).data
 
 	def get_source(self, obj) -> str:
-		return EMA_SOURCE
+		"""The regulator the row comes from, by name: keep it wherever you show the row."""
+		return source_for(obj)
+
+	def to_representation(self, instance):
+		data = super().to_representation(instance)
+		# A column that belongs to the other regulator is empty, not false or []: an
+		# FDA row has no orphan flag, which is not the same as "not an orphan".
+		not_applicable = (
+			MEDICINE_FDA_ONLY_FIELDS
+			if instance.regulator == Regulator.EMA
+			else MEDICINE_EMA_ONLY_FIELDS
+		)
+		for name in not_applicable:
+			data[name] = None
+		return data
 
 
 class MedicineDetailSerializer(MedicineSerializer):
 	"""``MedicineSerializer`` plus the medicine's events, newest first, and, on a lead
-	product, the further EMA products for the same medicine (``grouped_products``,
-	ordered by name; only those the caller can see)."""
+	product, the further products of the same regulator for the same medicine
+	(``grouped_products``, ordered by name; only those the caller can see)."""
 
 	events = MedicineHistoryEventSerializer(many=True, read_only=True)
 	grouped_products = MedicineGroupedProductSerializer(many=True, read_only=True)

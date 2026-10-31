@@ -146,6 +146,10 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"advanced_therapy",
 		"orphan_medicine",
 		"is_combination",
+		# FDA rows are served by the API from FDA medicines PR 3. The tool sends
+		# regulator=ema itself until PR 4 can describe an FDA row and exposes this
+		# parameter. PR 4 removes this line.
+		"regulator",
 		"site_id",
 		"include_public",
 	},

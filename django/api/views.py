@@ -111,7 +111,6 @@ from gregory.models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
-	Regulator,
 )
 from rest_framework import mixins, permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
@@ -1970,7 +1969,6 @@ def _category_medicines_count_subquery(visible_medicine_subject_ids=None):
 			MedicineCategoryAssignment.objects.filter(
 				teamcategory=OuterRef("pk"),
 				suppressed=False,
-				medicine__regulator=Regulator.EMA,  # PR 3 removes this gate (see public_medicines)
 				medicine__generic=False,
 				medicine__biosimilar=False,
 				medicine__grouped_under__isnull=True,
@@ -3674,14 +3672,15 @@ class PatentViewSet(
 
 
 ###
-# MEDICINES (EMA)
+# MEDICINES (EMA and FDA)
 ###
 
 
 class MedicineOrderingFilter(NullsLastOrderingFilter):
 	"""Ordering for ``/medicines/``: dates sort NULLS LAST in both directions and
 	``-id`` is appended as a tiebreaker. EMA dates many products the same day, so
-	without it a page boundary can repeat or skip a product between requests."""
+	without it a page boundary can repeat or skip a product between requests. The
+	EMA-only dates are null on FDA rows, so those sort after the EMA ones."""
 
 	nulls_last_fields = frozenset(
 		{"authorisation_date", "latest_ec_decision_date", "ema_last_updated"}
@@ -3695,9 +3694,11 @@ class MedicineOrderingFilter(NullsLastOrderingFilter):
 _MEDICINES_ORDERING_PARAM = _ordering_param(
 	["authorisation_date", "latest_ec_decision_date", "ema_last_updated"],
 	"Sort field, prefix with `-` for descending (default `-ema_last_updated`). "
-	"Products without the date always sort last, in both directions. Ties break "
+	"Products without the date always sort last, in both directions, so FDA rows "
+	"(which have no `ema_last_updated`) follow the EMA ones by default. Ties break "
 	"on `-id`. `latest_ec_decision_date` is the latest Commission decision, not "
-	"the approval; sort on `authorisation_date` for that.",
+	"the approval. `authorisation_date` is the first approval at either regulator: "
+	"sort on it (`-authorisation_date`) for a mixed list.",
 )
 
 
@@ -3712,12 +3713,37 @@ _MEDICINES_ORDERING_PARAM = _ordering_param(
 )
 class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
-	List the medicines the European Medicines Agency (EMA) has authorised for human
-	use in the EU, one record per EMA product, most recently updated first.
+	List medicines from two regulators: the human medicines the European Medicines
+	Agency (EMA) has authorised in the EU, one record per EMA product, and the
+	new drugs and biologics the U.S. Food and Drug Administration (FDA) has approved
+	(NDAs and BLAs), one record per FDA application. Most recently updated first for
+	EMA; FDA rows follow (see Ordering).
 
-	**Source: European Medicines Agency.** Every record carries
-	`"source": "European Medicines Agency"` and its `url` is the product's EPAR page
-	on ema.europa.eu. Keep both wherever you display a medicine.
+	**Source, per row.** `regulator` is `ema` or `fda`, and every record carries
+	`"source": "European Medicines Agency"` or `"source": "U.S. Food and Drug
+	Administration"` to match. `url` is the EPAR page on ema.europa.eu for an EMA
+	record, and for an FDA one the Drugs@FDA overview page (a CBER biologic: its
+	DailyMed label). Keep both wherever you display a medicine. FDA label text comes
+	from DailyMed (National Library of Medicine), and the FDA data comes through
+	openFDA: it is **not for clinical decisions** and the FDA does not endorse
+	Gregory's use of it. Generic drugs (ANDAs), applications under review and
+	unapproved products are not covered, so a missing record does not mean a product
+	is unapproved.
+
+	**One medicine can appear twice**, once per regulator, since each regulator
+	authorises its own product. They are separate records (separate ids, never
+	grouped together); group them by `substances` if you want one entry per drug.
+
+	**Fields that belong to the other regulator are `null`**, not `false` or `[]`.
+	On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
+	`therapeutic_areas`, `atc_code`, the designation flags, the opinion, EC, refusal,
+	withdrawal, suspension and end dates, `ema_first_published`, `ema_last_updated`)
+	are `null`; on an EMA row the FDA-only fields (`fda_application_number`,
+	`fda_application_type`, `fda_center`, `brand_names`, `fda_priority_review`,
+	`fda_original_class`, `interchangeable`) are `null`. `authorisation_date` is the
+	first approval at either: EMA's authorisation, or the FDA's original approval.
+	FDA rows have no `subjects` (the matcher makes no subject links for them); they
+	are visible through a category link only.
 
 	Medicines are only visible through sites that have **medicines_enabled** on
 	(`CustomSetting.medicines_enabled`, off by default). A medicine has no subject of
@@ -3766,13 +3792,15 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- **subject_id** - medicines linked to a category that has this subject, or approved by EMA for one of its conditions
 	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
 	- **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
+	- **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
 	- **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
 	- **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
-	- **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
-	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
-	- **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+	- **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
+	- **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
+	- **advanced_therapy** / **orphan_medicine** - `true`/`false`. EMA-only: FDA rows are left out whenever either is used, so `orphan_medicine=false` never returns an FDA row
+	- **is_combination** - `true`/`false`, at either regulator
 	- **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
-	- **include_generics** - `true` also lists generic and biosimilar products, and duplicate products
+	- **include_generics** - `true` also lists generic and biosimilar products (the FDA's biosimilars, such as Tyruko, too), and duplicate products
 	- **page**, **page_size**, **ordering**
 
 	The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
@@ -3787,15 +3815,20 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	`?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
 	`latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
 	Products without the date sort last in both directions; ties break on `-id`.
-	Unrecognised values are silently ignored.
+	Unrecognised values are silently ignored. The default puts FDA rows after the
+	EMA ones, because they have no `ema_last_updated`; for one list mixing both
+	regulators, newest approvals first, use `?ordering=-authorisation_date`.
 
 	# Fields:
-	`id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+	`id`, `regulator`, `ema_product_number`, `fda_application_number`,
+	`fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
+	`active_substance`, `substances`,
 	`is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
 	`pharmacotherapeutic_group`, `indication`, `holder`, the flags
 	(`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
 	`exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
-	`additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+	`additional_monitoring`, `biosimilar`, `generic`, `interchangeable`,
+	`patient_safety`), `fda_priority_review`, `fda_original_class`, the dates
 	(`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
 	`authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
 	`application_withdrawal_date`, `suspension_date`, `end_date`,
@@ -3810,6 +3843,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 
 	# Examples:
 	- On a condition page: `/medicines/?subject_id=1&category_id=6`
+	- Only the FDA's: `/medicines/?regulator=fda&ordering=-authorisation_date`
 	- Every medicine EMA approved for a condition, filed or not: `/medicines/?subject_id=13`
 	- Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
 	- In either of two categories: `/medicines/?category_id=6,21`
@@ -3891,13 +3925,18 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 )
 class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	"""
-	List what happened to EMA medicines, newest first: a CHMP opinion, an
+	List what happened to medicines, newest first: at EMA a CHMP opinion, an
 	authorisation, a new European Commission decision, a change of indication, a
-	withdrawal.
+	withdrawal; at the FDA an approval, a tentative approval, an approved new
+	indication or use, a discontinuation, a revoked licence.
 
-	**Source: European Medicines Agency.** Every row carries
-	`"source": "European Medicines Agency"`, and the nested medicine's `url` is its
-	EPAR page on ema.europa.eu.
+	**Source, per row.** Every row carries `"source": "European Medicines Agency"` or
+	`"source": "U.S. Food and Drug Administration"`, matching the nested medicine's
+	`regulator`. The nested medicine's `url` is its EPAR page on ema.europa.eu, or for
+	an FDA medicine its Drugs@FDA page (a CBER biologic: its DailyMed label). Keep
+	both wherever you show an event. FDA data comes through openFDA and is not for
+	clinical decisions; only NDAs and BLAs are covered, so a missing event does not
+	mean nothing happened.
 
 	Visibility is `/medicines/`'s, applied through the event's medicine: a medicine
 	is visible when it has a live link to a category with a subject in the caller's
@@ -3909,13 +3948,16 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	see.
 
 	Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
-	"Authorised in the EU"), `event_date`, `basis`, `from_value`, `to_value`, a small
-	`medicine` (`id`, `name`, `inn`, `url`) and `source`. `basis` says where the event
-	comes from. `observed` means Gregory saw the change between two syncs, and its
-	`event_date` is EMA's date or the day the change was seen. `reconstructed` means it
-	was read off EMA's date fields the first time the product was seen, so it is real
-	history but is not news. `from_value` / `to_value` hold the old and new text for
-	status and indication changes.
+	"Authorised in the EU" or "Approved by the FDA"), `event_date`, `basis`,
+	`from_value`, `to_value`, a small `medicine` (`id`, `regulator`, `name`, `inn`,
+	`url`) and `source`. `basis` says where the event comes from. `observed` means
+	Gregory saw the change between two syncs, and its `event_date` is the regulator's
+	date or the day the change was seen. `reconstructed` means it was read off the
+	regulator's dates (EMA's date fields, the FDA's submission dates) the first time
+	the product was seen, so it is real history but is not news. `from_value` /
+	`to_value` hold the old and new text for status and indication changes; on an FDA
+	approval or efficacy supplement `to_value` is the FDA submission number (`S-38`),
+	which an editor can look up on Drugs@FDA.
 
 	An `ec_decision` event is the date of EMA's latest Commission decision, usually a
 	variation. It is not the approval: that is the `authorised` event.
@@ -3929,7 +3971,8 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	- **subject_id** - events of medicines linked to a category that has this subject, or approved by EMA for one of its conditions
 	- **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
 	- **tracked** - `false`: the event's medicine has no live link to a category you can see; `true`: it has one
-	- **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, ...)
+	- **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
+	- **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, `fda_approved`, `fda_efficacy_supplement`, ...)
 	- **basis** - `observed` or `reconstructed`
 	- **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
 	- **include_generics** - `true` also lists events of generic and biosimilar products, and of duplicate products
@@ -3945,6 +3988,7 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 	- For one site: `/medicines/events/?site_id=3`
 	- News on medicines no category covers yet: `/medicines/events/?site_id=3&tracked=false`
 	- Positive opinions since January: `/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01`
+	- New FDA approvals and indications: `/medicines/events/?regulator=fda&kind=fda_approved,fda_efficacy_supplement&basis=observed`
 	"""
 
 	queryset = (

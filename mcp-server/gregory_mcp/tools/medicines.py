@@ -117,7 +117,10 @@ async def search_medicines(
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
 	}
-	data = await get_client().get("/medicines/", params)
+	# PR 4 removes this: until the tools can describe an FDA row (their source line and
+	# wording are EMA's), the API is asked for EMA's only. `params` stays free of it, so
+	# the zero-result guidance does not list a filter the caller never chose.
+	data = await get_client().get("/medicines/", {**params, "regulator": "ema"})
 	results = data.get("results", [])
 	count = data.get("count", len(results))
 	response: dict[str, Any] = {
@@ -166,6 +169,10 @@ async def get_medicine(medicine_id: int) -> dict:
 		if exc.status_code == 404:
 			raise ToolError(f"Medicine {medicine_id} was not found.") from exc
 		raise
+	# PR 4 removes this: the tool still words every record as EMA's, so an FDA one (the
+	# API serves both now) is reported as not found, as it was before FDA rows were public.
+	if medicine.get("regulator", "ema") != "ema":
+		raise ToolError(f"Medicine {medicine_id} was not found.")
 	return _shape_detail(strip_team_data(medicine))
 
 

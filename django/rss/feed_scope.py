@@ -184,32 +184,51 @@ def category_subject_map(subject_ids):
 	return mapping
 
 
-def _curated_medicine_events(*conditions):
+def regulator_of(request):
+	"""The ``?regulator=`` a medicine feed was asked for: ``"ema"``, ``"fda"`` or ``None``
+	(both). Anything else is a 404, as an unknown category is: a feed reader has no
+	use for a 400, and an empty feed would look like "no news".
+
+	The value is exact (lowercase), as it is on the API. Call it from ``get_object``.
+	"""
+	value = request.GET.get("regulator")
+	if value is None:
+		return None
+	if value not in Regulator.values:
+		raise Http404("Unknown regulator.")
+	return value
+
+
+def _curated_medicine_events(*conditions, regulator=None):
 	"""Events of the medicines a feed may list, narrowed by ``conditions``.
 
 	The exclusions every medicine feed shares, in one place so a feed can't forget one:
 	  * generic and biosimilar products: the feed is for news about the originator, not
-	    for each copy of a drug that is already on the market;
+	    for each copy of a drug that is already on the market (the FDA's biosimilars,
+	    Tyruko among them, are left out too);
 	  * grouped copies (``grouped_under`` set): EMA authorises one medicine under several
 	    names (Exelon, Prometax, Rivastigmine Sandoz), and only the lead reports an event,
 	    so one European Commission decision isn't announced once per copy;
-	  * ``reconstructed`` events older than RECONSTRUCTED_EVENT_DAYS (see above).
+	  * ``reconstructed`` events older than RECONSTRUCTED_EVENT_DAYS (see above), at
+	    either regulator.
 
 	``conditions`` are the filters that say which medicines the feed is about.
+	``regulator`` (``ema`` or ``fda``) narrows the feed to that regulator's medicines;
+	``None`` lists both.
 	"""
 	cutoff = timezone.localdate() - timedelta(days=RECONSTRUCTED_EVENT_DAYS)
-	return MedicineEvent.objects.filter(
+	events = MedicineEvent.objects.filter(
 		*conditions,
-		# An FDA medicine's events stay out of every feed until the FDA release can label
-		# them (PR 3 removes this gate; see api.medicine_scope.public_medicines).
-		medicine__regulator=Regulator.EMA,
 		medicine__generic=False,
 		medicine__biosimilar=False,
 		medicine__grouped_under__isnull=True,
 	).exclude(basis=MedicineEvent.Basis.RECONSTRUCTED, event_date__lt=cutoff)
+	if regulator is not None:
+		events = events.filter(medicine__regulator=regulator)
+	return events
 
 
-def medicine_event_base_qs(category_subject_map):
+def medicine_event_base_qs(category_subject_map, regulator=None):
 	"""Medicine events a feed may list, for the categories in category_subject_map.
 
 	category_subject_map is {category id: its subject ids inside the site's
@@ -225,7 +244,7 @@ def medicine_event_base_qs(category_subject_map):
 	The site and category feeds are curated: a medicine EMA approved for a condition
 	but that no category tracks is not in them (medicine_subject_event_base_qs has it).
 	The shared exclusions (generics, biosimilars, grouped copies, old reconstructed
-	events) are those of _curated_medicine_events.
+	events) are those of _curated_medicine_events, which also takes ``regulator``.
 	"""
 	category_ids = [
 		category_id for category_id, subjects in category_subject_map.items() if subjects
@@ -237,12 +256,15 @@ def medicine_event_base_qs(category_subject_map):
 				teamcategory__in=category_ids,
 				suppressed=False,
 			)
-		)
+		),
+		regulator=regulator,
 	)
 
 
-def medicine_subject_event_base_qs(subject_id):
-	"""Medicine events for one subject: every medicine EMA approved for its condition.
+def medicine_subject_event_base_qs(subject_id, regulator=None):
+	"""Medicine events for one subject: every medicine EMA approved for its condition,
+	and every FDA one filed under a category of the subject (the FDA has no subject
+	links).
 
 	An event is in when its medicine has EITHER
 	  * a NON-SUPPRESSED link to a category that has this subject (a medicine an editor
@@ -270,5 +292,6 @@ def medicine_subject_event_base_qs(subject_id):
 			MedicineSubjectLink.objects.filter(
 				medicine=OuterRef("medicine"), subject_id=subject_id, suppressed=False
 			)
-		)
+		),
+		regulator=regulator,
 	)

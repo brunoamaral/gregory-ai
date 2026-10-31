@@ -4431,12 +4431,37 @@ paths:
     get:
       operationId: medicines_list
       description: |-
-        List the medicines the European Medicines Agency (EMA) has authorised for human
-        use in the EU, one record per EMA product, most recently updated first.
+        List medicines from two regulators: the human medicines the European Medicines
+        Agency (EMA) has authorised in the EU, one record per EMA product, and the
+        new drugs and biologics the U.S. Food and Drug Administration (FDA) has approved
+        (NDAs and BLAs), one record per FDA application. Most recently updated first for
+        EMA; FDA rows follow (see Ordering).
 
-        **Source: European Medicines Agency.** Every record carries
-        `"source": "European Medicines Agency"` and its `url` is the product's EPAR page
-        on ema.europa.eu. Keep both wherever you display a medicine.
+        **Source, per row.** `regulator` is `ema` or `fda`, and every record carries
+        `"source": "European Medicines Agency"` or `"source": "U.S. Food and Drug
+        Administration"` to match. `url` is the EPAR page on ema.europa.eu for an EMA
+        record, and for an FDA one the Drugs@FDA overview page (a CBER biologic: its
+        DailyMed label). Keep both wherever you display a medicine. FDA label text comes
+        from DailyMed (National Library of Medicine), and the FDA data comes through
+        openFDA: it is **not for clinical decisions** and the FDA does not endorse
+        Gregory's use of it. Generic drugs (ANDAs), applications under review and
+        unapproved products are not covered, so a missing record does not mean a product
+        is unapproved.
+
+        **One medicine can appear twice**, once per regulator, since each regulator
+        authorises its own product. They are separate records (separate ids, never
+        grouped together); group them by `substances` if you want one entry per drug.
+
+        **Fields that belong to the other regulator are `null`**, not `false` or `[]`.
+        On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
+        `therapeutic_areas`, `atc_code`, the designation flags, the opinion, EC, refusal,
+        withdrawal, suspension and end dates, `ema_first_published`, `ema_last_updated`)
+        are `null`; on an EMA row the FDA-only fields (`fda_application_number`,
+        `fda_application_type`, `fda_center`, `brand_names`, `fda_priority_review`,
+        `fda_original_class`, `interchangeable`) are `null`. `authorisation_date` is the
+        first approval at either: EMA's authorisation, or the FDA's original approval.
+        FDA rows have no `subjects` (the matcher makes no subject links for them); they
+        are visible through a category link only.
 
         Medicines are only visible through sites that have **medicines_enabled** on
         (`CustomSetting.medicines_enabled`, off by default). A medicine has no subject of
@@ -4485,13 +4510,15 @@ paths:
         - **subject_id** - medicines linked to a category that has this subject, or approved by EMA for one of its conditions
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
         - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
+        - **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
-        - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
-        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
-        - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+        - **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
+        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
+        - **advanced_therapy** / **orphan_medicine** - `true`/`false`. EMA-only: FDA rows are left out whenever either is used, so `orphan_medicine=false` never returns an FDA row
+        - **is_combination** - `true`/`false`, at either regulator
         - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
-        - **include_generics** - `true` also lists generic and biosimilar products, and duplicate products
+        - **include_generics** - `true` also lists generic and biosimilar products (the FDA's biosimilars, such as Tyruko, too), and duplicate products
         - **page**, **page_size**, **ordering**
 
         The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
@@ -4506,15 +4533,20 @@ paths:
         `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
         `latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
         Products without the date sort last in both directions; ties break on `-id`.
-        Unrecognised values are silently ignored.
+        Unrecognised values are silently ignored. The default puts FDA rows after the
+        EMA ones, because they have no `ema_last_updated`; for one list mixing both
+        regulators, newest approvals first, use `?ordering=-authorisation_date`.
 
         # Fields:
-        `id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+        `id`, `regulator`, `ema_product_number`, `fda_application_number`,
+        `fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
+        `active_substance`, `substances`,
         `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
         `pharmacotherapeutic_group`, `indication`, `holder`, the flags
         (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
         `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
-        `additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+        `additional_monitoring`, `biosimilar`, `generic`, `interchangeable`,
+        `patient_safety`), `fda_priority_review`, `fda_original_class`, the dates
         (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
         `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
         `application_withdrawal_date`, `suspension_date`, `end_date`,
@@ -4529,6 +4561,7 @@ paths:
 
         # Examples:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - Only the FDA's: `/medicines/?regulator=fda&ordering=-authorisation_date`
         - Every medicine EMA approved for a condition, filed or not: `/medicines/?subject_id=13`
         - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
@@ -4542,15 +4575,17 @@ paths:
         schema:
           type: boolean
         description: 'true: gene, cell and tissue-engineered products; false: the
-          rest.'
+          rest. EMA-only: using it leaves the FDA''s medicines out, because the FDA
+          has no such column (`advanced_therapy` is null on their rows), so `false`
+          never means "unknown".'
       - in: query
         name: authorised_after
         schema:
           type: string
           format: date
         description: Products first authorised on or after this date (YYYY-MM-DD,
-          inclusive). This is the first approval, not the latest EC decision. Invalid
-          dates return 400.
+          inclusive). This is the first approval (the FDA's original approval), not
+          the latest EC decision. Invalid dates return 400.
       - in: query
         name: authorised_before
         schema:
@@ -4578,8 +4613,9 @@ paths:
         name: include_generics
         schema:
           type: boolean
-        description: 'Generic and biosimilar products, and duplicate products (further
-          EMA products for the same medicine, grouped under a lead product: see `grouped_under`),
+        description: 'Generic and biosimilar products (the FDA''s biosimilars, such
+          as Tyruko, too), and duplicate products (further products of the same regulator
+          for the same medicine, grouped under a lead product: see `grouped_under`),
           are left out unless this is true. They are matched and stored like any other
           product; the default hides them so a list shows the originators.'
       - in: query
@@ -4600,17 +4636,21 @@ paths:
         name: name
         schema:
           type: string
-        description: 'Part of the product''s name as EMA publishes it (the brand name),
-          case-insensitive, e.g. ?name=ocrevus. A substring of the whole name, which
-          can include a former name: ?name=corbilta finds "Corbilta (previously Levodopa/Carbidopa/Entacapone
-          Sandoz)". Use `substance` for the active substance.'
+        description: 'Part of the product''s name as the regulator publishes it (the
+          brand name), case-insensitive, e.g. ?name=ocrevus. A substring of the whole
+          name, which can include a former name: ?name=corbilta finds "Corbilta (previously
+          Levodopa/Carbidopa/Entacapone Sandoz)". An FDA application sold under several
+          brands has them all in `name`, joined with '' / ''. Use `substance` for
+          the active substance.'
       - in: query
         name: opinion_status
         schema:
           type: string
-        description: Positive or Negative. EMA fills it only while a medicine is at
-          the opinion stage and clears it once the Commission decides, so most products
-          have none.
+        description: 'Positive or Negative. EMA fills it only while a medicine is
+          at the opinion stage and clears it once the Commission decides, so most
+          products have none. EMA-only: using it leaves the FDA''s medicines out,
+          because the FDA has no such column (`opinion_status` is null on their rows),
+          so `false` never means "unknown".'
       - in: query
         name: ordering
         schema:
@@ -4624,18 +4664,22 @@ paths:
             - -latest_ec_decision_date
             - ema_last_updated
             - -ema_last_updated
-        description: Sort field, prefix with `-` for descending (default `-ema_last_updated`).
-          Products without the date always sort last, in both directions. Ties break
-          on `-id`. `latest_ec_decision_date` is the latest Commission decision, not
-          the approval; sort on `authorisation_date` for that. Accepts a comma-separated
-          combination of the values above to break ties on a second field, e.g. ?ordering=authorisation_date,-latest_ec_decision_date.
+        description: 'Sort field, prefix with `-` for descending (default `-ema_last_updated`).
+          Products without the date always sort last, in both directions, so FDA rows
+          (which have no `ema_last_updated`) follow the EMA ones by default. Ties
+          break on `-id`. `latest_ec_decision_date` is the latest Commission decision,
+          not the approval. `authorisation_date` is the first approval at either regulator:
+          sort on it (`-authorisation_date`) for a mixed list. Accepts a comma-separated
+          combination of the values above to break ties on a second field, e.g. ?ordering=authorisation_date,-latest_ec_decision_date.'
         explode: false
         style: form
       - in: query
         name: orphan_medicine
         schema:
           type: boolean
-        description: 'true: designated orphan medicines; false: the rest.'
+        description: 'true: designated orphan medicines; false: the rest. EMA-only:
+          using it leaves the FDA''s medicines out, because the FDA has no such column
+          (`orphan_medicine` is null on their rows), so `false` never means "unknown".'
       - name: page
         required: false
         in: query
@@ -4649,6 +4693,18 @@ paths:
         schema:
           type: integer
       - in: query
+        name: regulator
+        schema:
+          type: string
+          enum:
+          - ema
+          - fda
+        description: |-
+          ema or fda: only medicines from that regulator. Omit it for both. Any other value returns 400.
+
+          * `ema` - EMA
+          * `fda` - FDA
+      - in: query
         name: site_id
         schema:
           type: number
@@ -4661,8 +4717,9 @@ paths:
         name: status
         schema:
           type: string
-        description: EMA's status wording, case-insensitive, e.g. Authorised, Withdrawn,
-          Refused, Opinion. EMA's own words are stored, so new values can appear.
+        description: 'The regulator''s status wording, case-insensitive. EMA: Authorised,
+          Withdrawn, Refused, Opinion. FDA: Approved, Tentatively approved, Discontinued,
+          Revoked. The regulator''s own words are stored, so new values can appear.'
       - in: query
         name: subject_id
         schema:
@@ -4677,10 +4734,11 @@ paths:
         name: substance
         schema:
           type: string
-        description: A substance, as EMA names it (the INN, or the active substance
-          when the INN is empty). Matches one element of the product's `substances`
-          exactly, ignoring case and extra spaces, e.g. ?substance=ocrelizumab. A
-          combination product matches on any of its substances.
+        description: A substance, as the regulator names it (the INN, or the active
+          substance when the INN is empty; for the FDA, the ingredient). Matches one
+          element of the product's `substances` exactly, ignoring case and extra spaces,
+          e.g. ?substance=ocrelizumab. A combination product matches on any of its
+          substances.
       - in: query
         name: tracked
         schema:
@@ -4708,12 +4766,37 @@ paths:
     get:
       operationId: medicines_retrieve
       description: |-
-        List the medicines the European Medicines Agency (EMA) has authorised for human
-        use in the EU, one record per EMA product, most recently updated first.
+        List medicines from two regulators: the human medicines the European Medicines
+        Agency (EMA) has authorised in the EU, one record per EMA product, and the
+        new drugs and biologics the U.S. Food and Drug Administration (FDA) has approved
+        (NDAs and BLAs), one record per FDA application. Most recently updated first for
+        EMA; FDA rows follow (see Ordering).
 
-        **Source: European Medicines Agency.** Every record carries
-        `"source": "European Medicines Agency"` and its `url` is the product's EPAR page
-        on ema.europa.eu. Keep both wherever you display a medicine.
+        **Source, per row.** `regulator` is `ema` or `fda`, and every record carries
+        `"source": "European Medicines Agency"` or `"source": "U.S. Food and Drug
+        Administration"` to match. `url` is the EPAR page on ema.europa.eu for an EMA
+        record, and for an FDA one the Drugs@FDA overview page (a CBER biologic: its
+        DailyMed label). Keep both wherever you display a medicine. FDA label text comes
+        from DailyMed (National Library of Medicine), and the FDA data comes through
+        openFDA: it is **not for clinical decisions** and the FDA does not endorse
+        Gregory's use of it. Generic drugs (ANDAs), applications under review and
+        unapproved products are not covered, so a missing record does not mean a product
+        is unapproved.
+
+        **One medicine can appear twice**, once per regulator, since each regulator
+        authorises its own product. They are separate records (separate ids, never
+        grouped together); group them by `substances` if you want one entry per drug.
+
+        **Fields that belong to the other regulator are `null`**, not `false` or `[]`.
+        On an FDA row the EMA-only fields (`ema_product_number`, `opinion_status`,
+        `therapeutic_areas`, `atc_code`, the designation flags, the opinion, EC, refusal,
+        withdrawal, suspension and end dates, `ema_first_published`, `ema_last_updated`)
+        are `null`; on an EMA row the FDA-only fields (`fda_application_number`,
+        `fda_application_type`, `fda_center`, `brand_names`, `fda_priority_review`,
+        `fda_original_class`, `interchangeable`) are `null`. `authorisation_date` is the
+        first approval at either: EMA's authorisation, or the FDA's original approval.
+        FDA rows have no `subjects` (the matcher makes no subject links for them); they
+        are visible through a category link only.
 
         Medicines are only visible through sites that have **medicines_enabled** on
         (`CustomSetting.medicines_enabled`, off by default). A medicine has no subject of
@@ -4762,13 +4845,15 @@ paths:
         - **subject_id** - medicines linked to a category that has this subject, or approved by EMA for one of its conditions
         - **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
         - **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
+        - **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
         - **substance** - one substance, matched exactly (ignoring case) against the product's `substances`
         - **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
-        - **status** - EMA's status wording, case-insensitive (`Authorised`, `Withdrawn`, `Refused`, `Opinion`, ...)
-        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage
-        - **advanced_therapy** / **orphan_medicine** / **is_combination** - `true`/`false`
+        - **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`
+        - **opinion_status** - `Positive` or `Negative`; EMA only fills it while a product is at the opinion stage. EMA-only: FDA rows are left out whenever it is used
+        - **advanced_therapy** / **orphan_medicine** - `true`/`false`. EMA-only: FDA rows are left out whenever either is used, so `orphan_medicine=false` never returns an FDA row
+        - **is_combination** - `true`/`false`, at either regulator
         - **authorised_after** / **authorised_before** - first authorisation date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
-        - **include_generics** - `true` also lists generic and biosimilar products, and duplicate products
+        - **include_generics** - `true` also lists generic and biosimilar products (the FDA's biosimilars, such as Tyruko, too), and duplicate products
         - **page**, **page_size**, **ordering**
 
         The four link filters (`category_id`, `category_slug`, `subject_id`, `site_id`)
@@ -4783,15 +4868,20 @@ paths:
         `?ordering=<field>` (prefix with `-` to reverse): `authorisation_date`,
         `latest_ec_decision_date`, `ema_last_updated` (default `-ema_last_updated`).
         Products without the date sort last in both directions; ties break on `-id`.
-        Unrecognised values are silently ignored.
+        Unrecognised values are silently ignored. The default puts FDA rows after the
+        EMA ones, because they have no `ema_last_updated`; for one list mixing both
+        regulators, newest approvals first, use `?ordering=-authorisation_date`.
 
         # Fields:
-        `id`, `ema_product_number`, `name`, `inn`, `active_substance`, `substances`,
+        `id`, `regulator`, `ema_product_number`, `fda_application_number`,
+        `fda_application_type`, `fda_center`, `name`, `brand_names`, `inn`,
+        `active_substance`, `substances`,
         `is_combination`, `status`, `opinion_status`, `therapeutic_areas`, `atc_code`,
         `pharmacotherapeutic_group`, `indication`, `holder`, the flags
         (`advanced_therapy`, `orphan_medicine`, `conditional_approval`,
         `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`,
-        `additional_monitoring`, `biosimilar`, `generic`, `patient_safety`), the dates
+        `additional_monitoring`, `biosimilar`, `generic`, `interchangeable`,
+        `patient_safety`), `fda_priority_review`, `fda_original_class`, the dates
         (`rolling_review_start_date`, `evaluation_start_date`, `opinion_date`,
         `authorisation_date`, `latest_ec_decision_date`, `refusal_date`,
         `application_withdrawal_date`, `suspension_date`, `end_date`,
@@ -4806,6 +4896,7 @@ paths:
 
         # Examples:
         - On a condition page: `/medicines/?subject_id=1&category_id=6`
+        - Only the FDA's: `/medicines/?regulator=fda&ordering=-authorisation_date`
         - Every medicine EMA approved for a condition, filed or not: `/medicines/?subject_id=13`
         - Only the ones no category covers yet: `/medicines/?subject_id=13&tracked=false`
         - In either of two categories: `/medicines/?category_id=6,21`
@@ -4847,13 +4938,18 @@ paths:
     get:
       operationId: medicines_events_list
       description: |-
-        List what happened to EMA medicines, newest first: a CHMP opinion, an
+        List what happened to medicines, newest first: at EMA a CHMP opinion, an
         authorisation, a new European Commission decision, a change of indication, a
-        withdrawal.
+        withdrawal; at the FDA an approval, a tentative approval, an approved new
+        indication or use, a discontinuation, a revoked licence.
 
-        **Source: European Medicines Agency.** Every row carries
-        `"source": "European Medicines Agency"`, and the nested medicine's `url` is its
-        EPAR page on ema.europa.eu.
+        **Source, per row.** Every row carries `"source": "European Medicines Agency"` or
+        `"source": "U.S. Food and Drug Administration"`, matching the nested medicine's
+        `regulator`. The nested medicine's `url` is its EPAR page on ema.europa.eu, or for
+        an FDA medicine its Drugs@FDA page (a CBER biologic: its DailyMed label). Keep
+        both wherever you show an event. FDA data comes through openFDA and is not for
+        clinical decisions; only NDAs and BLAs are covered, so a missing event does not
+        mean nothing happened.
 
         Visibility is `/medicines/`'s, applied through the event's medicine: a medicine
         is visible when it has a live link to a category with a subject in the caller's
@@ -4865,13 +4961,16 @@ paths:
         see.
 
         Each row is `id`, `kind`, `kind_label` (the sentence the RSS feeds use, e.g.
-        "Authorised in the EU"), `event_date`, `basis`, `from_value`, `to_value`, a small
-        `medicine` (`id`, `name`, `inn`, `url`) and `source`. `basis` says where the event
-        comes from. `observed` means Gregory saw the change between two syncs, and its
-        `event_date` is EMA's date or the day the change was seen. `reconstructed` means it
-        was read off EMA's date fields the first time the product was seen, so it is real
-        history but is not news. `from_value` / `to_value` hold the old and new text for
-        status and indication changes.
+        "Authorised in the EU" or "Approved by the FDA"), `event_date`, `basis`,
+        `from_value`, `to_value`, a small `medicine` (`id`, `regulator`, `name`, `inn`,
+        `url`) and `source`. `basis` says where the event comes from. `observed` means
+        Gregory saw the change between two syncs, and its `event_date` is the regulator's
+        date or the day the change was seen. `reconstructed` means it was read off the
+        regulator's dates (EMA's date fields, the FDA's submission dates) the first time
+        the product was seen, so it is real history but is not news. `from_value` /
+        `to_value` hold the old and new text for status and indication changes; on an FDA
+        approval or efficacy supplement `to_value` is the FDA submission number (`S-38`),
+        which an editor can look up on Drugs@FDA.
 
         An `ec_decision` event is the date of EMA's latest Commission decision, usually a
         variation. It is not the approval: that is the `authorised` event.
@@ -4885,7 +4984,8 @@ paths:
         - **subject_id** - events of medicines linked to a category that has this subject, or approved by EMA for one of its conditions
         - **site_id** - filter by Django Site ID; events of medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
         - **tracked** - `false`: the event's medicine has no live link to a category you can see; `true`: it has one
-        - **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, ...)
+        - **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
+        - **kind** - one kind or a comma-separated list (`opinion_positive`, `authorised`, `ec_decision`, `indication_changed`, `fda_approved`, `fda_efficacy_supplement`, ...)
         - **basis** - `observed` or `reconstructed`
         - **event_date_after** / **event_date_before** - inclusive, `YYYY-MM-DD` (invalid dates return 400)
         - **include_generics** - `true` also lists events of generic and biosimilar products, and of duplicate products
@@ -4901,6 +5001,7 @@ paths:
         - For one site: `/medicines/events/?site_id=3`
         - News on medicines no category covers yet: `/medicines/events/?site_id=3&tracked=false`
         - Positive opinions since January: `/medicines/events/?kind=opinion_positive&event_date_after=2026-01-01`
+        - New FDA approvals and indications: `/medicines/events/?regulator=fda&kind=fda_approved,fda_efficacy_supplement&basis=observed`
       parameters:
       - in: query
         name: basis
@@ -4910,7 +5011,7 @@ paths:
           - observed
           - reconstructed
         description: |-
-          observed: Gregory saw the change between two syncs; reconstructed: read off EMA's date fields the first time the product was seen.
+          observed: Gregory saw the change between two syncs; reconstructed: read off the regulator's dates (EMA's date fields, the FDA's submission dates) the first time the product was seen.
 
           * `reconstructed` - Reconstructed from the regulator's dates
           * `observed` - Observed between syncs
@@ -4948,8 +5049,9 @@ paths:
         name: include_generics
         schema:
           type: boolean
-        description: 'Generic and biosimilar products, and duplicate products (further
-          EMA products for the same medicine, grouped under a lead product: see `grouped_under`),
+        description: 'Generic and biosimilar products (the FDA''s biosimilars, such
+          as Tyruko, too), and duplicate products (further products of the same regulator
+          for the same medicine, grouped under a lead product: see `grouped_under`),
           are left out unless this is true. They are matched and stored like any other
           product; the default hides them so a list shows the originators.'
       - in: query
@@ -4986,7 +5088,7 @@ paths:
             - status_changed
             - suspended
         description: |-
-          One kind, or a comma-separated list that matches ANY of them, e.g. ?kind=opinion_positive,authorised. Unknown values return 400.
+          One kind, or a comma-separated list that matches ANY of them, e.g. ?kind=opinion_positive,authorised. EMA's kinds and the FDA's (fda_approved, fda_tentative_approval, fda_efficacy_supplement, fda_discontinued, fda_revoked) share the list; the shared `status_changed` kind belongs to both. Unknown values return 400.
 
           * `rolling_review_started` - Rolling review started
           * `evaluation_started` - Evaluation started
@@ -5020,6 +5122,18 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: regulator
+        schema:
+          type: string
+          enum:
+          - ema
+          - fda
+        description: |-
+          ema or fda: only events of medicines from that regulator. Omit it for both. Any other value returns 400.
+
+          * `ema` - EMA
+          * `fda` - FDA
       - in: query
         name: site_id
         schema:
@@ -10665,18 +10779,24 @@ components:
     Medicine:
       type: object
       description: |-
-        One EMA centrally authorised human medicine (``/medicines/``).
+        One medicine from a regulator (``/medicines/``): an EMA centrally authorised human
+        medicine, or an FDA application (an NDA, or a BLA from CDER or CBER).
 
         Relies on MedicineViewSet attaching the caller's visible category links as
         ``_visible_links`` and visible subject links as ``_visible_subject_links``, so a
         page costs a constant number of queries. Without them (an instance built by hand)
         the same rule runs for that one medicine.
 
+        ``regulator`` says which (``ema`` or ``fda``) and ``source`` names it. A column that
+        belongs to the other regulator is ``null``: see ``MEDICINE_EMA_ONLY_FIELDS`` and
+        ``MEDICINE_FDA_ONLY_FIELDS``. ``authorisation_date`` is the first approval: EMA's
+        authorisation, or the FDA's original approval.
+
         ``tracked`` is true when the medicine is filed under at least one category the
         caller can see (``categories`` is not empty). ``subjects`` lists the conditions
-        EMA approved it for, which is how an untracked medicine is visible at all.
-        ``grouped_under`` is the id of the lead product when this row is a duplicate of
-        another EMA product, else null.
+        EMA approved it for, which is how an untracked EMA medicine is visible at all (the
+        FDA rows have none). ``grouped_under`` is the id of the lead product when this row
+        is a duplicate of another product of the same regulator, else null.
 
         ``latest_ec_decision_date`` is the most recent European Commission decision,
         usually a variation. It is NOT the approval date: ``authorisation_date`` is
@@ -10685,14 +10805,47 @@ components:
         id:
           type: integer
           readOnly: true
+        regulator:
+          allOf:
+          - $ref: '#/components/schemas/RegulatorEnum'
+          description: |-
+            Which regulator's record this is.
+
+            * `ema` - EMA
+            * `fda` - FDA
         ema_product_number:
           type: string
           nullable: true
           description: EMA's product number. Set on EMA rows only.
           maxLength: 32
+        fda_application_number:
+          type: string
+          nullable: true
+          description: The FDA application, e.g. NDA022561 or BLA125646. Set on FDA
+            rows only.
+          maxLength: 12
+        fda_application_type:
+          type: string
+          nullable: true
+          description: NDA or BLA. FDA rows only.
+          maxLength: 4
+        fda_center:
+          type: string
+          nullable: true
+          description: 'The FDA centre that regulates the product: CDER or CBER. FDA
+            rows only.'
+          maxLength: 4
         name:
           type: string
           maxLength: 255
+        brand_names:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+          nullable: true
+          description: Every brand sold under the application, distinct and in product
+            order. FDA rows only; name is these joined with ' / '.
         inn:
           type: string
           description: International non-proprietary name, as the regulator publishes
@@ -10719,6 +10872,7 @@ components:
           maxLength: 50
         opinion_status:
           type: string
+          nullable: true
           description: Positive or Negative while the medicine is at the opinion stage;
             EMA clears it once the EC decides.
           maxLength: 20
@@ -10727,8 +10881,10 @@ components:
           items:
             type: string
             maxLength: 255
+          nullable: true
         atc_code:
           type: string
+          nullable: true
           maxLength: 20
         pharmacotherapeutic_group:
           type: string
@@ -10740,24 +10896,48 @@ components:
           maxLength: 255
         advanced_therapy:
           type: boolean
+          nullable: true
         orphan_medicine:
           type: boolean
+          nullable: true
         conditional_approval:
           type: boolean
+          nullable: true
         exceptional_circumstances:
           type: boolean
+          nullable: true
         prime_priority_medicine:
           type: boolean
+          nullable: true
         accelerated_assessment:
           type: boolean
+          nullable: true
         additional_monitoring:
           type: boolean
+          nullable: true
         biosimilar:
           type: boolean
         generic:
           type: boolean
+        interchangeable:
+          type: boolean
+          nullable: true
+          description: A biosimilar the FDA licensed as interchangeable (Purple Book
+            351(k) Interchangeable).
+        fda_priority_review:
+          type: boolean
+          nullable: true
+          description: Whether the original submission had priority review. Null when
+            the FDA does not say. FDA rows only.
+        fda_original_class:
+          type: string
+          nullable: true
+          description: The original submission's class as the FDA gives it, e.g. TYPE
+            1 (a new molecular entity). FDA rows only.
+          maxLength: 30
         patient_safety:
           type: boolean
+          nullable: true
         rolling_review_start_date:
           type: string
           format: date
@@ -10840,6 +11020,8 @@ components:
           readOnly: true
         source:
           type: string
+          description: 'The regulator the row comes from, by name: keep it wherever
+            you show the row.'
           readOnly: true
       required:
       - categories
@@ -10874,20 +11056,53 @@ components:
       type: object
       description: |-
         ``MedicineSerializer`` plus the medicine's events, newest first, and, on a lead
-        product, the further EMA products for the same medicine (``grouped_products``,
-        ordered by name; only those the caller can see).
+        product, the further products of the same regulator for the same medicine
+        (``grouped_products``, ordered by name; only those the caller can see).
       properties:
         id:
           type: integer
           readOnly: true
+        regulator:
+          allOf:
+          - $ref: '#/components/schemas/RegulatorEnum'
+          description: |-
+            Which regulator's record this is.
+
+            * `ema` - EMA
+            * `fda` - FDA
         ema_product_number:
           type: string
           nullable: true
           description: EMA's product number. Set on EMA rows only.
           maxLength: 32
+        fda_application_number:
+          type: string
+          nullable: true
+          description: The FDA application, e.g. NDA022561 or BLA125646. Set on FDA
+            rows only.
+          maxLength: 12
+        fda_application_type:
+          type: string
+          nullable: true
+          description: NDA or BLA. FDA rows only.
+          maxLength: 4
+        fda_center:
+          type: string
+          nullable: true
+          description: 'The FDA centre that regulates the product: CDER or CBER. FDA
+            rows only.'
+          maxLength: 4
         name:
           type: string
           maxLength: 255
+        brand_names:
+          type: array
+          items:
+            type: string
+            maxLength: 255
+          nullable: true
+          description: Every brand sold under the application, distinct and in product
+            order. FDA rows only; name is these joined with ' / '.
         inn:
           type: string
           description: International non-proprietary name, as the regulator publishes
@@ -10914,6 +11129,7 @@ components:
           maxLength: 50
         opinion_status:
           type: string
+          nullable: true
           description: Positive or Negative while the medicine is at the opinion stage;
             EMA clears it once the EC decides.
           maxLength: 20
@@ -10922,8 +11138,10 @@ components:
           items:
             type: string
             maxLength: 255
+          nullable: true
         atc_code:
           type: string
+          nullable: true
           maxLength: 20
         pharmacotherapeutic_group:
           type: string
@@ -10935,24 +11153,48 @@ components:
           maxLength: 255
         advanced_therapy:
           type: boolean
+          nullable: true
         orphan_medicine:
           type: boolean
+          nullable: true
         conditional_approval:
           type: boolean
+          nullable: true
         exceptional_circumstances:
           type: boolean
+          nullable: true
         prime_priority_medicine:
           type: boolean
+          nullable: true
         accelerated_assessment:
           type: boolean
+          nullable: true
         additional_monitoring:
           type: boolean
+          nullable: true
         biosimilar:
           type: boolean
         generic:
           type: boolean
+        interchangeable:
+          type: boolean
+          nullable: true
+          description: A biosimilar the FDA licensed as interchangeable (Purple Book
+            351(k) Interchangeable).
+        fda_priority_review:
+          type: boolean
+          nullable: true
+          description: Whether the original submission had priority review. Null when
+            the FDA does not say. FDA rows only.
+        fda_original_class:
+          type: string
+          nullable: true
+          description: The original submission's class as the FDA gives it, e.g. TYPE
+            1 (a new molecular entity). FDA rows only.
+          maxLength: 30
         patient_safety:
           type: boolean
+          nullable: true
         rolling_review_start_date:
           type: string
           format: date
@@ -11035,6 +11277,8 @@ components:
           readOnly: true
         source:
           type: string
+          description: 'The regulator the row comes from, by name: keep it wherever
+            you show the row.'
           readOnly: true
         grouped_products:
           type: array
@@ -11059,7 +11303,7 @@ components:
     MedicineEvent:
       type: object
       description: |-
-        One event in a medicine's regulatory life (``/medicines/events/``).
+        One event in a medicine's regulatory life (``/medicines/events/``), EMA's or the FDA's.
 
         ``kind_label`` is the same sentence the RSS feeds use (``MedicineEvent.in_words``),
         so a kind is never worded two ways. Relies on MedicineEventViewSet selecting
@@ -11090,6 +11334,7 @@ components:
           readOnly: true
         source:
           type: string
+          description: 'The attribution of the event''s medicine: its own regulator.'
           readOnly: true
       required:
       - basis
@@ -11152,6 +11397,8 @@ components:
       properties:
         id:
           type: integer
+        regulator:
+          $ref: '#/components/schemas/RegulatorEnum'
         name:
           type: string
         inn:
@@ -11162,12 +11409,13 @@ components:
       - id
       - inn
       - name
+      - regulator
       - url
     MedicineGroupedProduct:
       type: object
       description: |-
-        A further EMA product for the same medicine, as ``grouped_products`` on the
-        lead product's detail.
+        A further product of the same regulator for the same medicine, as
+        ``grouped_products`` on the lead product's detail.
       properties:
         id:
           type: integer
@@ -11221,7 +11469,7 @@ components:
     MedicineSubject:
       type: object
       description: |-
-        A subject EMA approved a medicine for, as ``subjects`` on a medicine.
+        A subject EMA approved a medicine for, as ``subjects`` on an EMA medicine.
 
         Built from a ``MedicineSubjectLink``: ``matched_on`` is the subject's EMA
         therapeutic area that matched.
@@ -11965,6 +12213,14 @@ components:
       - domain
       - name
       - site_id
+    RegulatorEnum:
+      enum:
+      - ema
+      - fda
+      type: string
+      description: |-
+        * `ema` - EMA
+        * `fda` - FDA
     RelevanceRequest:
       type: object
       properties:

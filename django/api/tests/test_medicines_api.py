@@ -34,6 +34,7 @@ from gregory.models import (
 	MedicineCategoryAssignment,
 	MedicineEvent,
 	OrganizationApiSettings,
+	Regulator,
 	Subject,
 	Team,
 	TeamCategory,
@@ -684,7 +685,13 @@ class MedicineEventTests(MedicineFixture):
 		self.assertEqual(row["source"], SOURCE)
 		self.assertEqual(
 			row["medicine"],
-			{"id": self.als_only.pk, "name": "Exservan", "inn": "riluzole", "url": self.als_only.url},
+			{
+				"id": self.als_only.pk,
+				"regulator": "ema",
+				"name": "Exservan",
+				"inn": "riluzole",
+				"url": self.als_only.url,
+			},
 		)
 
 	def test_kind_label_is_the_feeds_wording(self):
@@ -844,3 +851,364 @@ class CategoryMedicinesCountTests(MedicineFixture):
 		self.assertEqual(response.status_code, 200, response.content)
 		counts = self.counts(response)
 		self.assertEqual(counts["ocrelizumab"], 5)
+
+
+FDA_SOURCE = "U.S. Food and Drug Administration"
+
+EMA_ONLY = (
+	"ema_product_number", "opinion_status", "therapeutic_areas", "atc_code", "advanced_therapy",
+	"orphan_medicine", "conditional_approval", "exceptional_circumstances",
+	"prime_priority_medicine", "accelerated_assessment", "additional_monitoring",
+	"patient_safety", "rolling_review_start_date", "evaluation_start_date", "opinion_date",
+	"latest_ec_decision_date", "refusal_date", "application_withdrawal_date",
+	"suspension_date", "end_date", "ema_first_published", "ema_last_updated",
+)
+FDA_ONLY = (
+	"fda_application_number", "fda_application_type", "fda_center", "brand_names",
+	"fda_priority_review", "fda_original_class", "interchangeable",
+)
+
+
+class FdaFixture(MedicineFixture):
+	"""The EMA fixture plus FDA applications: ``fda`` (Ocrevus, linked to C_ms and C_both,
+	with an observed efficacy supplement and a reconstructed approval), ``fda_biosimilar``
+	(Tyruko, linked to C_ms) and ``fda_unlinked`` (no link, so invisible)."""
+
+	@classmethod
+	def _fda(cls, number, name, substance, *categories, **fields):
+		values = {
+			"regulator": Regulator.FDA,
+			"ema_product_number": None,
+			"fda_application_number": number,
+			"fda_application_type": number[:3],
+			"fda_center": "CDER",
+			"name": name,
+			"brand_names": [name],
+			"inn": substance.upper(),
+			"substances": [substance],
+			"status": "Approved",
+			"indication": f"{name} is indicated for multiple sclerosis.",
+			"url": f"https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?ApplNo={number[3:]}",
+			"raw": {},
+		}
+		values.update(fields)
+		medicine = Medicine.objects.create(**values)
+		for category in categories:
+			cls._link(medicine, category)
+		return medicine
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.fda = cls._fda(
+			"BLA761053", "OCREVUS FDA", "ocrelizumab", cls.c_ms, cls.c_both,
+			authorisation_date=date(2017, 3, 28),
+			holder="GENENTECH INC",
+			fda_original_class="TYPE 1",
+			fda_priority_review=True,
+			pharmacotherapeutic_group="CD20-directed Cytolytic Antibody [EPC]",
+			fda_pharm_classes=["CD20-directed Cytolytic Antibody [EPC]"],
+			label_indications=[{"setid": "x", "indication": "internal"}],
+		)
+		cls.fda_biosimilar = cls._fda(
+			"BLA761322", "TYRUKO FDA", "natalizumab", cls.c_ms,
+			biosimilar=True, interchangeable=False, authorisation_date=date(2023, 8, 24),
+		)
+		cls.fda_unlinked = cls._fda("NDA022561", "MAVENCLAD FDA", "cladribine")
+		cls.ev_fda_new = cls._event(
+			cls.fda, Kind.FDA_EFFICACY_SUPPLEMENT, cls.today - timedelta(days=1), Basis.OBSERVED,
+			to_value="S-38",
+		)
+		cls.ev_fda_old = cls._event(
+			cls.fda, Kind.FDA_APPROVED, date(2017, 3, 28), Basis.RECONSTRUCTED, to_value="ORIG-1"
+		)
+		cls.ev_fda_biosimilar = cls._event(
+			cls.fda_biosimilar, Kind.FDA_APPROVED, cls.today - timedelta(days=5), Basis.OBSERVED
+		)
+		cls.ev_fda_unlinked = cls._event(
+			cls.fda_unlinked, Kind.FDA_APPROVED, cls.today, Basis.OBSERVED
+		)
+
+	def row(self, response, name):
+		return next(r for r in response.data["results"] if r["name"] == name)
+
+
+class FdaMedicinesApiTests(FdaFixture):
+	"""FDA rows are public beside EMA's (the temporary gate that hid them is gone)."""
+
+	def test_the_list_shows_the_linked_fda_medicine_beside_the_ema_ones(self):
+		response = self.client.get("/medicines/?page_size=100")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(self.names(response), sorted(VISIBLE_BY_DEFAULT + ["OCREVUS FDA"]))
+
+	def test_an_fda_row_has_its_source_regulator_and_fda_fields(self):
+		row = self.row(self.client.get("/medicines/?page_size=100"), "OCREVUS FDA")
+		self.assertEqual(row["source"], FDA_SOURCE)
+		self.assertEqual(row["regulator"], "fda")
+		self.assertEqual(row["fda_application_number"], "BLA761053")
+		self.assertEqual(row["fda_application_type"], "BLA")
+		self.assertEqual(row["fda_center"], "CDER")
+		self.assertEqual(row["brand_names"], ["OCREVUS FDA"])
+		self.assertTrue(row["fda_priority_review"])
+		self.assertEqual(row["fda_original_class"], "TYPE 1")
+		self.assertFalse(row["interchangeable"])
+		self.assertEqual(row["substances"], ["ocrelizumab"])
+		self.assertEqual(row["authorisation_date"], "2017-03-28")
+		self.assertEqual(row["holder"], "GENENTECH INC")
+		self.assertEqual(row["status"], "Approved")
+		self.assertEqual(row["url"], self.fda.url)
+		self.assertTrue(row["tracked"])
+		self.assertEqual({c["id"] for c in row["categories"]}, {self.c_ms.pk, self.c_both.pk})
+
+	def test_an_fda_row_has_null_for_every_ema_only_field(self):
+		row = self.row(self.client.get("/medicines/?page_size=100"), "OCREVUS FDA")
+		for name in EMA_ONLY:
+			with self.subTest(field=name):
+				self.assertIn(name, row)
+				self.assertIsNone(row[name])
+
+	def test_an_ema_row_has_null_for_every_fda_only_field(self):
+		row = self.row(self.client.get("/medicines/?page_size=100"), "Ocrevus")
+		self.assertEqual(row["regulator"], "ema")
+		self.assertEqual(row["source"], SOURCE)
+		for name in FDA_ONLY:
+			with self.subTest(field=name):
+				self.assertIn(name, row)
+				self.assertIsNone(row[name])
+		# The EMA fields it does have are untouched, false included.
+		self.assertEqual(row["ema_product_number"], self.ocrevus.ema_product_number)
+		self.assertIs(row["orphan_medicine"], False)
+		self.assertEqual(row["latest_ec_decision_date"], "2024-06-01")
+
+	def test_internal_fda_columns_are_not_exposed(self):
+		row = self.row(self.client.get("/medicines/?page_size=100"), "OCREVUS FDA")
+		for hidden in ("label_indications", "label_checked_at", "fda_pharm_classes", "raw", "raw_digest"):
+			self.assertNotIn(hidden, row)
+
+	def test_the_detail_works_and_carries_the_fda_events(self):
+		response = self.client.get(f"/medicines/{self.fda.pk}/")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["source"], FDA_SOURCE)
+		self.assertIsNone(response.data["ema_product_number"])
+		self.assertEqual(
+			[(e["kind"], e["kind_label"]) for e in response.data["events"]],
+			[
+				("fda_efficacy_supplement", "FDA approved a new indication or use"),
+				("fda_approved", "Approved by the FDA"),
+			],
+		)
+		self.assertEqual(response.data["events"][0]["to_value"], "S-38")
+		self.assertNotIn("source", response.data["events"][0])
+
+	def test_an_fda_row_with_no_visible_link_is_invisible(self):
+		response = self.client.get("/medicines/?include_generics=true&page_size=100")
+		self.assertNotIn("MAVENCLAD FDA", self.names(response))
+		self.assertEqual(self.client.get(f"/medicines/{self.fda_unlinked.pk}/").status_code, 404)
+
+	def test_a_suppressed_fda_link_hides_it(self):
+		MedicineCategoryAssignment.objects.filter(medicine=self.fda).update(suppressed=True)
+		self.assertNotIn("OCREVUS FDA", self.names(self.client.get("/medicines/?page_size=100")))
+		self.assertEqual(self.client.get(f"/medicines/{self.fda.pk}/").status_code, 404)
+
+	def test_a_site_with_the_switch_off_sees_no_fda_medicine(self):
+		key = self.key_for(self.site_off)
+		response = self.client.get("/medicines/?page_size=100", HTTP_AUTHORIZATION=key.api_key)
+		self.assertEqual(response.data["results"], [])
+
+	def test_the_fda_biosimilar_is_hidden_unless_include_generics(self):
+		self.assertNotIn("TYRUKO FDA", self.names(self.client.get("/medicines/?page_size=100")))
+		response = self.client.get("/medicines/?include_generics=true&page_size=100")
+		self.assertIn("TYRUKO FDA", self.names(response))
+		self.assertTrue(self.row(response, "TYRUKO FDA")["biosimilar"])
+
+	def test_the_link_filters_find_it(self):
+		for query in (
+			f"category_id={self.c_ms.pk}",
+			f"category_id={self.c_both.pk}",
+			f"site_id={self.site_on.pk}",
+			"tracked=true",
+			f"subject_id={self.s_ms.pk}&category_id={self.c_ms.pk}",
+			# The FDA has no subject links: a subject reaches it through its categories.
+			f"subject_id={self.s_als.pk}",
+		):
+			with self.subTest(query=query):
+				response = self.client.get(f"/medicines/?page_size=100&{query}")
+				self.assertIn("OCREVUS FDA", self.names(response))
+		self.assertNotIn(
+			"OCREVUS FDA", self.names(self.client.get("/medicines/?page_size=100&tracked=false"))
+		)
+		self.assertEqual(self.row(self.client.get("/medicines/?page_size=100"), "OCREVUS FDA")["subjects"], [])
+
+	def test_status_substance_and_name_filters_work_on_fda_rows(self):
+		self.assertEqual(self.names(self.client.get("/medicines/?status=approved")), ["OCREVUS FDA"])
+		response = self.client.get("/medicines/?substance=ocrelizumab")
+		self.assertEqual(self.names(response), ["OCREVUS FDA", "Ocrevus"])
+		self.assertEqual(self.names(self.client.get("/medicines/?name=ocrevus fda")), ["OCREVUS FDA"])
+
+	def test_the_authorised_dates_filter_both_regulators(self):
+		response = self.client.get("/medicines/?authorised_before=2017-12-31")
+		self.assertEqual(self.names(response), ["OCREVUS FDA"])
+
+
+class RegulatorFilterTests(FdaFixture):
+	def test_regulator_filters_the_medicines(self):
+		fda = self.client.get("/medicines/?regulator=fda&page_size=100")
+		self.assertEqual(self.names(fda), ["OCREVUS FDA"])
+		ema = self.client.get("/medicines/?regulator=ema&page_size=100")
+		self.assertEqual(self.names(ema), VISIBLE_BY_DEFAULT)
+		both = self.client.get("/medicines/?page_size=100")
+		self.assertEqual(both.data["count"], fda.data["count"] + ema.data["count"])
+
+	def test_regulator_filters_the_events(self):
+		fda = self.client.get("/medicines/events/?regulator=fda&page_size=100")
+		self.assertEqual(_ids(fda), [self.ev_fda_new.pk, self.ev_fda_old.pk])
+		ema = self.client.get("/medicines/events/?regulator=ema&page_size=100")
+		self.assertTrue(ema.data["results"])
+		self.assertTrue(all(r["source"] == SOURCE for r in ema.data["results"]))
+
+	def test_an_unknown_regulator_is_a_400(self):
+		self.assertEqual(self.client.get("/medicines/?regulator=who").status_code, 400)
+		self.assertEqual(self.client.get("/medicines/events/?regulator=who").status_code, 400)
+
+	def test_regulator_combines_with_other_filters(self):
+		response = self.client.get(f"/medicines/?regulator=fda&category_id={self.c_both.pk}")
+		self.assertEqual(self.names(response), ["OCREVUS FDA"])
+		response = self.client.get(f"/medicines/?regulator=fda&category_id={self.c_als.pk}")
+		self.assertEqual(response.data["results"], [])
+
+
+class EmaOnlyFilterTests(FdaFixture):
+	"""A filter on a column only EMA fills keeps FDA rows out, so `false` never means
+	"unknown"."""
+
+	def test_orphan_medicine_false_excludes_fda_rows(self):
+		names = self.names(self.client.get("/medicines/?orphan_medicine=false&page_size=100"))
+		self.assertNotIn("OCREVUS FDA", names)
+		self.assertIn("Ocrevus", names)
+		self.assertNotIn("Kesimpta", names)
+
+	def test_orphan_medicine_true_still_works(self):
+		self.assertEqual(self.names(self.client.get("/medicines/?orphan_medicine=true")), ["Kesimpta"])
+
+	def test_advanced_therapy_false_excludes_fda_rows(self):
+		names = self.names(self.client.get("/medicines/?advanced_therapy=false&page_size=100"))
+		self.assertNotIn("OCREVUS FDA", names)
+		self.assertIn("Ocrevus", names)
+
+	def test_opinion_status_excludes_fda_rows(self):
+		Medicine.objects.filter(pk=self.kesimpta.pk).update(opinion_status="Positive")
+		Medicine.objects.filter(pk=self.fda.pk).update(opinion_status="Positive")
+		self.assertEqual(self.names(self.client.get("/medicines/?opinion_status=positive")), ["Kesimpta"])
+
+	def test_is_combination_applies_to_both_regulators(self):
+		Medicine.objects.filter(pk=self.fda.pk).update(is_combination=True)
+		self.assertIn("OCREVUS FDA", self.names(self.client.get("/medicines/?is_combination=true")))
+
+
+class FdaEventApiTests(FdaFixture):
+	def test_events_list_shows_fda_events_with_their_source(self):
+		response = self.client.get("/medicines/events/?page_size=100")
+		self.assertEqual(response.status_code, 200)
+		ids = _ids(response)
+		self.assertIn(self.ev_fda_new.pk, ids)
+		self.assertIn(self.ev_fda_old.pk, ids)
+		self.assertIn(self.ev_auth.pk, ids)
+		self.assertNotIn(self.ev_fda_unlinked.pk, ids)
+		self.assertNotIn(self.ev_fda_biosimilar.pk, ids)
+		row = next(r for r in response.data["results"] if r["id"] == self.ev_fda_new.pk)
+		self.assertEqual(row["source"], FDA_SOURCE)
+		self.assertEqual(row["kind_label"], "FDA approved a new indication or use")
+		self.assertEqual(row["to_value"], "S-38")
+		self.assertEqual(
+			row["medicine"],
+			{
+				"id": self.fda.pk,
+				"regulator": "fda",
+				"name": "OCREVUS FDA",
+				"inn": "OCRELIZUMAB",
+				"url": self.fda.url,
+			},
+		)
+		ema_row = next(r for r in response.data["results"] if r["id"] == self.ev_auth.pk)
+		self.assertEqual(ema_row["source"], SOURCE)
+		self.assertEqual(ema_row["medicine"]["regulator"], "ema")
+
+	def test_the_fda_kinds_filter(self):
+		url = "/medicines/events/?kind=fda_approved,fda_efficacy_supplement&page_size=100"
+		self.assertEqual(set(_ids(self.client.get(url))), {self.ev_fda_new.pk, self.ev_fda_old.pk})
+
+	def test_basis_observed_gives_the_fresh_fda_event_only(self):
+		response = self.client.get("/medicines/events/?regulator=fda&basis=observed")
+		self.assertEqual(_ids(response), [self.ev_fda_new.pk])
+
+	def test_include_generics_adds_the_fda_biosimilar_events(self):
+		url = "/medicines/events/?regulator=fda&include_generics=true&page_size=100"
+		self.assertIn(self.ev_fda_biosimilar.pk, _ids(self.client.get(url)))
+
+	def test_events_are_still_ordered_newest_first(self):
+		response = self.client.get("/medicines/events/?page_size=100")
+		dates = [r["event_date"] for r in response.data["results"]]
+		self.assertEqual(dates, sorted(dates, reverse=True))
+
+
+class FdaOrderingTests(FdaFixture):
+	def test_the_default_order_puts_fda_rows_after_ema_ones(self):
+		response = self.client.get("/medicines/?page_size=100")
+		rows = response.data["results"]
+		positions = {r["name"]: i for i, r in enumerate(rows)}
+		# Dates sort last, so the FDA row (no ema_last_updated) follows every EMA row that has one.
+		dated_ema = [i for r in rows if r["ema_last_updated"] for i in [positions[r["name"]]]]
+		self.assertLess(max(dated_ema), positions["OCREVUS FDA"])
+
+	def test_authorisation_date_gives_a_mixed_regulator_order(self):
+		response = self.client.get("/medicines/?ordering=-authorisation_date&page_size=100")
+		dated = [r for r in response.data["results"] if r["authorisation_date"]]
+		dates = [r["authorisation_date"] for r in dated]
+		self.assertEqual(dates, sorted(dates, reverse=True))
+		self.assertEqual({r["regulator"] for r in dated}, {"ema", "fda"})
+		# Rows without the date still sort last.
+		self.assertIsNone(response.data["results"][-1]["authorisation_date"])
+
+
+class FdaCountAndQueryTests(FdaFixture):
+	def counts(self):
+		return {
+			row["category_slug"]: row["medicines_count"]
+			for row in self.client.get("/categories/").data["results"]
+		}
+
+	def test_medicines_count_counts_an_fda_link(self):
+		counts = self.counts()
+		# Without the FDA medicine C_ms is 5 and C_both 0 (CategoryMedicinesCountTests):
+		# Ocrevus (FDA) adds one to each; the FDA biosimilar adds nothing, as no biosimilar
+		# is counted.
+		self.assertEqual(counts["ocrelizumab"], 6)
+		self.assertEqual(counts["broad"], 1)
+		self.assertEqual(counts["riluzole"], 4)
+
+	def test_a_category_filter_agrees_with_the_count(self):
+		counts = self.counts()
+		for category in (self.c_ms, self.c_both):
+			listed = self.client.get(f"/medicines/?category_id={category.pk}").data["count"]
+			self.assertEqual(counts[category.category_slug], listed)
+
+	def test_the_list_query_count_does_not_grow_with_fda_rows(self):
+		def count(url):
+			self.client.get(url)
+			cache.clear()
+			with CaptureQueriesContext(connection) as queries:
+				response = self.client.get(url)
+			self.assertEqual(response.status_code, 200)
+			return len(queries), response
+
+		small, response = count("/medicines/?page_size=100")
+		rows = len(response.data["results"])
+		small_events, _ = count("/medicines/events/?page_size=100")
+		for i in range(10):
+			fda = self._fda(f"NDA9000{i:02d}", f"BULK{i}", f"bulk{i}", self.c_ms, self.c_als)
+			self._event(fda, Kind.FDA_APPROVED, self.today, Basis.OBSERVED)
+		large, response = count("/medicines/?page_size=100")
+		self.assertEqual(len(response.data["results"]), rows + 10)
+		self.assertEqual(small, large)
+		large_events, _ = count("/medicines/events/?page_size=100")
+		self.assertEqual(small_events, large_events)

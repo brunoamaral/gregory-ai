@@ -28,6 +28,7 @@ from gregory.models import (
 	CategoryAssignmentSource,
 	Medicine,
 	MedicineCategoryAssignment,
+	Regulator,
 	Subject,
 	Team,
 	TeamCategory,
@@ -424,3 +425,57 @@ class ThrottleTest(MedicineEditorFixture):
 	def test_reads_are_never_throttled(self):
 		self.delete(self.cat_a, self.auto)
 		self.assertEqual(self.get("/editor/medicines/").status_code, 200)
+
+
+class FdaMedicineTest(MedicineEditorFixture):
+	"""An FDA medicine goes through the editor link route like an EMA one."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.fda = Medicine.objects.create(
+			regulator=Regulator.FDA,
+			ema_product_number=None,
+			fda_application_number="NDA022561",
+			fda_application_type="NDA",
+			name="MAVENCLAD",
+			substances=["cladribine"],
+			status="Approved",
+			raw={},
+		)
+		cls.fda_link = cls.make_link(cls.fda, cls.cat_a, SOURCE.AUTOMATIC)
+
+	def test_removing_an_automatic_fda_link_suppresses_it(self):
+		response = self.delete(self.cat_a, self.fda)
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["suppressed"])
+		self.assertTrue(self.link(self.fda, self.cat_a).suppressed)
+
+	def test_restoring_it_makes_it_live_again(self):
+		self.delete(self.cat_a, self.fda)
+		response = self.put(self.cat_a, self.fda)
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.data["linked"])
+		self.assertFalse(self.link(self.fda, self.cat_a).suppressed)
+
+	def test_an_fda_medicine_can_be_added_by_hand_to_another_category(self):
+		response = self.put(self.cat_a2, self.fda)
+		self.assertEqual(response.status_code, 201)
+		self.assertEqual(self.link(self.fda, self.cat_a2).source, SOURCE.MANUAL)
+
+	def test_an_fda_medicine_with_no_link_in_scope_is_still_not_found(self):
+		unlinked = Medicine.objects.create(
+			regulator=Regulator.FDA,
+			ema_product_number=None,
+			fda_application_number="NDA999999",
+			name="NOLINK",
+			status="Approved",
+			raw={},
+		)
+		self.assertEqual(self.put(self.cat_a, unlinked).status_code, 404)
+
+	def test_the_editor_read_route_shows_the_fda_row_with_its_source(self):
+		detail = self.get(f"/editor/medicines/{self.fda.pk}/")
+		self.assertEqual(detail.status_code, 200)
+		self.assertEqual(detail.data["source"], "U.S. Food and Drug Administration")
+		self.assertEqual(detail.data["regulator"], "fda")

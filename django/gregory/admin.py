@@ -3818,16 +3818,6 @@ class MedicineCategoryAssignmentForm(forms.ModelForm):
 		if self.instance.pk and "medicine" in self.fields:
 			self.fields["medicine"].disabled = True
 
-	def clean_medicine(self):
-		medicine = self.cleaned_data.get("medicine")
-		# Until the FDA feeds and API ship (PR 3), a hand-made link to an FDA medicine would
-		# show it there labelled as EMA. The autocomplete already hides FDA rows
-		# (MedicineAdmin.get_search_results); this catches a pk posted by hand. PR 3 removes
-		# both. A saved link keeps its medicine, so an existing row is never blocked here.
-		if medicine is not None and not self.instance.pk and medicine.regulator != Regulator.EMA:
-			raise forms.ValidationError("Only EMA medicines can be linked to a category for now.")
-		return medicine
-
 
 class MedicineCategoryAssignmentFormSet(forms.BaseInlineFormSet):
 	"""Removing an automatic link suppresses it instead of deleting it.
@@ -5798,19 +5788,6 @@ class MedicineAdmin(admin.ModelAdmin):
 			name for _, options in ema_fieldsets + fda_fieldsets for name in options["fields"]
 		)
 	)
-
-	def get_search_results(self, request, queryset, search_term):
-		queryset, may_have_duplicates = super().get_search_results(request, queryset, search_term)
-		# The category page's medicine picker must not offer FDA rows until PR 3 (see
-		# MedicineCategoryAssignmentForm.clean_medicine); PR 3 removes this filter.
-		get = request.GET
-		if (
-			get.get("app_label") == MedicineCategoryAssignment._meta.app_label
-			and get.get("model_name") == MedicineCategoryAssignment._meta.model_name
-			and get.get("field_name") == "medicine"
-		):
-			queryset = queryset.filter(regulator=Regulator.EMA)
-		return queryset, may_have_duplicates
 
 	def get_fieldsets(self, request, obj=None):
 		if obj is not None and obj.regulator == Regulator.FDA:

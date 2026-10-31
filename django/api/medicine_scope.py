@@ -1,6 +1,6 @@
 """
-Who may see which EMA medicine in the JSON API (``/medicines/``, ``/medicines/events/``
-and ``medicines_count`` on ``/categories/``).
+Who may see which medicine, EMA's or the FDA's, in the JSON API (``/medicines/``,
+``/medicines/events/`` and ``medicines_count`` on ``/categories/``).
 
 A medicine is global reference data with no subject of its own. It is visible by one
 of two routes, both counted against ``request.visible_medicine_subject_ids``
@@ -11,7 +11,8 @@ on. With the switch off the set is empty, so every list is empty and every detai
 - a NON-SUPPRESSED link to a category that has a subject in the scope (a medicine an
   editor tracks), or
 - a NON-SUPPRESSED ``MedicineSubjectLink`` to a subject in the scope (a medicine EMA
-  approved for one of the subject's conditions, with or without a category).
+  approved for one of the subject's conditions, with or without a category). Only EMA
+  rows have these: the matcher makes no subject links for FDA medicines.
 
 The two suppressions are independent: a suppressed subject link alone hides nothing that
 a live category link still shows, and a suppressed category link alone hides nothing that
@@ -31,28 +32,21 @@ from gregory.models import (
 	TeamCategory,
 )
 
-#: Shown on every medicine and event row, and in the API docs. EMA's terms for reusing
-#: its data ask for the source to be named wherever the data is shown.
+#: Shown on every medicine and event row, and in the API docs. Each regulator's terms for
+#: reusing its data ask for the source to be named wherever the data is shown.
 EMA_SOURCE = "European Medicines Agency"
+FDA_SOURCE = "U.S. Food and Drug Administration"
+
+
+def source_for(medicine):
+	"""The attribution of one medicine row: its own regulator's name."""
+	return FDA_SOURCE if medicine.regulator == Regulator.FDA else EMA_SOURCE
+
 
 #: The request attribute ``VisibleOrgMiddleware`` fills in (a lazy set of subject ids).
 VISIBLE_ATTR = "visible_medicine_subject_ids"
 
 _CATEGORY_SUBJECTS = TeamCategory.subjects.through
-
-
-def public_medicines(queryset, prefix=""):
-	"""Keep only the medicines the API and the feeds may show: EMA's.
-
-	TEMPORARY GATE, PR 3 removes it. The matcher already links FDA medicines to categories,
-	but every read path still labels a row "European Medicines Agency" and has no FDA
-	fields, so an FDA medicine, its events and its links stay out of the API, the feeds and
-	the MCP tools (which read the API) until they can describe it. The admin is not gated.
-
-	``prefix`` is the lookup path from ``queryset``'s rows to the medicine: ``""`` for
-	``Medicine`` itself, ``"medicine__"`` for a link or an event.
-	"""
-	return queryset.filter(**{prefix + "regulator": Regulator.EMA})
 
 
 def category_has_subject(subject_ids, link_ref="teamcategory_id"):
@@ -82,9 +76,7 @@ def visible_links_queryset(request):
 	The same rule decides whether a medicine is listed at all, which categories a
 	medicine shows, and what ``medicines_count`` counts.
 	"""
-	links = public_medicines(
-		MedicineCategoryAssignment.objects.filter(suppressed=False), "medicine__"
-	)
+	links = MedicineCategoryAssignment.objects.filter(suppressed=False)
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return links
@@ -99,7 +91,7 @@ def visible_subject_links_queryset(request):
 	Feeds the ``subjects`` on a medicine row and the second visibility route. Same
 	``None`` / empty-scope contract as ``visible_links_queryset``.
 	"""
-	links = public_medicines(MedicineSubjectLink.objects.filter(suppressed=False), "medicine__")
+	links = MedicineSubjectLink.objects.filter(suppressed=False)
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return links
@@ -124,8 +116,6 @@ def scope_to_visible(queryset, request, medicine_ref):
 	``medicine_ref`` is the outer column holding the medicine's id: ``"pk"`` on
 	``Medicine``, ``"medicine_id"`` on ``MedicineEvent``.
 	"""
-	# The gate comes first: with no middleware (ids is None) nothing else scopes the rows.
-	queryset = public_medicines(queryset, "" if medicine_ref == "pk" else "medicine__")
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return queryset

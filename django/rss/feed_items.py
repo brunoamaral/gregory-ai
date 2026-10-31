@@ -41,6 +41,7 @@ from gregory.models import (
 	PatentApplicant,
 	Patents,
 	PatentSiteContent,
+	Regulator,
 	Subject,
 	TeamCategory,
 	TrialOrgContent,
@@ -641,33 +642,51 @@ class PatentFeedItemMixin:
 
 
 # ---------------------------------------------------------------------------
-# EMA medicine events
+# Medicine events (EMA and FDA)
 #
-# An item is one MedicineEvent: a regulatory milestone of one medicine (an
-# opinion, an authorisation, a new EC decision). The data is EMA's, reusable
-# provided EMA is credited, so every description ends with the attribution.
+# An item is one MedicineEvent: a regulatory milestone of one medicine (an EMA
+# opinion, authorisation or EC decision; an FDA approval or new indication). The
+# data is each regulator's, reusable provided it is credited, so every description
+# ends with its own regulator's attribution.
 # ---------------------------------------------------------------------------
 
-# Where an item links when a medicine has no EPAR page of its own.
+# Where an item links when a medicine has no page of its own: per regulator.
 EMA_MEDICINES_URL = "https://www.ema.europa.eu/en/medicines"
+FDA_MEDICINES_URL = "https://www.accessdata.fda.gov/scripts/cder/daf/"
 
 EMA_SOURCE_NOTE = "Source: European Medicines Agency"
+FDA_SOURCE_NOTE = "Source: U.S. Food and Drug Administration"
+
+
+def medicine_source_note(medicine):
+	"""The attribution line of one medicine's regulator."""
+	return FDA_SOURCE_NOTE if medicine.regulator == Regulator.FDA else EMA_SOURCE_NOTE
+
+
+def medicine_fallback_url(medicine):
+	return FDA_MEDICINES_URL if medicine.regulator == Regulator.FDA else EMA_MEDICINES_URL
 
 
 def medicine_event_title(event):
 	"""``"<product name> (<substance>): <event in words>"``.
 
-	The substance is the INN, or the active substance when EMA leaves the INN
-	empty; with neither, the brackets are left out.
+	The substance is the INN, or the active substance when the regulator leaves the INN
+	empty (for the FDA, the ingredient names); with neither, the brackets are left out.
+	The product name is EMA's name; for an FDA application, which can be sold under
+	several brands (Kesimpta and Arzerra), the first brand name.
 	"""
 	medicine = event.medicine
 	substance = medicine.inn or medicine.active_substance
-	name = f"{medicine.name} ({substance})" if substance else medicine.name
+	product = medicine.name
+	if medicine.regulator == Regulator.FDA and medicine.brand_names:
+		product = medicine.brand_names[0]
+	name = f"{product} ({substance})" if substance else product
 	return f"{name}: {event.in_words}"
 
 
 def medicine_event_description(event):
-	"""HTML description: the cleaned indication, then the EMA attribution.
+	"""HTML description: the cleaned indication, then the attribution of the medicine's
+	own regulator.
 
 	Medicine.indication is already cleaned of tags and entities by the sync;
 	it is escaped here all the same, as for every other database text.
@@ -675,7 +694,7 @@ def medicine_event_description(event):
 	sections = []
 	if event.medicine.indication:
 		sections.append(format_html("<p>{}</p>", _text_block(event.medicine.indication)))
-	sections.append(format_html("<p>{}</p>", EMA_SOURCE_NOTE))
+	sections.append(format_html("<p>{}</p>", medicine_source_note(event.medicine)))
 	return _join_sections(sections)
 
 
@@ -701,14 +720,16 @@ class MedicineEventFeedItemMixin:
 		return medicine_event_description(item)
 
 	def item_link(self, item):
-		return _http_url(item.medicine.url) or EMA_MEDICINES_URL
+		return _http_url(item.medicine.url) or medicine_fallback_url(item.medicine)
 
 	def item_guid(self, item):
-		return f"ema-medicine-event-{item.pk}"
+		# EMA's keep their original prefix: readers already hold them as seen.
+		prefix = "fda" if item.medicine.regulator == Regulator.FDA else "ema"
+		return f"{prefix}-medicine-event-{item.pk}"
 
 	item_guid_is_permalink = False
 
 	def item_pubdate(self, item):
-		# EMA's date for the event (a date, so midnight UTC), or the day the
+		# The regulator's date for the event (a date, so midnight UTC), or the day the
 		# sync saw it for an observed change EMA gave no date for.
 		return datetime.combine(item.event_date, time.min, tzinfo=timezone.utc)
