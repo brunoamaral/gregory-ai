@@ -263,7 +263,9 @@ medicine RSS feeds list both regulators' events. The full reference is in
 - **Source and regulator, per row.** `regulator` is `ema` or `fda`. `source` is `"U.S. Food and
   Drug Administration"` on an FDA row and `"European Medicines Agency"` on an EMA one, on
   medicines and events alike, and a feed item ends with `Source: U.S. Food and Drug
-  Administration` for an FDA event. `url` is the Drugs@FDA overview page, or a CBER biologic's
+  Administration; label text from DailyMed (U.S. National Library of Medicine)` for an FDA event
+  whose description carries the label's indication, and with the plain `Source: U.S. Food and Drug
+  Administration` when it has none. `url` is the Drugs@FDA overview page, or a CBER biologic's
   DailyMed label.
 - **`null` for the other regulator's fields.** An FDA row returns `null` for every EMA-only
   field (the product number, opinion status, therapeutic areas, ATC code, the designation

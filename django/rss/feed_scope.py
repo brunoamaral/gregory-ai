@@ -186,13 +186,14 @@ def category_subject_map(subject_ids):
 
 def regulator_of(request):
 	"""The ``?regulator=`` a medicine feed was asked for: ``"ema"``, ``"fda"`` or ``None``
-	(both). Anything else is a 404, as an unknown category is: a feed reader has no
-	use for a 400, and an empty feed would look like "no news".
+	(both; an empty ``?regulator=`` counts as absent, as it does on the API). Anything
+	else is a 404, as an unknown category is: a feed reader has no use for a 400, and an
+	empty feed would look like "no news".
 
 	The value is exact (lowercase), as it is on the API. Call it from ``get_object``.
 	"""
 	value = request.GET.get("regulator")
-	if value is None:
+	if not value:
 		return None
 	if value not in Regulator.values:
 		raise Http404("Unknown regulator.")

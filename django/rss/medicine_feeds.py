@@ -15,7 +15,7 @@ trial feeds disagree, this one wins for medicines:
 
   * Both regulators, one feed. Every feed lists the events of EMA's and the FDA's
     medicines together; ``?regulator=ema`` or ``?regulator=fda`` narrows it to one
-    (anything else is a 404). cache_page keys on the full URL, so each value has its
+    (an empty value counts as absent; anything else is a 404). cache_page keys on the full URL, so each value has its
     own cached copy and the narrowed feed never serves the unfiltered one.
 
   * BOTH switches: a medicine feed needs CustomSetting.rss_enabled AND
@@ -45,7 +45,11 @@ trial feeds disagree, this one wins for medicines:
   * Processed text only: the regulator's own cleaned indication (for the FDA, the
     label's) and the source line of the event's regulator, "Source: European
     Medicines Agency" or "Source: U.S. Food and Drug Administration", which each
-    asks for wherever its data is served. The link is the medicine's EPAR page, or
+    asks for wherever its data is served. An FDA description that carries the
+    label's indication text credits its publisher as well: "Source: U.S. Food and
+    Drug Administration; label text from DailyMed (U.S. National Library of
+    Medicine)". FDA titles read like EMA's: the product name capitalised (openFDA
+    stores it in capitals) and the lowercase substances in the brackets. The link is the medicine's EPAR page, or
     for the FDA its Drugs@FDA page (a CBER biologic: its DailyMed label).
   * No relevance judgement exists for medicines, so there are no /relevant/
     variants, and there is no search feed.
@@ -100,13 +104,12 @@ def _event_order(queryset):
 
 class _RegulatorSelfLinkMixin(_SelfLinkMixin):
 	"""``<atom:link rel="self">`` keeps ``?regulator=`` when the feed is narrowed, so a
-	reader that follows it gets the same feed. Validates the value too: an unknown
-	regulator is a 404 (``regulator_of``), raised from ``get_object`` through this."""
+	reader that follows it gets the same feed. ``get_object`` reads the regulator once
+	(``regulator_of``, which 404s on an unknown value) and passes it here."""
 
 	@staticmethod
-	def _request_url(request):
+	def _feed_url(request, regulator):
 		url = request.build_absolute_uri(request.path)
-		regulator = regulator_of(request)
 		return url if regulator is None else f"{url}?regulator={regulator}"
 
 
@@ -122,8 +125,8 @@ class SiteMedicineEventsByCategoryFeed(
 		# Per-request state goes on obj, not the shared Feed instance.
 		category._site = site
 		category._cat_subject_ids = cat_subject_ids
-		category._feed_url = self._request_url(request)
 		category._regulator = regulator_of(request)
+		category._feed_url = self._feed_url(request, category._regulator)
 		return category
 
 	def title(self, obj):
@@ -151,8 +154,8 @@ class SiteMedicineEventsBySubjectFeed(
 
 		# Per-request state goes on obj, not the shared Feed instance.
 		subject._site = site
-		subject._feed_url = self._request_url(request)
 		subject._regulator = regulator_of(request)
+		subject._feed_url = self._feed_url(request, subject._regulator)
 		return subject
 
 	def title(self, obj):
@@ -180,11 +183,12 @@ class SiteMedicineEventsFeed(_RegulatorSelfLinkMixin, MedicineEventFeedItemMixin
 
 		# There is no subject or category to hang per-request state on, so a
 		# small object carries it instead of the shared Feed instance.
+		regulator = regulator_of(request)
 		return SimpleNamespace(
 			_site=site,
 			_categories=category_subject_map(scope),
-			_feed_url=self._request_url(request),
-			_regulator=regulator_of(request),
+			_feed_url=self._feed_url(request, regulator),
+			_regulator=regulator,
 		)
 
 	def title(self, obj):

@@ -21,6 +21,7 @@ comes from third parties; neither may be able to inject markup into a feed
 that readers render as HTML.
 """
 
+import re
 from datetime import datetime, time, timezone
 from types import SimpleNamespace
 
@@ -656,11 +657,32 @@ FDA_MEDICINES_URL = "https://www.accessdata.fda.gov/scripts/cder/daf/"
 
 EMA_SOURCE_NOTE = "Source: European Medicines Agency"
 FDA_SOURCE_NOTE = "Source: U.S. Food and Drug Administration"
+# An FDA description republishes the indications text of a DailyMed label (the National
+# Library of Medicine's), so the line credits it as well; without that text it doesn't.
+FDA_LABEL_SOURCE_NOTE = (
+	FDA_SOURCE_NOTE + "; label text from DailyMed (U.S. National Library of Medicine)"
+)
+
+_WORD = re.compile(r"[A-Za-z][A-Za-z']*")
 
 
-def medicine_source_note(medicine):
-	"""The attribution line of one medicine's regulator."""
-	return FDA_SOURCE_NOTE if medicine.regulator == Regulator.FDA else EMA_SOURCE_NOTE
+def medicine_source_note(medicine, with_label_text=False):
+	"""The attribution line of one medicine's regulator.
+
+	``with_label_text``: the description carries the medicine's indication, which for the
+	FDA is the DailyMed label's text, so the line credits DailyMed too."""
+	if medicine.regulator != Regulator.FDA:
+		return EMA_SOURCE_NOTE
+	return FDA_LABEL_SOURCE_NOTE if with_label_text else FDA_SOURCE_NOTE
+
+
+def _sentence_case_caps(name):
+	"""``"OCREVUS ZUNOVO"`` becomes ``"Ocrevus Zunovo"``: each word capitalised, hyphens
+	and slashes starting a new word. A name with any lowercase letter (CBER's
+	``Kymriah``) is returned as it is."""
+	if not name.isupper():
+		return name
+	return _WORD.sub(lambda match: match.group().capitalize(), name)
 
 
 def medicine_fallback_url(medicine):
@@ -670,16 +692,24 @@ def medicine_fallback_url(medicine):
 def medicine_event_title(event):
 	"""``"<product name> (<substance>): <event in words>"``.
 
-	The substance is the INN, or the active substance when the regulator leaves the INN
-	empty (for the FDA, the ingredient names); with neither, the brackets are left out.
-	The product name is EMA's name; for an FDA application, which can be sold under
-	several brands (Kesimpta and Arzerra), the first brand name.
+	EMA: the INN, or the active substance when the INN is empty; with neither, the
+	brackets are left out; the product name is EMA's own.
+
+	FDA: openFDA stores brand and ingredient names in capitals, which would read badly
+	beside EMA's titles, so the brackets hold the normalised lowercase substances
+	(``Medicine.substances``; the INN or active substance when there are none) and an
+	all-capitals product name is capitalised word by word. An application can be sold
+	under several brands (Kesimpta and Arzerra): the product is the first brand name.
 	"""
 	medicine = event.medicine
-	substance = medicine.inn or medicine.active_substance
-	product = medicine.name
-	if medicine.regulator == Regulator.FDA and medicine.brand_names:
-		product = medicine.brand_names[0]
+	if medicine.regulator == Regulator.FDA:
+		substance = ", ".join(medicine.substances or []) or medicine.inn or medicine.active_substance
+		product = _sentence_case_caps(
+			medicine.brand_names[0] if medicine.brand_names else medicine.name
+		)
+	else:
+		substance = medicine.inn or medicine.active_substance
+		product = medicine.name
 	name = f"{product} ({substance})" if substance else product
 	return f"{name}: {event.in_words}"
 
@@ -692,9 +722,12 @@ def medicine_event_description(event):
 	it is escaped here all the same, as for every other database text.
 	"""
 	sections = []
-	if event.medicine.indication:
-		sections.append(format_html("<p>{}</p>", _text_block(event.medicine.indication)))
-	sections.append(format_html("<p>{}</p>", medicine_source_note(event.medicine)))
+	indication = event.medicine.indication
+	if indication:
+		sections.append(format_html("<p>{}</p>", _text_block(indication)))
+	sections.append(
+		format_html("<p>{}</p>", medicine_source_note(event.medicine, with_label_text=bool(indication)))
+	)
 	return _join_sections(sections)
 
 
@@ -702,7 +735,10 @@ def hydrate_medicine_events(ids):
 	"""Load the events in `ids`, in that order, with their medicines, in one query."""
 	by_id = {
 		event.pk: event
-		for event in MedicineEvent.objects.filter(pk__in=ids).select_related("medicine")
+		for event in MedicineEvent.objects.filter(pk__in=ids)
+		.select_related("medicine")
+		# EMA's whole row and the DailyMed labels' texts: several KB a row, never rendered.
+		.defer("medicine__raw", "medicine__label_indications")
 	}
 	return [by_id[pk] for pk in ids if pk in by_id]
 

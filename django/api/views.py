@@ -3876,8 +3876,11 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 
 	def get_queryset(self):
 		request = self.request
-		# `raw` holds EMA's whole row (several KB) and is never serialized.
-		qs = scope_to_visible(super().get_queryset().defer("raw"), request, "pk")
+		# `raw` holds the regulator's whole row (several KB) and `label_indications` the
+		# DailyMed labels' texts; neither is serialized.
+		qs = scope_to_visible(
+			super().get_queryset().defer("raw", "label_indications"), request, "pk"
+		)
 		qs = qs.prefetch_related(
 			Prefetch(
 				"category_assignments",
@@ -3993,7 +3996,7 @@ class MedicineEventViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 
 	queryset = (
 		MedicineEvent.objects.select_related("medicine")
-		.defer("medicine__raw")
+		.defer("medicine__raw", "medicine__label_indications")
 		.order_by("-event_date", "-id")
 	)
 	serializer_class = MedicineEventSerializer
