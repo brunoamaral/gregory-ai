@@ -470,6 +470,64 @@ class DetailTests(DrugFixture):
 		self.assertEqual(response.status_code, 200, response.content)
 		self.assertEqual(response.data["substance_key"], "compound 1.5")
 
+	def test_a_name_that_reduces_to_a_key_redirects_to_it_keeping_the_query(self):
+		cases = [
+			("fingolimod%20hydrochloride", "fingolimod"),
+			("dalfampridine", "fampridine"),
+			("valsartan+amlodipine", "amlodipine%2Bvalsartan"),
+			("Ocrelizumab+Hyaluronidase", "ocrelizumab"),
+		]
+		for given, canonical in cases:
+			with self.subTest(given=given):
+				response = self.client.get(f"{DRUGS}{given}/?include_generics=true&page_size=5")
+				self.assertEqual(response.status_code, 301)
+				self.assertEqual(
+					response["Location"], f"{DRUGS}{canonical}/?include_generics=true&page_size=5"
+				)
+				followed = self.client.get(response["Location"])
+				self.assertEqual(followed.status_code, 200)
+				direct = self.client.get(f"{DRUGS}{canonical}/?include_generics=true&page_size=5")
+				self.assertEqual(followed.json(), direct.json())
+
+	def test_a_redirect_without_a_query_string_has_none(self):
+		response = self.client.get(f"{DRUGS}fingolimod%20hydrochloride/")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(response["Location"], f"{DRUGS}fingolimod/")
+
+	def test_a_canonical_key_does_not_redirect(self):
+		for key in ("fingolimod", "amlodipine%2Bvalsartan", "interferon%20beta-1a"):
+			with self.subTest(key=key):
+				self.assertEqual(self.client.get(f"{DRUGS}{key}/").status_code, 200)
+
+	def test_an_unknown_name_still_404s_and_so_does_one_that_reduces_to_nothing_visible(self):
+		self.assertEqual(self.client.get(f"{DRUGS}nothing-here%20hydrochloride/").status_code, 404)
+		# The canonical drug exists but the caller cannot see it: no redirect to give it away.
+		self.assertEqual(self.client.get(f"{DRUGS}hiddenium%20hydrochloride/").status_code, 404)
+		# ...or it does not pass the filters.
+		self.assertEqual(
+			self.client.get(f"{DRUGS}valsartan+amlodipine/?regulator=fda").status_code, 404
+		)
+		# ...or it is a drug of generics and the default hides them.
+		self.assertEqual(self.client.get(f"{DRUGS}natalizumab%20hydrochloride/").status_code, 404)
+
+	def test_a_standalone_key_is_not_canonicalised(self):
+		self.assertEqual(self.client.get(f"{DRUGS}medicine-99999999/").status_code, 404)
+		self.assertEqual(self.client.get(f"{DRUGS}medicine-{self.keyless.pk}/").status_code, 200)
+
+	def test_a_miss_costs_one_extra_query(self):
+		def queries(url):
+			self.client.get(url)
+			cache.clear()
+			with CaptureQueriesContext(connection) as q:
+				self.client.get(url)
+			return len(q)
+
+		hit = queries(f"{DRUGS}fingolimod/")
+		miss = queries(f"{DRUGS}nothing-here/")
+		redirect = queries(f"{DRUGS}fingolimod%20hydrochloride/")
+		self.assertLessEqual(miss, hit)
+		self.assertLessEqual(redirect, hit)
+
 	def test_a_format_suffix_still_works_without_the_trailing_slash(self):
 		# `[^/]+` takes dots, so the router's `.json` route is what reads the suffix; the
 		# slash form is always the key as written.
@@ -482,8 +540,8 @@ class DetailTests(DrugFixture):
 
 	def test_an_unknown_key_is_a_404(self):
 		self.assertEqual(self.client.get(f"{DRUGS}nothing-here/").status_code, 404)
-		# A salt name is not a key.
-		self.assertEqual(self.client.get(f"{DRUGS}fingolimod%20hydrochloride/").status_code, 404)
+		# A salt name is not a key: it redirects to the drug's (see below).
+		self.assertEqual(self.client.get(f"{DRUGS}fingolimod%20hydrochloride/").status_code, 301)
 
 	def test_the_filters_apply_to_the_detail(self):
 		response = self.client.get(f"{DRUGS}fingolimod/?regulator=fda")

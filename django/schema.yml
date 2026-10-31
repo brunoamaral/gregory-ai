@@ -5003,7 +5003,11 @@ paths:
 
         `GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
         same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
-        `amlodipine%2Bvalsartan` (a literal `+` also works). The answer is 404 when none of the
+        `amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+        reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+        combination in another order, a delivery enzyme) is answered with a `301` to the
+        drug's key URL, query string kept, when that drug is visible and passes the filters.
+        The answer is 404 when none of the
         drug's records is visible to the caller or passes the filters (`include_generics`
         included: a drug of generics only needs `?include_generics=true`).
 
@@ -5275,7 +5279,11 @@ paths:
 
         `GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
         same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
-        `amlodipine%2Bvalsartan` (a literal `+` also works). The answer is 404 when none of the
+        `amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+        reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+        combination in another order, a delivery enzyme) is answered with a `301` to the
+        drug's key URL, query string kept, when that drug is visible and passes the filters.
+        The answer is 404 when none of the
         drug's records is visible to the caller or passes the filters (`include_generics`
         included: a drug of generics only needs `?include_generics=true`).
 

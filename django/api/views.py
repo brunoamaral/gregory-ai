@@ -81,7 +81,7 @@ from django.db.models import (
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.db.models.functions import Coalesce, ExtractYear, Lower, NullIf
 from gregory.classes import SciencePaper, ClinicalTrial
-from gregory.utils.substance_key import normal_case_if_caps
+from gregory.utils.substance_key import normal_case_if_caps, substance_key
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
@@ -137,7 +137,9 @@ from api.filters import (
 )
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
-from django.http import Http404, StreamingHttpResponse
+from django.http import Http404, HttpResponsePermanentRedirect, StreamingHttpResponse
+from django.urls import reverse
+from urllib.parse import quote
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import (
@@ -4027,7 +4029,11 @@ class MedicineDrugViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 
 	`GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
 	same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
-	`amlodipine%2Bvalsartan` (a literal `+` also works). The answer is 404 when none of the
+	`amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+	reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+	combination in another order, a delivery enzyme) is answered with a `301` to the
+	drug's key URL, query string kept, when that drug is visible and passes the filters.
+	The answer is 404 when none of the
 	drug's records is visible to the caller or passes the filters (`include_generics`
 	included: a drug of generics only needs `?include_generics=true`).
 
@@ -4154,11 +4160,20 @@ class MedicineDrugViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 
 	def retrieve(self, request, *args, **kwargs):
 		key = " ".join(kwargs[self.lookup_field].lower().split())
-		records = self.filter_queryset(self.get_queryset()).filter(substance_key=key)
-		items = self._items(records, [key])
-		if not items:
-			raise Http404
-		return Response(self.get_serializer(items[0]).data)
+		records = self.filter_queryset(self.get_queryset())
+		items = self._items(records.filter(substance_key=key), [key])
+		if items:
+			return Response(self.get_serializer(items[0]).data)
+		# Not a key as stored: a salt name, a US name, a combination in another order, a
+		# delivery enzyme. Send it to the canonical key, but only when that drug is visible
+		# to this caller and passes the filters, so a redirect never shows that a hidden
+		# drug exists. `medicine-<id>` keys stand for one record and are left alone.
+		canonical = None if key.startswith("medicine-") else substance_key(key.split("+"))
+		if canonical and canonical != key and records.filter(substance_key=canonical).exists():
+			location = reverse("medicine-drugs-list") + quote(canonical, safe="") + "/"
+			query = request.META.get("QUERY_STRING")
+			return HttpResponsePermanentRedirect(f"{location}?{query}" if query else location)
+		raise Http404
 
 
 def _drug_name(key, records):
