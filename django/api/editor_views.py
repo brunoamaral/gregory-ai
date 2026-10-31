@@ -62,6 +62,7 @@ from api.views import (
 	AuthorsViewSet,
 	CategoryViewSet,
 	McpTenantsView,
+	MedicineDrugViewSet,
 	MedicineViewSet,
 	PatentViewSet,
 	SponsorViewSet,
@@ -1939,6 +1940,7 @@ EditorSubjectsViewSet = _editor_read_view(SubjectsViewSet)
 EditorSponsorViewSet = _editor_read_view(SponsorViewSet)
 EditorPatentViewSet = _editor_read_view(PatentViewSet)
 EditorMedicineViewSet = _editor_read_view(MedicineViewSet)
+EditorMedicineDrugViewSet = _editor_read_view(MedicineDrugViewSet)
 class EditorStatsView(_editor_read_view(StatsView)):
 	"""``/editor/stats/``: counts over the editor's site scope.
 
@@ -1962,5 +1964,8 @@ EDITOR_READ_ROUTES = [
 	("subjects", EditorSubjectsViewSet, "editor-subjects"),
 	("sponsors", EditorSponsorViewSet, "editor-sponsors"),
 	("patents", EditorPatentViewSet, "editor-patents"),
+	# `medicines/drugs` before `medicines`: SimpleRouter would otherwise read "drugs" as a
+	# medicine id.
+	("medicines/drugs", EditorMedicineDrugViewSet, "editor-medicine-drugs"),
 	("medicines", EditorMedicineViewSet, "editor-medicines"),
 ]

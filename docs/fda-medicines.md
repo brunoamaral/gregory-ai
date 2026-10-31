@@ -311,7 +311,7 @@ and sort a mixed list by `authorisation_date`.
 
 ## MCP
 
-`search_medicines`, `get_medicine` and `set_medicine_link` (see
+`search_medicines`, `list_medicine_drugs`, `get_medicine` and `set_medicine_link` (see
 [07-mcp-server.md](07-mcp-server.md#medicines)) work on both regulators' records, on the sites
 that have `medicines_enabled` on.
 
@@ -323,11 +323,13 @@ that have `medicines_enabled` on.
   the two interleave; `regulator=ema` keeps `-ema_last_updated`.
 - **Salt names.** The FDA names an ingredient as on its label, sometimes with the salt (Gilenya is
   `fingolimod hydrochloride`, EMA's is `fingolimod`; Zeposia `ozanimod hydrochloride`; Exelon capsules
-  `rivastigmine tartrate`). The API's `substance` filter now ignores salts and the US/international name
+  `rivastigmine tartrate`). The API's `substance` filter ignores salts and the US/international name
   difference (`dalfampridine` is `fampridine`), so `substance=fingolimod` finds both regulators' Gilenya, and
-  records of one drug share `substance_key`. The MCP tools' text still says otherwise (try `name` or the salt
-  form, group by the substance without the salt, and the `fda_hint` and salt zero-result hint): that wording
-  is stale until drug-grouping PR 3 updates `mcp-server`.
+  records of one drug share `substance_key`. The tool descriptions, the zero-hit `guidance` and the site
+  instructions say exactly that: `substance` matches with or without the salt and with the US or
+  international name, every row carries `substance_key`, and the model groups by it (or calls
+  `list_medicine_drugs`, which returns one entry per drug with both regulators' records in it) instead of
+  trying the salt form or the brand.
 - **Capitals.** The FDA's data writes brand names, ingredients and companies in capitals. The tool
   descriptions and the site instructions ask the model to present them in normal case; the data is not
   changed.

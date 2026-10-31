@@ -1,4 +1,4 @@
-"""Medicines are offered per tenant: `search_medicines` and `get_medicine` are listed
+"""Medicines are offered per tenant: `search_medicines`, `list_medicine_drugs` and `get_medicine` are listed
 and callable only when the resolved tenant has `medicines_enabled`, on both `/mcp`
 and `/mcp/editor`; `set_medicine_link` additionally needs an editor with the edit
 scope; and nothing a tenant without medicines sees names them."""
@@ -65,7 +65,7 @@ def _editor(*, can_edit: bool = True, tier: str = "editor") -> EditorSession:
 
 
 def test_the_medicine_tools_are_named():
-	assert MEDICINE_READ_TOOLS == {"search_medicines", "get_medicine"}
+	assert MEDICINE_READ_TOOLS == {"search_medicines", "list_medicine_drugs", "get_medicine"}
 	assert MEDICINE_EDIT_TOOL == "set_medicine_link"
 	assert MEDICINE_TOOLS == MEDICINE_READ_TOOLS | {"set_medicine_link"}
 	# The ten and the six stay what they were.
@@ -127,7 +127,7 @@ async def test_anonymous_mcp_hides_the_medicine_tools_without_medicines(mock_gre
 async def test_anonymous_mcp_lists_the_two_read_tools_with_medicines(mock_gregory):
 	names = await _anonymous_tools(mock_gregory, **WITH)
 	assert names == READ_TOOLS | MEDICINE_READ_TOOLS
-	assert len(names) == 12
+	assert len(names) == 13
 
 
 async def test_no_listed_description_points_at_a_hidden_medicine_tool(mock_gregory):
@@ -147,6 +147,7 @@ async def test_no_listed_description_points_at_a_hidden_medicine_tool(mock_grego
 	"tool,args",
 	[
 		("search_medicines", {}),
+		("list_medicine_drugs", {}),
 		("get_medicine", {"medicine_id": 1}),
 		("set_medicine_link", {"category_id": 1, "medicine_id": 1, "linked": True}),
 	],
@@ -270,7 +271,7 @@ async def test_the_link_tool_is_annotated_like_the_other_two_way_tools(mock_edit
 		async with mcp_client(app, token="editor") as client:
 			tools = {t.name: t for t in (await client.list_tools()).tools}
 
-	for name in ("search_medicines", "get_medicine"):
+	for name in ("search_medicines", "list_medicine_drugs", "get_medicine"):
 		assert tools[name].annotations.read_only_hint is True
 		assert tools[name].annotations.idempotent_hint is True
 		assert tools[name].annotations.open_world_hint is False
@@ -334,6 +335,22 @@ async def test_an_editors_medicine_search_reads_from_the_editor_route(mock_edito
 
 	assert not result.is_error
 	request = next(r for r in mock_editor_gregory.requests if r.url.path == "/editor/medicines/")
+	assert request.headers["x-gregory-editor-site"] == str(SITE_ID)
+
+
+async def test_an_editors_drug_list_reads_from_the_editor_route(mock_editor_gregory):
+	_editor_django(
+		mock_editor_gregory,
+		with_medicines=True,
+		routes={"/editor/medicines/drugs/": httpx2.Response(200, json={"count": 0, "next": None, "results": []})},
+	)
+	app = new_app()
+	async with running(app):
+		async with mcp_client(app, token="editor") as client:
+			result = await client.call_tool("list_medicine_drugs", {"substance": "x"})
+
+	assert not result.is_error
+	request = next(r for r in mock_editor_gregory.requests if r.url.path == "/editor/medicines/drugs/")
 	assert request.headers["x-gregory-editor-site"] == str(SITE_ID)
 
 

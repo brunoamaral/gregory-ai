@@ -377,7 +377,8 @@ takes a `regulator` filter, and each row and record says which regulator it is f
 
 | Tool | Who | What it does |
 |:-----|:----|:-------------|
-| `search_medicines` | Everyone | Searches the medicines filed under the site's categories or approved for one of its conditions by `name` (brand or product name), `substance` (the INN), category, subject, `status`, `opinion_status`, first-authorisation dates, `tracked` and `include_generics`. Compact rows with the dates, `tracked`, the categories, the subjects and the EPAR link |
+| `search_medicines` | Everyone | Searches the medicines filed under the site's categories or approved for one of its conditions by `name` (brand or product name), `substance` (the INN; also finds the FDA's record of the same drug, with or without the salt), `substance_key`, category, subject, `status`, `opinion_status`, first-authorisation dates, `tracked` and `include_generics`. Compact rows with the dates, `substance_key`, `tracked`, the categories, the subjects and the EPAR link |
+| `list_medicine_drugs` | Everyone | The same filters, **one entry per drug**: each entry holds the drug's records at both regulators as the same compact rows (`GET /medicines/drugs/`) |
 | `get_medicine` | Everyone | One product with its events, each worded by `kind_label` |
 | `set_medicine_link` | Editors with the edit scope | Puts a medicine in a category, or takes it out. Live immediately, applies to the whole category |
 

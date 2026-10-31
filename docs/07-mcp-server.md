@@ -87,6 +87,7 @@ site: see [Patents](#patents) and [Medicines](#medicines).
 | `search_patents` | `GET /patents/` | Only on a site with patents. See [Patents](#patents). |
 | `get_patent` | `GET /patents/{patent_id}/` | Only on a site with patents. See [Patents](#patents). |
 | `search_medicines` | `GET /medicines/` | Only on a site with medicines. See [Medicines](#medicines). |
+| `list_medicine_drugs` | `GET /medicines/drugs/` | Only on a site with medicines. One entry per drug, both regulators' records inside. See [Medicines](#medicines). |
 | `get_medicine` | `GET /medicines/{id}/` | Only on a site with medicines. See [Medicines](#medicines). |
 
 `ml_score_min` and `ml_threshold` are different filters. `ml_score_min` keeps articles whose
@@ -139,7 +140,7 @@ is why patents are opt-in per site, claims are capped and there is no bulk expor
 Medicines from two regulators, the European Medicines Agency (EMA, see
 [ema-medicines.md](ema-medicines.md)) and the U.S. Food and Drug Administration (FDA, see
 [fda-medicines.md](fda-medicines.md)), are a per-site feature in the same way:
-`search_medicines` and `get_medicine` are listed, and can be called, only on a site whose
+`search_medicines`, `list_medicine_drugs` and `get_medicine` are listed, and can be called, only on a site whose
 `medicines_enabled` switch is on (reported per site by `GET /tenants/` and `GET /editor/tenants/`; a
 missing or non-boolean value means off). On any other site — on `/mcp` and `/mcp/editor` alike —
 `tools/list` leaves them out, a call to either is answered as a tool that doesn't exist, and the site's
@@ -148,21 +149,24 @@ independent: a site can have either, both or neither.
 
 | Tool | What it does |
 |:---|:---|
-| `search_medicines` | One row per EMA product or FDA application. A medicine shows because it is filed under one of the site's categories, or (EMA only) because EMA approved it for one of the site's conditions. `regulator` (`ema` or `fda`; leave it out for both), `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as the regulator names it, the INN at EMA or the ingredient at the FDA; ignoring case, salts and US/international names, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id` (`subject_id` alone also keeps the EMA medicines approved for that subject's condition), `status` (the regulator's wording: EMA's Authorised, Withdrawn, ...; the FDA's Approved, Tentatively approved, Discontinued, Revoked), `opinion_status` (EMA only; leaves out every FDA record), `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`; the FDA's original approval for an FDA record), `tracked` (`false`: only EMA medicines no category of the site covers yet; `true`: only filed ones), `include_generics`, `ordering`. Generic and biosimilar products, and duplicate products (further products of the same regulator for the same medicine), are hidden unless `include_generics=true`. Every row has `regulator`, `source`, `medicine_id`, `name`, `substances`, `status`, `authorisation_date`, `holder`, a ~400-character `indication`, `is_combination`, `generic`, `biosimilar`, `tracked`, `categories`, `subjects` (the conditions EMA approved it for: `subject_id`, `subject_name`, `matched_on`; empty for an FDA record) and `link`. An EMA row adds `opinion_status`, `opinion_date`, `latest_ec_decision_date`, `advanced_therapy` and `orphan_medicine`, and its `link` is the EPAR page. An FDA row adds `brand_names` and `fda_application_number`, none of the EMA ones, and its `link` is the Drugs@FDA page (a CBER biologic: its DailyMed label). Page size 10, at most 25. A zero-hit response carries `guidance`. |
-| `get_medicine` | One product by `medicine_id`: the full record (including `regulator`, `source`, `tracked`, `grouped_under` and, on a lead product, `grouped_products`) plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU" or "Approved by the FDA"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off the regulator's dates the first time the product was seen. An EMA record has `subjects`, the flags EMA publishes, and the opinion and European Commission dates. An FDA record has `fda_application_number`, `fda_application_type` (NDA or BLA), `fda_center` (CDER or CBER), `brand_names`, `fda_priority_review`, `fda_original_class` and `interchangeable`. The columns that belong only to the other regulator are `null` in the API and are **left out** of the tool's record, so a record never shows a field that cannot apply to it. A product the site cannot show is "not found", the same as one that does not exist. |
+| `search_medicines` | One row per EMA product or FDA application. A medicine shows because it is filed under one of the site's categories, or (EMA only) because EMA approved it for one of the site's conditions. `regulator` (`ema` or `fda`; leave it out for both), `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance, the INN at EMA or the ingredient at the FDA; matches with or without the salt and with the US or international name, so `fingolimod` and `fingolimod hydrochloride` find the same records, as do `fampridine` and `dalfampridine`), `substance_key` (one drug's key exactly, to list its records at both regulators), `category_id` / `category_slug` / `subject_id` (`subject_id` alone also keeps the EMA medicines approved for that subject's condition), `status` (the regulator's wording: EMA's Authorised, Withdrawn, ...; the FDA's Approved, Tentatively approved, Discontinued, Revoked), `opinion_status` (EMA only; leaves out every FDA record), `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`; the FDA's original approval for an FDA record), `tracked` (`false`: only EMA medicines no category of the site covers yet; `true`: only filed ones), `include_generics`, `ordering`. Generic and biosimilar products, and duplicate products (further products of the same regulator for the same medicine), are hidden unless `include_generics=true`. Every row has `regulator`, `source`, `medicine_id`, `name`, `substances`, `substance_key` (the substances without their salt: one drug's records at both regulators share it, so group rows by it), `status`, `authorisation_date`, `holder`, a ~400-character `indication`, `is_combination`, `generic`, `biosimilar`, `tracked`, `categories`, `subjects` (the conditions EMA approved it for: `subject_id`, `subject_name`, `matched_on`; empty for an FDA record) and `link`. An EMA row adds `opinion_status`, `opinion_date`, `latest_ec_decision_date`, `advanced_therapy` and `orphan_medicine`, and its `link` is the EPAR page. An FDA row adds `brand_names` and `fda_application_number`, none of the EMA ones, and its `link` is the Drugs@FDA page (a CBER biologic: its DailyMed label). Page size 10, at most 25. A zero-hit response carries `guidance`. |
+| `list_medicine_drugs` | The same records as `search_medicines`, **one entry per drug**: a drug approved by both regulators is one entry with both regulators' records inside. Takes the same filters (`regulator`, `name`, `substance`, `substance_key`, `category_id` / `category_slug` / `subject_id`, `status`, `opinion_status`, `authorised_after` / `authorised_before`, `tracked`, `include_generics`), applied to the records before they are grouped: a drug is listed when at least one of its records passes, and shows only the records that pass. `ordering` is `latest_authorisation` (default `-latest_authorisation`: the newest approval first), `name`, or either with a leading `-`; these are not `search_medicines`'s values, and the tool sends no default of its own. `page` and `page_size` count drugs (page size 10, at most 25). Each entry has `substance_key`, `name` (the EMA product's, else the FDA's in normal case), `substances`, `regulators` (which have a record shown), `first_authorised` (`{"ema": date or null, "fda": date or null}`) and `records`, each a row exactly as `search_medicines` returns it, EMA first. Nothing is merged: each record keeps its own `regulator`, `source`, id and dates. The response has `source`, `note`, `count`, `next_page` and `drugs`, and a zero-hit response carries `guidance` like `search_medicines`. |
+| `get_medicine` | One product by `medicine_id`: the full record (including `regulator`, `source`, `substance_key`, `tracked`, `grouped_under` and, on a lead product, `grouped_products`) plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU" or "Approved by the FDA"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off the regulator's dates the first time the product was seen. An EMA record has `subjects`, the flags EMA publishes, and the opinion and European Commission dates. An FDA record has `fda_application_number`, `fda_application_type` (NDA or BLA), `fda_center` (CDER or CBER), `brand_names`, `fda_priority_review`, `fda_original_class` and `interchangeable`. The columns that belong only to the other regulator are `null` in the API and are **left out** of the tool's record, so a record never shows a field that cannot apply to it. A product the site cannot show is "not found", the same as one that does not exist. |
 
 **Two regulators.** The API serves both (see [fda-medicines.md](fda-medicines.md)), and a search with
 no `regulator` returns both. One medicine can appear twice, once per regulator, as two records with
 their own ids. The FDA names an ingredient as on its label, sometimes with the salt (`fingolimod
-hydrochloride`, where EMA has `fingolimod`; likewise `ozanimod hydrochloride`, `rivastigmine tartrate`).
-The API's `substance` filter now ignores salts and US/international name differences, so
-`substance=fingolimod` finds EMA's Gilenya and the FDA's, and both regulators' records of a drug share
-`substance_key`. The tool text has not caught up: the descriptions still tell the model to also try `name`
-(the brand) or the salt form and to group by the substance without the salt, a zero-hit response's `guidance`
-carries a salt hint, and a response with records but none from the FDA carries `fda_hint`. That wording is
-stale until drug-grouping PR 3 updates `mcp-server`. The FDA's data writes brand names, ingredients
-and companies in capitals; the descriptions and the site instructions tell the model to present them in
-normal case (Kesimpta, Novartis), and the data itself is not changed.
+hydrochloride`, where EMA has `fingolimod`; likewise `ozanimod hydrochloride`, `rivastigmine tartrate`),
+and the US and international names of a substance differ (`dalfampridine`, `fampridine`). The API takes
+care of both, and the tools say so: `substance` matches with or without the salt and with the US or
+international name, so `substance=fingolimod` and `substance=fingolimod hydrochloride` both find EMA's
+Gilenya and the FDA's, and both regulators' records of one drug share `substance_key` (the substances
+without their salt, joined with `+`). Every row and record carries `substance_key`; the model is told to
+group by it rather than by `substances` or `name`, and `search_medicines` takes it as a filter to list one
+drug's records. `list_medicine_drugs` does the grouping itself. There is no hint to try the salt form or
+the brand: a `substance` that finds nothing gets the ordinary zero-hit `guidance`. The FDA's data writes
+brand names, ingredients and companies in capitals; the descriptions and the site instructions tell the
+model to present them in normal case (Kesimpta, Novartis), and the data itself is not changed.
 
 **Default order.** The API's own default, `-ema_last_updated`, lists every EMA record before every FDA
 one, which buries the FDA ones past a first page. So when the caller gives no `ordering` and does not
@@ -215,9 +219,9 @@ match only one field. `search_patents`'s reads title and summary only.
 
 ### Zero-hit guidance
 
-When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
+When `search_articles`, `search_trials`, `search_patents`, `search_medicines` or `list_medicine_drugs` returns zero results, the
 response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
-`substance` being an INN or ingredient (with a reminder that the FDA may name it with the salt, so try the salt form or `name`; the API no longer needs that, see above) (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), `regulator` narrowing to one regulator, generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` (each regulator's own wording) and
+`substance` being an INN or ingredient (with a reminder that it matches with or without the salt and with the US or international name, and `substance_key` being a drug's key exactly) (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), `regulator` narrowing to one regulator, generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` (each regulator's own wording) and
 `opinion_status` (EMA only), the first-authorisation date range, and the reminder that a drug missing from
 a regulator's data may be authorised nationally or approved under another route):
 
@@ -243,7 +247,7 @@ names and static advice text.
 
 ### Payload shaping
 
-`search_articles` / `search_trials` / `search_patents` / `search_medicines` / `search_authors` return a compact projection — id,
+`search_articles` / `search_trials` / `search_patents` / `search_medicines` / `list_medicine_drugs` / `search_authors` return a compact projection — id,
 title, date, a few key fields, and a summary truncated to ~400 characters — not the full
 record. A ten-result search with full abstracts and nested author lists is a very large
 response, and most searches are followed by a `get_*` read of one or two records anyway.
@@ -814,11 +818,11 @@ by the site, not the sign-in (see [Patents](#patents)). An editor's `search_pate
 `get_patent` read Django's `/editor/patents/` routes, like the other reads, and `get_patent`
 adds the site's editorial text to the record.
 
-On a site with medicines every tier also gets `search_medicines` and `get_medicine`, and an editor
+On a site with medicines every tier also gets `search_medicines`, `list_medicine_drugs` and `get_medicine`, and an editor
 with the edit scope gets `set_medicine_link` as a seventh write tool (see [Medicines](#medicines)).
 It is not one of the six: those are listed on every site, and this one only on a site with
-medicines. An editor's `search_medicines` and `get_medicine` read Django's `/editor/medicines/`
-routes, like the other reads.
+medicines. An editor's `search_medicines`, `list_medicine_drugs` and `get_medicine` read Django's
+`/editor/medicines/`, `/editor/medicines/drugs/` and `/editor/medicines/{id}/` routes, like the other reads.
 
 `tools/list` is filtered to that set and a call to a tool outside it is answered as a tool that
 does not exist. `GregoryClient` refuses a write without an edit session as a second lock (and a request to `/editor/sources/`, reads included, without the sources scope: `403 this sign-in cannot add sources`), and

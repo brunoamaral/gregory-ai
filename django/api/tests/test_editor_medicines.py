@@ -62,6 +62,7 @@ def _medicine(name, inn, **fields):
 		"name": name,
 		"inn": inn,
 		"substances": [inn],
+		"substance_key": inn,
 		"status": "Authorised",
 		"url": f"https://www.ema.europa.eu/en/medicines/human/EPAR/{slugify(name)}",
 		"raw": {},
@@ -413,6 +414,29 @@ class EditorReadTest(MedicineEditorFixture):
 
 	def test_the_route_needs_an_editor(self):
 		self.assertEqual(self.client.get("/editor/medicines/").status_code, 401)
+		self.assertEqual(self.client.get("/editor/medicines/drugs/").status_code, 401)
+
+	def test_the_editor_lists_the_drugs_of_its_site(self):
+		listing = self.get("/editor/medicines/drugs/")
+		self.assertEqual(listing.status_code, 200)
+		self.assertEqual(
+			{drug["substance_key"] for drug in listing.data["results"]},
+			{"autoprexumab", "handprexumab"},
+		)
+		records = [r["id"] for drug in listing.data["results"] for r in drug["records"]]
+		self.assertCountEqual(records, [self.auto.pk, self.hand.pk])
+
+	def test_the_editors_drug_list_leaves_out_other_sites_and_a_site_without_medicines(self):
+		keys = {drug["substance_key"] for drug in self.get("/editor/medicines/drugs/").data["results"]}
+		self.assertNotIn("otherexumab", keys)
+		self.assertNotIn("bonlyxumab", keys)
+		self.assertEqual(self.get("/editor/medicines/drugs/", site=self.site_b).data["results"], [])
+
+	def test_the_editor_reads_one_drug(self):
+		response = self.get("/editor/medicines/drugs/autoprexumab/")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["substance_key"], "autoprexumab")
+		self.assertEqual(self.get("/editor/medicines/drugs/otherexumab/").status_code, 404)
 
 
 class ThrottleTest(MedicineEditorFixture):
