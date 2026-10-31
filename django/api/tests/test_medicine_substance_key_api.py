@@ -58,6 +58,10 @@ class SubstanceKeyFixture(FdaFixture):
 			Regulator.EMA, "Enzyme alone", ["hyaluronidase (human recombinant) sodium"], cls.c_ms
 		)
 		cls.saline = cls._keyed(Regulator.EMA, "Saline", ["sodium chloride"], cls.c_ms)
+		cls.fampyra = cls._keyed(Regulator.EMA, "Fampyra", ["fampridine"], cls.c_ms)
+		cls.ampyra = cls._keyed(Regulator.FDA, "AMPYRA", ["dalfampridine"], cls.c_ms)
+		cls.ferrous_sulfate = cls._keyed(Regulator.EMA, "Iron sulfate", ["ferrous sulfate"], cls.c_ms)
+		cls.ferrous_fumarate = cls._keyed(Regulator.EMA, "Iron fumarate", ["ferrous fumarate"], cls.c_ms)
 		cls.ev_gilenya = cls._event(
 			cls.gilenya_fda, Kind.FDA_APPROVED, cls.today - timedelta(days=3), Basis.OBSERVED
 		)
@@ -210,3 +214,23 @@ class SaltTolerantSubstanceTests(SubstanceKeyFixture):
 
 	def test_it_combines_with_regulator(self):
 		self.assertEqual(self.found("substance=fingolimod&regulator=fda"), ["GILENYA FDA", "TASCENSO ODT"])
+
+
+class AliasAndMetalFilterTests(SubstanceKeyFixture):
+	def test_the_us_and_international_names_find_each_other(self):
+		self.assertEqual(self.ampyra.substance_key, "fampridine")
+		for query in ("substance=dalfampridine", "substance=fampridine", "substance=Dalfampridine%20hydrochloride"):
+			with self.subTest(query=query):
+				self.assertEqual(self.found(query), ["AMPYRA", "Fampyra"])
+		self.assertEqual(self.found("substance_key=fampridine"), ["AMPYRA", "Fampyra"])
+
+	def test_a_row_without_a_key_still_matches_its_stored_substance(self):
+		Medicine.objects.filter(pk=self.ampyra.pk).update(substance_key="")
+		self.assertEqual(self.found("substance=dalfampridine"), ["AMPYRA", "Fampyra"])
+		self.assertEqual(self.found("substance=fampridine"), ["Fampyra"])
+
+	def test_two_iron_salts_stay_two_drugs(self):
+		self.assertEqual(self.found("substance=ferrous%20sulfate"), ["Iron sulfate"])
+		self.assertEqual(self.found("substance=ferrous%20fumarate"), ["Iron fumarate"])
+		self.assertEqual(self.found("substance=ferrous"), [])
+		self.assertEqual(self.found("substance_key=ferrous%20sulfate"), ["Iron sulfate"])

@@ -41,10 +41,10 @@ class Command(GregoryBaseCommand):
 		changed = []
 		samples = []
 		# only(): the raw JSON of every row is tens of megabytes and is not needed.
-		queryset = Medicine.objects.only("id", "regulator", "substances", "substance_key")
+		queryset = Medicine.objects.only("id", "substances", "substance_key")
 		for medicine in queryset.order_by("pk").iterator(chunk_size=BATCH_SIZE):
 			total += 1
-			key = substance_key(medicine.substances, medicine.regulator, medicine.pk)
+			key = substance_key(medicine.substances, pk=medicine.pk)
 			if key == medicine.substance_key:
 				continue
 			if len(samples) < MAX_SAMPLES:

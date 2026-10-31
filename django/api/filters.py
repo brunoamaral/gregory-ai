@@ -2474,9 +2474,10 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"A substance, as the regulator names it (the INN, or the active substance "
 			"when the INN is empty; for the FDA, the ingredient). Matches one element "
 			"of the product's `substances` exactly, ignoring case and extra spaces, "
-			"e.g. ?substance=ocrelizumab, and also ignores the salt: ?substance=fingolimod "
-			"and ?substance=fingolimod hydrochloride both find the EMA and the FDA "
-			"records of Gilenya. A combination product matches on any of its "
+			"e.g. ?substance=ocrelizumab, and also ignores the salt and the US/international "
+			"name difference: ?substance=fingolimod and ?substance=fingolimod hydrochloride "
+			"both find the EMA and the FDA records of Gilenya, and ?substance=dalfampridine "
+			"finds EMA's Fampyra (fampridine) as well as the FDA's Ampyra. A combination product matches on any of its "
 			"substances (the parts of its `substance_key`)."
 		),
 	)
@@ -2607,13 +2608,13 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		``fingolimod hydrochloride`` and the other way round; the first stays so that a
 		name the key rules change (a delivery enzyme) still matches itself."""
 		from gregory.utils.ema import split_substances
-		from gregory.utils.substance_key import strip_salt
+		from gregory.utils.substance_key import canonical_substance
 
 		substances = split_substances(value, "")
 		if not substances:
 			return queryset
 		condition = Q(substances__overlap=substances)
-		for part in {strip_salt(s) for s in substances}:
+		for part in {canonical_substance(s) for s in substances}:
 			# One '+'-separated part of the key. re.escape output (backslash before +, -,
 			# a space or a bracket) is valid in PostgreSQL's regex syntax: a backslash
 			# before a non-letter stands for that character.

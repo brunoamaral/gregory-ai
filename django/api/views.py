@@ -3796,7 +3796,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 	- **site_id** - filter by Django Site ID; medicines linked to a category with a subject in that site's scope, or approved for one of those subjects. A site with `medicines_enabled` off returns nothing
 	- **tracked** - `false`: no live link to a category you can see (shown only because EMA approved it for a condition); `true`: filed under at least one category you can see
 	- **regulator** - `ema` or `fda`; omit for both (any other value returns 400)
-	- **substance** - one substance. Matches the product's `substances` exactly (ignoring case), or its `substance_key` with the salt ignored: `fingolimod` and `fingolimod hydrochloride` both find EMA's Gilenya and the FDA's
+	- **substance** - one substance. Matches the product's `substances` exactly (ignoring case), or its `substance_key` with the salt and the US/international name difference ignored: `fingolimod` and `fingolimod hydrochloride` both find EMA's Gilenya and the FDA's, `dalfampridine` finds Fampyra
 	- **substance_key** - the drug's key, exactly (ignoring case): `?substance_key=fingolimod` lists the records of that drug at both regulators; a combination is `amlodipine+valsartan`
 	- **name** - part of the product's name (the brand name, including a former name in brackets), case-insensitive: `?name=ocrevus`
 	- **status** - the regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, ... FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`

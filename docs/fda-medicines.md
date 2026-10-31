@@ -53,7 +53,11 @@ Things worth knowing:
   regulators' records of one drug. `substance_key` does: each substance goes through `strip_salt`, which drops
   trailing salt, hydrate and counter-ion words (hydrochloride, tartrate, sulfate, monohydrate, sodium, ...) one at a
   time while more than one word is left, and stops when only a counter-ion would remain (`sodium chloride` stays).
-  A short list of names keeps their last word (`dimethyl fumarate`, `diroximel fumarate`, `monomethyl fumarate`).
+  A short list of names keeps their last word (`dimethyl fumarate`, `diroximel fumarate`, `monomethyl fumarate`), and
+  a metal that is the drug stops the stripping of the anion after it (`ferrous sulfate`, `silver nitrate`).
+  A small `INN_ALIASES` map then turns the FDA's US names into the international ones EMA uses (`dalfampridine`
+  to `fampridine`, `acetaminophen` to `paracetamol`, `epinephrine` to `adrenaline`, ...); add a pair only for the
+  same molecule.
   A delivery enzyme listed as a second ingredient (hyaluronidase, as in Ocrevus Zunovo) is dropped when something
   else remains, as EMA files the subcutaneous form under the antibody. The rest is unique, sorted and joined with
   `+`. The sync sets it on every row it writes; `refresh_substance_keys` (pipeline step 3f, right after the syncs)
@@ -318,10 +322,11 @@ that have `medicines_enabled` on.
   the two interleave; `regulator=ema` keeps `-ema_last_updated`.
 - **Salt names.** The FDA names an ingredient as on its label, sometimes with the salt (Gilenya is
   `fingolimod hydrochloride`, EMA's is `fingolimod`; Zeposia `ozanimod hydrochloride`; Exelon capsules
-  `rivastigmine tartrate`), and `substance` is an exact match. To find the FDA record the tools tell the
-  model to also try `name` (the brand) or the salt form, and to group the two regulators' records by the
-  substance without the salt, not by exact `substances`. A `substance` search with no FDA record carries
-  that hint (in `guidance` on zero hits, as `fda_hint` otherwise).
+  `rivastigmine tartrate`). The API's `substance` filter now ignores salts and the US/international name
+  difference (`dalfampridine` is `fampridine`), so `substance=fingolimod` finds both regulators' Gilenya, and
+  records of one drug share `substance_key`. The MCP tools' text still says otherwise (try `name` or the salt
+  form, group by the substance without the salt, and the `fda_hint` and salt zero-result hint): that wording
+  is stale until drug-grouping PR 3 updates `mcp-server`.
 - **Capitals.** The FDA's data writes brand names, ingredients and companies in capitals. The tool
   descriptions and the site instructions ask the model to present them in normal case; the data is not
   changed.

@@ -5,7 +5,10 @@ from unittest import TestCase
 
 from gregory.utils.substance_key import (
 	COUNTER_IONS,
+	INN_ALIASES,
 	SALT_WORDS,
+	STANDALONE_METALS,
+	canonical_substance,
 	strip_salt,
 	substance_key,
 )
@@ -29,6 +32,14 @@ class SubstanceKeyTests(TestCase):
 			(["naproxen sodium"], "naproxen"),
 			(["amlodipine besylate", "valsartan"], "amlodipine+valsartan"),
 			(["interferon beta-1a"], "interferon beta-1a"),
+			(["ferrous sulfate"], "ferrous sulfate"),
+			(["ferrous fumarate"], "ferrous fumarate"),
+			(["silver nitrate"], "silver nitrate"),
+			(["bismuth subsalicylate"], "bismuth subsalicylate"),
+			(["dalfampridine"], "fampridine"),
+			(["fampridine"], "fampridine"),
+			(["epinephrine bitartrate"], "adrenaline"),
+			(["glyburide", "metformin hydrochloride"], "glibenclamide+metformin"),
 		]
 		for substances, expected in cases:
 			with self.subTest(substances=substances):
@@ -111,3 +122,70 @@ class StripSaltTests(TestCase):
 
 	def test_the_lists_do_not_overlap_the_exceptions(self):
 		self.assertTrue(COUNTER_IONS <= SALT_WORDS)
+
+
+class MetalTests(TestCase):
+	def test_a_metal_that_is_the_drug_keeps_its_anion(self):
+		for name in (
+			"ferrous sulfate",
+			"ferrous fumarate",
+			"ferric citrate",
+			"silver nitrate",
+			"silver sulfadiazine",
+			"gallium nitrate",
+			"bismuth subcitrate",
+			"strontium chloride",
+			"aluminum acetate",
+		):
+			with self.subTest(name=name):
+				self.assertEqual(strip_salt(name), name)
+
+	def test_ferrous_sulfate_and_ferrous_fumarate_are_different_drugs(self):
+		self.assertNotEqual(
+			substance_key(["ferrous sulfate"]), substance_key(["ferrous fumarate"])
+		)
+
+	def test_the_hydrate_goes_but_the_anion_stays(self):
+		self.assertEqual(strip_salt("ferrous sulfate hydrate"), "ferrous sulfate")
+
+	def test_a_metal_is_not_stripped_as_a_trailing_word(self):
+		self.assertEqual(strip_salt("something silver"), "something silver")
+		self.assertEqual(strip_salt("bismuth subsalicylate"), "bismuth subsalicylate")
+
+	def test_the_metals_are_a_separate_guard_set(self):
+		self.assertFalse(STANDALONE_METALS & SALT_WORDS)
+
+
+class AliasTests(TestCase):
+	def test_us_names_become_the_international_name(self):
+		expected = {
+			"dalfampridine": "fampridine",
+			"acetaminophen": "paracetamol",
+			"albuterol": "salbutamol",
+			"levalbuterol": "levosalbutamol",
+			"epinephrine": "adrenaline",
+			"norepinephrine": "noradrenaline",
+			"glyburide": "glibenclamide",
+			"meperidine": "pethidine",
+			"cyclosporine": "ciclosporin",
+			"rifampin": "rifampicin",
+			"hydroxyurea": "hydroxycarbamide",
+			"cholecalciferol": "colecalciferol",
+		}
+		self.assertEqual({k: INN_ALIASES[k] for k in expected}, expected)
+		for us, inn in expected.items():
+			with self.subTest(us=us):
+				self.assertEqual(substance_key([us]), inn)
+				self.assertEqual(canonical_substance(us), inn)
+				self.assertEqual(canonical_substance(inn), inn)
+
+	def test_the_alias_applies_after_the_salt_is_stripped(self):
+		self.assertEqual(canonical_substance("Dalfampridine Hydrochloride"), "fampridine")
+		self.assertEqual(canonical_substance("albuterol sulfate"), "salbutamol")
+
+	def test_the_map_never_points_at_another_us_name(self):
+		self.assertFalse(set(INN_ALIASES.values()) & set(INN_ALIASES))
+
+	def test_a_name_with_no_alias_is_unchanged(self):
+		self.assertEqual(canonical_substance("furosemide"), "furosemide")
+		self.assertEqual(canonical_substance("fingolimod hydrochloride"), "fingolimod")
