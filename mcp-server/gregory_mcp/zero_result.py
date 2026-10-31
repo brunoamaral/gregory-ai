@@ -205,8 +205,8 @@ def _looks_like_a_brand(value: Any) -> bool:
 
 def _medicine_substance_text(params: dict[str, Any]) -> str:
 	exact = (
-		"`substance` is an exact match (ignoring case) on one active substance as EMA names it, "
-		"the INN (e.g. ocrelizumab), not part of a name."
+		"`substance` is an exact match (ignoring case) on one active substance as the regulator names it, "
+		"the INN at EMA or the ingredient at the FDA (e.g. ocrelizumab), not part of a name."
 	)
 	if _looks_like_a_brand(params.get("substance")):
 		return (
@@ -220,8 +220,9 @@ _MEDICINE_SUBSTANCE_RULE = (("substance",), _medicine_substance_text)
 
 _MEDICINE_NAME_RULE = (
 	("name",),
-	"`name` matches part of the product name EMA publishes (a brand name, sometimes with a former "
-	"name in brackets), ignoring case. If the value is an active substance, use `substance` instead "
+	"`name` matches part of the product name the regulator publishes (a brand name, sometimes with a "
+	"former name in brackets at EMA; an FDA application sold under several brands lists them all), "
+	"ignoring case. If the value is an active substance, use `substance` instead "
 	"(the INN, e.g. ocrelizumab).",
 )
 
@@ -230,17 +231,26 @@ _MEDICINE_GENERICS_RULE = (
 	lambda params: (
 		"Generics, biosimilars and duplicate products are already included, so they are not the cause."
 		if params.get("include_generics")
-		else "Generic and biosimilar products, and duplicate products (further EMA products for the "
-		"same medicine as a lead product), are hidden unless `include_generics` is true: "
+		else "Generic and biosimilar products, and duplicate products (further products of the same "
+		"regulator for the same medicine as a lead product), are hidden unless `include_generics` is true: "
 		"a substance whose only listed products are copies would otherwise look absent."
 	),
 )
 
 _MEDICINE_STATUS_RULE = (
 	("status", "opinion_status"),
-	"`status` is EMA's own wording (Authorised, Withdrawn, Refused, Opinion, ...). "
-	"`opinion_status` is filled only while a product is at the opinion stage, so most "
-	"products have none: drop it, or use `status`.",
+	"`status` is the regulator's own wording: EMA's is Authorised, Withdrawn, Refused, Opinion, ...; "
+	"the FDA's is Approved, Tentatively approved, Discontinued, Revoked. A value from one does not "
+	"match the other's records. `opinion_status` is EMA-only and filled only while a product is at the "
+	"opinion stage, so most products have none, and it leaves out every FDA record: drop it, or use "
+	"`status`.",
+)
+
+_MEDICINE_REGULATOR_RULE = (
+	("regulator",),
+	"`regulator` keeps only EMA's or only the FDA's records. A medicine can be in one regulator's list "
+	"and not the other's, and an FDA record shows only when it is filed under a category of this site: "
+	"drop `regulator` to search both.",
 )
 
 _MEDICINE_DATE_RULE = (
@@ -251,16 +261,18 @@ _MEDICINE_DATE_RULE = (
 
 _MEDICINE_COVERAGE_RULE = (
 	("substance", "name"),
-	"EMA lists only medicines authorised centrally for the whole EU, and this site "
-	"shows only those filed under its categories or approved for one of its conditions. "
-	"A drug that is not here may still be authorised in individual countries: do not "
-	"conclude it is not approved.",
+	"EMA lists only medicines authorised centrally for the whole EU, and the FDA data has approved "
+	"new drugs and biologics (NDAs and BLAs) but not generics (ANDAs) or applications under review. "
+	"This site shows only those filed under its categories or approved for one of its "
+	"conditions (EMA records only). A drug that is not here may still be authorised in individual countries or approved "
+	"under another route: do not conclude it is not approved.",
 )
 
 _MEDICINE_TRACKED_RULE = (
 	("tracked",),
-	"`tracked=false` keeps only medicines that no category of this site covers, and "
-	"`tracked=true` only those filed under a category. Drop it to see both.",
+	"`tracked=false` keeps only medicines that no category of this site covers (EMA ones only: an FDA "
+	"record shows only when filed under a category), and `tracked=true` only those filed under a "
+	"category. Drop it to see both.",
 )
 
 # Checked in order per tool, so the categories most likely to silently zero
@@ -296,6 +308,7 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 	"medicines": (
 		_MEDICINE_DATE_RULE,
 		_TAXONOMY_RULE,
+		_MEDICINE_REGULATOR_RULE,
 		_MEDICINE_STATUS_RULE,
 		_MEDICINE_TRACKED_RULE,
 		_MEDICINE_SUBSTANCE_RULE,

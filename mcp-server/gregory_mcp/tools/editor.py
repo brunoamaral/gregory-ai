@@ -577,7 +577,7 @@ async def set_category_assignment(
 
 
 async def set_medicine_link(category_id: int, medicine_id: int, linked: bool) -> dict:
-	"""Put an EMA medicine in a category, or take it out of one.
+	"""Put a medicine (EMA or FDA) in a category, or take it out of one.
 
 	`linked=true` makes the medicine show in the category: a link an editor
 	removed is restored, and a medicine the automatic matching did not link is
@@ -588,7 +588,7 @@ async def set_medicine_link(category_id: int, medicine_id: int, linked: bool) ->
 
 	The change is live immediately and applies to the whole category, so it shows
 	on every site that lists that category, not only this one. It is recorded
-	under the signed-in person's name. Show the user the medicine (name and
+	under the signed-in person's name. Show the user the medicine (name, regulator and
 	substance, see search_medicines or get_medicine) and the category, and get
 	their confirmation before calling.
 

@@ -113,7 +113,7 @@ class Tenant:
 	# exactly what every tenant was before (the patent tools are hidden and the
 	# instructions do not mention patents).
 	patents_enabled: bool = False
-	# Whether EMA medicines are reachable through this site (`medicines_enabled`
+	# Whether medicines (EMA and FDA) are reachable through this site (`medicines_enabled`
 	# on GET /tenants/), read the same way as `patents_enabled`: off when absent
 	# or not a boolean, so an older Django changes nothing for a tenant.
 	medicines_enabled: bool = False

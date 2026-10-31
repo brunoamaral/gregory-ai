@@ -8,9 +8,8 @@ empty on them, and the FDA columns stay empty on EMA rows. Like the EMA data the
 reference data with no team, subject or organisation of its own.
 
 > **Where this stands.** FDA medicines are imported, labelled, linked to categories, visible in
-> the Django admin, and served by the JSON API and the RSS feeds beside EMA's (see
-> [API and feeds](#api-and-feeds)). The MCP tools do not describe them yet and still show
-> EMA's medicines only.
+> the Django admin, and served by the JSON API, the RSS feeds and the MCP tools beside EMA's
+> (see [API and feeds](#api-and-feeds) and [MCP](#mcp)).
 
 ## What the data is
 
@@ -288,6 +287,32 @@ medicine RSS feeds list both regulators' events. The full reference is in
 For the frontend: show the regulator on each row, group the two regulators' products of one
 substance under that substance (they are separate records that are never grouped by Gregory),
 and sort a mixed list by `authorisation_date`.
+
+## MCP
+
+`search_medicines`, `get_medicine` and `set_medicine_link` (see
+[07-mcp-server.md](07-mcp-server.md#medicines)) work on both regulators' records, on the sites
+that have `medicines_enabled` on.
+
+- **`regulator`.** `search_medicines` takes `regulator` (`ema` or `fda`); omitted, it searches both.
+  Every row and record has `regulator` and its own `source`, so the model can name the right
+  regulator beside each medicine.
+- **A medicine can appear twice**, once per regulator, as two records. The tool descriptions say so and
+  suggest grouping by `substances`. `ordering=-authorisation_date` gives one list of both.
+- **FDA rows show FDA fields.** A search row has `brand_names` and `fda_application_number`; the
+  detail also has `fda_application_type`, `fda_center`, `fda_priority_review`, `fda_original_class`
+  and `interchangeable`. The columns the API sends as `null` because they belong to the other
+  regulator (EMA's opinion, European Commission and designation fields on an FDA record, the FDA's
+  on an EMA one) are left out by the tools, so nothing prints as "None".
+- **Coverage note.** An FDA record carries the FDA's note: approved new drugs and biologics (NDAs
+  and BLAs) only, no generics (ANDAs) or applications under review, through openFDA with label
+  text from DailyMed, not for clinical decisions, and "not in FDA's data" is not "not approved".
+  A search for one regulator carries only that regulator's note; an unfiltered search carries both.
+- **Visibility.** An FDA record shows only when it is filed under one of the site's categories
+  (it has no subject links), so it is always `tracked`. `tracked=false` and `opinion_status` return
+  EMA records only.
+- **`set_medicine_link`** files an EMA or an FDA record in a category, or takes it out; the endpoint is
+  the same for both.
 
 ## In the admin
 

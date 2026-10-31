@@ -412,6 +412,7 @@ def test_instructions_for_a_medicines_tenant_name_the_source_and_the_caveat():
 	for session in (None, _editor(), _editor(can_edit=False), _editor(tier="public")):
 		text = instructions_for(_tenant(medicines_enabled=True), session)
 		assert "European Medicines Agency" in text
+		assert "U.S. Food and Drug Administration" in text
 		assert "does not mean it is not approved" in text
 
 
@@ -458,10 +459,10 @@ def test_the_wording_without_medicines_is_exactly_what_it_was():
 
 
 def test_the_records_list_names_each_kind_the_tenant_has():
-	assert "articles, clinical trials, EU-authorised medicines and researchers" in instructions_for(
+	assert "articles, clinical trials, EU and US medicines and researchers" in instructions_for(
 		_tenant(medicines_enabled=True)
 	)
-	assert "articles, clinical trials, patents, EU-authorised medicines and researchers" in instructions_for(
+	assert "articles, clinical trials, patents, EU and US medicines and researchers" in instructions_for(
 		_tenant(medicines_enabled=True, patents_enabled=True)
 	)
 	assert "articles, clinical trials, patents and researchers" in instructions_for(_tenant(patents_enabled=True))
@@ -499,7 +500,7 @@ def test_the_link_tool_follows_the_other_edit_tools_in_the_same_sentence():
 	text = instructions_for(_tenant(medicines_enabled=True), _editor())
 	assert (
 		"set_category_assignment (put an article in a category by hand, or take it out), "
-		"set_medicine_link (put an EMA medicine in a category, or take it out; the change applies to the "
+		"set_medicine_link (put a medicine, EMA or FDA, in a category, or take it out; the change applies to the "
 		"whole category)."
 	) in text
 	assert "Edits are live immediately" in text

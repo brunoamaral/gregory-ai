@@ -116,48 +116,131 @@ def compact_patent(patent: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
+#: The attribution of each regulator, as the API words it in a record's `source`.
+REGULATOR_SOURCES = {
+	"ema": "European Medicines Agency",
+	"fda": "U.S. Food and Drug Administration",
+}
+
+#: Columns that exist for one regulator only. The API sends the other regulator's as
+#: `null`; the tools leave them out, so a record never shows a field that cannot apply
+#: to it. Kept in step with `MEDICINE_EMA_ONLY_FIELDS` / `MEDICINE_FDA_ONLY_FIELDS` in
+#: django/api/serializers/__init__.py.
+EMA_ONLY_MEDICINE_FIELDS = (
+	"ema_product_number",
+	"opinion_status",
+	"therapeutic_areas",
+	"atc_code",
+	"advanced_therapy",
+	"orphan_medicine",
+	"conditional_approval",
+	"exceptional_circumstances",
+	"prime_priority_medicine",
+	"accelerated_assessment",
+	"additional_monitoring",
+	"patient_safety",
+	"rolling_review_start_date",
+	"evaluation_start_date",
+	"opinion_date",
+	"latest_ec_decision_date",
+	"refusal_date",
+	"application_withdrawal_date",
+	"suspension_date",
+	"end_date",
+	"ema_first_published",
+	"ema_last_updated",
+)
+FDA_ONLY_MEDICINE_FIELDS = (
+	"fda_application_number",
+	"fda_application_type",
+	"fda_center",
+	"brand_names",
+	"fda_priority_review",
+	"fda_original_class",
+	"interchangeable",
+)
+
+
+def medicine_regulator(medicine: dict[str, Any]) -> str:
+	"""`ema` or `fda`. A record from before the API had a `regulator` is EMA's."""
+	return "fda" if medicine.get("regulator") == "fda" else "ema"
+
+
+def medicine_source(medicine: dict[str, Any]) -> str:
+	"""The attribution to show with this record: the API's own `source`, else its
+	regulator's name."""
+	return medicine.get("source") or REGULATOR_SOURCES[medicine_regulator(medicine)]
+
+
+def drop_other_regulator_fields(medicine: dict[str, Any]) -> dict[str, Any]:
+	"""`medicine` without the columns that belong to the other regulator and are
+	`null` on it (an FDA row has no `therapeutic_areas`, an EMA row no `brand_names`).
+	A value that is somehow set is kept."""
+	other = FDA_ONLY_MEDICINE_FIELDS if medicine_regulator(medicine) == "ema" else EMA_ONLY_MEDICINE_FIELDS
+	return {k: v for k, v in medicine.items() if not (k in other and v is None)}
+
+
 def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
-	"""An EMA medicine's search row. `link` is the product's EPAR page on
-	ema.europa.eu. `latest_ec_decision_date` keeps that name on purpose: it is the
-	latest European Commission decision (usually a variation), never the approval,
-	which is `authorisation_date`. `categories` are the live links the caller may
-	see; `tracked` is true when there is at least one. `subjects` are the conditions
-	EMA approved it for, which is why an untracked medicine is listed at all."""
-	return {
+	"""A medicine's search row, from either regulator. `regulator` and `source` say
+	which. `link` is the record's `url`: an EMA product's EPAR page on ema.europa.eu,
+	or an FDA application's Drugs@FDA page (a CBER biologic: its DailyMed label).
+
+	`authorisation_date` is the first approval at either regulator (on an FDA row, the
+	original approval). An EMA row has `latest_ec_decision_date`, kept under that name
+	on purpose: it is the latest European Commission decision (usually a variation),
+	never the approval. `categories` are the live links the caller may see; `tracked`
+	is true when there is at least one. `subjects` are the conditions EMA approved an
+	EMA medicine for, which is why an untracked one is listed at all; an FDA row has
+	none.
+
+	A field only one regulator has is on that regulator's rows only: an FDA row has
+	`brand_names` and `fda_application_number` and none of the EMA opinion, EC decision
+	or designation fields; an EMA row has neither of the FDA ones."""
+	fda = medicine_regulator(medicine) == "fda"
+	row: dict[str, Any] = {
 		"medicine_id": medicine.get("id"),
+		"regulator": medicine_regulator(medicine),
+		"source": medicine_source(medicine),
 		"name": medicine.get("name"),
-		"substances": medicine.get("substances"),
-		"status": medicine.get("status"),
-		"opinion_status": medicine.get("opinion_status"),
-		"authorisation_date": medicine.get("authorisation_date"),
-		"opinion_date": medicine.get("opinion_date"),
-		"latest_ec_decision_date": medicine.get("latest_ec_decision_date"),
-		"holder": medicine.get("holder"),
-		"indication": _truncate(medicine.get("indication")),
-		"advanced_therapy": medicine.get("advanced_therapy"),
-		"orphan_medicine": medicine.get("orphan_medicine"),
-		"is_combination": medicine.get("is_combination"),
-		"generic": medicine.get("generic"),
-		"biosimilar": medicine.get("biosimilar"),
-		"tracked": medicine.get("tracked"),
-		"categories": [
-			{
-				"category_id": c.get("id"),
-				"category_name": c.get("category_name"),
-				"category_slug": c.get("category_slug"),
-			}
-			for c in medicine.get("categories") or []
-		],
-		"subjects": [
-			{
-				"subject_id": s.get("id"),
-				"subject_name": s.get("subject_name"),
-				"matched_on": s.get("matched_on"),
-			}
-			for s in medicine.get("subjects") or []
-		],
-		"link": medicine.get("url"),
 	}
+	if fda:
+		row["brand_names"] = medicine.get("brand_names")
+		row["fda_application_number"] = medicine.get("fda_application_number")
+	row["substances"] = medicine.get("substances")
+	row["status"] = medicine.get("status")
+	if not fda:
+		row["opinion_status"] = medicine.get("opinion_status")
+	row["authorisation_date"] = medicine.get("authorisation_date")
+	if not fda:
+		row["opinion_date"] = medicine.get("opinion_date")
+		row["latest_ec_decision_date"] = medicine.get("latest_ec_decision_date")
+	row["holder"] = medicine.get("holder")
+	row["indication"] = _truncate(medicine.get("indication"))
+	if not fda:
+		row["advanced_therapy"] = medicine.get("advanced_therapy")
+		row["orphan_medicine"] = medicine.get("orphan_medicine")
+	row["is_combination"] = medicine.get("is_combination")
+	row["generic"] = medicine.get("generic")
+	row["biosimilar"] = medicine.get("biosimilar")
+	row["tracked"] = medicine.get("tracked")
+	row["categories"] = [
+		{
+			"category_id": c.get("id"),
+			"category_name": c.get("category_name"),
+			"category_slug": c.get("category_slug"),
+		}
+		for c in medicine.get("categories") or []
+	]
+	row["subjects"] = [
+		{
+			"subject_id": s.get("id"),
+			"subject_name": s.get("subject_name"),
+			"matched_on": s.get("matched_on"),
+		}
+		for s in medicine.get("subjects") or []
+	]
+	row["link"] = medicine.get("url")
+	return row
 
 
 def compact_author(author: dict[str, Any]) -> dict[str, Any]:

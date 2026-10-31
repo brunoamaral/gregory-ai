@@ -6,17 +6,86 @@ import httpx2
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from gregory_mcp.compact import EMA_ONLY_MEDICINE_FIELDS, FDA_ONLY_MEDICINE_FIELDS
 from gregory_mcp.tools.medicines import (
 	COVERAGE_NOTE,
+	EMA_NOTE,
+	FDA_NOTE,
 	MAX_PAGE_SIZE,
 	get_medicine,
 	search_medicines,
 )
 
 SOURCE = "European Medicines Agency"
+FDA_SOURCE = "U.S. Food and Drug Administration"
+
+# What the API sends for an FDA row: the EMA-only fields are null, not absent.
+FDA_ROW = {
+	"id": 31,
+	"regulator": "fda",
+	"ema_product_number": None,
+	"fda_application_number": "BLA761053",
+	"fda_application_type": "BLA",
+	"fda_center": "CDER",
+	"name": "KESIMPTA / ARZERRA",
+	"brand_names": ["KESIMPTA", "ARZERRA"],
+	"inn": "OFATUMUMAB",
+	"active_substance": "OFATUMUMAB",
+	"substances": ["ofatumumab"],
+	"is_combination": False,
+	"status": "Approved",
+	"opinion_status": None,
+	"therapeutic_areas": None,
+	"atc_code": None,
+	"pharmacotherapeutic_group": "CD20-directed Cytolytic Antibody",
+	"indication": "Relapsing forms of multiple sclerosis. " + "x" * 1000,
+	"holder": "NOVARTIS",
+	"advanced_therapy": None,
+	"orphan_medicine": None,
+	"conditional_approval": None,
+	"exceptional_circumstances": None,
+	"prime_priority_medicine": None,
+	"accelerated_assessment": None,
+	"additional_monitoring": None,
+	"biosimilar": False,
+	"generic": False,
+	"interchangeable": False,
+	"fda_priority_review": True,
+	"fda_original_class": "TYPE 1 - NEW MOLECULAR ENTITY",
+	"patient_safety": None,
+	"rolling_review_start_date": None,
+	"evaluation_start_date": None,
+	"opinion_date": None,
+	"authorisation_date": "2009-10-26",
+	"latest_ec_decision_date": None,
+	"refusal_date": None,
+	"application_withdrawal_date": None,
+	"suspension_date": None,
+	"end_date": None,
+	"ema_first_published": None,
+	"ema_last_updated": None,
+	"url": "https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=125326",
+	"grouped_under": None,
+	"tracked": True,
+	"categories": [{"id": 8, "category_name": "Ofatumumab", "category_slug": "ofatumumab"}],
+	"subjects": [],
+	"source": FDA_SOURCE,
+}
+
+# An EMA row as the API sends it now: the FDA-only fields are null.
+EMA_NULL_FDA_FIELDS = {
+	"fda_application_number": None,
+	"fda_application_type": None,
+	"fda_center": None,
+	"brand_names": None,
+	"fda_priority_review": None,
+	"fda_original_class": None,
+	"interchangeable": None,
+}
 
 ROW = {
 	"id": 12,
+	"regulator": "ema",
 	"ema_product_number": "EMEA/H/C/004043",
 	"name": "Ocrevus",
 	"inn": "ocrelizumab",
@@ -44,6 +113,7 @@ ROW = {
 		{"id": 1, "subject_name": "Multiple Sclerosis", "subject_slug": "ms", "matched_on": "Multiple Sclerosis"}
 	],
 	"source": SOURCE,
+	**EMA_NULL_FDA_FIELDS,
 }
 
 
@@ -67,6 +137,8 @@ async def test_search_medicines_returns_compact_rows_with_the_source(mock_gregor
 	assert result["medicines"] == [
 		{
 			"medicine_id": 12,
+			"regulator": "ema",
+			"source": SOURCE,
 			"name": "Ocrevus",
 			"substances": ["ocrelizumab"],
 			"status": "Authorised",
@@ -118,6 +190,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 	await search_medicines(
 		name="ocrevus",
 		substance="ocrelizumab",
+		regulator="fda",
 		category_id=6,
 		category_slug="ocrelizumab",
 		subject_id=1,
@@ -148,7 +221,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 		"ordering": "-authorisation_date",
 		"page": "2",
 		"page_size": "5",
-		"regulator": "ema",  # the tool's own, until PR 4 describes FDA rows
+		"regulator": "fda",
 	}
 
 
@@ -157,8 +230,8 @@ async def test_unset_filters_are_not_sent(mock_gregory):
 
 	await search_medicines()
 
-	# `regulator=ema` is the tool's own, temporary, until PR 4 describes FDA rows.
-	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size", "regulator"}
+	# No `regulator` unless the caller chose one: the search covers both.
+	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size"}
 
 
 async def test_page_size_is_capped_and_a_next_page_is_reported(mock_gregory):
@@ -234,19 +307,29 @@ async def test_the_guidance_does_not_blame_generics_when_they_are_included(mock_
 	assert "already included" in " ".join(result["guidance"]["suggestions"])
 
 
-def test_the_coverage_note_says_not_in_ema_is_not_unapproved():
+def test_the_coverage_note_says_not_in_a_regulators_data_is_not_unapproved():
 	assert "European Medicines Agency" in COVERAGE_NOTE
 	assert "individual EU countries" in COVERAGE_NOTE
 	assert "not mean 'not approved'" in COVERAGE_NOTE
+	assert "U.S. Food and Drug Administration" in COVERAGE_NOTE
+	assert "ANDAs" in COVERAGE_NOTE and "under review" in COVERAGE_NOTE
+	assert "'not in FDA's data' does not mean 'not approved'" in COVERAGE_NOTE
+	assert "can have a record from each regulator" in COVERAGE_NOTE
 
 
-def test_the_tool_descriptions_name_the_source_and_the_caveat():
-	for fn in (search_medicines, get_medicine):
-		doc = fn.__doc__
+def test_the_tool_descriptions_name_both_sources_and_the_caveat():
+	search_doc, detail_doc = (" ".join(fn.__doc__.split()) for fn in (search_medicines, get_medicine))
+	for doc in (search_doc, detail_doc):
 		assert "European Medicines Agency" in doc
-		assert "individual" in doc and "not approved" in doc
-	assert "latest_ec_decision_date" in search_medicines.__doc__
-	assert "latest_ec_decision_date" in get_medicine.__doc__
+		assert "U.S. Food and Drug Administration" in doc
+		assert "individual EU countries" in doc and "not approved" in doc
+		assert "ANDAs" in doc and "under review" in doc
+		assert "EU-authorised" not in doc
+		assert "latest_ec_decision_date" in doc
+	assert "twice, once per regulator" in search_doc
+	assert "Pass `regulator` to search one regulator only" in search_doc
+	assert "ordering=-authorisation_date" in search_doc
+	assert "CHMP is EMA's" in detail_doc
 
 
 # --- get_medicine -------------------------------------------------------------
@@ -287,7 +370,8 @@ async def test_get_medicine_returns_the_record_and_its_events_worded_by_kind_lab
 	assert "id" not in result
 	assert result["name"] == "Ocrevus"
 	assert result["source"] == SOURCE
-	assert result["note"] == COVERAGE_NOTE
+	assert result["regulator"] == "ema"
+	assert result["note"] == EMA_NOTE
 	assert result["url"] == ROW["url"]
 	assert result["latest_ec_decision_date"] == "2026-06-01"
 	assert result["categories"] == ROW["categories"]
@@ -297,12 +381,88 @@ async def test_get_medicine_returns_the_record_and_its_events_worded_by_kind_lab
 	assert result["events"][1]["basis"] == "reconstructed"
 
 
-async def test_get_medicine_reports_an_fda_record_as_not_found_until_pr_4(mock_gregory):
-	fda = {**DETAIL, "regulator": "fda", "source": "U.S. Food and Drug Administration"}
-	mock_gregory.set_handler(_json(fda))
+FDA_DETAIL = {
+	**FDA_ROW,
+	"grouped_products": [],
+	"events": [
+		{
+			"id": 95,
+			"kind": "fda_approved",
+			"kind_label": "Approved by the FDA",
+			"event_date": "2009-10-26",
+			"basis": "reconstructed",
+			"from_value": "",
+			"to_value": "",
+		},
+	],
+}
 
-	with pytest.raises(ToolError, match="was not found"):
-		await get_medicine(12)
+
+async def test_get_medicine_describes_an_fda_record_in_its_own_words(mock_gregory):
+	mock_gregory.set_handler(_json(FDA_DETAIL))
+
+	result = await get_medicine(31)
+
+	assert result["medicine_id"] == 31
+	assert result["regulator"] == "fda"
+	assert result["source"] == FDA_SOURCE
+	assert result["fda_application_number"] == "BLA761053"
+	assert result["fda_application_type"] == "BLA"
+	assert result["fda_center"] == "CDER"
+	assert result["brand_names"] == ["KESIMPTA", "ARZERRA"]
+	assert result["fda_priority_review"] is True
+	assert result["fda_original_class"] == "TYPE 1 - NEW MOLECULAR ENTITY"
+	assert result["interchangeable"] is False
+	assert result["authorisation_date"] == "2009-10-26"
+	assert result["url"] == FDA_ROW["url"]
+	assert result["events"][0]["kind_label"] == "Approved by the FDA"
+	assert "id" not in result["events"][0]
+	# The FDA's own caveat, not EMA's.
+	assert result["note"] == FDA_NOTE
+	assert "ANDAs" in result["note"]
+	assert "EMA" not in result["note"]
+
+
+async def test_an_fda_detail_has_none_of_the_null_ema_fields(mock_gregory):
+	mock_gregory.set_handler(_json(FDA_DETAIL))
+
+	result = await get_medicine(31)
+
+	for field in EMA_ONLY_MEDICINE_FIELDS:
+		assert field not in result
+	# Nothing else on the record is null, so nothing prints as "None".
+	assert {k for k, v in result.items() if v is None} == {"grouped_under"}
+
+
+async def test_an_ema_detail_has_none_of_the_null_fda_fields_and_keeps_its_own_nulls(mock_gregory):
+	detail = dict(DETAIL, end_date=None, refusal_date=None)
+	mock_gregory.set_handler(_json(detail))
+
+	result = await get_medicine(12)
+
+	for field in FDA_ONLY_MEDICINE_FIELDS:
+		assert field not in result
+	assert result["regulator"] == "ema"
+	assert result["note"] == EMA_NOTE
+	# An EMA field that is empty on this EMA row is still its own field.
+	assert result["end_date"] is None and result["refusal_date"] is None
+
+
+async def test_a_record_without_a_regulator_is_read_as_ema_s(mock_gregory):
+	legacy = {k: v for k, v in DETAIL.items() if k not in ("regulator", "source", *FDA_ONLY_MEDICINE_FIELDS)}
+	mock_gregory.set_handler(_json(legacy))
+
+	result = await get_medicine(12)
+
+	assert result["regulator"] == "ema"
+	assert result["source"] == SOURCE
+
+
+async def test_a_grouped_fda_lead_keeps_its_grouped_products(mock_gregory):
+	detail = dict(FDA_DETAIL, grouped_products=[{"id": 32, "name": "Tyruko", "url": "https://x/tyruko"}])
+	mock_gregory.set_handler(_json(detail))
+
+	assert (await get_medicine(31))["grouped_products"] == [{"id": 32, "name": "Tyruko", "url": "https://x/tyruko"}]
 
 
 async def test_get_medicine_without_events_returns_an_empty_list(mock_gregory):
@@ -337,7 +497,7 @@ async def test_other_errors_are_not_swallowed(mock_gregory):
 
 
 def test_the_docstring_explains_tracked_and_the_two_ways_a_medicine_shows():
-	doc = search_medicines.__doc__
+	doc = " ".join(search_medicines.__doc__.split())
 	assert "tracked=false" in doc
 	assert "approved it for one of" in doc
 	assert "duplicate products" in doc
@@ -368,3 +528,114 @@ async def test_the_detail_keeps_subjects_and_grouped_products(mock_gregory):
 	assert result["subjects"] == ROW["subjects"]
 	assert result["tracked"] is True
 	assert result["grouped_products"] == [{"id": 13, "name": "Axura", "url": "https://x/axura"}]
+
+
+# --- FDA records ------------------------------------------------------------------
+
+
+async def test_an_fda_row_in_search_names_its_regulator_and_source(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [FDA_ROW]}))
+
+	result = await search_medicines(substance="ofatumumab", regulator="fda")
+
+	assert mock_gregory.requests[0].url.params["regulator"] == "fda"
+	assert result["source"] == FDA_SOURCE
+	assert result["note"] == FDA_NOTE
+	assert result["medicines"] == [
+		{
+			"medicine_id": 31,
+			"regulator": "fda",
+			"source": FDA_SOURCE,
+			"name": "KESIMPTA / ARZERRA",
+			"brand_names": ["KESIMPTA", "ARZERRA"],
+			"fda_application_number": "BLA761053",
+			"substances": ["ofatumumab"],
+			"status": "Approved",
+			"authorisation_date": "2009-10-26",
+			"holder": "NOVARTIS",
+			"indication": ("Relapsing forms of multiple sclerosis. " + "x" * 1000)[:400] + "…",
+			"is_combination": False,
+			"generic": False,
+			"biosimilar": False,
+			"tracked": True,
+			"categories": [{"category_id": 8, "category_name": "Ofatumumab", "category_slug": "ofatumumab"}],
+			"subjects": [],
+			"link": FDA_ROW["url"],
+		}
+	]
+
+
+async def test_an_fda_row_shows_no_ema_field_and_an_ema_row_no_fda_field(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 2, "next": None, "results": [ROW, FDA_ROW]}))
+
+	ema, fda = (await search_medicines(substance="x"))["medicines"]
+
+	for field in ("opinion_status", "opinion_date", "latest_ec_decision_date", "advanced_therapy", "orphan_medicine"):
+		assert field in ema and field not in fda
+	for field in ("brand_names", "fda_application_number"):
+		assert field in fda and field not in ema
+	# Nothing null that cannot apply to the row, so nothing for a model to print as "None".
+	assert None not in fda.values()
+
+
+async def test_a_mixed_search_names_both_sources_once_each(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 3, "next": None, "results": [ROW, ROW, FDA_ROW]}))
+
+	result = await search_medicines(substance="x")
+
+	assert result["source"] == f"{SOURCE} and {FDA_SOURCE}"
+	assert result["note"] == COVERAGE_NOTE
+	assert [m["source"] for m in result["medicines"]] == [SOURCE, SOURCE, FDA_SOURCE]
+
+
+async def test_an_unfiltered_search_keeps_both_caveats_even_when_the_page_is_all_ema(mock_gregory):
+	"""EMA rows sort first, so page 1 can be all EMA while page 2 has FDA ones."""
+	mock_gregory.set_handler(_json({"count": 40, "next": "https://x/medicines/?page=2", "results": [ROW]}))
+
+	result = await search_medicines()
+
+	assert result["source"] == SOURCE
+	assert result["note"] == COVERAGE_NOTE
+	assert result["next_page"] == 2
+
+
+async def test_a_regulator_filter_narrows_the_note_to_that_regulator(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	ema = await search_medicines(regulator="ema")
+	fda = await search_medicines(regulator="fda")
+
+	assert (ema["source"], ema["note"]) == (SOURCE, EMA_NOTE)
+	assert (fda["source"], fda["note"]) == (FDA_SOURCE, FDA_NOTE)
+
+
+async def test_a_zero_hit_search_with_no_filter_names_both_sources(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(name="nothing")
+
+	assert result["source"] == f"{SOURCE} and {FDA_SOURCE}"
+
+
+async def test_the_zero_hit_guidance_handles_the_regulator_filter(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance="ocrelizumab", regulator="fda", opinion_status="Positive")
+
+	guidance = result["guidance"]
+	assert guidance["applied_filters"] == ["opinion_status", "regulator", "substance"]
+	text = " ".join(guidance["suggestions"])
+	assert "drop `regulator` to search both" in text
+	assert "leaves out every FDA record" in text
+	assert "ANDAs" in text and "under review" in text
+	assert "not conclude it is not approved" in text
+
+
+def test_regulator_is_limited_to_the_two_regulators_on_the_tool():
+	from typing import Literal, get_args, get_type_hints
+
+	hint = get_type_hints(search_medicines)["regulator"]
+	(literal, none) = get_args(hint)
+	assert none is type(None)
+	assert literal.__origin__ is Literal
+	assert set(get_args(literal)) == {"ema", "fda"}

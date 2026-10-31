@@ -4,7 +4,8 @@
 > This page describes the EMA side. The matcher links FDA medicines to categories too, with
 > its own disease check (see [fda-medicines.md](fda-medicines.md#matching)), and the API and
 > the RSS feeds show both regulators' medicines (see
-> [fda-medicines.md](fda-medicines.md#api-and-feeds)). The MCP tools still show EMA's only.
+> [fda-medicines.md](fda-medicines.md#api-and-feeds)), and so do the MCP tools (see
+> [fda-medicines.md](fda-medicines.md#mcp)).
 
 Gregory keeps a copy of the European Medicines Agency's list of centrally authorised
 human medicines, so an editor can see where a medicine stands with the regulator: a
@@ -363,7 +364,9 @@ The rules that matter when reading or changing the code:
 ## MCP
 
 The research assistant (the MCP server, see [07-mcp-server.md](07-mcp-server.md#medicines)) can read
-and curate medicines on the sites that have them.
+and curate medicines on the sites that have them. The tools cover the FDA's records too (see
+[fda-medicines.md](fda-medicines.md#mcp)); this section describes the EMA side. `search_medicines`
+takes a `regulator` filter, and each row and record says which regulator it is from.
 
 | Tool | Who | What it does |
 |:-----|:----|:-------------|
@@ -375,10 +378,10 @@ and curate medicines on the sites that have them.
   (the tenant directory, `GET /tenants/`, reports it). On any other site they do not exist and the
   site's instructions never mention medicines. `set_medicine_link` also needs an editor with the
   edit scope; a read-only sign-in never sees it.
-- **Attribution travels with the data.** Every response says `source: "European Medicines Agency"`
-  and that the list covers only centrally authorised medicines: a drug missing from it may still be
-  authorised in individual countries, so "not in EMA's data" is not "not approved". The tool
-  descriptions say the same, and tell the model to show the EPAR `link`.
+- **Attribution travels with the data.** Every EMA row says `source: "European Medicines Agency"`
+  and the response says that the list covers only centrally authorised medicines: a drug missing from
+  it may still be authorised in individual countries, so "not in EMA's data" is not "not approved".
+  The tool descriptions say the same, and tell the model to show the EPAR `link`.
 - **`tracked=false` is the editor's to-do list.** It lists the medicines that show only because EMA
   approved them for one of the site's conditions. An editor tracks one by creating or updating a
   category (a matching term with an intervention modality); the instructions say so, and tell an
