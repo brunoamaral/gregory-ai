@@ -153,9 +153,23 @@ independent: a site can have either, both or neither.
 
 **Two regulators.** The API serves both (see [fda-medicines.md](fda-medicines.md)), and a search with
 no `regulator` returns both. One medicine can appear twice, once per regulator, as two records with
-their own ids; the tools' descriptions tell the model to group them by `substances` if it wants one entry
-per drug. With no `ordering`, EMA records come first and FDA ones follow; `ordering=-authorisation_date`
-gives one list of both, newest approvals first. An FDA record shows on a site only when it is filed
+their own ids. The FDA names an ingredient as on its label, sometimes with the salt (`fingolimod
+hydrochloride`, where EMA has `fingolimod`; likewise `ozanimod hydrochloride`, `rivastigmine tartrate`),
+and `substance` is an exact match, so `substance=fingolimod` finds EMA's Gilenya and not the FDA's. To
+find a drug's FDA record the tools' descriptions tell the model to also try `name` (the brand) or the
+salt form, and to group the two regulators' records by the substance without the salt, not by exact
+`substances`. A `substance` search that finds no FDA record says so: a zero-hit response's `guidance`
+carries the hint, and a response with records but none from the FDA (the search covering the whole
+result, `regulator` not `ema`) carries it as `fda_hint`. The FDA's data writes brand names, ingredients
+and companies in capitals; the descriptions and the site instructions tell the model to present them in
+normal case (Kesimpta, Novartis), and the data itself is not changed.
+
+**Default order.** The API's own default, `-ema_last_updated`, lists every EMA record before every FDA
+one, which buries the FDA ones past a first page. So when the caller gives no `ordering` and does not
+ask for `regulator=ema`, `search_medicines` sends `ordering=-authorisation_date` (the first approval,
+which both regulators have), and the two interleave. `regulator=ema` with no `ordering` keeps
+`-ema_last_updated`; any `ordering` the caller gives is sent as given. The defaulted order is not a
+filter the caller chose and is not listed in the zero-hit `guidance`. An FDA record shows on a site only when it is filed
 under one of the site's categories, so it is always `tracked`, and `tracked=false` and `opinion_status`
 return EMA records only.
 
@@ -203,7 +217,7 @@ match only one field. `search_patents`'s reads title and summary only.
 
 When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
 response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
-`substance` being an exact INN or ingredient (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), `regulator` narrowing to one regulator, generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` (each regulator's own wording) and
+`substance` being an exact INN or ingredient (with a reminder that the FDA may name it with the salt, so try the salt form or `name`) (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), `regulator` narrowing to one regulator, generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` (each regulator's own wording) and
 `opinion_status` (EMA only), the first-authorisation date range, and the reminder that a drug missing from
 a regulator's data may be authorised nationally or approved under another route):
 

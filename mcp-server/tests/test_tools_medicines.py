@@ -230,8 +230,9 @@ async def test_unset_filters_are_not_sent(mock_gregory):
 
 	await search_medicines()
 
-	# No `regulator` unless the caller chose one: the search covers both.
-	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size"}
+	# No `regulator` unless the caller chose one: the search covers both. The one thing
+	# sent that the caller did not choose is the mixed order (see the ordering tests).
+	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size", "ordering"}
 
 
 async def test_page_size_is_capped_and_a_next_page_is_reported(mock_gregory):
@@ -328,8 +329,14 @@ def test_the_tool_descriptions_name_both_sources_and_the_caveat():
 		assert "latest_ec_decision_date" in doc
 	assert "twice, once per regulator" in search_doc
 	assert "Pass `regulator` to search one regulator only" in search_doc
-	assert "ordering=-authorisation_date" in search_doc
+	assert "`-authorisation_date`" in search_doc and "`-ema_last_updated`" in search_doc
 	assert "CHMP is EMA's" in detail_doc
+	# The FDA's capitals, and its salt names, are explained to the model.
+	for doc in (search_doc, detail_doc):
+		assert "in capitals" in doc and "normal case (Kesimpta, Novartis)" in doc
+		assert "fingolimod hydrochloride" in doc
+		assert "not by exact `substances`" in doc
+	assert "finds both" not in detail_doc
 
 
 # --- get_medicine -------------------------------------------------------------
@@ -629,6 +636,92 @@ async def test_the_zero_hit_guidance_handles_the_regulator_filter(mock_gregory):
 	assert "leaves out every FDA record" in text
 	assert "ANDAs" in text and "under review" in text
 	assert "not conclude it is not approved" in text
+
+
+@pytest.mark.parametrize(
+	("kwargs", "expected"),
+	[
+		({}, "-authorisation_date"),  # both regulators: mixed, newest approvals first
+		({"regulator": "fda"}, "-authorisation_date"),
+		({"regulator": "ema"}, None),  # EMA only: the API's own default, unchanged
+		({"ordering": "authorisation_date"}, "authorisation_date"),  # the caller's choice wins
+		({"regulator": "ema", "ordering": "-latest_ec_decision_date"}, "-latest_ec_decision_date"),
+		({"regulator": "fda", "ordering": "ema_last_updated"}, "ema_last_updated"),
+	],
+)
+async def test_the_default_order_mixes_the_regulators_unless_the_search_is_ema_only(
+	mock_gregory, kwargs, expected
+):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	await search_medicines(**kwargs)
+
+	assert mock_gregory.requests[0].url.params.get("ordering") == expected
+
+
+async def test_the_defaulted_order_is_not_given_to_the_guidance(mock_gregory, monkeypatch):
+	from gregory_mcp.tools import medicines
+
+	seen = {}
+
+	def fake_guidance(params, tool):
+		seen.update(params)
+		return {}
+
+	monkeypatch.setattr(medicines, "guidance_for", fake_guidance)
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	await search_medicines(substance="x")
+
+	assert mock_gregory.requests[0].url.params["ordering"] == "-authorisation_date"
+	assert seen["ordering"] is None
+
+
+@pytest.mark.parametrize("regulator", [None, "fda"])
+async def test_a_failed_substance_search_suggests_the_salt_form_or_the_brand_for_the_fda(
+	mock_gregory, regulator
+):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance="fingolimod", regulator=regulator)
+
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "fingolimod hydrochloride, where EMA has fingolimod" in text
+	assert "salt form, or `name` with the brand" in text
+
+
+async def test_an_ema_only_substance_search_is_not_told_about_fda_salts(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance="fingolimod", regulator="ema")
+
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "salt" not in text
+
+
+async def test_a_substance_search_with_no_fda_record_says_to_try_the_salt_or_the_brand(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [ROW]}))
+
+	result = await search_medicines(substance="fingolimod")
+
+	assert result["fda_hint"].startswith("No FDA record matched this `substance`")
+	assert "fingolimod hydrochloride" in result["fda_hint"]
+	assert "`name` (the brand) or the salt form" in result["fda_hint"]
+
+
+@pytest.mark.parametrize(
+	("kwargs", "payload"),
+	[
+		({"substance": "x", "regulator": "ema"}, {"count": 1, "next": None, "results": [ROW]}),
+		({"substance": "x"}, {"count": 2, "next": None, "results": [ROW, FDA_ROW]}),
+		({"substance": "x"}, {"count": 40, "next": "https://x/medicines/?page=2", "results": [ROW]}),
+		({"name": "x"}, {"count": 1, "next": None, "results": [ROW]}),
+	],
+)
+async def test_the_fda_hint_is_left_out_when_it_does_not_apply(mock_gregory, kwargs, payload):
+	mock_gregory.set_handler(_json(payload))
+
+	assert "fda_hint" not in await search_medicines(**kwargs)
 
 
 def test_regulator_is_limited_to_the_two_regulators_on_the_tool():

@@ -297,8 +297,18 @@ that have `medicines_enabled` on.
 - **`regulator`.** `search_medicines` takes `regulator` (`ema` or `fda`); omitted, it searches both.
   Every row and record has `regulator` and its own `source`, so the model can name the right
   regulator beside each medicine.
-- **A medicine can appear twice**, once per regulator, as two records. The tool descriptions say so and
-  suggest grouping by `substances`. `ordering=-authorisation_date` gives one list of both.
+- **A medicine can appear twice**, once per regulator, as two records. The tool descriptions say so.
+  With no `ordering` a search of both regulators (or of the FDA) is sent as `-authorisation_date`, so
+  the two interleave; `regulator=ema` keeps `-ema_last_updated`.
+- **Salt names.** The FDA names an ingredient as on its label, sometimes with the salt (Gilenya is
+  `fingolimod hydrochloride`, EMA's is `fingolimod`; Zeposia `ozanimod hydrochloride`; Exelon capsules
+  `rivastigmine tartrate`), and `substance` is an exact match. To find the FDA record the tools tell the
+  model to also try `name` (the brand) or the salt form, and to group the two regulators' records by the
+  substance without the salt, not by exact `substances`. A `substance` search with no FDA record carries
+  that hint (in `guidance` on zero hits, as `fda_hint` otherwise).
+- **Capitals.** The FDA's data writes brand names, ingredients and companies in capitals. The tool
+  descriptions and the site instructions ask the model to present them in normal case; the data is not
+  changed.
 - **FDA rows show FDA fields.** A search row has `brand_names` and `fda_application_number`; the
   detail also has `fda_application_type`, `fda_center`, `fda_priority_review`, `fda_original_class`
   and `interchangeable`. The columns the API sends as `null` because they belong to the other

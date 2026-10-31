@@ -206,8 +206,15 @@ def _looks_like_a_brand(value: Any) -> bool:
 def _medicine_substance_text(params: dict[str, Any]) -> str:
 	exact = (
 		"`substance` is an exact match (ignoring case) on one active substance as the regulator names it, "
-		"the INN at EMA or the ingredient at the FDA (e.g. ocrelizumab), not part of a name."
+		"the INN at EMA (e.g. ocrelizumab) or the ingredient at the FDA, not part of a name."
 	)
+	if params.get("regulator") != "ema":
+		# The FDA writes an ingredient as on its label, often with the salt.
+		exact += (
+			" The FDA names an ingredient as on its label, sometimes with the salt (fingolimod "
+			"hydrochloride, where EMA has fingolimod), so to find the FDA's record also try the salt "
+			"form, or `name` with the brand."
+		)
 	if _looks_like_a_brand(params.get("substance")):
 		return (
 			"The `substance` value looks like a brand or product name: use `name` instead, which matches "

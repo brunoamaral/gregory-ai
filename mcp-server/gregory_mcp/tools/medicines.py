@@ -36,6 +36,9 @@ MAX_PAGE_SIZE = 25
 
 Regulator = Literal["ema", "fda"]
 
+#: The order a search of both regulators (or of the FDA) gets when the caller gives none.
+DEFAULT_MIXED_ORDERING = "-authorisation_date"
+
 EMA_NOTE = (
 	"Source: European Medicines Agency (EMA), medicines authorised centrally for the whole EU. "
 	"A drug missing from this list may still be authorised in individual EU countries, so "
@@ -47,6 +50,15 @@ FDA_NOTE = (
 	"(NDAs and BLAs), through openFDA; label text from DailyMed. Generic drugs (ANDAs) and "
 	"applications under review are not covered, so 'not in FDA's data' does not mean 'not "
 	"approved'. Not for clinical decisions."
+)
+
+#: Shown when a `substance` search found no FDA record: the FDA names an ingredient as on
+#: its label, which is often the salt.
+FDA_SALT_HINT = (
+	"No FDA record matched this `substance`. The FDA names an ingredient as on its label, "
+	"sometimes with the salt (fingolimod hydrochloride, where EMA has fingolimod), and "
+	"`substance` is an exact match: to find the FDA's record, also try `name` (the brand) "
+	"or the salt form."
 )
 
 #: Attached to every response, so the caveat travels with the data wherever the
@@ -98,10 +110,16 @@ async def search_medicines(
 
 	Every row has `regulator` ("ema" or "fda") and `source` (the regulator's name):
 	show the source with the medicine. One medicine can appear twice, once per regulator,
-	as two separate records with their own ids; group them by `substances` to show one
-	entry per drug. Pass `regulator` to search one regulator only; leave it out for both.
-	With no `ordering`, EMA records come first (newest update first) and FDA ones follow:
-	use `ordering=-authorisation_date` for one list of both, newest approvals first.
+	as two separate records with their own ids. The FDA names an ingredient as on its
+	label, sometimes with the salt (fingolimod hydrochloride, where EMA has fingolimod),
+	so to show one entry per drug group the two regulators' records by the substance
+	without the salt, not by exact `substances`. Pass `regulator` to search one regulator
+	only; leave it out for both. With no `ordering`, a search of both regulators (or of the
+	FDA) lists records by `-authorisation_date`, newest approvals first, so both regulators
+	are mixed; a search of EMA only lists them by `-ema_last_updated`, newest update first.
+
+	The FDA's data writes brand names, ingredients and companies in capitals (KESIMPTA,
+	NOVARTIS): write them in normal case (Kesimpta, Novartis) when you present them.
 
 	The data covers only what each regulator publishes. EMA lists centrally authorised
 	medicines, and a drug missing from it may still be authorised in individual EU
@@ -113,9 +131,12 @@ async def search_medicines(
 	publishes, ignoring case ("ocrevus" finds Ocrevus; an EMA product renamed from
 	another name also matches on the former name in brackets; an FDA application sold
 	under several brands lists them all in its name). Use `substance` for the active
-	substance: the INN as EMA names it, or the ingredient as the FDA names it (e.g.
-	"ocrelizumab"), matched exactly but ignoring case, not part of a name. A combination
-	product matches on any of its substances. They combine with each other and with the
+	substance: the INN as EMA names it (e.g. "ocrelizumab"), or the ingredient as the FDA
+	names it, matched exactly but ignoring case, not part of a name. The FDA writes an
+	ingredient as on its label, sometimes with the salt ("fingolimod hydrochloride",
+	"rivastigmine tartrate"), so `substance="fingolimod"` finds EMA's Gilenya but not the
+	FDA's: to find a drug's FDA record, also try `name` (the brand) or the salt form. A
+	combination product matches on any of its substances. They combine with each other and with the
 	filters below. `category_id` / `category_slug` / `subject_id` (see
 	list_categories, list_subjects) keep products linked to that category, or to a
 	category of that subject; `subject_id` on its own also keeps EMA products EMA approved
@@ -149,8 +170,9 @@ async def search_medicines(
 	Drugs@FDA page for an FDA one: always show it, and name the regulator as the source.
 
 	`ordering` is one of authorisation_date, latest_ec_decision_date,
-	ema_last_updated (the default, newest first), with an optional leading `-` for
-	descending. The last two are EMA's dates, so FDA records sort last on them.
+	ema_last_updated, with an optional leading `-` for descending. The default is
+	`-authorisation_date`, except for `regulator="ema"`, where it is `-ema_last_updated`.
+	The last two are EMA's dates, so FDA records sort last on them.
 
 	A zero-hit response adds a `guidance` key: which filters were applied and ranked
 	suggestions for what is most likely over-constraining the search.
@@ -173,7 +195,14 @@ async def search_medicines(
 		"page": clamped_page,
 		"page_size": clamp_page_size(page_size, MAX_PAGE_SIZE),
 	}
-	data = await get_client().get("/medicines/", params)
+	# Left alone, the API lists every EMA record before every FDA one (`-ema_last_updated`),
+	# which buries the FDA ones past a first page. Unless the caller chose an order, or is
+	# searching EMA alone, ask for the first approval, which both regulators have. Only the
+	# request carries it: the zero-result guidance reads `params`, the caller's own choices.
+	sent = dict(params)
+	if ordering is None and regulator != "ema":
+		sent["ordering"] = DEFAULT_MIXED_ORDERING
+	data = await get_client().get("/medicines/", sent)
 	results = data.get("results", [])
 	count = data.get("count", len(results))
 	# The sources of the rows shown; with none (a zero-hit search), those the search
@@ -190,6 +219,15 @@ async def search_medicines(
 	}
 	if count == 0:
 		response["guidance"] = guidance_for(params, "medicines")
+	elif (
+		substance
+		and regulator != "ema"
+		and not data.get("next")
+		and not any(medicine_regulator(m) == "fda" for m in results)
+	):
+		# Records came back but none is the FDA's: `substance` is an exact match, and the
+		# FDA often names the ingredient with its salt, so its record may simply not match.
+		response["fda_hint"] = FDA_SALT_HINT
 	return response
 
 
@@ -208,8 +246,14 @@ async def get_medicine(medicine_id: int) -> dict:
 	a new molecular entity) and `interchangeable` (a biologic the FDA allows to be
 	substituted for its reference product); fields only the other regulator has are
 	left out. `generic` and `biosimilar` apply to both. A medicine can have a record at
-	each regulator: they are separate records with their own ids (search_medicines by
-	`substance` finds both).
+	each regulator: they are separate records with their own ids. The FDA names an
+	ingredient as on its label, sometimes with the salt (fingolimod hydrochloride, where
+	EMA has fingolimod), so to find the other regulator's record of a drug use
+	search_medicines with `name` (the brand) or the salt form of `substance`, and group the
+	two by the substance without the salt, not by exact `substances`.
+
+	The FDA's data writes brand names, ingredients and companies in capitals (KESIMPTA,
+	NOVARTIS): write them in normal case (Kesimpta, Novartis) when you present them.
 
 	For a lead product, `grouped_products` lists the further products of the same
 	regulator for the same medicine, and `grouped_under` on a duplicate gives its lead.
