@@ -52,22 +52,29 @@ _EDIT_TOOLS_WITH_PATENTS = (
 	"set_category_assignment (put an article or a patent in a category by hand, or take it out)"
 )
 
-# Added to the list above for a site that shows EMA medicines, and only for such a
+# Added to the list above for a site that shows medicines, and only for such a
 # site: elsewhere the tool is hidden and the text must not point at what is absent.
-# A medicine is global EMA data, so the tool changes only its link to a category.
+# A medicine is global regulator data (EMA or FDA), so the tool changes only its link to a category.
 _MEDICINE_EDIT_TOOL = (
-	"set_medicine_link (put an EMA medicine in a category, or take it out; the change applies to the "
+	"set_medicine_link (put a medicine, EMA or FDA, in a category, or take it out; the change applies to the "
 	"whole category)"
 )
 
 # For a site that shows medicines: where the data is from, and what its absence means.
 _MEDICINES_NOTE = (
-	"Medicines come from the European Medicines Agency (EMA) and cover only those authorised centrally for "
-	"the EU. A drug missing from them may still be authorised in individual countries, so not being in "
-	"EMA's data does not mean it is not approved. Name EMA as the source when you present one. A medicine "
-	"shows if it is filed under one of the site's categories or if EMA approved it for one of the site's "
-	"conditions; one with no category is untracked (tracked=false in search_medicines), and an editor "
-	"tracks it by creating or updating a category (a matching term with an intervention modality)."
+	"Medicines come from two regulators: the European Medicines Agency (EMA), which covers those authorised "
+	"centrally for the EU, and the U.S. Food and Drug Administration (FDA), which covers its approved new "
+	"drugs and biologics (NDAs and BLAs, not generics or applications under review). Each record says which "
+	"it is from (regulator, source), and one medicine can have a record from each. A drug missing from "
+	"either may still be authorised or approved elsewhere, so not being in a regulator's data does not mean "
+	"it is not approved. Name the regulator as the source when you present a medicine, and write the FDA's "
+	"brand names and companies, which its data gives in capitals, in normal case (Kesimpta, Novartis). "
+	"The FDA names an ingredient as on its label, sometimes with the salt (fingolimod hydrochloride, where "
+	"EMA has fingolimod), so match the two regulators' records of a drug without the salt. A medicine shows if "
+	"it is filed under one of the site's categories or if EMA approved it for one of the site's conditions "
+	"(an FDA record shows only when filed under a category); one with no category is untracked "
+	"(tracked=false in search_medicines, EMA records only), and an editor tracks it by creating or updating "
+	"a category (a matching term with an intervention modality)."
 )
 
 # Only for a session that has the tool: elsewhere the text must not point at what is absent.
@@ -145,7 +152,7 @@ def _records(tenant: Tenant) -> str:
 	if tenant.patents_enabled:
 		kinds.append("patents")
 	if tenant.medicines_enabled:
-		kinds.append("EU-authorised medicines")
+		kinds.append("EU and US medicines")
 	return f"{', '.join(kinds)} and researchers"
 
 
@@ -183,7 +190,7 @@ def _server_info(tenant: Tenant, session: EditorSession | None = None) -> dict[s
 	records = ", ".join(
 		["articles", "clinical trials"]
 		+ (["patents"] if tenant.patents_enabled else [])
-		+ (["EU-authorised medicines"] if tenant.medicines_enabled else [])
+		+ (["EU and US medicines"] if tenant.medicines_enabled else [])
 		+ ["authors"]
 	)
 	return {

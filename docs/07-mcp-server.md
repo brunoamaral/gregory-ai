@@ -67,8 +67,8 @@ re-checks within a minute).
 
 ## Tools
 
-Ten task-shaped tools, plus two for patents on sites that have them and two for EMA medicines
-on sites that have those, rather than a 1:1 mirror of every API endpoint — a large tool list
+Ten task-shaped tools, plus two for patents on sites that have them and two for medicines (EMA and
+FDA) on sites that have those, rather than a 1:1 mirror of every API endpoint — a large tool list
 crowds context and degrades model tool selection. The patent and medicine tools are offered per
 site: see [Patents](#patents) and [Medicines](#medicines).
 
@@ -136,7 +136,9 @@ is why patents are opt-in per site, claims are capped and there is no bulk expor
 
 ### Medicines
 
-EMA medicines (see [ema-medicines.md](ema-medicines.md)) are a per-site feature in the same way:
+Medicines from two regulators, the European Medicines Agency (EMA, see
+[ema-medicines.md](ema-medicines.md)) and the U.S. Food and Drug Administration (FDA, see
+[fda-medicines.md](fda-medicines.md)), are a per-site feature in the same way:
 `search_medicines` and `get_medicine` are listed, and can be called, only on a site whose
 `medicines_enabled` switch is on (reported per site by `GET /tenants/` and `GET /editor/tenants/`; a
 missing or non-boolean value means off). On any other site — on `/mcp` and `/mcp/editor` alike —
@@ -146,18 +148,43 @@ independent: a site can have either, both or neither.
 
 | Tool | What it does |
 |:---|:---|
-| `search_medicines` | One row per EMA product. A medicine shows because it is filed under one of the site's categories, or because EMA approved it for one of the site's conditions. `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as EMA names it, the INN; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id` (`subject_id` alone also keeps the medicines approved for that subject's condition), `status` (EMA's wording), `opinion_status`, `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`), `tracked` (`false`: only medicines no category of the site covers yet; `true`: only filed ones), `include_generics`, `ordering`. Generic and biosimilar products, and duplicate products (further EMA products for the same medicine), are hidden unless `include_generics=true`. Compact rows: `medicine_id`, `name`, `substances`, `status`, `opinion_status`, `authorisation_date`, `opinion_date`, `latest_ec_decision_date`, `holder`, a ~400-character `indication`, the flags (`advanced_therapy`, `orphan_medicine`, `is_combination`, `generic`, `biosimilar`), `tracked`, `categories`, `subjects` (the conditions EMA approved it for: `subject_id`, `subject_name`, `matched_on`) and `link` (the EPAR page). Page size 10, at most 25. A zero-hit response carries `guidance`. |
-| `get_medicine` | One product by `medicine_id`: the full record (including `tracked`, `subjects`, `grouped_under` and, on a lead product, `grouped_products`) plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off EMA's dates the first time the product was seen. A product the site cannot show is "not found", the same as one that does not exist. |
+| `search_medicines` | One row per EMA product or FDA application. A medicine shows because it is filed under one of the site's categories, or (EMA only) because EMA approved it for one of the site's conditions. `regulator` (`ema` or `fda`; leave it out for both), `name` (part of the brand or product name, case-insensitive, e.g. `ocrevus`), `substance` (one active substance as the regulator names it, the INN at EMA or the ingredient at the FDA; an exact match ignoring case, so `ocrelizumab`), `category_id` / `category_slug` / `subject_id` (`subject_id` alone also keeps the EMA medicines approved for that subject's condition), `status` (the regulator's wording: EMA's Authorised, Withdrawn, ...; the FDA's Approved, Tentatively approved, Discontinued, Revoked), `opinion_status` (EMA only; leaves out every FDA record), `authorised_after` / `authorised_before` (first authorisation, `YYYY-MM-DD`; the FDA's original approval for an FDA record), `tracked` (`false`: only EMA medicines no category of the site covers yet; `true`: only filed ones), `include_generics`, `ordering`. Generic and biosimilar products, and duplicate products (further products of the same regulator for the same medicine), are hidden unless `include_generics=true`. Every row has `regulator`, `source`, `medicine_id`, `name`, `substances`, `status`, `authorisation_date`, `holder`, a ~400-character `indication`, `is_combination`, `generic`, `biosimilar`, `tracked`, `categories`, `subjects` (the conditions EMA approved it for: `subject_id`, `subject_name`, `matched_on`; empty for an FDA record) and `link`. An EMA row adds `opinion_status`, `opinion_date`, `latest_ec_decision_date`, `advanced_therapy` and `orphan_medicine`, and its `link` is the EPAR page. An FDA row adds `brand_names` and `fda_application_number`, none of the EMA ones, and its `link` is the Drugs@FDA page (a CBER biologic: its DailyMed label). Page size 10, at most 25. A zero-hit response carries `guidance`. |
+| `get_medicine` | One product by `medicine_id`: the full record (including `regulator`, `source`, `tracked`, `grouped_under` and, on a lead product, `grouped_products`) plus `events`, newest first, each with `kind_label` (the sentence the RSS feeds use, e.g. "Authorised in the EU" or "Approved by the FDA"), `event_date`, `kind`, `basis` and, for a status or indication change, `from_value` and `to_value`. `basis` is `observed` when the change was seen between two syncs and `reconstructed` when it was read off the regulator's dates the first time the product was seen. An EMA record has `subjects`, the flags EMA publishes, and the opinion and European Commission dates. An FDA record has `fda_application_number`, `fda_application_type` (NDA or BLA), `fda_center` (CDER or CBER), `brand_names`, `fda_priority_review`, `fda_original_class` and `interchangeable`. The columns that belong only to the other regulator are `null` in the API and are **left out** of the tool's record, so a record never shows a field that cannot apply to it. A product the site cannot show is "not found", the same as one that does not exist. |
 
-**EMA only, for now.** The API serves FDA medicines too (see [fda-medicines.md](fda-medicines.md)), but
-these tools do not describe them yet: `search_medicines` asks the API for `regulator=ema` and
-`get_medicine` reports an FDA record as not found. A later change gives the tools both regulators.
+**Two regulators.** The API serves both (see [fda-medicines.md](fda-medicines.md)), and a search with
+no `regulator` returns both. One medicine can appear twice, once per regulator, as two records with
+their own ids. The FDA names an ingredient as on its label, sometimes with the salt (`fingolimod
+hydrochloride`, where EMA has `fingolimod`; likewise `ozanimod hydrochloride`, `rivastigmine tartrate`),
+and `substance` is an exact match, so `substance=fingolimod` finds EMA's Gilenya and not the FDA's. To
+find a drug's FDA record the tools' descriptions tell the model to also try `name` (the brand) or the
+salt form, and to group the two regulators' records by the substance without the salt, not by exact
+`substances`. A `substance` search that finds no FDA record says so: a zero-hit response's `guidance`
+carries the hint, and a response with records but none from the FDA (the search covering the whole
+result, `regulator` not `ema`) carries it as `fda_hint`. The FDA's data writes brand names, ingredients
+and companies in capitals; the descriptions and the site instructions tell the model to present them in
+normal case (Kesimpta, Novartis), and the data itself is not changed.
 
-**Source and coverage.** Every response carries `source: "European Medicines Agency"` and a `note`, and
-both tools' descriptions say it: the data is EMA's, and it covers only medicines authorised centrally for
-the whole EU. A drug missing from it may still be authorised in individual countries, so "not in EMA's
-data" is not "not approved". The site's instructions say the same, and tell the model to name EMA as the
-source. The tools' descriptions also tell the model to show the product's `link`.
+**Default order.** The API's own default, `-ema_last_updated`, lists every EMA record before every FDA
+one, which buries the FDA ones past a first page. So when the caller gives no `ordering` and does not
+ask for `regulator=ema`, `search_medicines` sends `ordering=-authorisation_date` (the first approval,
+which both regulators have), and the two interleave. `regulator=ema` with no `ordering` keeps
+`-ema_last_updated`; any `ordering` the caller gives is sent as given. The defaulted order is not a
+filter the caller chose and is not listed in the zero-hit `guidance`. An FDA record shows on a site only when it is filed
+under one of the site's categories, so it is always `tracked`, and `tracked=false` and `opinion_status`
+return EMA records only.
+
+**Source and coverage.** Every row and record carries its own `source` (`"European Medicines Agency"` or
+`"U.S. Food and Drug Administration"`), read from the API, and a response has a top-level `source` (the
+sources of the rows it returns, joined with " and ", or of the regulators the search was about when it
+found nothing) and a `note`. The note is the caveat for the regulator in play: EMA's data covers only
+medicines authorised centrally for the whole EU, so a drug missing from it may still be authorised in
+individual countries; the FDA's has approved new drugs and biologics (NDAs and BLAs) but not generics
+(ANDAs) or applications under review, comes through openFDA with label text from DailyMed, and is not
+for clinical decisions. In both cases "not in the regulator's data" is not "not approved". A search with
+`regulator` set carries that regulator's note only; one without it always carries both, because the
+other regulator's records can be on a later page. The site's instructions say the same, and tell the
+model to name the regulator as the source. The tools' descriptions also tell the model to show the
+record's `link`. CHMP opinions belong to EMA records only, and the descriptions say so.
 
 **Dates.** `authorisation_date` is the first approval. `latest_ec_decision_date` is the most recent
 European Commission decision, usually a variation (a new indication, a label change), and keeps that name
@@ -190,9 +217,9 @@ match only one field. `search_patents`'s reads title and summary only.
 
 When `search_articles`, `search_trials`, `search_patents` or `search_medicines` returns zero results, the
 response carries a `guidance` key instead of just an empty list (for medicines the suggestions are about
-`substance` being an exact INN (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` and
-`opinion_status`, the first-authorisation date range, and the reminder that a drug missing from EMA's data
-may be authorised nationally):
+`substance` being an exact INN or ingredient (with a reminder that the FDA may name it with the salt, so try the salt form or `name`) (a failed `substance` search that looks like a brand suggests `name`, and a failed `name` search suggests `substance`), `regulator` narrowing to one regulator, generics and duplicate products being hidden by default, `tracked` narrowing to filed or unfiled medicines, `status` (each regulator's own wording) and
+`opinion_status` (EMA only), the first-authorisation date range, and the reminder that a drug missing from
+a regulator's data may be authorised nationally or approved under another route):
 
 - `applied_filters` — the names (never the values) of every filter that was set on the
   call, sorted.
@@ -406,9 +433,10 @@ assistant"` — a client only ever sees these if no tenant resolved, which
   naming the title), the subjects covered (in `id` order), and a note that every tool is
   read-only and scoped to those subjects. Patents and medicines are named in the generated
   introduction, the `description` and the note only for a tenant that has them; a tenant with
-  medicines also gets a sentence saying the medicines are the European Medicines Agency's, cover only
-  centrally authorised ones, that a drug missing from them may still be authorised nationally, and that a
-  medicine with no category is untracked (an editor tracks it by creating or updating a category); its
+  medicines also gets a sentence saying the medicines come from two regulators (EMA, centrally
+  authorised ones only, and the FDA, approved new drugs and biologics but not generics or applications
+  under review), that each record says which, that a drug missing from either may still be authorised
+  or approved elsewhere, and that a medicine with no category is untracked (an editor tracks it by creating or updating a category); its
   editors are told about `set_medicine_link`, and that it is not how a medicine is tracked. None of this text ever contains "GregoryAI",
   "instance" or "tenant" — `tests/test_identity.py` checks every tenant's rendered text
   for that.
@@ -807,7 +835,7 @@ answer is never served to `/mcp`.
 | `create_category` | `POST /editor/categories/` | Name, subjects (one team), terms and optional `category_exclude_terms`. Starts empty; the next pipeline run fills it. A taken slug names the existing category. |
 | `update_category` | `PATCH /editor/categories/{category_id}/` | Only the fields sent. `category_terms` replaces; `add_terms`/`remove_terms` edit; `category_exclude_terms`/`add_exclude_terms`/`remove_exclude_terms` do the same for the veto list. Refused for a category shared with another site. |
 | `set_category_assignment` | `PUT` (`assigned=true`) or `DELETE` (`assigned=false`) `/editor/articles/{id}/categories/{category_id}/`, or `/editor/patents/{id}/categories/{category_id}/` | `assigned=true` is a hand assignment, never removed by the pipeline, idempotent. `assigned=false` removes hand assignments only; a pipeline match is refused with the reason. |
-| `set_medicine_link` | `PUT` (`linked=true`) or `DELETE` (`linked=false`) `/editor/categories/{category_id}/medicines/{medicine_id}/` | Only on a site with medicines (see [Medicines](#medicines)). Puts an EMA medicine in a category or takes it out; the change applies to the **whole category**, so it shows on every site that lists it. `linked=false` suppresses a link the matcher made (so it never comes back) and deletes a manual one; `linked=true` restores a suppressed link or adds a manual one. Repeating either changes nothing. The description asks the model to show the medicine and the category and get the user's confirmation first. |
+| `set_medicine_link` | `PUT` (`linked=true`) or `DELETE` (`linked=false`) `/editor/categories/{category_id}/medicines/{medicine_id}/` | Only on a site with medicines (see [Medicines](#medicines)). Puts a medicine (EMA or FDA) in a category or takes it out; the change applies to the **whole category**, so it shows on every site that lists it. `linked=false` suppresses a link the matcher made (so it never comes back) and deletes a manual one; `linked=true` restores a suppressed link or adds a manual one. Repeating either changes nothing. The description asks the model to show the medicine and the category and get the user's confirmation first. |
 | `list_sources` | `GET /editor/sources/` | Source managers only. The sources of the site's subjects, of every type, with their settings (for the four types that can be added), whether they are active and when they were last fetched. Filters `subject_id`, `source_type`, `active` (default: active only). |
 | `preview_source` | `POST /editor/sources/preview/` | Source managers only. Takes the same arguments as `create_source` (without `name` and `description`), runs the same checks and saves nothing. Returns the counts and up to 5 sample titles, what the first run brings in, PubMed's reading of the search, and `refused` / `duplicate_of`. A source that would be refused is still a normal answer. |
 | `create_source` | `POST /editor/sources/` | Source managers only. Adds an RSS feed of papers or trials (`rss_papers`, `rss_trials`), a PubMed search (`pubmed`) or a ClinicalTrials.gov search (`ctgov`) for one subject. Live at once, feeds every site that covers the subject, brings in content from today on. A duplicate is reported as "already exists" (`created: false`) rather than as an error. |

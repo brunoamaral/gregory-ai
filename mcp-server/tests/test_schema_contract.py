@@ -146,10 +146,6 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"advanced_therapy",
 		"orphan_medicine",
 		"is_combination",
-		# FDA rows are served by the API from FDA medicines PR 3. The tool sends
-		# regulator=ema itself until PR 4 can describe an FDA row and exposes this
-		# parameter. PR 4 removes this line.
-		"regulator",
 		"site_id",
 		"include_public",
 	},
@@ -328,3 +324,19 @@ def test_stats_endpoints_exist_in_schema(schema_params):
 	for path in ("/stats/", "/articles/stats/", "/trials/stats/", "/patents/stats/"):
 		assert path in schema_params, f"{path} is missing from schema.yml entirely"
 	assert {"team", "subject"} <= schema_params["/stats/"]
+
+
+def test_the_medicine_field_lists_match_the_schema():
+	"""compact.py lists the columns that belong to one regulator only, to leave the
+	other regulator's nulls out. A field renamed or added in the serializer must be
+	reflected there."""
+	from gregory_mcp.compact import EMA_ONLY_MEDICINE_FIELDS, FDA_ONLY_MEDICINE_FIELDS
+
+	if not SCHEMA_PATH.exists():
+		pytest.skip(f"schema.yml not found at {SCHEMA_PATH} — run from within the gregory-ai checkout")
+	with SCHEMA_PATH.open() as f:
+		properties = yaml.safe_load(f)["components"]["schemas"]["Medicine"]["properties"]
+	assert "regulator" in properties and "source" in properties
+	assert set(EMA_ONLY_MEDICINE_FIELDS) <= set(properties)
+	assert set(FDA_ONLY_MEDICINE_FIELDS) <= set(properties)
+	assert not set(EMA_ONLY_MEDICINE_FIELDS) & set(FDA_ONLY_MEDICINE_FIELDS)

@@ -1466,6 +1466,8 @@ async def test_a_failed_link_edit_logs_the_error(monkeypatch, caplog):
 
 def test_the_link_tool_docstring_says_live_whole_category_and_confirm():
 	doc = editor.set_medicine_link.__doc__
+	assert "a medicine (EMA or FDA)" in doc
+	assert "EMA medicine" not in doc
 	assert "live immediately" in doc
 	assert "whole category" in doc
 	assert "confirmation before calling" in doc
