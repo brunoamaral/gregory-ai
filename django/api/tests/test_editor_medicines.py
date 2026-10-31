@@ -439,6 +439,48 @@ class EditorReadTest(MedicineEditorFixture):
 		self.assertEqual(self.get("/editor/medicines/drugs/otherexumab/").status_code, 404)
 
 
+class EditorDrugRedirectTest(MedicineEditorFixture):
+	"""A non-canonical drug key redirects within the editor route, not to the public one."""
+
+	def setUp(self):
+		super().setUp()
+		self.fampridine = _medicine("Fampyra", "fampridine")
+		self.make_link(self.fampridine, self.cat_a, SOURCE.AUTOMATIC)
+
+	def test_a_us_name_redirects_to_the_editor_route_keeping_the_query(self):
+		response = self.get("/editor/medicines/drugs/dalfampridine/?include_generics=true&page_size=5")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(
+			response["Location"], "/editor/medicines/drugs/fampridine/?include_generics=true&page_size=5"
+		)
+
+	def test_a_redirect_without_a_query_string_has_none(self):
+		response = self.get("/editor/medicines/drugs/dalfampridine/")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(response["Location"], "/editor/medicines/drugs/fampridine/")
+
+	def test_an_encoded_key_redirects_too(self):
+		response = self.get("/editor/medicines/drugs/Dalfampridine%20/")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(response["Location"], "/editor/medicines/drugs/fampridine/")
+
+	def test_a_canonical_key_is_200(self):
+		response = self.get("/editor/medicines/drugs/fampridine/")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["substance_key"], "fampridine")
+
+	def test_following_the_redirect_with_editor_auth_gives_the_same_item(self):
+		first = self.get("/editor/medicines/drugs/dalfampridine/")
+		followed = self.get(first["Location"])
+		self.assertEqual(followed.status_code, 200)
+		self.assertEqual(followed.data, self.get("/editor/medicines/drugs/fampridine/").data)
+
+	def test_the_redirect_needs_an_editor_and_hides_a_drug_the_site_cannot_see(self):
+		self.assertEqual(self.client.get("/editor/medicines/drugs/dalfampridine/").status_code, 401)
+		# Site B has medicines off: no redirect, so no hint that the drug exists.
+		self.assertEqual(self.get("/editor/medicines/drugs/dalfampridine/", site=self.site_b).status_code, 404)
+
+
 class ThrottleTest(MedicineEditorFixture):
 	@override_settings(MCP_EDITOR_RATE_LIMITS={"hour": 1, "day": 100})
 	def test_medicine_writes_past_the_hourly_limit_are_429(self):
