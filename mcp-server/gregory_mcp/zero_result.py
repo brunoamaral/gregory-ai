@@ -1,4 +1,4 @@
-"""Guidance attached to zero-hit search_articles/search_trials/search_patents/search_medicines responses.
+"""Guidance attached to zero-hit search_articles/search_trials/search_patents/search_medicines/list_medicine_drugs responses.
 
 Phase 3 of MCP-TELEMETRY-PLAN.md. A product change independent of the
 telemetry work: `{"count": 0, "articles": []}` is a dead end for the model
@@ -205,16 +205,10 @@ def _looks_like_a_brand(value: Any) -> bool:
 
 def _medicine_substance_text(params: dict[str, Any]) -> str:
 	exact = (
-		"`substance` is an exact match (ignoring case) on one active substance as the regulator names it, "
-		"the INN at EMA (e.g. ocrelizumab) or the ingredient at the FDA, not part of a name."
+		"`substance` matches a whole active substance (the INN at EMA, e.g. ocrelizumab, or the ingredient at "
+		"the FDA), ignoring case, salts and the US/international name: fingolimod and fingolimod hydrochloride "
+		"find the same records, as do fampridine and dalfampridine. It is not part of a name."
 	)
-	if params.get("regulator") != "ema":
-		# The FDA writes an ingredient as on its label, often with the salt.
-		exact += (
-			" The FDA names an ingredient as on its label, sometimes with the salt (fingolimod "
-			"hydrochloride, where EMA has fingolimod), so to find the FDA's record also try the salt "
-			"form, or `name` with the brand."
-		)
 	if _looks_like_a_brand(params.get("substance")):
 		return (
 			"The `substance` value looks like a brand or product name: use `name` instead, which matches "
@@ -225,6 +219,13 @@ def _medicine_substance_text(params: dict[str, Any]) -> str:
 
 _MEDICINE_SUBSTANCE_RULE = (("substance",), _medicine_substance_text)
 
+_MEDICINE_SUBSTANCE_KEY_RULE = (
+	("substance_key",),
+	"`substance_key` is a drug's key exactly (ignoring case): its substances without their salt, sorted and "
+	"joined with `+` (fingolimod, amlodipine+valsartan). Take it from a record's `substance_key`, or use "
+	"`substance`, which also matches a salt name or a US/international name.",
+)
+
 _MEDICINE_NAME_RULE = (
 	("name",),
 	"`name` matches part of the product name the regulator publishes (a brand name, sometimes with a "
@@ -234,7 +235,7 @@ _MEDICINE_NAME_RULE = (
 )
 
 _MEDICINE_GENERICS_RULE = (
-	("substance", "name", "status", "category_id", "category_slug", "subject_id"),
+	("substance", "substance_key", "name", "status", "category_id", "category_slug", "subject_id"),
 	lambda params: (
 		"Generics, biosimilars and duplicate products are already included, so they are not the cause."
 		if params.get("include_generics")
@@ -267,7 +268,7 @@ _MEDICINE_DATE_RULE = (
 )
 
 _MEDICINE_COVERAGE_RULE = (
-	("substance", "name"),
+	("substance", "substance_key", "name"),
 	"EMA lists only medicines authorised centrally for the whole EU, and the FDA data has approved "
 	"new drugs and biologics (NDAs and BLAs) but not generics (ANDAs) or applications under review. "
 	"This site shows only those filed under its categories or approved for one of its "
@@ -319,6 +320,7 @@ _RULES_BY_TOOL: dict[str, tuple[tuple[tuple[str, ...], Any], ...]] = {
 		_MEDICINE_STATUS_RULE,
 		_MEDICINE_TRACKED_RULE,
 		_MEDICINE_SUBSTANCE_RULE,
+		_MEDICINE_SUBSTANCE_KEY_RULE,
 		_MEDICINE_NAME_RULE,
 		_MEDICINE_GENERICS_RULE,
 		_MEDICINE_COVERAGE_RULE,

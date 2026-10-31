@@ -46,6 +46,7 @@ TOOL_ENDPOINTS = [
 	(trials.search_trials, "/trials/", {"intent"}),
 	(patents.search_patents, "/patents/", {"intent"}),
 	(medicines.search_medicines, "/medicines/", set()),
+	(medicines.list_medicine_drugs, "/medicines/drugs/", set()),
 	(authors.search_authors, "/authors/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
 	(catalog.list_categories, "/categories/", set()),
@@ -148,9 +149,15 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"is_combination",
 		"site_id",
 		"include_public",
-		# The API got it first (drug grouping, PR 1). The MCP tool takes it in PR 3: remove
-		# this entry then.
-		"substance_key",
+	},
+	# list_medicine_drugs takes the same filters as search_medicines, so the same
+	# parameters are left out of it for the same reasons.
+	"/medicines/drugs/": {
+		"advanced_therapy",
+		"orphan_medicine",
+		"is_combination",
+		"site_id",
+		"include_public",
 	},
 	"/trials/": {
 		"format",

@@ -1,9 +1,9 @@
 """Builds the MCPServer: registers tools, resources, and prompts.
 
 `build_server()` is the anonymous server behind `/mcp`: everything on it is
-read-only. Fourteen read tools are registered, but `search_patents` and
-`get_patent` are offered only to a tenant that has patents, and `search_medicines`
-and `get_medicine` only to one that has medicines (tool_access.py), so the others
+read-only. Fifteen read tools are registered, but `search_patents` and
+`get_patent` are offered only to a tenant that has patents, and `search_medicines`,
+`list_medicine_drugs` and `get_medicine` only to one that has medicines (tool_access.py), so the others
 see ten. Every tool is annotated `read_only_hint=True, idempotent_hint=True,
 open_world_hint=False` since none of them write, and every one only ever talks
 to the one Gregory instance named by `GREGORY_API_URL`.
@@ -197,6 +197,7 @@ def build_server(editor: bool = False) -> MCPServer:
 	server.add_tool(patents.get_patent, annotations=READ_ONLY)
 	# Offered only to a tenant with medicines_enabled (tool_access.py).
 	server.add_tool(medicines.search_medicines, annotations=READ_ONLY)
+	server.add_tool(medicines.list_medicine_drugs, annotations=READ_ONLY)
 	server.add_tool(medicines.get_medicine, annotations=READ_ONLY)
 	server.add_tool(authors.search_authors, annotations=READ_ONLY)
 	server.add_tool(authors.get_author, annotations=READ_ONLY)

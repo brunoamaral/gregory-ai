@@ -17,7 +17,7 @@ A tenant without them has the list above and nothing mentions patents there.
 That applies on both addresses: `/mcp` runs this middleware too, for exactly
 this reason.
 
-`search_medicines` and `get_medicine` are offered the same way, on
+`search_medicines`, `list_medicine_drugs` and `get_medicine` are offered the same way, on
 `Tenant.medicines_enabled`. `set_medicine_link` needs both: the tenant's
 medicines and an editor with the edit scope, like the six write tools.
 
@@ -57,7 +57,7 @@ READ_TOOLS = frozenset(
 #: Offered only on a tenant with `patents_enabled`.
 PATENT_TOOLS = frozenset({"search_patents", "get_patent"})
 #: Offered only on a tenant with `medicines_enabled`...
-MEDICINE_READ_TOOLS = frozenset({"search_medicines", "get_medicine"})
+MEDICINE_READ_TOOLS = frozenset({"search_medicines", "list_medicine_drugs", "get_medicine"})
 #: ...and this one only to an editor with the edit scope as well. It is not in
 #: WRITE_TOOLS: those are offered on every tenant, and a tenant without medicines
 #: must not be offered it.

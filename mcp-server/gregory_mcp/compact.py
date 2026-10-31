@@ -195,7 +195,10 @@ def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
 
 	A field only one regulator has is on that regulator's rows only: an FDA row has
 	`brand_names` and `fda_application_number` and none of the EMA opinion, EC decision
-	or designation fields; an EMA row has neither of the FDA ones."""
+	or designation fields; an EMA row has neither of the FDA ones.
+
+	`substance_key` is the drug's key: its substances without their salt, joined with
+	`+`. Both regulators' records of one drug share it, so it is what to group by."""
 	fda = medicine_regulator(medicine) == "fda"
 	row: dict[str, Any] = {
 		"medicine_id": medicine.get("id"),
@@ -207,6 +210,7 @@ def compact_medicine(medicine: dict[str, Any]) -> dict[str, Any]:
 		row["brand_names"] = medicine.get("brand_names")
 		row["fda_application_number"] = medicine.get("fda_application_number")
 	row["substances"] = medicine.get("substances")
+	row["substance_key"] = medicine.get("substance_key")
 	row["status"] = medicine.get("status")
 	if not fda:
 		row["opinion_status"] = medicine.get("opinion_status")

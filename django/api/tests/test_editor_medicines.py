@@ -62,6 +62,7 @@ def _medicine(name, inn, **fields):
 		"name": name,
 		"inn": inn,
 		"substances": [inn],
+		"substance_key": inn,
 		"status": "Authorised",
 		"url": f"https://www.ema.europa.eu/en/medicines/human/EPAR/{slugify(name)}",
 		"raw": {},
@@ -413,6 +414,71 @@ class EditorReadTest(MedicineEditorFixture):
 
 	def test_the_route_needs_an_editor(self):
 		self.assertEqual(self.client.get("/editor/medicines/").status_code, 401)
+		self.assertEqual(self.client.get("/editor/medicines/drugs/").status_code, 401)
+
+	def test_the_editor_lists_the_drugs_of_its_site(self):
+		listing = self.get("/editor/medicines/drugs/")
+		self.assertEqual(listing.status_code, 200)
+		self.assertEqual(
+			{drug["substance_key"] for drug in listing.data["results"]},
+			{"autoprexumab", "handprexumab"},
+		)
+		records = [r["id"] for drug in listing.data["results"] for r in drug["records"]]
+		self.assertCountEqual(records, [self.auto.pk, self.hand.pk])
+
+	def test_the_editors_drug_list_leaves_out_other_sites_and_a_site_without_medicines(self):
+		keys = {drug["substance_key"] for drug in self.get("/editor/medicines/drugs/").data["results"]}
+		self.assertNotIn("otherexumab", keys)
+		self.assertNotIn("bonlyxumab", keys)
+		self.assertEqual(self.get("/editor/medicines/drugs/", site=self.site_b).data["results"], [])
+
+	def test_the_editor_reads_one_drug(self):
+		response = self.get("/editor/medicines/drugs/autoprexumab/")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["substance_key"], "autoprexumab")
+		self.assertEqual(self.get("/editor/medicines/drugs/otherexumab/").status_code, 404)
+
+
+class EditorDrugRedirectTest(MedicineEditorFixture):
+	"""A non-canonical drug key redirects within the editor route, not to the public one."""
+
+	def setUp(self):
+		super().setUp()
+		self.fampridine = _medicine("Fampyra", "fampridine")
+		self.make_link(self.fampridine, self.cat_a, SOURCE.AUTOMATIC)
+
+	def test_a_us_name_redirects_to_the_editor_route_keeping_the_query(self):
+		response = self.get("/editor/medicines/drugs/dalfampridine/?include_generics=true&page_size=5")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(
+			response["Location"], "/editor/medicines/drugs/fampridine/?include_generics=true&page_size=5"
+		)
+
+	def test_a_redirect_without_a_query_string_has_none(self):
+		response = self.get("/editor/medicines/drugs/dalfampridine/")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(response["Location"], "/editor/medicines/drugs/fampridine/")
+
+	def test_an_encoded_key_redirects_too(self):
+		response = self.get("/editor/medicines/drugs/Dalfampridine%20/")
+		self.assertEqual(response.status_code, 301)
+		self.assertEqual(response["Location"], "/editor/medicines/drugs/fampridine/")
+
+	def test_a_canonical_key_is_200(self):
+		response = self.get("/editor/medicines/drugs/fampridine/")
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["substance_key"], "fampridine")
+
+	def test_following_the_redirect_with_editor_auth_gives_the_same_item(self):
+		first = self.get("/editor/medicines/drugs/dalfampridine/")
+		followed = self.get(first["Location"])
+		self.assertEqual(followed.status_code, 200)
+		self.assertEqual(followed.data, self.get("/editor/medicines/drugs/fampridine/").data)
+
+	def test_the_redirect_needs_an_editor_and_hides_a_drug_the_site_cannot_see(self):
+		self.assertEqual(self.client.get("/editor/medicines/drugs/dalfampridine/").status_code, 401)
+		# Site B has medicines off: no redirect, so no hint that the drug exists.
+		self.assertEqual(self.get("/editor/medicines/drugs/dalfampridine/", site=self.site_b).status_code, 404)
 
 
 class ThrottleTest(MedicineEditorFixture):

@@ -138,7 +138,6 @@ from api.filters import (
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
 from django.http import Http404, HttpResponsePermanentRedirect, StreamingHttpResponse
-from django.urls import reverse
 from urllib.parse import quote
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -4170,7 +4169,11 @@ class MedicineDrugViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
 		# drug exists. `medicine-<id>` keys stand for one record and are left alone.
 		canonical = None if key.startswith("medicine-") else substance_key(key.split("+"))
 		if canonical and canonical != key and records.filter(substance_key=canonical).exists():
-			location = reverse("medicine-drugs-list") + quote(canonical, safe="") + "/"
+			# Stay on the route that served this request (/medicines/drugs/ or the editor's
+			# twin): swap the key, the last non-empty path segment, for the canonical one.
+			# A key never holds a "/", so splitting is safe; request.path is already decoded.
+			parent = request.path.rstrip("/").rpartition("/")[0]
+			location = f"{parent}/{quote(canonical, safe='')}/"
 			query = request.META.get("QUERY_STRING")
 			return HttpResponsePermanentRedirect(f"{location}?{query}" if query else location)
 		raise Http404

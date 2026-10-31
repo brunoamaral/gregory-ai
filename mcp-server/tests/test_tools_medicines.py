@@ -6,6 +6,7 @@ import httpx2
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 
+from gregory_mcp.tools import medicines as medicines_module
 from gregory_mcp.compact import EMA_ONLY_MEDICINE_FIELDS, FDA_ONLY_MEDICINE_FIELDS
 from gregory_mcp.tools.medicines import (
 	COVERAGE_NOTE,
@@ -13,6 +14,7 @@ from gregory_mcp.tools.medicines import (
 	FDA_NOTE,
 	MAX_PAGE_SIZE,
 	get_medicine,
+	list_medicine_drugs,
 	search_medicines,
 )
 
@@ -32,6 +34,7 @@ FDA_ROW = {
 	"inn": "OFATUMUMAB",
 	"active_substance": "OFATUMUMAB",
 	"substances": ["ofatumumab"],
+	"substance_key": "ofatumumab",
 	"is_combination": False,
 	"status": "Approved",
 	"opinion_status": None,
@@ -91,6 +94,7 @@ ROW = {
 	"inn": "ocrelizumab",
 	"active_substance": "ocrelizumab",
 	"substances": ["ocrelizumab"],
+	"substance_key": "ocrelizumab",
 	"is_combination": False,
 	"status": "Authorised",
 	"opinion_status": "",
@@ -141,6 +145,7 @@ async def test_search_medicines_returns_compact_rows_with_the_source(mock_gregor
 			"source": SOURCE,
 			"name": "Ocrevus",
 			"substances": ["ocrelizumab"],
+			"substance_key": "ocrelizumab",
 			"status": "Authorised",
 			"opinion_status": "",
 			"authorisation_date": "2018-01-08",
@@ -190,6 +195,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 	await search_medicines(
 		name="ocrevus",
 		substance="ocrelizumab",
+		substance_key="ocrelizumab",
 		regulator="fda",
 		category_id=6,
 		category_slug="ocrelizumab",
@@ -209,6 +215,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 	assert params == {
 		"name": "ocrevus",
 		"substance": "ocrelizumab",
+		"substance_key": "ocrelizumab",
 		"category_id": "6",
 		"category_slug": "ocrelizumab",
 		"subject_id": "1",
@@ -331,11 +338,18 @@ def test_the_tool_descriptions_name_both_sources_and_the_caveat():
 	assert "Pass `regulator` to search one regulator only" in search_doc
 	assert "`-authorisation_date`" in search_doc and "`-ema_last_updated`" in search_doc
 	assert "CHMP is EMA's" in detail_doc
-	# The FDA's capitals, and its salt names, are explained to the model.
+	# The FDA's capitals are explained to the model.
 	for doc in (search_doc, detail_doc):
 		assert "in capitals" in doc and "normal case (Kesimpta, Novartis)" in doc
-		assert "fingolimod hydrochloride" in doc
-		assert "not by exact `substances`" in doc
+	# Salt and US/international names need no workaround: `substance` ignores them, and
+	# one drug's records share `substance_key`.
+	assert "ignoring case, salts and the US/international name" in search_doc
+	assert '"fampridine" and "dalfampridine"' in search_doc
+	assert "group the rows by `substance_key`" in search_doc
+	assert "Pass `substance_key` to list the records of one drug" in search_doc
+	assert "share `substance_key`" in detail_doc
+	for doc in (search_doc, detail_doc):
+		assert "also try `name`" not in doc and "or the salt form" not in doc
 	assert "finds both" not in detail_doc
 
 
@@ -557,6 +571,7 @@ async def test_an_fda_row_in_search_names_its_regulator_and_source(mock_gregory)
 			"brand_names": ["KESIMPTA", "ARZERRA"],
 			"fda_application_number": "BLA761053",
 			"substances": ["ofatumumab"],
+			"substance_key": "ofatumumab",
 			"status": "Approved",
 			"authorisation_date": "2009-10-26",
 			"holder": "NOVARTIS",
@@ -677,51 +692,186 @@ async def test_the_defaulted_order_is_not_given_to_the_guidance(mock_gregory, mo
 	assert seen["ordering"] is None
 
 
-@pytest.mark.parametrize("regulator", [None, "fda"])
-async def test_a_failed_substance_search_suggests_the_salt_form_or_the_brand_for_the_fda(
-	mock_gregory, regulator
-):
+@pytest.mark.parametrize("regulator", [None, "ema", "fda"])
+async def test_a_failed_substance_search_says_salts_and_us_names_are_ignored(mock_gregory, regulator):
 	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
 
 	result = await search_medicines(substance="fingolimod", regulator=regulator)
 
 	text = " ".join(result["guidance"]["suggestions"])
-	assert "fingolimod hydrochloride, where EMA has fingolimod" in text
-	assert "salt form, or `name` with the brand" in text
+	assert "ignoring case, salts and the US/international name" in text
+	assert "fingolimod and fingolimod hydrochloride find the same records" in text
+	assert "fampridine and dalfampridine" in text
+	# The #970 workaround (try the salt form) is gone.
+	assert "salt form" not in text and "try the salt" not in text
 
 
-async def test_an_ema_only_substance_search_is_not_told_about_fda_salts(mock_gregory):
-	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
-
-	result = await search_medicines(substance="fingolimod", regulator="ema")
-
-	text = " ".join(result["guidance"]["suggestions"])
-	assert "salt" not in text
-
-
-async def test_a_substance_search_with_no_fda_record_says_to_try_the_salt_or_the_brand(mock_gregory):
+async def test_a_substance_search_never_carries_an_fda_hint(mock_gregory):
+	"""A search with records but none from the FDA used to carry `fda_hint`."""
 	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [ROW]}))
 
 	result = await search_medicines(substance="fingolimod")
 
-	assert result["fda_hint"].startswith("No FDA record matched this `substance`")
-	assert "fingolimod hydrochloride" in result["fda_hint"]
-	assert "`name` (the brand) or the salt form" in result["fda_hint"]
+	assert "fda_hint" not in result
+	assert not hasattr(medicines_module, "FDA_SALT_HINT")
 
 
-@pytest.mark.parametrize(
-	("kwargs", "payload"),
-	[
-		({"substance": "x", "regulator": "ema"}, {"count": 1, "next": None, "results": [ROW]}),
-		({"substance": "x"}, {"count": 2, "next": None, "results": [ROW, FDA_ROW]}),
-		({"substance": "x"}, {"count": 40, "next": "https://x/medicines/?page=2", "results": [ROW]}),
-		({"name": "x"}, {"count": 1, "next": None, "results": [ROW]}),
+async def test_a_failed_substance_key_search_explains_the_key(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await search_medicines(substance_key="fingolimod hydrochloride")
+
+	assert result["guidance"]["applied_filters"] == ["substance_key"]
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "without their salt" in text and "use `substance`" in text
+
+
+# --- list_medicine_drugs ------------------------------------------------------
+
+
+DRUG = {
+	"substance_key": "ocrelizumab",
+	"name": "Ocrevus",
+	"substances": ["ocrelizumab"],
+	"regulators": ["ema", "fda"],
+	"first_authorised": {"ema": "2018-01-08", "fda": "2017-03-28"},
+	"records": [
+		ROW,
+		{
+			**FDA_ROW,
+			"id": 32,
+			"name": "OCREVUS",
+			"brand_names": ["OCREVUS"],
+			"substances": ["ocrelizumab"],
+			"substance_key": "ocrelizumab",
+			"authorisation_date": "2017-03-28",
+		},
 	],
-)
-async def test_the_fda_hint_is_left_out_when_it_does_not_apply(mock_gregory, kwargs, payload):
-	mock_gregory.set_handler(_json(payload))
+}
 
-	assert "fda_hint" not in await search_medicines(**kwargs)
+
+async def test_list_medicine_drugs_returns_one_entry_per_drug_with_compact_records(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [DRUG]}))
+
+	result = await list_medicine_drugs(subject_id=1)
+
+	assert mock_gregory.requests[0].url.path == "/medicines/drugs/"
+	assert dict(mock_gregory.requests[0].url.params) == {"subject_id": "1", "page": "1", "page_size": "10"}
+	assert result["count"] == 1
+	assert result["next_page"] is None
+	assert result["note"] == COVERAGE_NOTE
+	assert result["source"] == f"{SOURCE} and {FDA_SOURCE}"
+	assert "medicines" not in result
+	(drug,) = result["drugs"]
+	assert {k: v for k, v in drug.items() if k != "records"} == {
+		"substance_key": "ocrelizumab",
+		"name": "Ocrevus",
+		"substances": ["ocrelizumab"],
+		"regulators": ["ema", "fda"],
+		"first_authorised": {"ema": "2018-01-08", "fda": "2017-03-28"},
+	}
+	# The records are the rows search_medicines returns, with the same source attribution.
+	mock_gregory.set_handler(_json({"count": 2, "next": None, "results": DRUG["records"]}))
+	assert drug["records"] == (await search_medicines())["medicines"]
+	assert [r["regulator"] for r in drug["records"]] == ["ema", "fda"]
+	assert [r["source"] for r in drug["records"]] == [SOURCE, FDA_SOURCE]
+	assert [r["medicine_id"] for r in drug["records"]] == [12, 32]
+	assert all(r["substance_key"] == "ocrelizumab" for r in drug["records"])
+	assert "ema_product_number" not in drug["records"][1] and "brand_names" in drug["records"][1]
+
+
+async def test_list_medicine_drugs_passes_every_filter_through(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	await list_medicine_drugs(
+		name="ocrevus",
+		substance="ocrelizumab",
+		substance_key="ocrelizumab",
+		regulator="fda",
+		category_id=6,
+		category_slug="ocrelizumab",
+		subject_id=1,
+		status="Approved",
+		opinion_status="Positive",
+		authorised_after="2018-01-01",
+		authorised_before="2020-01-01",
+		include_generics=True,
+		tracked=False,
+		ordering="name",
+		page=2,
+		page_size=5,
+	)
+
+	assert dict(mock_gregory.requests[0].url.params) == {
+		"name": "ocrevus",
+		"substance": "ocrelizumab",
+		"substance_key": "ocrelizumab",
+		"regulator": "fda",
+		"category_id": "6",
+		"category_slug": "ocrelizumab",
+		"subject_id": "1",
+		"status": "Approved",
+		"opinion_status": "Positive",
+		"authorised_after": "2018-01-01",
+		"authorised_before": "2020-01-01",
+		"include_generics": "true",
+		"tracked": "false",
+		"ordering": "name",
+		"page": "2",
+		"page_size": "5",
+	}
+
+
+async def test_list_medicine_drugs_leaves_the_order_to_the_api_by_default(mock_gregory):
+	"""The API's default, -latest_authorisation, is right for drugs; search_medicines's
+	-authorisation_date is not an ordering there."""
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	await list_medicine_drugs()
+
+	assert "ordering" not in mock_gregory.requests[0].url.params
+
+
+async def test_list_medicine_drugs_clamps_the_page_and_reports_a_next_page(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 90, "next": "https://x/medicines/drugs/?page=2", "results": [DRUG]}))
+
+	result = await list_medicine_drugs(page=0, page_size=500)
+
+	assert mock_gregory.requests[0].url.params["page_size"] == str(MAX_PAGE_SIZE)
+	assert mock_gregory.requests[0].url.params["page"] == "1"
+	assert result["next_page"] == 2
+
+
+async def test_list_medicine_drugs_names_the_sources_of_the_records_shown(mock_gregory):
+	fda_only = {**DRUG, "regulators": ["fda"], "records": [DRUG["records"][1]]}
+	mock_gregory.set_handler(_json({"count": 1, "next": None, "results": [fda_only]}))
+
+	result = await list_medicine_drugs(regulator="fda")
+
+	assert (result["source"], result["note"]) == (FDA_SOURCE, FDA_NOTE)
+
+
+async def test_a_zero_hit_drug_list_carries_guidance(mock_gregory):
+	mock_gregory.set_handler(_json({"count": 0, "next": None, "results": []}))
+
+	result = await list_medicine_drugs(substance="Ocrevus", status="Approved")
+
+	assert result["drugs"] == []
+	assert result["source"] == f"{SOURCE} and {FDA_SOURCE}"
+	assert result["guidance"]["applied_filters"] == ["status", "substance"]
+	text = " ".join(result["guidance"]["suggestions"])
+	assert "looks like a brand or product name: use `name`" in text
+	assert "not approved" in text
+
+
+def test_the_drug_list_docstring_explains_the_grouping():
+	doc = " ".join(list_medicine_drugs.__doc__.split())
+	assert "one entry per drug" in doc
+	assert "`substance_key`" in doc and "fingolimod" in doc
+	assert "latest_authorisation" in doc
+	assert "normal case (Kesimpta, Novartis)" in doc
+	assert "European Medicines Agency" in doc and "U.S. Food and Drug Administration" in doc
+	assert "individual EU countries" in doc and "ANDAs" in doc
 
 
 def test_regulator_is_limited_to_the_two_regulators_on_the_tool():
