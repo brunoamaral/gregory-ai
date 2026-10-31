@@ -1589,3 +1589,43 @@ class MedicineDetailSerializer(MedicineSerializer):
 
 	class Meta(MedicineSerializer.Meta):
 		fields = MedicineSerializer.Meta.fields + ["grouped_products", "events"]
+
+
+class MedicineDrugFirstAuthorisedSerializer(serializers.Serializer):
+	"""The earliest ``authorisation_date`` of a drug's shown records, per regulator."""
+
+	ema = serializers.DateField(allow_null=True, read_only=True)
+	fda = serializers.DateField(allow_null=True, read_only=True)
+
+
+class MedicineDrugSerializer(serializers.Serializer):
+	"""One drug on ``/medicines/drugs/``: every visible record that shares a
+	``substance_key``, from both regulators.
+
+	Read from a dict built by ``MedicineDrugViewSet`` (``api.views._drug_item``), whose
+	``records`` are ``Medicine`` instances carrying the prefetches ``MedicineSerializer``
+	relies on. Each record is the same row as on ``/medicines/``."""
+
+	substance_key = serializers.CharField(
+		read_only=True,
+		help_text="The drug's key: its substances without their salt, sorted and joined with '+'.",
+	)
+	name = serializers.CharField(
+		read_only=True,
+		help_text=(
+			"The EMA product's name (the earliest authorised that is not a duplicate), else "
+			"the FDA's first brand name in normal case."
+		),
+	)
+	substances = serializers.ListField(
+		child=serializers.CharField(),
+		read_only=True,
+		help_text="The EMA product's substances, else the key split on '+'.",
+	)
+	regulators = serializers.ListField(
+		child=serializers.CharField(),
+		read_only=True,
+		help_text="The regulators that have a record shown, sorted: `ema`, `fda` or both.",
+	)
+	first_authorised = MedicineDrugFirstAuthorisedSerializer(read_only=True)
+	records = MedicineSerializer(many=True, read_only=True)

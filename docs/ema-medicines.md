@@ -46,7 +46,9 @@ Things worth knowing before using the dates:
   puts an EMA product and the FDA's records of the same drug under one name (EMA's Gilenya is
   `fingolimod`; the FDA's is `fingolimod hydrochloride`, and both keys are `fingolimod`). The rules are in
   `gregory/utils/substance_key.py`; see [fda-medicines.md](fda-medicines.md#substance-key). The sync sets it on every
-  row it writes. A product with no substances is keyed `medicine-<id>`.
+  row it writes. A product with no substances is keyed `medicine-<id>`. `GET /medicines/drugs/` groups the
+  records by this key, and names a drug after its EMA product (see
+  [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#get-medicinesdrugs)).
 - **Status wording is EMA's own** and is stored as given. A value Gregory has not seen
   before is imported like any other.
 
