@@ -148,6 +148,7 @@ async def test_search_medicines_passes_every_filter_through(mock_gregory):
 		"ordering": "-authorisation_date",
 		"page": "2",
 		"page_size": "5",
+		"regulator": "ema",  # the tool's own, until PR 4 describes FDA rows
 	}
 
 
@@ -156,7 +157,8 @@ async def test_unset_filters_are_not_sent(mock_gregory):
 
 	await search_medicines()
 
-	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size"}
+	# `regulator=ema` is the tool's own, temporary, until PR 4 describes FDA rows.
+	assert set(mock_gregory.requests[0].url.params) == {"page", "page_size", "regulator"}
 
 
 async def test_page_size_is_capped_and_a_next_page_is_reported(mock_gregory):
@@ -293,6 +295,14 @@ async def test_get_medicine_returns_the_record_and_its_events_worded_by_kind_lab
 	assert [e["event_date"] for e in result["events"]] == ["2026-06-01", "2018-01-08"]
 	assert all("id" not in e for e in result["events"])
 	assert result["events"][1]["basis"] == "reconstructed"
+
+
+async def test_get_medicine_reports_an_fda_record_as_not_found_until_pr_4(mock_gregory):
+	fda = {**DETAIL, "regulator": "fda", "source": "U.S. Food and Drug Administration"}
+	mock_gregory.set_handler(_json(fda))
+
+	with pytest.raises(ToolError, match="was not found"):
+		await get_medicine(12)
 
 
 async def test_get_medicine_without_events_returns_an_empty_list(mock_gregory):

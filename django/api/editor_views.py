@@ -55,7 +55,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
-from api.medicine_scope import category_has_subject, public_medicines
+from api.medicine_scope import category_has_subject
 from api.serializers import McpTenantSerializer
 from api.views import (
 	ArticleViewSet,
@@ -1420,8 +1420,7 @@ class EditorCategoryMedicineView(_CategoryScopeMixin, _EditorView):
 		category = self.category_for_edit(category_id)
 		if not {s.id for s in category.subjects.all()} & scope:
 			raise NotFound("Category not found.")
-		# An FDA medicine is not public yet (PR 3 removes this gate), so it is "not found".
-		medicine = public_medicines(Medicine.objects.defer("raw")).filter(pk=medicine_id).first()
+		medicine = Medicine.objects.defer("raw").filter(pk=medicine_id).first()
 		known = medicine is not None and (
 			MedicineCategoryAssignment.objects.filter(medicine=medicine)
 			.filter(category_has_subject(scope))

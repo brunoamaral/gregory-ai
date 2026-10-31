@@ -2,8 +2,9 @@
 
 > The FDA's approvals share the same table, events and admin; see [fda-medicines.md](fda-medicines.md).
 > This page describes the EMA side. The matcher links FDA medicines to categories too, with
-> its own disease check (see [fda-medicines.md](fda-medicines.md#matching)); the API, the
-> feeds and the MCP tools do not show FDA medicines yet.
+> its own disease check (see [fda-medicines.md](fda-medicines.md#matching)), and the API and
+> the RSS feeds show both regulators' medicines (see
+> [fda-medicines.md](fda-medicines.md#api-and-feeds)). The MCP tools still show EMA's only.
 
 Gregory keeps a copy of the European Medicines Agency's list of centrally authorised
 human medicines, so an editor can see where a medicine stands with the regulator: a

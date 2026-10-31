@@ -38,9 +38,9 @@ A read-only [MCP server](07-mcp-server.md) also exposes this API to LLM clients 
 | New patent families by subject | `GET /feed/sites/{site_id}/patents/subject/{subject_slug}/` — see [Patent feeds](#patent-feeds) |
 | New patent families by topic (category) | `GET /feed/sites/{site_id}/patents/category/{category_slug}/` — see [Patent feeds](#patent-feeds) |
 | Patent search results | `GET /feed/sites/{site_id}/patents/search/?…` — see [Patent feeds](#patent-feeds) |
-| EMA medicine events, all categories | `GET /feed/sites/{site_id}/medicines/` — see [Medicine feeds](#medicine-feeds) |
-| EMA medicine events by topic (category) | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` — see [Medicine feeds](#medicine-feeds) |
-| EMA medicine events by condition (subject), including untracked medicines | `GET /feed/sites/{site_id}/medicines/subject/{subject_slug}/` — see [Medicine feeds](#medicine-feeds) |
+| Medicine events (EMA and FDA), all categories | `GET /feed/sites/{site_id}/medicines/` — see [Medicine feeds](#medicine-feeds) |
+| Medicine events (EMA and FDA) by topic (category) | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` — see [Medicine feeds](#medicine-feeds) |
+| Medicine events (EMA and FDA) by condition (subject), including untracked EMA medicines | `GET /feed/sites/{site_id}/medicines/subject/{subject_slug}/` — see [Medicine feeds](#medicine-feeds) |
 
 The variants of the subject, category and author feeds are fixed path segments, not query parameters, so the set of URLs a site can have is small and known in advance (about subjects × 4 + categories × 2). **On those feeds any query string is ignored** and does not change the response. The [search feeds](#search-feeds) are the one exception: a search is open-ended, so they take an allowlisted query string.
 
@@ -134,7 +134,7 @@ New patent families, for researchers and industry watchers: who is patenting wha
 
 ### Medicine feeds
 
-New regulatory events of medicines the European Medicines Agency (EMA) has handled: a CHMP opinion, an authorisation, a new European Commission decision, a withdrawal. They are how a partner hears about an approval without polling the API. The data and the sync behind it are described in [ema-medicines.md](ema-medicines.md). The feeds follow the scope, slug-resolution, empty-feed and caching rules above, with these differences:
+New regulatory events of medicines, from two regulators. The European Medicines Agency (EMA): a CHMP opinion, an authorisation, a new European Commission decision, a withdrawal. The U.S. Food and Drug Administration (FDA): an approval, a new indication or use, a discontinuation, a revoked licence. They are how a partner hears about an approval without polling the API. The data and the syncs behind it are described in [ema-medicines.md](ema-medicines.md) and [fda-medicines.md](fda-medicines.md). The feeds follow the scope, slug-resolution, empty-feed and caching rules above, with these differences:
 
 | Feed | URL |
 |:-----|:----|
@@ -142,17 +142,18 @@ New regulatory events of medicines the European Medicines Agency (EMA) has handl
 | By category | `GET /feed/sites/{site_id}/medicines/category/{category_slug}/` |
 | By condition (subject) | `GET /feed/sites/{site_id}/medicines/subject/{subject_slug}/` |
 
+- **Both regulators in one feed, `?regulator=` narrows it.** Every medicine feed lists the events of EMA's and the FDA's medicines together, newest first. `?regulator=ema` keeps EMA's events and `?regulator=fda` the FDA's (`/feed/sites/3/medicines/?regulator=fda`). Any other value, including an empty one or different case, is a **404**, as an unknown category is. The same `medicines_enabled` switch covers both regulators. The cache keys on the full URL, query string included, so each value has its own cached copy and `?regulator=fda` never serves the cached unfiltered feed. The channel's `atom:link rel="self"` keeps the parameter, and the title names the regulator (`Medicines (FDA): {Category} — {site}`).
 - **Two switches.** A medicine feed needs the site's `CustomSetting.rss_enabled` **and** `CustomSetting.medicines_enabled`, which is **off** for every site until someone ticks it. With either off it is a **404**, even when the category is in scope. A category outside the site's scope (none of its subjects is in `scope_subjects`) is a **404** too, and so is a subject that is not in `scope_subjects`. There are no `/relevant/` variants and no search feed.
-- **Which medicines.** Those with a link to the category that an editor has **not suppressed** (automatic or manual: see [Matching medicines to categories](ema-medicines.md#matching-medicines-to-categories)). The category feed uses one category, the site feed every category that has a subject in the site's scope. An event appears once in the site feed, however many of the site's categories its medicine is in. **Generic and biosimilar products are left out, and so are duplicate products** (one medicine EMA authorises under several names, such as Exelon, Prometax and Rivastigmine Sandoz: the lead product reports the event for all of them, see [Grouping copies of a medicine](ema-medicines.md#grouping-copies-of-a-medicine)). This holds for all three feeds.
-- **The subject feed includes untracked medicines.** The all-categories and category feeds are curated: only medicines filed under a category. The subject feed lists the events of every medicine that has a live link to a category of that subject **or** a non-suppressed subject link to it, that is, a medicine EMA approved for one of the subject's conditions whether or not a category covers it (the API's `?subject_id=` rule, see [Which sites show medicines](#which-sites-show-medicines)). The two suppressions are independent, as on the API: a suppressed subject link next to a live category link keeps the medicine in, and a suppressed category link next to a live subject link does too. A medicine reached by both routes is listed once per event. A research-area subject with no EMA therapeutic areas lists just its categories' medicines. An in-scope subject with nothing to show is an empty feed (200).
-- **Which events.** `observed` events (a change the sync saw between two downloads) always; `reconstructed` events (read off EMA's date fields when a medicine was first seen) only when their date is within the last **90 days**. Without that cut-off, the first sync would put every approval since 1995 in the feed. Events of a medicine that EMA no longer lists are still shown.
+- **Which medicines.** Those with a link to the category that an editor has **not suppressed** (automatic or manual: see [Matching medicines to categories](ema-medicines.md#matching-medicines-to-categories)). The category feed uses one category, the site feed every category that has a subject in the site's scope. An event appears once in the site feed, however many of the site's categories its medicine is in. **Generic and biosimilar products are left out (the FDA's biosimilars, such as Tyruko, too), and so are duplicate products** (one medicine EMA authorises under several names, such as Exelon, Prometax and Rivastigmine Sandoz: the lead product reports the event for all of them, see [Grouping copies of a medicine](ema-medicines.md#grouping-copies-of-a-medicine)). This holds for all three feeds.
+- **The subject feed includes untracked medicines.** The all-categories and category feeds are curated: only medicines filed under a category. The subject feed lists the events of every medicine that has a live link to a category of that subject **or** a non-suppressed subject link to it, that is, a medicine EMA approved for one of the subject's conditions whether or not a category covers it (FDA medicines have no subject links, so they reach the subject feed through a category only) (the API's `?subject_id=` rule, see [Which sites show medicines](#which-sites-show-medicines)). The two suppressions are independent, as on the API: a suppressed subject link next to a live category link keeps the medicine in, and a suppressed category link next to a live subject link does too. A medicine reached by both routes is listed once per event. A research-area subject with no EMA therapeutic areas lists just its categories' medicines. An in-scope subject with nothing to show is an empty feed (200).
+- **Which events.** `observed` events (a change the sync saw between two downloads) always; `reconstructed` events (read off the regulator's dates when a medicine was first seen: EMA's date fields, the FDA's submission dates) only when their date is within the last **90 days**, for either regulator. Without that cut-off, the first sync would put every approval since 1995 in the feed. Events of a medicine that its regulator no longer lists are still shown.
 - **Ordered by event date**, newest first (ties by newest event id), **50 items**. `<pubDate>` is the event date at midnight UTC.
 - **Item content.**
-	- `title`: `{product name} ({substance}): {event in words}`, for example `Ocrevus (ocrelizumab): CHMP positive opinion`. The substance is EMA's INN, or the active substance when the INN is empty; with neither, the brackets are left out. The wordings are fixed per event kind (`MedicineEvent.IN_WORDS`): *CHMP positive opinion*, *CHMP negative opinion*, *CHMP opinion adopted*, *Authorised in the EU*, *New European Commission decision*, *Indication changed*, *Authorisation refused*, *Application withdrawn*, *Authorisation suspended*, *Authorisation ended*, *Rolling review started*, *EMA evaluation started* and *Status changed*. *New European Commission decision* is a later decision such as a variation, not the approval. *Authorisation ended* adds the new status when the event has one (`Authorisation ended (Withdrawn)`), and *Status changed* adds both (`Status changed: Authorised → Suspended`).
-	- `link`: the medicine's EPAR page on ema.europa.eu.
-	- `guid`: `ema-medicine-event-{event id}` (not a permalink).
-	- the HTML description: the medicine's cleaned indication (HTML-escaped), then `Source: European Medicines Agency`, which EMA's legal notice asks for wherever its data is served.
-- **Channel.** `Medicines: {Category} — {site}`, `Medicines: {Subject} — {site}` and `Medicine approvals — {site}`; the description credits EMA. The `<link>` is the site's homepage.
+	- `title`: `{product name} ({substance}): {event in words}`, for example `Ocrevus (ocrelizumab): CHMP positive opinion` or `OCREVUS (OCRELIZUMAB): FDA approved a new indication or use`. The substance is the INN, or the active substance when the INN is empty (for the FDA, the application's ingredient names); with neither, the brackets are left out. The product name is EMA's name, or for an FDA application the **first** of its brand names (Kesimpta and Arzerra are one application and read `KESIMPTA (OFATUMUMAB): ...`; a CBER biologic with no brand name falls back to its name). The wordings are fixed per event kind (`MedicineEvent.IN_WORDS`): *CHMP positive opinion*, *CHMP negative opinion*, *CHMP opinion adopted*, *Authorised in the EU*, *New European Commission decision*, *Indication changed*, *Authorisation refused*, *Application withdrawn*, *Authorisation suspended*, *Authorisation ended*, *Rolling review started*, *EMA evaluation started* and *Status changed*; and for the FDA *Approved by the FDA*, *Tentatively approved by the FDA*, *FDA approved a new indication or use*, *Discontinued in the US* and *US licence revoked*. *New European Commission decision* is a later decision such as a variation, not the approval. *Authorisation ended* adds the new status when the event has one (`Authorisation ended (Withdrawn)`), and *Status changed* adds both (`Status changed: Authorised → Suspended`).
+	- `link`: the medicine's EPAR page on ema.europa.eu; for an FDA medicine its Drugs@FDA page (a CBER biologic: its DailyMed label), falling back to `https://www.accessdata.fda.gov/scripts/cder/daf/` when it has none.
+	- `guid`: `ema-medicine-event-{event id}` or `fda-medicine-event-{event id}` (not a permalink). EMA's keep the prefix they always had.
+	- the HTML description: the medicine's cleaned indication (HTML-escaped; for the FDA, the main DailyMed label's), then its own regulator's source line, `Source: European Medicines Agency` or `Source: U.S. Food and Drug Administration`, which each asks for wherever its data is served.
+- **Channel.** `Medicines: {Category} — {site}`, `Medicines: {Subject} — {site}` and `Medicine approvals — {site}`, with ` (EMA)` or ` (FDA)` after `Medicines` / `Medicine approvals` when `?regulator=` narrows the feed; the description credits both regulators, or the one asked for. The `<link>` is the site's homepage.
 - **Cost.** One render uses a fixed number of queries (7 for a category feed, 6 for the site feed and 6 for a subject feed) whatever the number of items.
 
 ### Old feed URLs — permanent redirect
@@ -299,7 +300,7 @@ The reads `GET /editor/patents/` and `GET /editor/patents/{id}/` accept `?includ
 
 #### Medicine routes
 
-An EMA medicine is global reference data with no subject of its own (see [Medicines](#medicines)), so editors work on its **links to categories**, not on the medicine. One route, which the MCP tool `set_medicine_link` calls:
+A medicine (EMA's or the FDA's) is global reference data with no subject of its own (see [Medicines](#medicines)), so editors work on its **links to categories**, not on the medicine. One route, which the MCP tool `set_medicine_link` calls:
 
 | Method and path | Purpose |
 |:----------------|:--------|
@@ -663,9 +664,9 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
-| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `substance`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines and FDA-approved drugs and biologics (NDAs and BLAs) — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
 | Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `grouped_products` and `events`, newest first |
-| Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
+| Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `kind`, `basis`, `event_date_after`, `event_date_before`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | Rendered template |
 | Email templates | `GET /emails/context/{template_name}/` | `template_name` (path) | The template's context as JSON |
@@ -1111,16 +1112,20 @@ Takes the same parameters as the list and the same scope. Returns `total`, `with
 
 ## Medicines
 
-`GET /medicines/` lists the medicines the European Medicines Agency (EMA) has authorised for human use in the EU, one record per EMA product; `GET /medicines/events/` lists what happened to them. Where the data comes from, how it is synced and how medicines are linked to categories is in [ema-medicines.md](ema-medicines.md).
+`GET /medicines/` lists medicines from two regulators: the human medicines the European Medicines Agency (EMA) has authorised in the EU, one record per EMA product, and the drugs and biologics the U.S. Food and Drug Administration (FDA) has approved (NDAs and BLAs), one record per FDA application. `GET /medicines/events/` lists what happened to them. Where the data comes from, how it is synced and how medicines are linked to categories is in [ema-medicines.md](ema-medicines.md) and [fda-medicines.md](fda-medicines.md).
 
-**Source: European Medicines Agency.** Every medicine and every event carries `"source": "European Medicines Agency"`, and `url` is the product's EPAR page on ema.europa.eu. EMA's legal notice allows reuse provided EMA is acknowledged, so keep the attribution wherever you display the data.
+**Source, per row.** `regulator` is `ema` or `fda`, and every medicine and every event carries the matching `"source": "European Medicines Agency"` or `"source": "U.S. Food and Drug Administration"`. `url` is the product's EPAR page on ema.europa.eu, or for an FDA application its Drugs@FDA overview page (a CBER biologic: its DailyMed label). EMA's legal notice allows reuse provided EMA is acknowledged, and the FDA asks for its data to be credited too, so keep the attribution wherever you display the data. FDA label text (the `indication`) comes from DailyMed, the National Library of Medicine's label database. The FDA data is served through openFDA, **is not for clinical decisions**, and the FDA does not endorse Gregory's use of it.
+
+**What the FDA data leaves out.** Only NDAs and BLAs: generic drugs (ANDAs) are not covered, nor are applications still under review or unapproved products. A missing record does not mean a product is unapproved. The FDA also has no EMA-style opinion or designation fields, so those are `null` on its rows (below).
+
+**One medicine can appear twice**, once per regulator: Ocrevus has an EMA record and an FDA one, with separate ids, categories and histories. Records of different regulators are never grouped (`grouped_under` points at a product of the same regulator). Group by `substances` to show one entry per drug, and use `regulator` to tell them apart.
 
 ### Which sites show medicines
 
 A medicine has no subject of its own. It is **visible by either of two routes**, each counted against the caller's scope:
 
 - it has a live (non-suppressed) **category link** to a category that has a subject in the scope (a medicine an editor tracks), or
-- it has a live (non-suppressed) **subject link**: EMA approved it for one of a subject's conditions (the subject's *EMA therapeutic areas*), with or without a category.
+- it has a live (non-suppressed) **subject link**: EMA approved it for one of a subject's conditions (the subject's *EMA therapeutic areas*), with or without a category. Only EMA medicines have subject links; an FDA medicine is visible through a category link alone.
 
 It is visible only on sites with `CustomSetting.medicines_enabled` on (off by default). A site with the switch off shows no medicines even when its scope lists the subject. The caller rules are those of every other endpoint (see [Visibility rules summary](#visibility-rules-summary)), counting only sites with the switch on, exactly as for [patents](#which-sites-show-patents).
 
@@ -1128,7 +1133,7 @@ A caller with nothing in scope gets an empty list from `/medicines/` and `/medic
 
 **`tracked`.** A medicine is *tracked* when it is filed under at least one category the caller can see, which is exactly "`categories` is not empty". A medicine that shows only because EMA approved it for one of the site's conditions is *untracked*: that is where an editor finds a candidate for a new category (`?subject_id=13&tracked=false`). A category the caller cannot see never makes a medicine look tracked.
 
-**Generics, biosimilars and duplicate products are hidden by default.** Products with `generic` or `biosimilar` set are left out of both lists unless `?include_generics=true`. So are *duplicate products*: when EMA authorises one medicine under several names (Exelon, Prometax and Rivastigmine Sandoz), one product leads and the others carry `grouped_under`, the lead's id (see [Grouping copies of a medicine](ema-medicines.md#grouping-copies-of-a-medicine)). `include_generics=true` lists all three kinds. `GET /medicines/{id}/` returns a product whatever it is, since you asked for it by id.
+**Generics, biosimilars and duplicate products are hidden by default.** Products with `generic` or `biosimilar` set (FDA biosimilars such as Tyruko, which carry the FDA's `351(k)` licence, included) are left out of both lists unless `?include_generics=true`. So are *duplicate products*: when EMA authorises one medicine under several names (Exelon, Prometax and Rivastigmine Sandoz), one product leads and the others carry `grouped_under`, the lead's id (see [Grouping copies of a medicine](ema-medicines.md#grouping-copies-of-a-medicine)). `include_generics=true` lists all three kinds. `GET /medicines/{id}/` returns a product whatever it is, since you asked for it by id.
 
 ### `GET /medicines/`
 
@@ -1140,15 +1145,17 @@ Every parameter is optional.
 | `category_slug` | Category slug |
 | `subject_id` | Linked to a category that has this subject, **or** approved by EMA for this subject's condition (a subject link). With `category_id` or `category_slug`, only category links count |
 | `site_id` | Linked to a category that has a subject in that site's scope, **or** approved for one of those subjects. With `category_id` or `category_slug`, only category links count. A site with `medicines_enabled` off returns nothing |
-| `tracked` | `false`: no live link to a category you can see, so the medicine shows only because EMA approved it for one of the site's conditions. `true`: filed under at least one category you can see. Omitted: both |
-| `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances |
-| `name` | Part of the product's `name` (the brand name), case-insensitive: `?name=ocrevus`, or `?name=corbilta` for "Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)". A plain column filter; it combines with every other filter and changes nothing about visibility or generics |
-| `status` | EMA's status wording, case-insensitive: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … Values are EMA's own, so new ones can appear |
-| `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none |
-| `advanced_therapy`, `orphan_medicine`, `is_combination` | `true`/`false` |
+| `tracked` | `false`: no live link to a category you can see, so the medicine shows only because EMA approved it for one of the site's conditions. `true`: filed under at least one category you can see. Omitted: both. Every visible FDA medicine is tracked |
+| `regulator` | `ema` or `fda`. Omitted: both. Any other value is `400` |
+| `substance` | One substance, matched against the product's `substances` exactly, ignoring case and extra spaces. A combination product matches on any of its substances. FDA substances are the application's ingredients, lowercased, without the FDA's four-letter suffix (`natalizumab-sztn` is `natalizumab`) |
+| `name` | Part of the product's `name` (the brand name; for an FDA application every brand, joined with ` / `), case-insensitive: `?name=ocrevus`, or `?name=corbilta` for "Corbilta (previously Levodopa/Carbidopa/Entacapone Sandoz)". A plain column filter; it combines with every other filter and changes nothing about visibility or generics |
+| `status` | The regulator's status wording, case-insensitive. EMA: `Authorised`, `Withdrawn`, `Refused`, `Opinion`, … FDA: `Approved`, `Tentatively approved`, `Discontinued`, `Revoked`. Values are the regulators' own, so new ones can appear |
+| `opinion_status` | `Positive` or `Negative`. EMA fills it only while a product is at the opinion stage and clears it once the Commission decides, so most products have none. **EMA-only:** using it leaves FDA rows out |
+| `advanced_therapy`, `orphan_medicine` | `true`/`false`. **EMA-only:** using either leaves FDA rows out, so `orphan_medicine=false` returns EMA products that are not orphan medicines and never an FDA row, whose `false` would only mean "not assessed" (their field is `null`) |
+| `is_combination` | `true`/`false`, at either regulator |
 | `authorised_after`, `authorised_before` | `authorisation_date`, inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
-| `include_generics` | `true` also lists generic and biosimilar products, and duplicate products (`grouped_under` set) |
-| `ordering` | `authorisation_date`, `latest_ec_decision_date`, `ema_last_updated`, each with an optional `-`. Default `-ema_last_updated`. Products without the date sort last in both directions; ties break on `-id` |
+| `include_generics` | `true` also lists generic and biosimilar products (the FDA's biosimilars too), and duplicate products (`grouped_under` set) |
+| `ordering` | `authorisation_date`, `latest_ec_decision_date`, `ema_last_updated`, each with an optional `-`. Default `-ema_last_updated`. Products without the date sort last in both directions; ties break on `-id`. FDA rows have no `ema_last_updated`, so the default lists them after the EMA ones (among the other undated rows). For one list that mixes both regulators, newest approvals first, use `ordering=-authorisation_date`, which both fill |
 | `page`, `page_size` | `page_size` up to 100; `page * page_size` above 10,000 is `400`, as elsewhere |
 
 **The four link filters.** `category_id`, `category_slug`, `subject_id` and `site_id` are about a medicine's links, and are what a condition page sends (`/medicines/?subject_id=1&category_id=6`, the same parameters as `/patents/`).
@@ -1166,22 +1173,32 @@ JSON only: there is no CSV, `?format=csv` is `404`, and `?all_results=true` is i
 
 | Field | Meaning |
 |:------|:--------|
-| `id`, `ema_product_number` | Gregory's id and EMA's product number (`EMEA/H/C/004043`) |
-| `name`, `inn`, `active_substance` | As EMA publishes them. `inn` is empty for some products |
-| `substances` | Lowercased substances, from the INN or, when that is empty, the active substance |
+| `id`, `regulator` | Gregory's id, and `ema` or `fda` |
+| `ema_product_number` | EMA's product number (`EMEA/H/C/004043`). `null` on FDA rows |
+| `fda_application_number`, `fda_application_type`, `fda_center` | The FDA application (`BLA761053`), its type (`NDA` or `BLA`) and the centre that regulates it (`CDER` or `CBER`). `null` on EMA rows |
+| `name`, `inn`, `active_substance` | As the regulator publishes them. `inn` is empty for some EMA products. On an FDA row, `name` is the brand names joined with ` / `, and `inn` and `active_substance` are the ingredient names (upper case, with the salt) |
+| `brand_names` | Every brand sold under an FDA application, distinct (`["KESIMPTA", "ARZERRA"]`). `null` on EMA rows |
+| `substances` | Lowercased substances. EMA: from the INN or, when that is empty, the active substance. FDA: the application's ingredients without the FDA's four-letter suffix |
 | `is_combination` | More than one substance |
-| `status`, `opinion_status` | EMA's wording |
-| `therapeutic_areas`, `atc_code`, `pharmacotherapeutic_group`, `indication`, `holder` | As published; `indication` has its HTML removed |
-| `advanced_therapy`, `orphan_medicine`, `conditional_approval`, `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`, `additional_monitoring`, `biosimilar`, `generic`, `patient_safety` | EMA's flags |
-| `rolling_review_start_date`, `evaluation_start_date`, `opinion_date`, `authorisation_date`, `refusal_date`, `application_withdrawal_date`, `suspension_date`, `end_date` | Dates, or `null`. `end_date` is when an authorisation was withdrawn, expired, lapsed or revoked; `status` says which |
-| `latest_ec_decision_date` | The most recent European Commission decision. **Not the approval date**: it is usually a variation (a new indication, a label change). `authorisation_date` is the first approval, so show that one as "authorised" |
-| `ema_first_published`, `ema_last_updated` | When EMA first published and last updated the product's record |
-| `url` | The EPAR page on ema.europa.eu |
-| `grouped_under` | The id of the lead product when this one is a duplicate of it (same substances, same indication), else `null`. Duplicates are hidden from lists unless `include_generics=true` |
+| `status`, `opinion_status` | The regulator's wording. FDA `status`: `Approved`, `Tentatively approved`, `Discontinued` or `Revoked`. `opinion_status` is `null` on FDA rows |
+| `therapeutic_areas`, `atc_code` | EMA's classification. `null` on FDA rows |
+| `pharmacotherapeutic_group`, `indication`, `holder` | As published; `indication` has its HTML removed. On an FDA row `pharmacotherapeutic_group` is the first openFDA established pharmacologic class, `indication` is the indications section of the application's main DailyMed label (empty until a label has been fetched) and `holder` is the sponsor |
+| `advanced_therapy`, `orphan_medicine`, `conditional_approval`, `exceptional_circumstances`, `prime_priority_medicine`, `accelerated_assessment`, `additional_monitoring`, `patient_safety` | EMA's flags. `null` on FDA rows |
+| `biosimilar`, `generic` | Set on both regulators' rows (an FDA biosimilar is a `351(k)` BLA; the FDA data has no generics, so `generic` is always `false` there) |
+| `interchangeable` | An FDA biosimilar licensed as interchangeable. `null` on EMA rows |
+| `fda_priority_review`, `fda_original_class` | Whether the FDA's original submission had priority review (`null` when the FDA does not say), and its class as the FDA gives it (`TYPE 1` is a new molecular entity). `null` on EMA rows |
+| `rolling_review_start_date`, `evaluation_start_date`, `opinion_date`, `refusal_date`, `application_withdrawal_date`, `suspension_date`, `end_date` | EMA's dates, or `null`. `null` on every FDA row. `end_date` is when an authorisation was withdrawn, expired, lapsed or revoked; `status` says which |
+| `authorisation_date` | The first approval, at either regulator: EMA's authorisation, or the FDA's original approval (a CBER biologic: the earliest approval date among its original rows) |
+| `latest_ec_decision_date` | The most recent European Commission decision. **Not the approval date**: it is usually a variation (a new indication, a label change). `authorisation_date` is the first approval, so show that one as "authorised". `null` on FDA rows |
+| `ema_first_published`, `ema_last_updated` | When EMA first published and last updated the product's record. `null` on FDA rows |
+| `url` | The EPAR page on ema.europa.eu; for an FDA application its Drugs@FDA overview page (a CBER biologic: its DailyMed label) |
+| `grouped_under` | The id of the lead product when this one is a duplicate of it (same regulator, same substances, same indication), else `null`. Duplicates are hidden from lists unless `include_generics=true` |
 | `tracked` | `true` when the medicine is filed under at least one category the caller can see, i.e. `categories` is not empty |
 | `categories` | The categories the medicine is linked to that the caller can see, by live links only: `id`, `category_name`, `category_slug` |
-| `subjects` | The conditions EMA approved the medicine for that the caller can see, by live subject links only: `id`, `subject_name`, `subject_slug`, `matched_on` (the subject's EMA therapeutic area that matched). Empty for a medicine that is only filed under a category |
-| `source` | `European Medicines Agency` |
+| `subjects` | The conditions EMA approved the medicine for that the caller can see, by live subject links only: `id`, `subject_name`, `subject_slug`, `matched_on` (the subject's EMA therapeutic area that matched). Empty for a medicine that is only filed under a category, and always empty for an FDA one |
+| `source` | `European Medicines Agency` or `U.S. Food and Drug Administration`, matching `regulator` |
+
+**Fields that belong to the other regulator are `null`, not `false` or `[]`.** The EMA-only fields on an FDA row (`ema_product_number`, `opinion_status`, `therapeutic_areas`, `atc_code`, the eight flags above, `rolling_review_start_date`, `evaluation_start_date`, `opinion_date`, `latest_ec_decision_date`, `refusal_date`, `application_withdrawal_date`, `suspension_date`, `end_date`, `ema_first_published`, `ema_last_updated`) and the FDA-only fields on an EMA row (`fda_application_number`, `fda_application_type`, `fda_center`, `brand_names`, `fda_priority_review`, `fda_original_class`, `interchangeable`) are `null`, and the OpenAPI schema marks them nullable. A `false` orphan flag therefore always means "EMA says it is not an orphan medicine". Gregory's internal FDA columns (`label_indications`, `fda_pharm_classes`, `raw`) are not exposed.
 
 `GET /medicines/{id}/` adds `grouped_products` and `events`. `grouped_products` is the lead product's duplicates, ordered by name: `id`, `name`, `url` (empty for any other product; only duplicates the caller can see). `events` is the product's regulatory history, newest first, each with the event fields below except `medicine` and `source`.
 
@@ -1193,6 +1210,7 @@ Newest first (`event_date`, then newest id). Visibility is the event's medicine'
 |:----------|:--------|
 | `category_id`, `category_slug`, `subject_id`, `site_id` | As on `/medicines/`, applied to the event's medicine: `subject_id` and `site_id` accept a category link or a subject link, and only category links with a category filter. Given together they must hold on the same live link |
 | `tracked` | As on `/medicines/`, applied to the event's medicine |
+| `regulator` | `ema` or `fda`, applied to the event's medicine. Omitted: both. Any other value is `400` |
 | `kind` | One kind or a comma-separated list (`?kind=opinion_positive,authorised`). Unknown values are `400` |
 | `basis` | `observed` or `reconstructed` |
 | `event_date_after`, `event_date_before` | Inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
@@ -1202,19 +1220,19 @@ Newest first (`event_date`, then newest id). Visibility is the event's medicine'
 | Field | Meaning |
 |:------|:--------|
 | `id` | The event's id |
-| `kind` | `rolling_review_started`, `evaluation_started`, `opinion_positive`, `opinion_negative`, `opinion_adopted`, `authorised`, `ec_decision`, `indication_changed`, `refused`, `application_withdrawn`, `suspended`, `ended` or `status_changed` |
-| `kind_label` | The event as a sentence, worded exactly as in the [medicine feeds](#medicine-feeds): *Authorised in the EU*, *New European Commission decision*, … (`Authorisation ended (Withdrawn)` adds the new status; `Status changed: Authorised → Suspended` adds both) |
-| `event_date` | EMA's date where it gives one, otherwise the day Gregory saw the change |
-| `basis` | `observed`: Gregory saw the change between two syncs. `reconstructed`: read off EMA's date fields the first time the product was seen, so it is real history but not news. Filter on `basis=observed` for a "what's new" list |
-| `from_value`, `to_value` | The old and new text for status and indication changes; `to_value` holds the status for `ended` |
-| `medicine` | `id`, `name`, `inn`, `url` |
-| `source` | `European Medicines Agency` |
+| `kind` | EMA: `rolling_review_started`, `evaluation_started`, `opinion_positive`, `opinion_negative`, `opinion_adopted`, `authorised`, `ec_decision`, `indication_changed`, `refused`, `application_withdrawn`, `suspended`, `ended`. FDA: `fda_approved`, `fda_tentative_approval`, `fda_efficacy_supplement`, `fda_discontinued`, `fda_revoked`. Both: `status_changed` |
+| `kind_label` | The event as a sentence, worded exactly as in the [medicine feeds](#medicine-feeds): *Authorised in the EU*, *New European Commission decision*, *Approved by the FDA*, *FDA approved a new indication or use*, … (`Authorisation ended (Withdrawn)` adds the new status; `Status changed: Authorised → Suspended` adds both) |
+| `event_date` | The regulator's date where it gives one (EMA's date fields, the FDA's submission date), otherwise the day Gregory saw the change |
+| `basis` | `observed`: Gregory saw the change between two syncs. `reconstructed`: read off the regulator's dates the first time the product was seen, so it is real history but not news. Filter on `basis=observed` for a "what's new" list. The FDA's first sync reconstructs thousands of approvals, so an FDA list without `basis=observed` is mostly history |
+| `from_value`, `to_value` | The old and new text for status and indication changes; `to_value` holds the status for `ended`. On `fda_approved`, `fda_tentative_approval` and `fda_efficacy_supplement`, `to_value` is the FDA submission number (`S-38`), which can be looked up on Drugs@FDA |
+| `medicine` | `id`, `regulator`, `name`, `inn`, `url` |
+| `source` | `European Medicines Agency` or `U.S. Food and Drug Administration`, matching the medicine's `regulator` |
 
 An `ec_decision` event is the date of EMA's latest Commission decision, not the approval: that is the `authorised` event. `/medicines/events/` is its own route: `events` is never read as a medicine id.
 
 ### Categories
 
-`GET /categories/` rows carry `medicines_count`: the live links of the category to medicines, **without generics, biosimilars and duplicate products**, so it equals `count` of `/medicines/?category_id={id}`. It is `0` for a category none of whose subjects is in the caller's medicine scope, which includes every category on a site with `medicines_enabled` off.
+`GET /categories/` rows carry `medicines_count`: the live links of the category to medicines of either regulator, **without generics, biosimilars and duplicate products**, so it equals `count` of `/medicines/?category_id={id}`. It is `0` for a category none of whose subjects is in the caller's medicine scope, which includes every category on a site with `medicines_enabled` off.
 
 ### Examples
 
@@ -1224,6 +1242,9 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/?subject_id=13&tracked=false             the ones no category covers yet
 /medicines/?category_id=6,21                        either category
 /medicines/?substance=natalizumab&include_generics=true   with biosimilars and duplicates
+/medicines/?regulator=fda&ordering=-authorisation_date    only the FDA's, newest approvals first
+/medicines/?ordering=-authorisation_date                  both regulators in one list
+/medicines/?orphan_medicine=false                         EMA only: FDA rows are left out
 /medicines/?name=ocrevus                            by brand name
 /medicines/?authorised_after=2024-01-01&ordering=-authorisation_date
 /medicines/123/                                     with events
@@ -1231,6 +1252,8 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/events/?site_id=3&tracked=false          events of medicines no category covers
 /medicines/events/?subject_id=1&category_id=6&basis=observed
 /medicines/events/?kind=opinion_positive&event_date_after=2026-01-01
+/medicines/events/?regulator=fda&basis=observed     new FDA approvals and indications
+/medicines/events/?kind=fda_approved,fda_efficacy_supplement&basis=observed
 ```
 
 ---

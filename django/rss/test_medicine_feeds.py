@@ -1,5 +1,5 @@
 """
-EMA medicine event feeds (feed/sites/<site_id>/medicines/,
+Medicine event feeds, EMA and FDA (feed/sites/<site_id>/medicines/,
 feed/sites/<site_id>/medicines/category/<slug>/ and
 feed/sites/<site_id>/medicines/subject/<slug>/).
 
@@ -682,31 +682,45 @@ class MedicineFeedExclusionTests(MedicineFixture, TestCase):
 		self.assertOnlyTheLead()
 
 
-class FdaGateFeedTests(MedicineFixture, TestCase):
-	"""TEMPORARY: an FDA medicine's events stay out of every feed until the FDA release can
-	label them (PR 3 removes the gate and this class)."""
+class FdaFeedTests(MedicineFixture, TestCase):
+	"""FDA events in the medicine feeds: their own title, description, source line and link,
+	and the ``?regulator=`` narrowing."""
 
 	def setUp(self):
 		self.build()
-		self.lead = self.make_medicine("Lead", source=CategoryAssignmentSource.MANUAL)
-		self.subject_link(self.lead)
-		self.make_event(self.lead)
+		cache.clear()
+		self.ema = self.make_medicine("Ocrevus", indication="Treatment of multiple sclerosis.")
+		self.subject_link(self.ema)
+		self.ema_event = self.make_event(self.ema, Kind.AUTHORISED, days_ago=3)
+		self.fda = self.make_fda("BLA761053", ["OCREVUS", "ZUNOVO"], inn="OCRELIZUMAB")
+		self.fda_event = self.make_event(self.fda, Kind.FDA_EFFICACY_SUPPLEMENT, days_ago=1, to_value="S-38")
 
-	def test_an_automatic_fda_link_and_its_events_show_in_no_feed(self):
-		fda = Medicine.objects.create(
-			regulator="fda",
-			ema_product_number=None,
-			fda_application_number="BLA761053",
-			name="OCREVUS FDA",
-			inn="ocrelizumab",
-			substances=["ocrelizumab"],
-			status="Approved",
-		)
-		link = self.link(fda, self.category)
-		self.subject_link(fda)
-		self.make_event(fda, kind=Kind.FDA_EFFICACY_SUPPLEMENT)
-		self.make_event(fda, kind=Kind.FDA_APPROVED, days_ago=2)
-		self.assertEqual(link.source, CategoryAssignmentSource.AUTOMATIC)
+	def make_fda(self, number, brands, inn="", category="default", **extra):
+		fields = {
+			"regulator": "fda",
+			"ema_product_number": None,
+			"fda_application_number": number,
+			"fda_application_type": number[:3],
+			"name": " / ".join(brands),
+			"brand_names": brands,
+			"inn": inn,
+			"substances": [inn.lower()] if inn else [],
+			"status": "Approved",
+			"indication": "OCREVUS is indicated for relapsing forms of multiple sclerosis.",
+			"url": f"https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?ApplNo={number[3:]}",
+		}
+		fields.update(extra)
+		medicine = Medicine.objects.create(**fields)
+		category = self.category if category == "default" else category
+		if category is not None:
+			self.link(medicine, category)
+		return medicine
+
+	def fda_items(self, response):
+		return [i for i in self.items(response) if i.findtext("guid").startswith("fda-")]
+
+	def test_an_fda_event_shows_in_every_feed_beside_the_ema_one(self):
+		self.subject_link(self.fda)  # the matcher makes none; a hand-made one changes nothing
 		feeds = {
 			"subject": self.subject_feed(),
 			"category": self.category_feed(),
@@ -715,7 +729,141 @@ class FdaGateFeedTests(MedicineFixture, TestCase):
 		for name, response in feeds.items():
 			with self.subTest(feed=name):
 				self.assertEqual(response.status_code, 200)
-				self.assertEqual(self.titles(response), ["Lead (ocrelizumab): Authorised in the EU"])
+				self.assertEqual(
+					self.titles(response),
+					[
+						"OCREVUS (OCRELIZUMAB): FDA approved a new indication or use",
+						"Ocrevus (ocrelizumab): Authorised in the EU",
+					],
+				)
+
+	def test_an_fda_item_has_its_title_link_guid_and_source_line(self):
+		(item,) = self.fda_items(self.category_feed())
+		self.assertEqual(item.findtext("title"), "OCREVUS (OCRELIZUMAB): FDA approved a new indication or use")
+		self.assertEqual(item.findtext("link"), self.fda.url)
+		self.assertEqual(item.find("guid").text, f"fda-medicine-event-{self.fda_event.pk}")
+		self.assertEqual(item.find("guid").get("isPermaLink"), "false")
+		self.assertEqual(
+			item.findtext("description"),
+			"<p>OCREVUS is indicated for relapsing forms of multiple sclerosis.</p>"
+			"<p>Source: U.S. Food and Drug Administration</p>",
+		)
+
+	def test_an_ema_item_keeps_its_guid_and_source_line(self):
+		(item,) = [i for i in self.items(self.category_feed()) if i.findtext("guid").startswith("ema-")]
+		self.assertEqual(item.find("guid").text, f"ema-medicine-event-{self.ema_event.pk}")
+		self.assertTrue(item.findtext("description").endswith("Source: European Medicines Agency</p>"))
+		self.assertNotIn("Food and Drug", item.findtext("description"))
+
+	def test_the_title_uses_the_first_brand_name_and_the_ingredients(self):
+		other = self.make_fda("NDA022561", ["KESIMPTA", "ARZERRA"], inn="OFATUMUMAB")
+		self.make_event(other, Kind.FDA_APPROVED, days_ago=0)
+		titles = self.titles(self.category_feed())
+		self.assertIn("KESIMPTA (OFATUMUMAB): Approved by the FDA", titles)
+
+	def test_without_brand_names_or_ingredients_the_title_falls_back(self):
+		cber = self.make_fda("BLA125646", [], name="Kymriah", inn="")
+		self.make_event(cber, Kind.FDA_APPROVED, days_ago=0)
+		self.assertIn("Kymriah: Approved by the FDA", self.titles(self.category_feed()))
+
+	def test_the_link_falls_back_to_the_fda_database_when_there_is_no_url(self):
+		bare = self.make_fda("NDA000001", ["BARE"], url="")
+		self.make_event(bare, Kind.FDA_APPROVED, days_ago=0)
+		items = {i.findtext("title").split(" ")[0]: i for i in self.items(self.category_feed())}
+		self.assertEqual(items["BARE:"].findtext("link"), "https://www.accessdata.fda.gov/scripts/cder/daf/")
+
+	def test_an_fda_medicine_with_no_description_still_carries_its_source(self):
+		bare = self.make_fda("NDA000002", ["QUIET"], indication="")
+		self.make_event(bare, Kind.FDA_APPROVED, days_ago=0)
+		item = [i for i in self.items(self.category_feed()) if i.findtext("title").startswith("QUIET")][0]
+		self.assertEqual(item.findtext("description"), "<p>Source: U.S. Food and Drug Administration</p>")
+
+	def test_the_ninety_day_rule_applies_to_fda_events(self):
+		old = self.make_fda("NDA000003", ["OLDIE"])
+		self.make_event(old, Kind.FDA_APPROVED, days_ago=RECONSTRUCTED_EVENT_DAYS + 5, basis=Basis.RECONSTRUCTED)
+		self.make_event(old, Kind.FDA_EFFICACY_SUPPLEMENT, days_ago=RECONSTRUCTED_EVENT_DAYS + 5, basis=Basis.OBSERVED)
+		recent = self.make_fda("NDA000004", ["RECENT"])
+		self.make_event(recent, Kind.FDA_APPROVED, days_ago=10, basis=Basis.RECONSTRUCTED)
+		titles = " ".join(self.titles(self.category_feed()))
+		self.assertNotIn("OLDIE: Approved by the FDA", titles)
+		self.assertIn("OLDIE: FDA approved a new indication or use", titles)
+		self.assertIn("RECENT: Approved by the FDA", titles)
+
+	def test_an_fda_biosimilar_and_a_suppressed_fda_link_stay_out(self):
+		biosimilar = self.make_fda("BLA761322", ["TYRUKO"], biosimilar=True)
+		self.make_event(biosimilar, Kind.FDA_APPROVED, days_ago=0)
+		hidden = self.make_fda("NDA000005", ["HIDDEN"])
+		self.make_event(hidden, Kind.FDA_APPROVED, days_ago=0)
+		MedicineCategoryAssignment.objects.filter(medicine=hidden).update(suppressed=True)
+		titles = " ".join(self.titles(self.category_feed()))
+		self.assertNotIn("TYRUKO", titles)
+		self.assertNotIn("HIDDEN", titles)
+
+	def test_an_fda_medicine_with_no_category_link_reaches_no_feed(self):
+		unfiled = self.make_fda("NDA000006", ["UNFILED"], category=None)
+		self.make_event(unfiled, Kind.FDA_APPROVED, days_ago=0)
+		for response in (self.subject_feed(), self.category_feed(), self.site_feed()):
+			self.assertNotIn("UNFILED", " ".join(self.titles(response)))
+
+	# --- ?regulator= -----------------------------------------------------------------
+
+	def test_regulator_narrows_every_feed(self):
+		for name, url in self.routes():
+			with self.subTest(route=name):
+				fda = self.get_titles(f"{url}?regulator=fda")
+				ema = self.get_titles(f"{url}?regulator=ema")
+				self.assertEqual(fda, ["OCREVUS (OCRELIZUMAB): FDA approved a new indication or use"])
+				self.assertEqual(ema, ["Ocrevus (ocrelizumab): Authorised in the EU"])
+				self.assertEqual(len(self.get_titles(url)), 2)
+
+	def test_an_unknown_regulator_is_a_404_on_every_feed(self):
+		for name, url in self.routes():
+			for value in ("who", "FDA", "", "ema,fda"):
+				with self.subTest(route=name, value=value):
+					self.assertEqual(self.client.get(url, {"regulator": value}).status_code, 404)
+
+	def test_the_narrowed_response_is_not_the_cached_unfiltered_one(self):
+		# cache_page keys on the full URL, query string included: warm the plain URL,
+		# then ask for each regulator without clearing the cache.
+		for name, url in self.routes():
+			with self.subTest(route=name):
+				cache.clear()
+				self.assertEqual(len(self.get_titles(url)), 2)
+				self.assertEqual(len(self.get_titles(f"{url}?regulator=fda")), 1)
+				self.assertEqual(len(self.get_titles(f"{url}?regulator=ema")), 1)
+				# Each is cached under its own key.
+				self.make_event(self.fda, Kind.FDA_APPROVED, days_ago=0)
+				self.assertEqual(len(self.get_titles(url)), 2)
+				self.assertEqual(len(self.get_titles(f"{url}?regulator=fda")), 1)
+				cache.clear()
+				self.assertEqual(len(self.get_titles(f"{url}?regulator=fda")), 2)
+				MedicineEvent.objects.filter(medicine=self.fda, kind=Kind.FDA_APPROVED).delete()
+
+	def test_the_channel_names_both_regulators_or_the_one_asked_for(self):
+		both = ET.fromstring(self.category_feed().content).find("./channel")
+		self.assertIn("European Medicines Agency", both.findtext("description"))
+		self.assertIn("U.S. Food and Drug Administration", both.findtext("description"))
+		self.assertEqual(both.findtext("title"), "Medicines: Reader Category — Reader Site")
+
+		url = self.category_url(BY_CATEGORY)
+		fda = ET.fromstring(self.client.get(url, {"regulator": "fda"}).content).find("./channel")
+		self.assertIn("U.S. Food and Drug Administration", fda.findtext("description"))
+		self.assertNotIn("European Medicines Agency", fda.findtext("description"))
+		self.assertEqual(fda.findtext("title"), "Medicines (FDA): Reader Category — Reader Site")
+		self_link = [l.get("href") for l in fda.findall(f"{ATOM}link") if l.get("rel") == "self"]
+		self.assertEqual(self_link, ["http://testserver" + url + "?regulator=fda"])
+
+		ema = ET.fromstring(self.client.get(url, {"regulator": "ema"}).content).find("./channel")
+		self.assertNotIn("U.S. Food and Drug Administration", ema.findtext("description"))
+		self.assertEqual(ema.findtext("title"), "Medicines (EMA): Reader Category — Reader Site")
+
+	def test_the_site_and_subject_channels_are_titled_by_regulator(self):
+		site = ET.fromstring(self.client.get(self.url(SITE_FEED), {"regulator": "fda"}).content)
+		self.assertEqual(site.findtext("./channel/title"), "Medicine approvals (FDA) — Reader Site")
+		subject = ET.fromstring(
+			self.client.get(self.subject_url(BY_SUBJECT), {"regulator": "fda"}).content
+		)
+		self.assertTrue(subject.findtext("./channel/title").startswith("Medicines (FDA): "))
 
 
 class MedicineFeedQueryCountTests(MedicineFixture, TestCase):

@@ -24,6 +24,7 @@ from gregory.models import (
 	PatentApplicant,
 	PatentPublication,
 	Medicine,
+	Regulator,
 	MedicineCategoryAssignment,
 	MedicineEvent,
 	MedicineSubjectLink,
@@ -2294,10 +2295,19 @@ _SITE_ID_HELP = (
 	"(medicines_enabled off) returns nothing. Only live links count."
 )
 _INCLUDE_GENERICS_HELP = (
-	"Generic and biosimilar products, and duplicate products (further EMA products "
-	"for the same medicine, grouped under a lead product: see `grouped_under`), are "
-	"left out unless this is true. They are matched and stored like any other "
-	"product; the default hides them so a list shows the originators."
+	"Generic and biosimilar products (the FDA's biosimilars, such as Tyruko, too), and "
+	"duplicate products (further products of the same regulator for the same medicine, "
+	"grouped under a lead product: see `grouped_under`), are left out unless this is "
+	"true. They are matched and stored like any other product; the default hides them "
+	"so a list shows the originators."
+)
+_REGULATOR_HELP = (
+	"ema or fda: only {things} from that regulator. Omit it for both. Any other value "
+	"returns 400."
+)
+_EMA_ONLY_HELP = (
+	" EMA-only: using it leaves the FDA's medicines out, because the FDA has no such "
+	"column ({column} is null on their rows), so `false` never means \"unknown\"."
 )
 _TRACKED_HELP = (
 	"false: no live link to a category you can see (the medicine shows only because "
@@ -2449,14 +2459,21 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Site ID",
 		help_text=_SITE_ID_HELP.format(things="medicines"),
 	)
+	regulator = filters.ChoiceFilter(
+		field_name="regulator",
+		choices=Regulator.choices,
+		label="Regulator",
+		help_text=_REGULATOR_HELP.format(things="medicines"),
+	)
 	substance = filters.CharFilter(
 		method="filter_substance",
 		label="Substance",
 		help_text=(
-			"A substance, as EMA names it (the INN, or the active substance when "
-			"the INN is empty). Matches one element of the product's `substances` "
-			"exactly, ignoring case and extra spaces, e.g. ?substance=ocrelizumab. "
-			"A combination product matches on any of its substances."
+			"A substance, as the regulator names it (the INN, or the active substance "
+			"when the INN is empty; for the FDA, the ingredient). Matches one element "
+			"of the product's `substances` exactly, ignoring case and extra spaces, "
+			"e.g. ?substance=ocrelizumab. A combination product matches on any of its "
+			"substances."
 		),
 	)
 	name = filters.CharFilter(
@@ -2464,11 +2481,12 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		lookup_expr="icontains",
 		label="Name",
 		help_text=(
-			"Part of the product's name as EMA publishes it (the brand name), "
-			"case-insensitive, e.g. ?name=ocrevus. A substring of the whole name, "
-			"which can include a former name: ?name=corbilta finds \"Corbilta "
-			"(previously Levodopa/Carbidopa/Entacapone Sandoz)\". Use `substance` for "
-			"the active substance."
+			"Part of the product's name as the regulator publishes it (the brand "
+			"name), case-insensitive, e.g. ?name=ocrevus. A substring of the whole "
+			"name, which can include a former name: ?name=corbilta finds \"Corbilta "
+			"(previously Levodopa/Carbidopa/Entacapone Sandoz)\". An FDA application "
+			"sold under several brands has them all in `name`, joined with ' / '. Use "
+			"`substance` for the active substance."
 		),
 	)
 	status = filters.CharFilter(
@@ -2476,27 +2494,33 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		lookup_expr="iexact",
 		label="Status",
 		help_text=(
-			"EMA's status wording, case-insensitive, e.g. Authorised, Withdrawn, "
-			"Refused, Opinion. EMA's own words are stored, so new values can appear."
+			"The regulator's status wording, case-insensitive. EMA: Authorised, "
+			"Withdrawn, Refused, Opinion. FDA: Approved, Tentatively approved, "
+			"Discontinued, Revoked. The regulator's own words are stored, so new "
+			"values can appear."
 		),
 	)
 	opinion_status = filters.CharFilter(
-		field_name="opinion_status",
-		lookup_expr="iexact",
+		method="filter_opinion_status",
 		label="Opinion status",
 		help_text=(
 			"Positive or Negative. EMA fills it only while a medicine is at the "
 			"opinion stage and clears it once the Commission decides, so most "
 			"products have none."
-		),
+		)
+		+ _EMA_ONLY_HELP.format(column="`opinion_status`"),
 	)
 	advanced_therapy = filters.BooleanFilter(
+		method="filter_ema_flag",
 		label="Advanced therapy",
-		help_text="true: gene, cell and tissue-engineered products; false: the rest.",
+		help_text="true: gene, cell and tissue-engineered products; false: the rest."
+		+ _EMA_ONLY_HELP.format(column="`advanced_therapy`"),
 	)
 	orphan_medicine = filters.BooleanFilter(
+		method="filter_ema_flag",
 		label="Orphan medicine",
-		help_text="true: designated orphan medicines; false: the rest.",
+		help_text="true: designated orphan medicines; false: the rest."
+		+ _EMA_ONLY_HELP.format(column="`orphan_medicine`"),
 	)
 	is_combination = filters.BooleanFilter(
 		label="Combination product",
@@ -2508,8 +2532,8 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Authorised on or after",
 		help_text=(
 			"Products first authorised on or after this date (YYYY-MM-DD, "
-			"inclusive). This is the first approval, not the latest EC decision. "
-			"Invalid dates return 400."
+			"inclusive). This is the first approval (the FDA's original approval), "
+			"not the latest EC decision. Invalid dates return 400."
 		),
 	)
 	authorised_before = filters.DateFilter(
@@ -2539,6 +2563,7 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"category_slug",
 			"subject_id",
 			"site_id",
+			"regulator",
 			"substance",
 			"name",
 			"status",
@@ -2551,6 +2576,14 @@ class MedicineFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"tracked",
 			"include_generics",
 		]
+
+	def filter_opinion_status(self, queryset, name, value):
+		return queryset.filter(regulator=Regulator.EMA, opinion_status__iexact=value)
+
+	def filter_ema_flag(self, queryset, name, value):
+		"""A designation flag only EMA gives: FDA rows hold the default ``false``, which
+		would otherwise answer ``orphan_medicine=false`` with medicines nobody assessed."""
+		return queryset.filter(**{"regulator": Regulator.EMA, name: value})
 
 	def filter_substance(self, queryset, name, value):
 		from gregory.utils.ema import split_substances
@@ -2588,13 +2621,22 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Site ID",
 		help_text=_SITE_ID_HELP.format(things="events of medicines"),
 	)
+	regulator = filters.ChoiceFilter(
+		field_name="medicine__regulator",
+		choices=Regulator.choices,
+		label="Regulator",
+		help_text=_REGULATOR_HELP.format(things="events of medicines"),
+	)
 	kind = ChoiceInFilter(
 		field_name="kind",
 		choices=MedicineEvent.Kind.choices,
 		label="Kind",
 		help_text=(
 			"One kind, or a comma-separated list that matches ANY of them, e.g. "
-			"?kind=opinion_positive,authorised. Unknown values return 400."
+			"?kind=opinion_positive,authorised. EMA's kinds and the FDA's "
+			"(fda_approved, fda_tentative_approval, fda_efficacy_supplement, "
+			"fda_discontinued, fda_revoked) share the list; the shared `status_changed` "
+			"kind belongs to both. Unknown values return 400."
 		),
 	)
 	basis = filters.ChoiceFilter(
@@ -2603,7 +2645,8 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		label="Basis",
 		help_text=(
 			"observed: Gregory saw the change between two syncs; reconstructed: "
-			"read off EMA's date fields the first time the product was seen."
+			"read off the regulator's dates (EMA's date fields, the FDA's submission "
+			"dates) the first time the product was seen."
 		),
 	)
 	event_date_after = filters.DateFilter(
@@ -2636,6 +2679,7 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 			"category_slug",
 			"subject_id",
 			"site_id",
+			"regulator",
 			"kind",
 			"basis",
 			"event_date_after",

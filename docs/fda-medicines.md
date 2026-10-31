@@ -7,13 +7,10 @@ revoked. FDA records are `Medicine` rows with `regulator = "fda"`; the EMA colum
 empty on them, and the FDA columns stay empty on EMA rows. Like the EMA data they are global
 reference data with no team, subject or organisation of its own.
 
-> **Where this stands.** FDA medicines are imported, labelled and linked to categories, and
-> visible in the Django admin. The API, the RSS feeds and the MCP tools (which read the API)
-> do not show them yet: a temporary gate keeps FDA medicines, their events and their links out
-> of every public read path (`medicines_count` included) until they can be described as FDA
-> records, because those paths still label every row as EMA's. The category page's medicine
-> picker offers EMA medicines only, and a hand-made link to an FDA medicine is refused; the
-> matcher's own links are not affected.
+> **Where this stands.** FDA medicines are imported, labelled, linked to categories, visible in
+> the Django admin, and served by the JSON API and the RSS feeds beside EMA's (see
+> [API and feeds](#api-and-feeds)). The MCP tools do not describe them yet and still show
+> EMA's medicines only.
 
 ## What the data is
 
@@ -221,9 +218,9 @@ Other rules:
 
 Editors fix FDA links the same way as EMA links (see
 [ema-medicines.md](ema-medicines.md#fixing-links)): suppress a wrong automatic link, or add one by hand. The category
-page's picker does not offer FDA medicines yet, so for now a hand-made FDA link waits for the
-API and feed release; an FDA medicine whose label is missing (a discontinued application, say)
-can be added then.
+page's picker offers FDA medicines too (search by brand name or application number), so an FDA
+medicine whose label is missing (a discontinued application, say) can be added by hand. A
+hand-made link is shown in the API and the feeds as soon as it is saved.
 
 ## Events
 
@@ -252,6 +249,45 @@ label wording.
   `fda_revoked` and `status_changed` are dated the day the sync saw the change.
 
 The unique constraint on (medicine, kind, date) makes repeating a sync safe.
+
+## API and feeds
+
+`GET /medicines/` and `GET /medicines/events/` list both regulators' rows, and the three
+medicine RSS feeds list both regulators' events. The full reference is in
+[03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines); in short:
+
+- **Visibility is EMA's.** A medicine is visible through a live category link to a category with
+  a subject in the caller's scope, on a site with `medicines_enabled` on. One switch covers both
+  regulators. FDA medicines have no subject links (see [Matching](#matching)), so they show through categories only, and `?subject_id=` finds them
+  through their categories.
+- **Source and regulator, per row.** `regulator` is `ema` or `fda`. `source` is `"U.S. Food and
+  Drug Administration"` on an FDA row and `"European Medicines Agency"` on an EMA one, on
+  medicines and events alike, and a feed item ends with `Source: U.S. Food and Drug
+  Administration` for an FDA event. `url` is the Drugs@FDA overview page, or a CBER biologic's
+  DailyMed label.
+- **`null` for the other regulator's fields.** An FDA row returns `null` for every EMA-only
+  field (the product number, opinion status, therapeutic areas, ATC code, the designation
+  flags, the opinion, EC, refusal, withdrawal, suspension and end dates, EMA's publication
+  dates), and an EMA row `null` for the FDA-only ones (application number and type, centre,
+  brand names, priority review, original class, interchangeable). `null`, not `false`, so a
+  missing flag is never read as "no". `label_indications`, `fda_pharm_classes` and `raw` are
+  not exposed; `indication` is the main label's text.
+- **Filters.** `regulator=ema|fda` on both endpoints. The EMA-only filters (`opinion_status`,
+  `advanced_therapy`, `orphan_medicine`) leave FDA rows out whenever they are used.
+  `include_generics` still hides generics, biosimilars (Tyruko among them) and grouped
+  copies. `ordering=-authorisation_date` is the regulator-neutral order; the default
+  (`-ema_last_updated`) lists FDA rows after EMA's.
+- **Feeds.** `?regulator=ema|fda` narrows any of the three feeds (anything else is a 404), and
+  each query string is cached separately. The 90-day rule for reconstructed events applies to
+  both regulators, which keeps the first sync's thousands of reconstructed approvals out of
+  the feeds. An item's title reads `{first brand} ({ingredients}): {event in words}`.
+- **`medicines_count`** on a category counts FDA links as well.
+- **Attribution.** The API docs credit DailyMed for the label text and carry the openFDA
+  disclaimer (not for clinical decisions; the FDA does not endorse Gregory's use of the data).
+
+For the frontend: show the regulator on each row, group the two regulators' products of one
+substance under that substance (they are separate records that are never grouped by Gregory),
+and sort a mixed list by `authorisation_date`.
 
 ## In the admin
 
