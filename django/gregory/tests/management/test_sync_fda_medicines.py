@@ -820,3 +820,95 @@ class EmaSyncIgnoresFdaRowsTests(SyncTestCase):
 		call_command("sync_ema_medicines", file=str(ema_fixture), stdout=StringIO())
 		self.assertEqual(Medicine.objects.filter(regulator=Regulator.FDA, in_latest_export=False).count(), 0)
 		self.assertEqual(Medicine.objects.filter(regulator=Regulator.EMA).count(), 16)
+
+
+class SubstanceKeyTests(SyncTestCase):
+	def test_every_row_gets_its_key(self):
+		self.sync()
+		self.assertEqual(self.medicine("BLA761053").substance_key, "ocrelizumab")
+		# The subcutaneous form keys like the intravenous one: hyaluronidase is dropped.
+		self.assertEqual(self.medicine("BLA761371").substance_key, "ocrelizumab")
+		self.assertEqual(self.medicine("BLA761322").substance_key, "natalizumab")
+		self.assertEqual(self.medicine("NDA020895").substance_key, "sildenafil")
+		self.assertEqual(self.medicine("NDA206111").substance_key, "empagliflozin+metformin")
+		self.assertEqual(self.medicine("NDA202172").substance_key, "rosuvastatin")
+		self.assertEqual(self.medicine("NDA205764").substance_key, "carbon dioxide")
+		# A CBER row (Purple Book) is keyed too.
+		kymriah = Medicine.objects.get(fda_center="CBER", name__icontains="kymriah")
+		self.assertEqual(kymriah.substance_key, "tisagenlecleucel")
+
+	def test_both_regulators_share_a_key_for_the_same_drug(self):
+		self.sync()
+		call_command(
+			"sync_ema_medicines",
+			file=str(Path(__file__).resolve().parent.parent / "fixtures" / "ema" / "medicines-base.json"),
+			stdout=StringIO(),
+		)
+		pairs = {
+			("Ocrevus", "BLA761053"),
+			("Tysabri", "BLA125104"),
+			("Viagra", "NDA020895"),
+			("Synjardy", "NDA206111"),
+		}
+		for ema_name, fda_number in pairs:
+			with self.subTest(ema_name):
+				self.assertEqual(
+					Medicine.objects.get(name=ema_name, regulator=Regulator.EMA).substance_key,
+					self.medicine(fda_number).substance_key,
+				)
+
+	def test_a_record_with_no_ingredients_is_keyed_by_its_id_and_keeps_it(self):
+		payload = load(DRUGS_BASE)
+		record = dict(self.base_record("NDA017581"), application_number="NDA999999")
+		record["products"] = [dict(p, active_ingredients=[]) for p in record["products"]]
+		payload["results"].append(record)
+		payload["meta"]["results"]["total"] += 1
+		self.sync(self.write_drugs(payload), purplebook=None)
+		row = self.medicine("NDA999999")
+		self.assertEqual(row.substances, [])
+		self.assertEqual(row.substance_key, f"medicine-{row.pk}")
+		# Rewritten by a later sync (the sponsor moved): the id key stays.
+		record["sponsor_name"] = "SOMEONE ELSE"
+		self.sync(self.write_drugs(payload, name="again.json"), purplebook=None)
+		row = self.medicine("NDA999999")
+		self.assertEqual(row.holder, "SOMEONE ELSE")
+		self.assertEqual(row.substance_key, f"medicine-{row.pk}")
+
+	def test_a_stale_key_alone_is_not_a_change_and_makes_no_event(self):
+		self.sync()
+		Medicine.objects.filter(fda_application_number="BLA761053").update(substance_key="stale")
+		events_before = list(MedicineEvent.objects.order_by("id").values_list("id", flat=True))
+		synced_before = dict(Medicine.objects.values_list("fda_application_number", "last_synced_at"))
+		output = self.sync()
+		self.assertIn("0 new, 0 changed", output)
+		self.assertEqual(
+			list(MedicineEvent.objects.order_by("id").values_list("id", flat=True)), events_before
+		)
+		self.assertEqual(
+			dict(Medicine.objects.values_list("fda_application_number", "last_synced_at")),
+			synced_before,
+		)
+		self.assertEqual(self.medicine("BLA761053").substance_key, "stale")
+
+	def test_a_row_the_sync_rewrites_gets_the_current_key_and_only_its_own_events(self):
+		self.sync()
+		Medicine.objects.filter(fda_application_number="BLA761053").update(substance_key="stale")
+		events_before = MedicineEvent.objects.count()
+		payload = load(DRUGS_BASE)
+		ocrevus = next(r for r in payload["results"] if r["application_number"] == "BLA761053")
+		ocrevus["sponsor_name"] = "GENENTECH, INC. (RENAMED)"
+		output = self.sync(self.write_drugs(payload))
+		self.assertIn("0 new, 1 changed", output)
+		self.assertEqual(self.medicine("BLA761053").substance_key, "ocrelizumab")
+		self.assertEqual(MedicineEvent.objects.count(), events_before)
+
+	def test_a_cber_row_the_purple_book_rewrites_gets_the_current_key(self):
+		self.sync()
+		kymriah = Medicine.objects.get(fda_center="CBER", name__icontains="kymriah")
+		Medicine.objects.filter(pk=kymriah.pk).update(substance_key="stale")
+		self.sync(drugs=None, purplebook=PB_CHANGED)
+		kymriah.refresh_from_db()
+		# The changed Purple Book revokes Kymriah, so the row is rewritten (and gets its
+		# own status event); the key comes back with it.
+		self.assertEqual(kymriah.status, "Revoked")
+		self.assertEqual(kymriah.substance_key, "tisagenlecleucel")

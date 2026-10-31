@@ -50,6 +50,7 @@ from gregory.utils.fda import (
 	parse_purplebook,
 	read_drugsfda,
 )
+from gregory.utils.substance_key import standalone_keys, substance_key
 
 BATCH_SIZE = 500
 MAX_COUNT_DROP = 0.05
@@ -73,13 +74,13 @@ DATED_KINDS = (
 # the label sync fills. A CBER row's url is left alone too: DailyMed supplies it.
 DRUGSFDA_FIELDS = [
 	"fda_application_type", "fda_center", "name", "inn", "active_substance", "substances",
-	"is_combination", "status", "pharmacotherapeutic_group", "fda_pharm_classes", "holder",
-	"authorisation_date", "brand_names", "fda_original_class", "fda_priority_review", "url",
-	"raw", "raw_digest",
+	"substance_key", "is_combination", "status", "pharmacotherapeutic_group", "fda_pharm_classes",
+	"holder", "authorisation_date", "brand_names", "fda_original_class", "fda_priority_review",
+	"url", "raw", "raw_digest",
 ]
 PURPLEBOOK_FIELDS = [
 	"fda_application_type", "fda_center", "name", "inn", "active_substance", "substances",
-	"is_combination", "status", "holder", "biosimilar", "interchangeable",
+	"substance_key", "is_combination", "status", "holder", "biosimilar", "interchangeable",
 	"authorisation_date", "brand_names", "raw", "raw_digest",
 ]
 # Columns bulk_update writes on a changed row. Rows are loaded without ``raw`` (about 40 MB
@@ -88,7 +89,11 @@ BOOKKEEPING = ["in_latest_export", "last_synced_at"]
 
 
 def compared(fields):
-	return [name for name in fields if name != "raw"]
+	"""The columns that decide whether a row changed. ``raw`` is compared by its digest, and
+	substance_key is derived from substances by rules in code: a change to those rules is not
+	a change in the FDA's data. refresh_substance_keys carries it to unchanged rows, and a row
+	the sync writes anyway gets the current key."""
+	return [name for name in fields if name not in ("raw", "substance_key")]
 
 
 class Command(GregoryBaseCommand):
@@ -348,6 +353,7 @@ class Command(GregoryBaseCommand):
 				row = Medicine(**values, in_latest_export=True, last_synced_at=now)
 				plan["new"].append((row, reconstructed_events(parsed)))
 				continue
+			values["substance_key"] = substance_key(parsed.substances, pk=medicine.pk)
 			if skip is not None and skip(medicine):
 				skipped += 1
 				continue
@@ -478,6 +484,10 @@ class Command(GregoryBaseCommand):
 		new_medicines = [medicine for medicine, _ in plan["new"]]
 		# PostgreSQL returns the new primary keys, which the events need.
 		Medicine.objects.bulk_create(new_medicines, batch_size=BATCH_SIZE)
+		# A new row with no substances is keyed by its id, which exists only now.
+		Medicine.objects.bulk_update(
+			standalone_keys(new_medicines), ["substance_key"], batch_size=BATCH_SIZE
+		)
 
 		changed_medicines = [medicine for medicine, _ in plan["changed"]]
 		Medicine.objects.bulk_update(changed_medicines, plan["update_fields"], batch_size=BATCH_SIZE)

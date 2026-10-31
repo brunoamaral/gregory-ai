@@ -48,6 +48,24 @@ Things worth knowing:
   `is_combination`. A name with AND that is an enumeration (`LAMIVUDINE, NEVIRAPINE, AND
   STAVUDINE`) is split on its commas too; a name with commas and no AND is not. `inn` and `active_substance` keep the name as published. CBER proper names
   are never split.
+- **<a id="substance-key"></a>`substance_key`.** The FDA names an ingredient as on its label, sometimes with the salt
+  (Gilenya is `fingolimod hydrochloride`, EMA's is `fingolimod`), so exact `substances` do not pair the two
+  regulators' records of one drug. `substance_key` does: each substance goes through `strip_salt`, which drops
+  trailing salt, hydrate and counter-ion words (hydrochloride, tartrate, sulfate, monohydrate, sodium, ...) one at a
+  time while more than one word is left, and stops when only a counter-ion would remain (`sodium chloride` stays).
+  A short list of names keeps their last word (`dimethyl fumarate`, `diroximel fumarate`, `monomethyl fumarate`), and
+  a metal that is the drug stops the stripping of the anion after it (`ferrous sulfate`, `silver nitrate`).
+  A small `INN_ALIASES` map then turns the FDA's US names into the international ones EMA uses (`dalfampridine`
+  to `fampridine`, `acetaminophen` to `paracetamol`, `epinephrine` to `adrenaline`, ...); add a pair only for the
+  same molecule.
+  A delivery enzyme listed as a second ingredient (hyaluronidase, as in Ocrevus Zunovo) is dropped when something
+  else remains, as EMA files the subcutaneous form under the antibody. The rest is unique, sorted and joined with
+  `+`. The sync sets it on every row it writes; `refresh_substance_keys` (pipeline step 3f, right after the syncs)
+  recomputes every row and writes only the ones that changed, so editing the word lists in
+  `gregory/utils/substance_key.py` reaches stored rows on the next run without a migration. The API filters
+  `substance` (salt-tolerant) and `substance_key` (exact) use it; see
+  [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines). A new salt word that is missed shows up as an FDA
+  key with no EMA partner: add the word and a test.
 - **Brand names are as the FDA writes them**, in upper case for Drugs@FDA.
 - **`indication` comes from the label.** It is empty until an application has been a candidate
   for a category and DailyMed holds a label for it (see [Labels](#labels)).
@@ -62,7 +80,7 @@ Things worth knowing:
 docker exec gregory python manage.py sync_fda_medicines
 ```
 
-`pipeline` runs it on every run (step 3e, after the EMA sync), with `--skip-follow-up`: the
+`pipeline` runs it on every run (step 3e, after the EMA sync; step 3f, `refresh_substance_keys`, follows), with `--skip-follow-up`: the
 pipeline's step 7c runs the labels and the matcher once, after `rebuild_categories`. Run by
 hand, the command does both itself after a write. It never touches `indication`,
 `label_indications`, `label_checked_at` or a CBER row's `url`: `sync_fda_labels` owns those. Each file is one conditional
@@ -304,10 +322,11 @@ that have `medicines_enabled` on.
   the two interleave; `regulator=ema` keeps `-ema_last_updated`.
 - **Salt names.** The FDA names an ingredient as on its label, sometimes with the salt (Gilenya is
   `fingolimod hydrochloride`, EMA's is `fingolimod`; Zeposia `ozanimod hydrochloride`; Exelon capsules
-  `rivastigmine tartrate`), and `substance` is an exact match. To find the FDA record the tools tell the
-  model to also try `name` (the brand) or the salt form, and to group the two regulators' records by the
-  substance without the salt, not by exact `substances`. A `substance` search with no FDA record carries
-  that hint (in `guidance` on zero hits, as `fda_hint` otherwise).
+  `rivastigmine tartrate`). The API's `substance` filter now ignores salts and the US/international name
+  difference (`dalfampridine` is `fampridine`), so `substance=fingolimod` finds both regulators' Gilenya, and
+  records of one drug share `substance_key`. The MCP tools' text still says otherwise (try `name` or the salt
+  form, group by the substance without the salt, and the `fda_hint` and salt zero-result hint): that wording
+  is stale until drug-grouping PR 3 updates `mcp-server`.
 - **Capitals.** The FDA's data writes brand names, ingredients and companies in capitals. The tool
   descriptions and the site instructions ask the model to present them in normal case; the data is not
   changed.

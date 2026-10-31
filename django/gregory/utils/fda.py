@@ -26,6 +26,7 @@ from dataclasses import dataclass, field, fields
 from datetime import date, datetime
 
 from gregory.utils.regulator_http import USER_AGENT, clip as _clip, get_with_retries
+from gregory.utils.substance_key import substance_key
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +143,8 @@ class ParsedFdaMedicine:
 	inn: str = ""
 	active_substance: str = ""
 	substances: list = field(default_factory=list)
+	# "" when there are no substances: the sync gives the stored row medicine-<pk>.
+	substance_key: str = ""
 	is_combination: bool = False
 	status: str = ""
 	pharmacotherapeutic_group: str = ""
@@ -295,6 +298,7 @@ def parse_application(record):
 		inn=ingredient_text[:500],
 		active_substance=ingredient_text,
 		substances=substances,
+		substance_key=substance_key(substances),
 		is_combination=len(substances) > 1
 		or any(len(p.get("active_ingredients") or []) > 1 for p in products),
 		status=_product_status(products),
@@ -471,6 +475,7 @@ def _cber_medicine(key, rows):
 		inn="; ".join(proper_names)[:500],
 		active_substance="; ".join(proper_names),
 		substances=substances,
+		substance_key=substance_key(substances),
 		is_combination=False,
 		status=status,
 		holder=_clip(rows[0]["Applicant"], 255),

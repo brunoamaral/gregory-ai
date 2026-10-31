@@ -148,6 +148,9 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"is_combination",
 		"site_id",
 		"include_public",
+		# The API got it first (drug grouping, PR 1). The MCP tool takes it in PR 3: remove
+		# this entry then.
+		"substance_key",
 	},
 	"/trials/": {
 		"format",

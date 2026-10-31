@@ -550,3 +550,77 @@ class DownloadTests(SyncTestCase):
 		with patch(DOWNLOAD, side_effect=RuntimeError("down")):
 			with self.assertRaisesMessage(CommandError, "Could not download"):
 				self.run_download()
+
+
+class SubstanceKeyTests(SyncTestCase):
+	def base_rows_with(self, replacement):
+		"""The whole base export with one row replaced, so the 5% guard has no reason to trip."""
+		return [
+			replacement if row["name_of_medicine"] == replacement["name_of_medicine"] else row
+			for row in load(BASE)["data"]
+		]
+
+	def test_every_row_gets_its_key(self):
+		self.sync()
+		self.assertEqual(self.medicine("Ocrevus").substance_key, "ocrelizumab")
+		# EMA names the salt in active_substance only; the INN decides the substances.
+		self.assertEqual(self.medicine("Gilenya").substance_key, "fingolimod")
+		self.assertEqual(self.medicine("Synjardy").substance_key, "empagliflozin+metformin")
+		self.assertEqual(self.medicine("Hydrocortisone Aguettant").substance_key, "hydrocortisone")
+
+	def test_a_row_with_no_substances_is_keyed_by_its_id(self):
+		row = dict(
+			self.base_row("Ocrevus"),
+			international_non_proprietary_name_common_name="",
+			active_substance="",
+			ema_product_number="EMEA/H/C/999998",
+			name_of_medicine="Nothing",
+		)
+		self.sync(self.write_export([row]))
+		nothing = self.medicine("Nothing")
+		self.assertEqual(nothing.substances, [])
+		self.assertEqual(nothing.substance_key, f"medicine-{nothing.pk}")
+		# A later sync that rewrites the row keeps the id key.
+		changed = dict(row, marketing_authorisation_developer_applicant_holder="Someone else")
+		output = self.sync(self.write_export([changed], name="again.json"))
+		self.assertIn("0 new, 1 changed", output)
+		self.assertEqual(self.medicine("Nothing").substance_key, f"medicine-{nothing.pk}")
+		self.assertEqual(self.medicine("Nothing").holder, "Someone else")
+
+	def test_a_changed_substance_changes_the_key(self):
+		self.sync()
+		row = dict(
+			self.base_row("Ocrevus"),
+			international_non_proprietary_name_common_name="ocrelizumab; hyaluronidase",
+		)
+		self.sync(self.write_export(self.base_rows_with(row)))
+		self.assertEqual(self.medicine("Ocrevus").substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertEqual(self.medicine("Ocrevus").substance_key, "ocrelizumab")
+
+	def test_a_stale_key_alone_is_not_a_change_and_makes_no_event(self):
+		self.sync()
+		Medicine.objects.filter(name="Ocrevus").update(substance_key="stale")
+		events_before = list(MedicineEvent.objects.order_by("id").values_list("id", flat=True))
+		synced_before = dict(Medicine.objects.values_list("name", "last_synced_at"))
+		output = self.sync()
+		self.assertIn("0 new, 0 changed", output)
+		self.assertEqual(
+			list(MedicineEvent.objects.order_by("id").values_list("id", flat=True)), events_before
+		)
+		self.assertEqual(dict(Medicine.objects.values_list("name", "last_synced_at")), synced_before)
+		# Carrying the key to unchanged rows is refresh_substance_keys' job.
+		self.assertEqual(self.medicine("Ocrevus").substance_key, "stale")
+
+	def test_a_row_the_sync_rewrites_gets_the_current_key_and_only_its_own_events(self):
+		self.sync()
+		Medicine.objects.filter(name="Ocrevus").update(substance_key="stale")
+		events_before = MedicineEvent.objects.count()
+		row = dict(
+			self.base_row("Ocrevus"),
+			marketing_authorisation_developer_applicant_holder="Someone else",
+		)
+		output = self.sync(self.write_export(self.base_rows_with(row)))
+		self.assertIn("0 new, 1 changed", output)
+		self.assertEqual(self.medicine("Ocrevus").substance_key, "ocrelizumab")
+		# A holder change is not an event, so the new key added none either.
+		self.assertEqual(MedicineEvent.objects.count(), events_before)
