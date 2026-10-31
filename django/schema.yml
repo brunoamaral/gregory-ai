@@ -4956,6 +4956,388 @@ paths:
               schema:
                 $ref: '#/components/schemas/MedicineDetail'
           description: ''
+  /medicines/drugs/:
+    get:
+      operationId: medicines_drugs_list
+      description: |-
+        List medicines **one entry per drug**: the records of a drug at both regulators
+        together, so a drug approved by the EMA and by the FDA (Gilenya) is one item with
+        two records, not two rows. `/medicines/` lists the same records one by one.
+
+        A drug is identified by its `substance_key` (the substances without their salt:
+        `fingolimod hydrochloride` at the FDA and `fingolimod` at EMA are both
+        `fingolimod`; a combination is `amlodipine+valsartan`). Nothing is merged: each
+        record keeps its own regulator, id, status, dates and indication.
+
+        Each item is:
+
+        - `substance_key`
+        - `name`: the drug's brand name. The EMA product's name when there is one (the
+          earliest authorised that is not a duplicate of another EMA product), else the
+          FDA's first brand name in normal case (`Ocrevus Zunovo`, not `OCREVUS ZUNOVO`).
+          It is taken from the records shown, so a filter that leaves out one regulator
+          can change it.
+        - `substances`: the EMA product's substances, else the key split on `+`.
+        - `regulators`: which regulators have a record shown (`["ema", "fda"]`).
+        - `first_authorised`: `{"ema": date|null, "fda": date|null}`, the earliest
+          `authorisation_date` of the shown records of each regulator.
+        - `records`: the drug's records, each exactly a row of `/medicines/` (same fields,
+          same `source` attribution, same `categories`, `subjects` and `tracked`). EMA
+          records come first, then the FDA's, each oldest authorisation first.
+
+        One key can cover products with different uses (cladribine is Mavenclad for MS and
+        Leustatin for leukaemia): each record carries its own `name` and `indication`.
+
+        **Filters and visibility are `/medicines/`'s.** Every filter of `/medicines/` works
+        here and is applied to the records before they are grouped: a drug is listed when at
+        least one of its records passes, and shows only the records that pass
+        (`?subject_id=1&regulator=fda` lists the FDA's records for that subject, by drug). A
+        record you cannot see on `/medicines/` is never inside a drug, and a caller whose
+        sites do not show medicines (`medicines_enabled` off) gets an empty list and a 404
+        on a single drug. As on `/medicines/`, generics, biosimilars and duplicate products
+        are left out unless `?include_generics=true`.
+
+        **Pages count drugs.** `count` is the number of drugs, `page_size` (max 100) the
+        number of items per page. Ordered by newest authorisation by default (see Ordering).
+        JSON only; `?all_results=true` is ignored, as on `/medicines/`.
+
+        `GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
+        same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
+        `amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+        reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+        combination in another order, a delivery enzyme) is answered with a `301` to the
+        drug's key URL, query string kept, when that drug is visible and passes the filters.
+        The answer is 404 when none of the
+        drug's records is visible to the caller or passes the filters (`include_generics`
+        included: a drug of generics only needs `?include_generics=true`).
+
+        # Query Parameters:
+        The filters of `/medicines/`: `category_id`, `category_slug`, `subject_id`,
+        `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`,
+        `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`,
+        `authorised_after`, `authorised_before`, `include_generics`, and `page`,
+        `page_size`, `ordering`. See `/medicines/` for what each does.
+
+        # Ordering:
+        `?ordering=` (prefix with `-` to reverse): `latest_authorisation` (default
+        `-latest_authorisation`: the drug with the newest approval first) or `name`. A drug
+        without any authorisation date sorts last in both directions. Ties break on
+        `substance_key`. Unrecognised values are silently ignored.
+
+        # Examples:
+        - A condition page, one card per drug: `/medicines/drugs/?subject_id=1`
+        - Only the FDA's records, by drug: `/medicines/drugs/?subject_id=1&regulator=fda`
+        - Alphabetical: `/medicines/drugs/?subject_id=1&ordering=name`
+        - One drug: `/medicines/drugs/fingolimod/`
+        - A combination: `/medicines/drugs/amlodipine%2Bvalsartan/`
+      parameters:
+      - in: query
+        name: advanced_therapy
+        schema:
+          type: boolean
+        description: 'true: gene, cell and tissue-engineered products; false: the
+          rest. EMA-only: using it leaves the FDA''s medicines out, because the FDA
+          has no such column (`advanced_therapy` is null on their rows), so `false`
+          never means "unknown".'
+      - in: query
+        name: authorised_after
+        schema:
+          type: string
+          format: date
+        description: Products first authorised on or after this date (YYYY-MM-DD,
+          inclusive). This is the first approval (the FDA's original approval), not
+          the latest EC decision. Invalid dates return 400.
+      - in: query
+        name: authorised_before
+        schema:
+          type: string
+          format: date
+        description: Products first authorised on or before this date (YYYY-MM-DD,
+          inclusive). Invalid dates return 400.
+      - in: query
+        name: category_id
+        schema:
+          type: array
+          items:
+            type: number
+        description: 'Filter by category ID (see /categories/). One ID, or a comma-separated
+          list that matches ANY of them, e.g. ?category_id=6,21. Only live links count:
+          a link an editor removed never matches.'
+        explode: false
+        style: form
+      - in: query
+        name: category_slug
+        schema:
+          type: string
+        description: Filter by category slug (see /categories/). Only live links count.
+      - in: query
+        name: include_generics
+        schema:
+          type: boolean
+        description: 'Generic and biosimilar products (the FDA''s biosimilars, such
+          as Tyruko, too), and duplicate products (further products of the same regulator
+          for the same medicine, grouped under a lead product: see `grouped_under`),
+          are left out unless this is true. They are matched and stored like any other
+          product; the default hides them so a list shows the originators.'
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: query
+        name: is_combination
+        schema:
+          type: boolean
+        description: 'true: products with more than one substance; false: single-substance
+          products.'
+      - in: query
+        name: name
+        schema:
+          type: string
+        description: 'Part of the product''s name as the regulator publishes it (the
+          brand name), case-insensitive, e.g. ?name=ocrevus. A substring of the whole
+          name, which can include a former name: ?name=corbilta finds "Corbilta (previously
+          Levodopa/Carbidopa/Entacapone Sandoz)". An FDA application sold under several
+          brands has them all in `name`, joined with '' / ''. Use `substance` for
+          the active substance.'
+      - in: query
+        name: opinion_status
+        schema:
+          type: string
+        description: 'Positive or Negative. EMA fills it only while a medicine is
+          at the opinion stage and clears it once the Commission decides, so most
+          products have none. EMA-only: using it leaves the FDA''s medicines out,
+          because the FDA has no such column (`opinion_status` is null on their rows),
+          so `false` never means "unknown".'
+      - in: query
+        name: ordering
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - latest_authorisation
+            - -latest_authorisation
+            - name
+            - -name
+        description: Sort field, prefix with `-` for descending (default `-latest_authorisation`).
+          `latest_authorisation` is the newest first authorisation among the drug's
+          records shown, at either regulator; a drug whose records have no date sorts
+          last in both directions. `name` is the drug's `name`, alphabetical and case-insensitive.
+          Ties break on `substance_key`. Accepts a comma-separated combination of
+          the values above to break ties on a second field, e.g. ?ordering=latest_authorisation,-name.
+        explode: false
+        style: form
+      - in: query
+        name: orphan_medicine
+        schema:
+          type: boolean
+        description: 'true: designated orphan medicines; false: the rest. EMA-only:
+          using it leaves the FDA''s medicines out, because the FDA has no such column
+          (`orphan_medicine` is null on their rows), so `false` never means "unknown".'
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: regulator
+        schema:
+          type: string
+          enum:
+          - ema
+          - fda
+        description: |-
+          ema or fda: only medicines from that regulator. Omit it for both. Any other value returns 400.
+
+          * `ema` - EMA
+          * `fda` - FDA
+      - in: query
+        name: site_id
+        schema:
+          type: number
+        description: 'Filter by Django Site ID: keep medicines linked to a category
+          that has a subject in that site''s scope (see CustomSetting.scope_subjects),
+          or approved by EMA for one of those subjects. Given together with category_id
+          or category_slug, only category links count. A site that does not show medicines
+          (medicines_enabled off) returns nothing. Only live links count.'
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: 'The regulator''s status wording, case-insensitive. EMA: Authorised,
+          Withdrawn, Refused, Opinion. FDA: Approved, Tentatively approved, Discontinued,
+          Revoked. The regulator''s own words are stored, so new values can appear.'
+      - in: query
+        name: subject_id
+        schema:
+          type: number
+        description: 'Keep medicines for this subject (see /subjects/): linked to
+          a category that has it, or approved by EMA for one of its conditions (a
+          subject link). Only live links count. Given together with category_id or
+          category_slug, only category links count, and all the filters must hold
+          on the same link: ?subject_id=1&category_id=6 means a live link to category
+          6, and category 6 has subject 1.'
+      - in: query
+        name: substance
+        schema:
+          type: string
+        description: 'A substance, as the regulator names it (the INN, or the active
+          substance when the INN is empty; for the FDA, the ingredient). Matches one
+          element of the product''s `substances` exactly, ignoring case and extra
+          spaces, e.g. ?substance=ocrelizumab, and also ignores the salt and the US/international
+          name difference: ?substance=fingolimod and ?substance=fingolimod hydrochloride
+          both find the EMA and the FDA records of Gilenya, and ?substance=dalfampridine
+          finds EMA''s Fampyra (fampridine) as well as the FDA''s Ampyra. A combination
+          product matches on any of its substances (the parts of its `substance_key`).'
+      - in: query
+        name: substance_key
+        schema:
+          type: string
+        description: 'The drug''s `substance_key`, exactly (ignoring case): the substances
+          without their salt, sorted and joined with ''+'', e.g. ?substance_key=fingolimod
+          or ?substance_key=amlodipine%2Bvalsartan (encode the + as %2B). Every record
+          of one drug has the same key at either regulator, so this lists the EMA
+          and the FDA records of a drug together.'
+      - in: query
+        name: tracked
+        schema:
+          type: boolean
+        description: 'false: no live link to a category you can see (the medicine
+          shows only because EMA approved it for one of the site''s conditions); true:
+          filed under at least one category you can see. Exactly `categories` empty
+          or not on each row.'
+      tags:
+      - medicines
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMedicineDrugList'
+          description: ''
+  /medicines/drugs/{substance_key}/:
+    get:
+      operationId: medicines_drugs_retrieve
+      description: |-
+        List medicines **one entry per drug**: the records of a drug at both regulators
+        together, so a drug approved by the EMA and by the FDA (Gilenya) is one item with
+        two records, not two rows. `/medicines/` lists the same records one by one.
+
+        A drug is identified by its `substance_key` (the substances without their salt:
+        `fingolimod hydrochloride` at the FDA and `fingolimod` at EMA are both
+        `fingolimod`; a combination is `amlodipine+valsartan`). Nothing is merged: each
+        record keeps its own regulator, id, status, dates and indication.
+
+        Each item is:
+
+        - `substance_key`
+        - `name`: the drug's brand name. The EMA product's name when there is one (the
+          earliest authorised that is not a duplicate of another EMA product), else the
+          FDA's first brand name in normal case (`Ocrevus Zunovo`, not `OCREVUS ZUNOVO`).
+          It is taken from the records shown, so a filter that leaves out one regulator
+          can change it.
+        - `substances`: the EMA product's substances, else the key split on `+`.
+        - `regulators`: which regulators have a record shown (`["ema", "fda"]`).
+        - `first_authorised`: `{"ema": date|null, "fda": date|null}`, the earliest
+          `authorisation_date` of the shown records of each regulator.
+        - `records`: the drug's records, each exactly a row of `/medicines/` (same fields,
+          same `source` attribution, same `categories`, `subjects` and `tracked`). EMA
+          records come first, then the FDA's, each oldest authorisation first.
+
+        One key can cover products with different uses (cladribine is Mavenclad for MS and
+        Leustatin for leukaemia): each record carries its own `name` and `indication`.
+
+        **Filters and visibility are `/medicines/`'s.** Every filter of `/medicines/` works
+        here and is applied to the records before they are grouped: a drug is listed when at
+        least one of its records passes, and shows only the records that pass
+        (`?subject_id=1&regulator=fda` lists the FDA's records for that subject, by drug). A
+        record you cannot see on `/medicines/` is never inside a drug, and a caller whose
+        sites do not show medicines (`medicines_enabled` off) gets an empty list and a 404
+        on a single drug. As on `/medicines/`, generics, biosimilars and duplicate products
+        are left out unless `?include_generics=true`.
+
+        **Pages count drugs.** `count` is the number of drugs, `page_size` (max 100) the
+        number of items per page. Ordered by newest authorisation by default (see Ordering).
+        JSON only; `?all_results=true` is ignored, as on `/medicines/`.
+
+        `GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
+        same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
+        `amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+        reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+        combination in another order, a delivery enzyme) is answered with a `301` to the
+        drug's key URL, query string kept, when that drug is visible and passes the filters.
+        The answer is 404 when none of the
+        drug's records is visible to the caller or passes the filters (`include_generics`
+        included: a drug of generics only needs `?include_generics=true`).
+
+        # Query Parameters:
+        The filters of `/medicines/`: `category_id`, `category_slug`, `subject_id`,
+        `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`,
+        `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`,
+        `authorised_after`, `authorised_before`, `include_generics`, and `page`,
+        `page_size`, `ordering`. See `/medicines/` for what each does.
+
+        # Ordering:
+        `?ordering=` (prefix with `-` to reverse): `latest_authorisation` (default
+        `-latest_authorisation`: the drug with the newest approval first) or `name`. A drug
+        without any authorisation date sorts last in both directions. Ties break on
+        `substance_key`. Unrecognised values are silently ignored.
+
+        # Examples:
+        - A condition page, one card per drug: `/medicines/drugs/?subject_id=1`
+        - Only the FDA's records, by drug: `/medicines/drugs/?subject_id=1&regulator=fda`
+        - Alphabetical: `/medicines/drugs/?subject_id=1&ordering=name`
+        - One drug: `/medicines/drugs/fingolimod/`
+        - A combination: `/medicines/drugs/amlodipine%2Bvalsartan/`
+      parameters:
+      - in: query
+        name: include_public
+        schema:
+          type: boolean
+        description: |-
+          Identified callers only (API key or signed-in user): add the scopes of every publicly readable site to your own, so a private site's frontend can read public content alongside its own. No-op for an anonymous caller, whose scope already is exactly that set.
+
+          Undeclared but functional before Phase 4 of site-scoped API visibility, when it read 'adds public organisations' — organisations are no longer the visibility unit, so it is declared here with its current meaning rather than left to be discovered.
+      - in: path
+        name: substance_key
+        schema:
+          type: string
+        description: 'The drug''s `substance_key` (case-insensitive), URL-encoded:
+          keys contain spaces, brackets and, for a combination, `+` (`amlodipine+valsartan`).
+          Send `+` as `%2B` or as it is; a space as `%20`.'
+        required: true
+      tags:
+      - medicines
+      security:
+      - {}
+      - basicAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - apiKeyAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MedicineDrug'
+          description: ''
   /medicines/events/:
     get:
       operationId: medicines_events_list
@@ -11355,6 +11737,73 @@ components:
       - subjects
       - substance_key
       - tracked
+    MedicineDrug:
+      type: object
+      description: |-
+        One drug on ``/medicines/drugs/``: every visible record that shares a
+        ``substance_key``, from both regulators.
+
+        Read from a dict built by ``MedicineDrugViewSet`` (``api.views._drug_item``), whose
+        ``records`` are ``Medicine`` instances carrying the prefetches ``MedicineSerializer``
+        relies on. Each record is the same row as on ``/medicines/``.
+      properties:
+        substance_key:
+          type: string
+          readOnly: true
+          description: 'The drug''s key: its substances without their salt, sorted
+            and joined with ''+''.'
+        name:
+          type: string
+          readOnly: true
+          description: The EMA product's name (the earliest authorised that is not
+            a duplicate), else the FDA's first brand name in normal case.
+        substances:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: The EMA product's substances, else the key split on '+'.
+        regulators:
+          type: array
+          items:
+            type: string
+          readOnly: true
+          description: 'The regulators that have a record shown, sorted: `ema`, `fda`
+            or both.'
+        first_authorised:
+          allOf:
+          - $ref: '#/components/schemas/MedicineDrugFirstAuthorised'
+          readOnly: true
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Medicine'
+          readOnly: true
+      required:
+      - first_authorised
+      - name
+      - records
+      - regulators
+      - substance_key
+      - substances
+    MedicineDrugFirstAuthorised:
+      type: object
+      description: The earliest ``authorisation_date`` of a drug's shown records,
+        per regulator.
+      properties:
+        ema:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        fda:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+      required:
+      - ema
+      - fda
     MedicineEvent:
       type: object
       description: |-
@@ -11637,6 +12086,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedMedicineDrugList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MedicineDrug'
     PaginatedMedicineEventList:
       type: object
       required:

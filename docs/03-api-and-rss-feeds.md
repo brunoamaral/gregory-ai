@@ -666,6 +666,8 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
 | Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines and FDA-approved drugs and biologics (NDAs and BLAs) — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
 | Medicines | `GET /medicines/{id}/` | `id` (path) | Adds `grouped_products` and `events`, newest first |
+| Medicines | `GET /medicines/drugs/` | Every `GET /medicines/` filter, `ordering` (`-latest_authorisation` default, `latest_authorisation`, `name`), pagination | `/medicines/` paged by drug: one item per `substance_key` with its `name`, `substances`, `regulators`, `first_authorised` and `records` (the normal `/medicines/` rows, both regulators). `count` counts drugs. Same visibility and filters as `/medicines/`, applied to the records first. See [Medicines](#get-medicinesdrugs) |
+| Medicines | `GET /medicines/drugs/{substance_key}/` | `substance_key` (path, URL-encoded), the same filters | One drug, the same item. 404 when no record of it is visible or passes the filters |
 | Medicines | `GET /medicines/events/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `kind`, `basis`, `event_date_after`, `event_date_before`, `substance_key`, `include_generics`, pagination | What happened to those medicines, newest first, with the same visibility. See [Medicines](#medicines) |
 | Email templates | `GET /emails/` | None | Template preview dashboard. **Staff only** (Django admin session), like every `/emails/` route |
 | Email templates | `GET /emails/preview/{template_name}/` | `template_name` (path) | Rendered template |
@@ -1118,7 +1120,7 @@ Takes the same parameters as the list and the same scope. Returns `total`, `with
 
 **What the FDA data leaves out.** Only NDAs and BLAs: generic drugs (ANDAs) are not covered, nor are applications still under review or unapproved products. A missing record does not mean a product is unapproved. The FDA also has no EMA-style opinion or designation fields, so those are `null` on its rows (below).
 
-**One medicine can appear twice**, once per regulator: Ocrevus has an EMA record and an FDA one, with separate ids, categories and histories. Records of different regulators are never grouped (`grouped_under` points at a product of the same regulator). Every record of one drug has the same `substance_key` (below), so group on it to show one entry per drug, and use `regulator` to tell the records apart. `?substance_key=fingolimod` lists the records of one drug at both regulators.
+**One medicine can appear twice**, once per regulator: Ocrevus has an EMA record and an FDA one, with separate ids, categories and histories. Records of different regulators are never grouped (`grouped_under` points at a product of the same regulator). Every record of one drug has the same `substance_key` (below), so group on it to show one entry per drug, and use `regulator` to tell the records apart. `?substance_key=fingolimod` lists the records of one drug at both regulators. **To list one entry per drug, use [`GET /medicines/drugs/`](#get-medicinesdrugs)**, which pages by drug and puts each drug's records inside it.
 
 ### Which sites show medicines
 
@@ -1204,6 +1206,54 @@ JSON only: there is no CSV, `?format=csv` is `404`, and `?all_results=true` is i
 
 `GET /medicines/{id}/` adds `grouped_products` and `events`. `grouped_products` is the lead product's duplicates, ordered by name: `id`, `name`, `url` (empty for any other product; only duplicates the caller can see). `events` is the product's regulatory history, newest first, each with the event fields below except `medicine` and `source`.
 
+### `GET /medicines/drugs/`
+
+`/medicines/` pages by record; this endpoint pages by **drug**. A drug is every visible record that shares a `substance_key`, from both regulators, so Gilenya at EMA, Gilenya at the FDA and Tascenso (another FDA application of fingolimod) are one item. Nothing is merged: each record keeps its own id, regulator, status and dates. It is what a condition page lists when it wants one card per drug.
+
+```json
+{
+  "count": 31,
+  "next": "https://.../medicines/drugs/?page=2",
+  "previous": null,
+  "current_page": 1,
+  "total_pages": 4,
+  "page_size": 10,
+  "results": [
+    {
+      "substance_key": "fingolimod",
+      "name": "Gilenya",
+      "substances": ["fingolimod"],
+      "regulators": ["ema", "fda"],
+      "first_authorised": {"ema": "2011-03-17", "fda": "2010-09-21"},
+      "records": [
+        {"id": 1204, "regulator": "ema", "name": "Gilenya", "substance_key": "fingolimod", "...": "the row of /medicines/"},
+        {"id": 5871, "regulator": "fda", "name": "GILENYA", "substance_key": "fingolimod", "...": "the row of /medicines/"},
+        {"id": 5990, "regulator": "fda", "name": "TASCENSO ODT", "substance_key": "fingolimod", "...": "the row of /medicines/"}
+      ]
+    }
+  ]
+}
+```
+
+| Field | Meaning |
+|:------|:--------|
+| `substance_key` | The drug's key (see `substance_key` above): its substances without their salt, sorted and joined with `+` |
+| `name` | The EMA product's name when there is one (the earliest authorised that is not a duplicate of another EMA product), else the FDA's first brand name in normal case (`Ocrevus Zunovo`, not `OCREVUS ZUNOVO`; a mixed-case name is left alone). It is worked out from the records shown, so `regulator=fda` can change it |
+| `substances` | The EMA product's `substances`, else the key split on `+`. Empty for a record with no substances |
+| `regulators` | Which regulators have a record shown, sorted: `["ema"]`, `["fda"]` or `["ema", "fda"]` |
+| `first_authorised` | `{"ema": date or null, "fda": date or null}`: the earliest `authorisation_date` among the shown records of each regulator |
+| `records` | The drug's records, each **exactly a row of `/medicines/`** (same fields, `source`, `categories`, `subjects`, `tracked`). EMA first, then the FDA's, each oldest authorisation first, then by id |
+
+**Filters and visibility are `/medicines/`'s.** Every filter of `/medicines/` works here (`category_id`, `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`, ..., `include_generics`) with the same meaning, and is applied to the **records before they are grouped**: a drug is listed when at least one of its records passes, and it shows only the records that pass. `?subject_id=1&regulator=fda` lists the FDA's records for subject 1, by drug. A record the caller cannot see on `/medicines/` is never inside a drug, and a site with `medicines_enabled` off gets an empty list. Generics, biosimilars and duplicate products (`grouped_under` set) are left out of `records` unless `include_generics=true`, so a drug made only of them is not listed by default.
+
+**Pages count drugs.** `count` is the number of drugs, `page_size` (default 10, max 100) the number of items per page, and `next` / `previous` walk drugs, so a drug is never cut between two pages. JSON only; `all_results=true` is ignored, as on `/medicines/`.
+
+**Ordering.** `?ordering=-latest_authorisation` (the default: the drug with the newest approval at either regulator first), `latest_authorisation`, `name` or `-name` (alphabetical on the `name` shown, ignoring case). A drug whose records have no authorisation date sorts last in both directions. Ties break on `substance_key`. Anything else is ignored, as on `/medicines/`.
+
+**One drug: `GET /medicines/drugs/{substance_key}/`.** The same item, so a drug's page has a stable URL, with the same filters (a `regulator=fda` detail shows only the FDA's records, and `include_generics` is still needed for a drug of generics only). 404 when none of the drug's records is visible to the caller or passes the filters. The key is case-insensitive and goes in the path URL-encoded: `/medicines/drugs/interferon%20beta-1a/`, `/medicines/drugs/amlodipine%2Bvalsartan/`. A literal `+` also works (a path is not a query string, so `+` is never a space). A name that is not a key but reduces to one is answered with a `301` to the drug's key URL, query string kept: a salt name (`/medicines/drugs/fingolimod%20hydrochloride/`), a US name (`dalfampridine`, key `fampridine`), a combination in another order (`valsartan+amlodipine`) or with a delivery enzyme (`ocrelizumab+hyaluronidase`). It redirects only when the drug at the canonical key is visible to the caller and passes the filters, so a redirect never shows that a hidden drug exists; otherwise 404. `medicine-<id>` keys are never rewritten. A key with a dot is safe with the trailing slash; without it, `.json` is read as a format suffix.
+
+One key can cover products with different uses (cladribine is Mavenclad for MS and Leustatin for leukaemia): each record carries its own `name` and `indication`, and a category or subject filter keeps only the records linked to it.
+
 ### `GET /medicines/events/`
 
 Newest first (`event_date`, then newest id). Visibility is the event's medicine's, as above, and generics, biosimilars and duplicate products are hidden by default. Parameters:
@@ -1253,6 +1303,10 @@ An `ec_decision` event is the date of EMA's latest Commission decision, not the 
 /medicines/?name=ocrevus                            by brand name
 /medicines/?authorised_after=2024-01-01&ordering=-authorisation_date
 /medicines/123/                                     with events
+/medicines/drugs/?subject_id=1                      the same records, one entry per drug
+/medicines/drugs/?subject_id=1&regulator=fda&ordering=name   the FDA's records by drug, A to Z
+/medicines/drugs/fingolimod/                        one drug: Gilenya at both regulators, and Tascenso
+/medicines/drugs/amlodipine%2Bvalsartan/            a combination (the + encoded)
 /medicines/events/?site_id=3                        events for the medicines of site 3
 /medicines/events/?site_id=3&tracked=false          events of medicines no category covers
 /medicines/events/?subject_id=1&category_id=6&basis=observed

@@ -65,7 +65,8 @@ Things worth knowing:
   `gregory/utils/substance_key.py` reaches stored rows on the next run without a migration. The API filters
   `substance` (salt-tolerant) and `substance_key` (exact) use it; see
   [03-api-and-rss-feeds.md](03-api-and-rss-feeds.md#medicines). A new salt word that is missed shows up as an FDA
-  key with no EMA partner: add the word and a test.
+  key with no EMA partner: add the word and a test. `GET /medicines/drugs/` lists the records grouped by this
+  key; an FDA-only drug is named after its first brand in normal case (`Zeposia`, not `ZEPOSIA`).
 - **Brand names are as the FDA writes them**, in upper case for Drugs@FDA.
 - **`indication` comes from the label.** It is empty until an application has been a candidate
   for a category and DailyMed holds a label for it (see [Labels](#labels)).

@@ -21,7 +21,6 @@ comes from third parties; neither may be able to inject markup into a feed
 that readers render as HTML.
 """
 
-import re
 from datetime import datetime, time, timezone
 from types import SimpleNamespace
 
@@ -33,6 +32,7 @@ from django.utils.safestring import mark_safe
 from django.utils.text import Truncator
 
 from api.patent_links import visible_patent_trial_links_queryset
+from gregory.utils.substance_key import normal_case_if_caps
 from rss.abstract_html import clean_abstract_html, has_markup
 from gregory.models import (
 	Articles,
@@ -663,8 +663,6 @@ FDA_LABEL_SOURCE_NOTE = (
 	FDA_SOURCE_NOTE + "; label text from DailyMed (U.S. National Library of Medicine)"
 )
 
-_WORD = re.compile(r"[A-Za-z][A-Za-z']*")
-
 
 def medicine_source_note(medicine, with_label_text=False):
 	"""The attribution line of one medicine's regulator.
@@ -674,15 +672,6 @@ def medicine_source_note(medicine, with_label_text=False):
 	if medicine.regulator != Regulator.FDA:
 		return EMA_SOURCE_NOTE
 	return FDA_LABEL_SOURCE_NOTE if with_label_text else FDA_SOURCE_NOTE
-
-
-def _sentence_case_caps(name):
-	"""``"OCREVUS ZUNOVO"`` becomes ``"Ocrevus Zunovo"``: each word capitalised, hyphens
-	and slashes starting a new word. A name with any lowercase letter (CBER's
-	``Kymriah``) is returned as it is."""
-	if not name.isupper():
-		return name
-	return _WORD.sub(lambda match: match.group().capitalize(), name)
 
 
 def medicine_fallback_url(medicine):
@@ -704,7 +693,7 @@ def medicine_event_title(event):
 	medicine = event.medicine
 	if medicine.regulator == Regulator.FDA:
 		substance = ", ".join(medicine.substances or []) or medicine.inn or medicine.active_substance
-		product = _sentence_case_caps(
+		product = normal_case_if_caps(
 			medicine.brand_names[0] if medicine.brand_names else medicine.name
 		)
 	else:

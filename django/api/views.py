@@ -33,6 +33,7 @@ from api.serializers import (
 	PatentDetailSerializer,
 	MedicineSerializer,
 	MedicineDetailSerializer,
+	MedicineDrugSerializer,
 	MedicineEventSerializer,
 	TrialSerializer,
 	TrialDetailSerializer,
@@ -66,6 +67,8 @@ from django.db.models import (
 	Count,
 	Exists,
 	ForeignKey,
+	CharField,
+	Func,
 	Max,
 	Q,
 	Prefetch,
@@ -75,8 +78,10 @@ from django.db.models import (
 	When,
 	IntegerField,
 )
-from django.db.models.functions import Coalesce, ExtractYear
+from django.contrib.postgres.aggregates import ArrayAgg
+from django.db.models.functions import Coalesce, ExtractYear, Lower, NullIf
 from gregory.classes import SciencePaper, ClinicalTrial
+from gregory.utils.substance_key import normal_case_if_caps, substance_key
 from gregory.utils.trial_field_normalizers import (
 	SponsorType,
 	TrialPhase,
@@ -111,6 +116,7 @@ from gregory.models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	Regulator,
 )
 from rest_framework import mixins, permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
@@ -131,7 +137,9 @@ from api.filters import (
 )
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
-from django.http import Http404, StreamingHttpResponse
+from django.http import Http404, HttpResponsePermanentRedirect, StreamingHttpResponse
+from django.urls import reverse
+from urllib.parse import quote
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from drf_spectacular.utils import (
@@ -3691,6 +3699,36 @@ class MedicineOrderingFilter(NullsLastOrderingFilter):
 		return queryset.order_by(*queryset.query.order_by, "-id")
 
 
+def visible_medicine_records(request, queryset):
+	"""The medicine rows the caller may see, ready for ``MedicineSerializer``.
+
+	Shared by ``/medicines/`` and ``/medicines/drugs/``, so a record is visible in one
+	exactly when it is in the other. ``scope_to_visible`` keeps the rows with a live
+	category link or subject link in the caller's medicine scope, the columns the API
+	never serializes are deferred (``raw`` holds the regulator's whole row, several KB,
+	and ``label_indications`` the DailyMed labels' texts), and the caller's visible
+	links are prefetched as ``_visible_links`` / ``_visible_subject_links`` so a page
+	costs a constant number of queries."""
+	return scope_to_visible(
+		queryset.defer("raw", "label_indications"), request, "pk"
+	).prefetch_related(
+		Prefetch(
+			"category_assignments",
+			queryset=visible_links_queryset(request)
+			.select_related("teamcategory")
+			.order_by("teamcategory__category_name", "teamcategory_id"),
+			to_attr="_visible_links",
+		),
+		Prefetch(
+			"subject_links",
+			queryset=visible_subject_links_queryset(request)
+			.select_related("subject")
+			.order_by("subject__subject_name", "subject_id"),
+			to_attr="_visible_subject_links",
+		),
+	)
+
+
 _MEDICINES_ORDERING_PARAM = _ordering_param(
 	["authorisation_date", "latest_ec_decision_date", "ema_last_updated"],
 	"Sort field, prefix with `-` for descending (default `-ema_last_updated`). "
@@ -3881,27 +3919,7 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 
 	def get_queryset(self):
 		request = self.request
-		# `raw` holds the regulator's whole row (several KB) and `label_indications` the
-		# DailyMed labels' texts; neither is serialized.
-		qs = scope_to_visible(
-			super().get_queryset().defer("raw", "label_indications"), request, "pk"
-		)
-		qs = qs.prefetch_related(
-			Prefetch(
-				"category_assignments",
-				queryset=visible_links_queryset(request)
-				.select_related("teamcategory")
-				.order_by("teamcategory__category_name", "teamcategory_id"),
-				to_attr="_visible_links",
-			),
-			Prefetch(
-				"subject_links",
-				queryset=visible_subject_links_queryset(request)
-				.select_related("subject")
-				.order_by("subject__subject_name", "subject_id"),
-				to_attr="_visible_subject_links",
-			),
-		)
+		qs = visible_medicine_records(request, super().get_queryset())
 		if self.action == "retrieve":
 			# The copies are other medicines: show only the ones this caller could
 			# open themselves.
@@ -3924,6 +3942,290 @@ class MedicineViewSet(viewsets.ReadOnlyModelViewSet):
 		if self.action == "retrieve":
 			return queryset
 		return super().filter_queryset(queryset)
+
+
+_MEDICINE_DRUGS_ORDERING_PARAM = _ordering_param(
+	["latest_authorisation", "name"],
+	"Sort field, prefix with `-` for descending (default `-latest_authorisation`). "
+	"`latest_authorisation` is the newest first authorisation among the drug's records "
+	"shown, at either regulator; a drug whose records have no date sorts last in both "
+	"directions. `name` is the drug's `name`, alphabetical and case-insensitive. Ties "
+	"break on `substance_key`.",
+)
+
+_SUBSTANCE_KEY_PATH_PARAM = OpenApiParameter(
+	"substance_key",
+	OpenApiTypes.STR,
+	OpenApiParameter.PATH,
+	description=(
+		"The drug's `substance_key` (case-insensitive), URL-encoded: keys contain "
+		"spaces, brackets and, for a combination, `+` (`amlodipine+valsartan`). Send "
+		"`+` as `%2B` or as it is; a space as `%20`."
+	),
+)
+
+
+class _FirstOf(Func):
+	"""``(array_agg(...))[1]``: the first element of an ordered array aggregate, NULL when
+	the aggregate matched no row. Postgres arrays start at 1."""
+
+	template = "(%(expressions)s)[1]"
+	arity = 1
+	output_field = CharField()
+
+
+@extend_schema_view(
+	list=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_MEDICINE_DRUGS_ORDERING_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
+	retrieve=extend_schema(
+		auth=_OPTIONAL_API_KEY_SECURITY,
+		parameters=[_SUBSTANCE_KEY_PATH_PARAM, _INCLUDE_PUBLIC_PARAM],
+	),
+)
+class MedicineDrugViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+	"""
+	List medicines **one entry per drug**: the records of a drug at both regulators
+	together, so a drug approved by the EMA and by the FDA (Gilenya) is one item with
+	two records, not two rows. `/medicines/` lists the same records one by one.
+
+	A drug is identified by its `substance_key` (the substances without their salt:
+	`fingolimod hydrochloride` at the FDA and `fingolimod` at EMA are both
+	`fingolimod`; a combination is `amlodipine+valsartan`). Nothing is merged: each
+	record keeps its own regulator, id, status, dates and indication.
+
+	Each item is:
+
+	- `substance_key`
+	- `name`: the drug's brand name. The EMA product's name when there is one (the
+	  earliest authorised that is not a duplicate of another EMA product), else the
+	  FDA's first brand name in normal case (`Ocrevus Zunovo`, not `OCREVUS ZUNOVO`).
+	  It is taken from the records shown, so a filter that leaves out one regulator
+	  can change it.
+	- `substances`: the EMA product's substances, else the key split on `+`.
+	- `regulators`: which regulators have a record shown (`["ema", "fda"]`).
+	- `first_authorised`: `{"ema": date|null, "fda": date|null}`, the earliest
+	  `authorisation_date` of the shown records of each regulator.
+	- `records`: the drug's records, each exactly a row of `/medicines/` (same fields,
+	  same `source` attribution, same `categories`, `subjects` and `tracked`). EMA
+	  records come first, then the FDA's, each oldest authorisation first.
+
+	One key can cover products with different uses (cladribine is Mavenclad for MS and
+	Leustatin for leukaemia): each record carries its own `name` and `indication`.
+
+	**Filters and visibility are `/medicines/`'s.** Every filter of `/medicines/` works
+	here and is applied to the records before they are grouped: a drug is listed when at
+	least one of its records passes, and shows only the records that pass
+	(`?subject_id=1&regulator=fda` lists the FDA's records for that subject, by drug). A
+	record you cannot see on `/medicines/` is never inside a drug, and a caller whose
+	sites do not show medicines (`medicines_enabled` off) gets an empty list and a 404
+	on a single drug. As on `/medicines/`, generics, biosimilars and duplicate products
+	are left out unless `?include_generics=true`.
+
+	**Pages count drugs.** `count` is the number of drugs, `page_size` (max 100) the
+	number of items per page. Ordered by newest authorisation by default (see Ordering).
+	JSON only; `?all_results=true` is ignored, as on `/medicines/`.
+
+	`GET /medicines/drugs/{substance_key}/` returns the same item for one drug, with the
+	same filters, so the drug's page has a stable URL. Encode the key: `interferon%20beta-1a`,
+	`amlodipine%2Bvalsartan` (a literal `+` also works). A name that is not a key but
+	reduces to one (a salt name `fingolimod%20hydrochloride`, a US name `dalfampridine`, a
+	combination in another order, a delivery enzyme) is answered with a `301` to the
+	drug's key URL, query string kept, when that drug is visible and passes the filters.
+	The answer is 404 when none of the
+	drug's records is visible to the caller or passes the filters (`include_generics`
+	included: a drug of generics only needs `?include_generics=true`).
+
+	# Query Parameters:
+	The filters of `/medicines/`: `category_id`, `category_slug`, `subject_id`,
+	`site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`,
+	`opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`,
+	`authorised_after`, `authorised_before`, `include_generics`, and `page`,
+	`page_size`, `ordering`. See `/medicines/` for what each does.
+
+	# Ordering:
+	`?ordering=` (prefix with `-` to reverse): `latest_authorisation` (default
+	`-latest_authorisation`: the drug with the newest approval first) or `name`. A drug
+	without any authorisation date sorts last in both directions. Ties break on
+	`substance_key`. Unrecognised values are silently ignored.
+
+	# Examples:
+	- A condition page, one card per drug: `/medicines/drugs/?subject_id=1`
+	- Only the FDA's records, by drug: `/medicines/drugs/?subject_id=1&regulator=fda`
+	- Alphabetical: `/medicines/drugs/?subject_id=1&ordering=name`
+	- One drug: `/medicines/drugs/fingolimod/`
+	- A combination: `/medicines/drugs/amlodipine%2Bvalsartan/`
+	"""
+
+	queryset = Medicine.objects.all()
+	serializer_class = MedicineDrugSerializer
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = MedicinePagination
+	# No CSV, as on /medicines/.
+	renderer_classes = (JSONRenderer, BrowsableAPIRenderer)
+	# Ordering is by drug, not by record: see `_ordering`.
+	filter_backends = [django_filters.DjangoFilterBackend]
+	filterset_class = MedicineFilter
+	# A key holds spaces, `+`, brackets and dots, never a slash.
+	lookup_field = "substance_key"
+	lookup_value_regex = r"[^/]+"
+
+	# Read by CachedCountMixin: the cached count depends on the medicine scope.
+	medicine_scoped = True
+
+	_ORDERINGS = ("latest_authorisation", "name")
+	_DEFAULT_ORDERING = ("-latest_authorisation",)
+	# The records of a drug, and the order "earliest" means in the name rule.
+	_RECORD_ORDER = (F("authorisation_date").asc(nulls_last=True), "id")
+
+	def get_queryset(self):
+		return visible_medicine_records(self.request, super().get_queryset())
+
+	def _ordering(self):
+		"""The valid terms of ``?ordering=``, else the default."""
+		terms = []
+		for term in (self.request.query_params.get("ordering") or "").split(","):
+			term = term.strip()
+			if term.lstrip("-") in self._ORDERINGS:
+				terms.append(term)
+		return terms or list(self._DEFAULT_ORDERING)
+
+	def _sort_name(self):
+		"""SQL twin of ``_drug_name``, lowercased: the EMA product that leads, else the
+		FDA's first brand, else any EMA product, else the key. Casing is dropped, so
+		the normal-case conversion of an FDA brand does not matter."""
+		by_date = {"order_by": list(self._RECORD_ORDER)}
+		ema_lead = _FirstOf(
+			ArrayAgg(
+				"name",
+				filter=Q(regulator=Regulator.EMA, grouped_under__isnull=True),
+				**by_date,
+			)
+		)
+		fda_brand = _FirstOf(
+			ArrayAgg(
+				Coalesce(NullIf(F("brand_names__0"), Value("")), F("name")),
+				filter=Q(regulator=Regulator.FDA),
+				**by_date,
+			)
+		)
+		ema_any = _FirstOf(ArrayAgg("name", filter=Q(regulator=Regulator.EMA), **by_date))
+		return Lower(Coalesce(ema_lead, fda_brand, ema_any, F("substance_key")))
+
+	def _key_page_queryset(self, records):
+		"""One row per ``substance_key`` of ``records``, in the requested order.
+
+		``values("substance_key")`` plus an aggregate is a GROUP BY, so the paginator's
+		count (``SELECT COUNT(*) FROM (... GROUP BY ...)``) counts drugs, and a page
+		slice is a LIMIT/OFFSET over drugs. ``order_by()`` first drops any ordering of
+		the record queryset, which would otherwise join the GROUP BY; the prefetches
+		are cleared because a values() queryset has no instances to prefetch on."""
+		keys = (
+			records.prefetch_related(None)
+			.order_by()
+			.values("substance_key")
+			.annotate(latest_authorisation=Max("authorisation_date"))
+		)
+		order = []
+		for term in self._ordering():
+			descending = term.startswith("-")
+			if term.lstrip("-") == "name":
+				keys = keys.annotate(sort_name=self._sort_name())
+				order.append(F("sort_name").desc() if descending else F("sort_name").asc())
+			else:
+				field = F("latest_authorisation")
+				order.append(
+					field.desc(nulls_last=True) if descending else field.asc(nulls_last=True)
+				)
+		return keys.order_by(*order, "substance_key")
+
+	def _items(self, records, keys):
+		"""One item per key of ``keys``, in that order, from the ``records`` queryset
+		(already narrowed to these keys): one query, plus the prefetches."""
+		by_key = {key: [] for key in keys}
+		for record in records.order_by(
+			Case(When(regulator=Regulator.EMA, then=0), default=1, output_field=IntegerField()),
+			*self._RECORD_ORDER,
+		):
+			by_key[record.substance_key].append(record)
+		return [_drug_item(key, by_key[key]) for key in keys if by_key[key]]
+
+	def list(self, request, *args, **kwargs):
+		records = self.filter_queryset(self.get_queryset())
+		page = self.paginate_queryset(self._key_page_queryset(records))
+		keys = [row["substance_key"] for row in page]
+		items = self._items(records.filter(substance_key__in=keys), keys)
+		return self.get_paginated_response(self.get_serializer(items, many=True).data)
+
+	def retrieve(self, request, *args, **kwargs):
+		key = " ".join(kwargs[self.lookup_field].lower().split())
+		records = self.filter_queryset(self.get_queryset())
+		items = self._items(records.filter(substance_key=key), [key])
+		if items:
+			return Response(self.get_serializer(items[0]).data)
+		# Not a key as stored: a salt name, a US name, a combination in another order, a
+		# delivery enzyme. Send it to the canonical key, but only when that drug is visible
+		# to this caller and passes the filters, so a redirect never shows that a hidden
+		# drug exists. `medicine-<id>` keys stand for one record and are left alone.
+		canonical = None if key.startswith("medicine-") else substance_key(key.split("+"))
+		if canonical and canonical != key and records.filter(substance_key=canonical).exists():
+			location = reverse("medicine-drugs-list") + quote(canonical, safe="") + "/"
+			query = request.META.get("QUERY_STRING")
+			return HttpResponsePermanentRedirect(f"{location}?{query}" if query else location)
+		raise Http404
+
+
+def _drug_name(key, records):
+	"""The drug's name from its ``records`` (EMA first, then FDA, as ``_items`` orders
+	them): the EMA product that leads, else the FDA's first brand in normal case, else
+	any EMA product (every EMA record shown is a duplicate of a lead that a filter left
+	out), else the key. ``MedicineDrugViewSet._sort_name`` is the SQL twin."""
+	ema = [r for r in records if r.regulator == Regulator.EMA]
+	for record in ema:
+		if record.grouped_under_id is None:
+			return record.name
+	for record in records:
+		if record.regulator == Regulator.FDA:
+			brand = record.brand_names[0] if record.brand_names else ""
+			return normal_case_if_caps(brand or record.name)
+	return ema[0].name if ema else key
+
+
+def _drug_substances(key, records):
+	"""The EMA record's substances (the lead's first), else the key split on ``+``. A key
+	that only stands for one record without substances (``medicine-7``) has none."""
+	ema = sorted(
+		(r for r in records if r.regulator == Regulator.EMA and r.substances),
+		key=lambda r: r.grouped_under_id is not None,
+	)
+	if ema:
+		return list(ema[0].substances)
+	if key.startswith("medicine-"):
+		return []
+	return key.split("+")
+
+
+def _drug_item(key, records):
+	"""The dict ``MedicineDrugSerializer`` reads: ``records`` are the drug's visible,
+	filtered ``Medicine`` rows, EMA first, then FDA, each oldest authorisation first."""
+	first = {}
+	for record in records:
+		if record.authorisation_date is not None:
+			current = first.get(record.regulator)
+			if current is None or record.authorisation_date < current:
+				first[record.regulator] = record.authorisation_date
+	return {
+		"substance_key": key,
+		"name": _drug_name(key, records),
+		"substances": _drug_substances(key, records),
+		"regulators": sorted({r.regulator for r in records}),
+		"first_authorised": {
+			Regulator.EMA: first.get(Regulator.EMA),
+			Regulator.FDA: first.get(Regulator.FDA),
+		},
+		"records": records,
+	}
 
 
 @extend_schema_view(
