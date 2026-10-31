@@ -111,6 +111,7 @@ from gregory.models import (
 	Medicine,
 	MedicineCategoryAssignment,
 	MedicineEvent,
+	Regulator,
 )
 from rest_framework import mixins, permissions, viewsets, generics, filters, status
 from rest_framework.decorators import api_view, action
@@ -1969,6 +1970,7 @@ def _category_medicines_count_subquery(visible_medicine_subject_ids=None):
 			MedicineCategoryAssignment.objects.filter(
 				teamcategory=OuterRef("pk"),
 				suppressed=False,
+				medicine__regulator=Regulator.EMA,  # PR 3 removes this gate (see public_medicines)
 				medicine__generic=False,
 				medicine__biosimilar=False,
 				medicine__grouped_under__isnull=True,

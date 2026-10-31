@@ -124,6 +124,14 @@ class Command(GregoryBaseCommand):
 			help="Parse, compare and report; write nothing.",
 		)
 		parser.add_argument(
+			"--skip-follow-up",
+			action="store_true",
+			help=(
+				"Do not run sync_fda_labels and match_medicines afterwards. The pipeline passes it, "
+				"since its step 7c runs both after rebuild_categories."
+			),
+		)
+		parser.add_argument(
 			"--force",
 			action="store_true",
 			help="Download even if the file has not changed, and accept a file with fewer applications than the last sync.",
@@ -147,9 +155,14 @@ class Command(GregoryBaseCommand):
 				failed = True
 				self.stderr.write(f"{self._label(source)}: {exc}")
 
-		if wrote and not self.dry_run:
-			# sync_fda_labels runs here once it exists, before the matcher reads the labels.
-			#
+		if wrote and not self.dry_run and not options["skip_follow_up"]:
+			# New or changed medicines may be candidates for a category, so their labels come
+			# first: the matcher reads the labels. sync_fda_labels reports its own DailyMed
+			# errors and never fails the run; a bug in it must not stop the matcher either.
+			try:
+				call_command("sync_fda_labels", stdout=self.stdout, stderr=self.stderr)
+			except Exception as exc:
+				self.stderr.write(f"sync_fda_labels failed: {exc}")
 			# A sync that changed substances relinks categories in the same run. Outside the
 			# transactions: a matching failure must not undo a good sync, and the pipeline's
 			# own match_medicines step retries it.

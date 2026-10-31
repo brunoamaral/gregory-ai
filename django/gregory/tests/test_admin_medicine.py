@@ -238,6 +238,40 @@ class FdaMedicineAdminTests(TestCase):
 		self.assertIn("Only EMA medicines", form.errors["medicine"][0])
 		self.assertTrue(form_class(data={"medicine": self.ema.pk}).is_valid())
 
+	def test_an_fda_page_shows_each_dailymed_label_read_only(self):
+		Medicine.objects.filter(pk=self.fda.pk).update(
+			label_indications=[
+				{
+					"setid": "aaa-111",
+					"version": "24",
+					"title": "OCREVUS (OCRELIZUMAB) INJECTION",
+					"published": "2026-05-20",
+					"indication": "OCREVUS is indicated for multiple sclerosis.",
+				},
+				{
+					"setid": "bbb-222",
+					"version": "3",
+					"title": "ZUNOVO <b>injection</b>",
+					"published": "2026-01-02",
+					"indication": "ZUNOVO is indicated for primary progressive MS.",
+				},
+			]
+		)
+		response = self.change_page(self.fda)
+		self.assertContains(response, "DailyMed labels")
+		self.assertContains(response, "OCREVUS (OCRELIZUMAB) INJECTION")
+		self.assertContains(response, "Published 2026-05-20 (version 24)")
+		self.assertContains(response, "OCREVUS is indicated for multiple sclerosis.")
+		self.assertContains(response, "ZUNOVO is indicated for primary progressive MS.")
+		self.assertContains(response, "https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=aaa-111")
+		# A title is text, never markup.
+		self.assertNotContains(response, "ZUNOVO <b>injection</b>")
+		self.assertContains(response, "ZUNOVO &lt;b&gt;injection&lt;/b&gt;")
+
+	def test_an_fda_page_without_labels_says_so_and_an_ema_page_has_no_labels(self):
+		self.assertContains(self.change_page(self.fda), "DailyMed labels")
+		self.assertNotContains(self.change_page(self.ema), "DailyMed labels")
+
 	def test_an_ema_page_hides_the_fda_fields(self):
 		response = self.change_page(self.ema)
 		self.assertContains(response, "EPAR page")

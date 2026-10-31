@@ -381,6 +381,25 @@ class MedicineAdminLinksTests(MedicineLinkAdminTestCase):
 		response = self.client.get(reverse("admin:gregory_subject_change", args=[subject.pk]))
 		self.assertContains(response, "ema_therapeutic_areas")
 
+	def test_subject_form_exposes_the_fda_terms_after_the_ema_areas(self):
+		self.client.force_login(self.superuser)
+		subject = Subject.objects.get(subject_slug="ms")
+		response = self.client.get(reverse("admin:gregory_subject_change", args=[subject.pk]))
+		content = response.content.decode()
+		self.assertIn("FDA indication terms", content)
+		self.assertLess(content.index("ema_therapeutic_areas"), content.index("fda_indication_terms"))
+
+	def test_saving_the_fda_terms_from_the_subject_form(self):
+		from gregory.admin import SubjectAdminForm
+
+		subject = Subject.objects.get(subject_slug="ms")
+		form = SubjectAdminForm(instance=subject)
+		field = form.fields["fda_indication_terms"]
+		self.assertEqual(field.label, "FDA indication terms (comma separated)")
+		self.assertIn("alzheimer", field.help_text)
+		self.assertEqual(field.clean("multiple sclerosis, alzheimer"), ["multiple sclerosis", "alzheimer"])
+		self.assertEqual(field.clean(""), [])
+
 	def test_category_form_exposes_the_medicine_fields(self):
 		self.client.force_login(self.superuser)
 		response = self.client.get(self.change_url())

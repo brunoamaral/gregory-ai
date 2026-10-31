@@ -55,8 +55,8 @@ class Command(BaseCommand):
 			),  # 3d. EMA medicines (one conditional download; a 304 costs nothing)
 			(
 				"sync_fda_medicines",
-				{},
-			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing)
+				{"skip_follow_up": True},
+			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing). Its labels and matching run once, at 7c
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors
@@ -73,9 +73,13 @@ class Command(BaseCommand):
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
 			(
+				"sync_fda_labels",
+				{},
+			),  # 7c-i. DailyMed labels of the FDA medicines that could belong in a category (after rebuild_categories has taken category edits; a label is downloaded only when its version changed)
+			(
 				"match_medicines",
 				{},
-			),  # 7c. Link EMA medicines to categories (after rebuild_categories has taken category edits)
+			),  # 7c-ii. Link EMA and FDA medicines to categories (after the labels, which the FDA disease check reads)
 			(
 				"detect_patent_trial_links",
 				{},

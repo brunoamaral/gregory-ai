@@ -29,6 +29,7 @@ from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from .services.medicine_linking import link_category
+from .utils.dailymed import label_page_url
 from .services.trial_links import link_trial, remove_link, trial_label, visible_link
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, OuterRef, Q, Subquery
@@ -4027,7 +4028,7 @@ class TeamCategoryAdmin(
 	}
 
 	# Form fields the medicine rule reads (see gregory/services/medicine_matching.py):
-	# a change to any of them re-links the category's EMA medicines.
+	# a change to any of them re-links the category's medicines.
 	MEDICINE_MATCHING_FIELDS = {
 		"category_terms",
 		"category_exclude_terms",
@@ -4045,7 +4046,7 @@ class TeamCategoryAdmin(
 		configuration. New automatic categories are backfilled immediately;
 		edited ones are re-matched only when a field that affects matching
 		changed. Manual categories are never touched. Articles and trials
-		(MATCHING_CONFIG_FIELDS) and EMA medicines (MEDICINE_MATCHING_FIELDS)
+		(MATCHING_CONFIG_FIELDS) and medicines (MEDICINE_MATCHING_FIELDS)
 		depend on different fields, so each is checked on its own.
 		"""
 		super().save_related(request, form, formsets, change)
@@ -4059,16 +4060,16 @@ class TeamCategoryAdmin(
 			self._link_medicines(request, category)
 
 	def _link_medicines(self, request, category):
-		"""Link the category's EMA medicines now, inside a savepoint so a failure rolls
+		"""Link the category's medicines now, inside a savepoint so a failure rolls
 		back only the links and never the category save."""
 		try:
 			with transaction.atomic():
 				counts = link_category(category)
 		except Exception as exc:
-			logger.exception("Could not link EMA medicines for category %s", category.pk)
+			logger.exception("Could not link medicines for category %s", category.pk)
 			self.message_user(
 				request,
-				f"Could not link the EMA medicines of '{category.category_name}' now ({exc}); "
+				f"Could not link the medicines of '{category.category_name}' now ({exc}); "
 				"the pipeline will link them on its next run.",
 				messages.WARNING,
 			)
@@ -5753,7 +5754,18 @@ class MedicineAdmin(admin.ModelAdmin):
 				)
 			},
 		),
-		("Indication", {"fields": ("indication",)}),
+		(
+			"Indication",
+			{
+				"fields": ("indication", "dailymed_labels"),
+				"description": (
+					"The indication shown is the main label's. The disease check of a category "
+					"reads every label below. sync_fda_labels fetches them for the medicines "
+					"that could belong in a category; a medicine with none has not been a "
+					"candidate yet, or DailyMed holds no label for it."
+				),
+			},
+		),
 		(
 			"Approval",
 			{
@@ -5840,6 +5852,28 @@ class MedicineAdmin(admin.ModelAdmin):
 		if obj.url.startswith(("https://", "http://")):
 			return format_html('<a href="{0}" target="_blank" rel="noopener">{0}</a>', obj.url)
 		return obj.url or "-"
+
+	@admin.display(description="DailyMed labels")
+	def dailymed_labels(self, obj):
+		"""One block per label: its title, published date, version and indications text."""
+		entries = [entry for entry in obj.label_indications or [] if isinstance(entry, dict)]
+		if not entries:
+			return "-"
+		return format_html_join(
+			mark_safe("<hr>"),
+			'<strong><a href="{}" target="_blank" rel="noopener">{}</a></strong><br>'
+			"Published {} (version {})<br>{}",
+			(
+				(
+					label_page_url(entry.get("setid", "")),
+					entry.get("title") or entry.get("setid") or "Label",
+					entry.get("published") or "unknown",
+					entry.get("version") or "unknown",
+					entry.get("indication") or "No indications section.",
+				)
+				for entry in entries
+			),
+		)
 
 	@admin.display(description="Public page")
 	def fda_link(self, obj):

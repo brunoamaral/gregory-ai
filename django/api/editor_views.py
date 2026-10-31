@@ -55,7 +55,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
-from api.medicine_scope import category_has_subject
+from api.medicine_scope import category_has_subject, public_medicines
 from api.serializers import McpTenantSerializer
 from api.views import (
 	ArticleViewSet,
@@ -696,14 +696,14 @@ _MEDICINE_MATCHING_FIELDS = frozenset({"category_terms", "category_exclude_terms
 
 
 def _link_medicines(category):
-	"""Link an automatic category's EMA medicines now, so the editor's change shows at
+	"""Link an automatic category's medicines now, so the editor's change shows at
 	once instead of at the next pipeline run. Runs after the editor's own transaction, so a
 	failure here can never undo or fail the category write: it is logged and the pipeline
 	catches up. A manual category has no automatic links, so this does nothing for one."""
 	try:
 		link_category(category)
 	except Exception:
-		logger.exception("Could not link EMA medicines for category %s", category.pk)
+		logger.exception("Could not link medicines for category %s", category.pk)
 
 
 def _category_payload(category):
@@ -1420,7 +1420,8 @@ class EditorCategoryMedicineView(_CategoryScopeMixin, _EditorView):
 		category = self.category_for_edit(category_id)
 		if not {s.id for s in category.subjects.all()} & scope:
 			raise NotFound("Category not found.")
-		medicine = Medicine.objects.defer("raw").filter(pk=medicine_id).first()
+		# An FDA medicine is not public yet (PR 3 removes this gate), so it is "not found".
+		medicine = public_medicines(Medicine.objects.defer("raw")).filter(pk=medicine_id).first()
 		known = medicine is not None and (
 			MedicineCategoryAssignment.objects.filter(medicine=medicine)
 			.filter(category_has_subject(scope))

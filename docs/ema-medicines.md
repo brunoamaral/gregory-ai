@@ -1,8 +1,9 @@
 # EMA medicines
 
 > The FDA's approvals share the same table, events and admin; see [fda-medicines.md](fda-medicines.md).
-> This page describes the EMA side. Until the FDA rules arrive, the matcher, the API and the
-> feeds only handle EMA medicines.
+> This page describes the EMA side. The matcher links FDA medicines to categories too, with
+> its own disease check (see [fda-medicines.md](fda-medicines.md#matching)); the API, the
+> feeds and the MCP tools do not show FDA medicines yet.
 
 Gregory keeps a copy of the European Medicines Agency's list of centrally authorised
 human medicines, so an editor can see where a medicine stands with the regulator: a
@@ -218,7 +219,8 @@ copies. The indication is compared lowercased, with the product's own name remov
 (indications name their product: "Exelon is indicated for ...") and punctuation and
 whitespace collapsed. One product in each group leads: an `Authorised` product first, then the
 earliest `authorisation_date`, then the lowest EMA product number. The other products get
-`grouped_under` set to the lead; leads and singletons get none.
+`grouped_under` set to the lead; leads and singletons get none. A group never mixes the two
+regulators: an FDA product is grouped only with FDA products.
 
 Substances alone would merge different medicines (Avonex and Rebif, Tecfidera and Skilarence),
 so the indication has to match too. Generics, biosimilars, products never authorised (a refused

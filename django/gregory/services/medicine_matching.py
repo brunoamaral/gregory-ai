@@ -1,5 +1,5 @@
 """
-The rule that decides which EMA medicines belong to a team category.
+The rule that decides which medicines belong to a team category.
 
 Pure functions, no database access: ``match_medicines`` loads the rows and calls these.
 The rule, per category:
@@ -11,26 +11,35 @@ The rule, per category:
    ``name``. Without ``*`` a substance matches when it equals the pattern or is the
    pattern plus one more word (``pixantrone`` matches ``pixantrone dimaleate``). With
    ``*`` the pattern must match the whole substance, and ``*`` stands for any run of
-   characters. A name must equal the pattern (or fit it, with ``*``): no extra word.
+   characters. A name must equal the pattern (or fit it, with ``*``): no extra word. An
+   FDA row has one name per brand sold under its application, so a pattern may match any
+   of ``brand_names`` as well as ``name``.
 3. Combination products are skipped unless the category opts in.
 4. ``category_exclude_terms`` rules a product out when one appears as a whole word in a
    substance or in the name.
-5. Disease check. ``areas`` is the union of ``ema_therapeutic_areas`` over the category's
-   subjects. When it is empty the check is skipped; otherwise one of the product's
-   therapeutic areas must start with one of them, ignoring case.
-6. Diagnostics (ATC codes starting V04, V08 or V09) never match a category.
-
-Only EMA products are matched for now. An FDA row (``regulator`` is not ``ema``) has no
-therapeutic areas, so the disease check could not run on it and a category with no areas
-would link it unchecked: ``product_matches``, ``subject_match`` and ``group_key`` return
-``None`` for it until the FDA rules arrive.
+5. Disease check. Steps 1 to 4 are ``pattern_match``; this step depends on the regulator.
+   - EMA: ``areas`` is the union of ``ema_therapeutic_areas`` over the category's
+     subjects. When it is empty the check is skipped; otherwise one of the product's
+     therapeutic areas must start with one of them, ignoring case.
+   - FDA: the FDA publishes no disease areas, so the check reads the labels. ``terms`` is
+     the union of ``fda_indication_terms`` over the category's subjects. When it is empty
+     the check is skipped; otherwise one term must appear as a whole word, ignoring case,
+     in the indications of any of the application's DailyMed labels (not just the one
+     shown, which is what keeps Kesimpta linked through its shared application with
+     Arzerra). A medicine with no label gets no link.
+6. Diagnostics never match a category: an EMA product whose ATC code starts V04, V08 or
+   V09, an FDA row with an openFDA pharmacologic class containing "diagnostic" or
+   "contrast".
 
 The same module holds the two other rules ``match_medicines`` applies:
 
 - ``subject_match``: a subject's own EMA areas against a product, with no category. It
-  uses the same prefix rule as the disease check above, and skips diagnostics.
-- ``group_key`` and ``group_lead``: products that share their substances and their
-  indication are copies of one medicine; one leads and the others point at it.
+  uses the same prefix rule as the disease check above, and skips diagnostics. An FDA row
+  never gets a subject link (it would need a label for every application): it reaches a
+  subject only through a category.
+- ``group_key`` and ``group_lead``: products of one regulator that share their substances
+  and their indication are copies of one medicine; one leads and the others point at it.
+  Grouping across regulators is left to the frontend.
 """
 
 import re
@@ -57,6 +66,10 @@ MATCHED_ON_MAX = 255
 # radiopharmaceuticals. We don't track diagnostics.
 DIAGNOSTIC_ATC_PREFIXES = ("V04", "V08", "V09")
 
+# An FDA row has no ATC code; its openFDA established pharmacologic classes say it
+# ("Radiographic Contrast Agent [EPC]", "Radioactive Diagnostic Agent [EPC]").
+DIAGNOSTIC_FDA_CLASS_WORDS = ("diagnostic", "contrast")
+
 # Everything that is not a letter, digit or underscore: replaced by a space when comparing
 # indications, so "contra-indication" and "contra indication" read the same.
 _PUNCTUATION = re.compile(r"[^\w\s]")
@@ -68,9 +81,18 @@ def normalise(text):
 
 
 def is_diagnostic(medicine):
-	"""Whether ``medicine`` is a diagnostic: its ATC code starts with V04, V08 or V09.
+	"""Whether ``medicine`` is a diagnostic.
 
-	A product with no ATC code yet (new products often have none) isn't caught."""
+	EMA: the ATC code starts with V04, V08 or V09; a product with no ATC code yet (new
+	products often have none) isn't caught. FDA: one of its pharmacologic classes contains
+	"diagnostic" or "contrast"; a row with no openFDA block (about 3,700 applications)
+	isn't caught."""
+	if medicine.regulator == Regulator.FDA:
+		return any(
+			word in (pharm_class or "").lower()
+			for pharm_class in medicine.fda_pharm_classes or []
+			for word in DIAGNOSTIC_FDA_CLASS_WORDS
+		)
 	return (medicine.atc_code or "").upper().startswith(DIAGNOSTIC_ATC_PREFIXES)
 
 
@@ -150,15 +172,21 @@ def _matching_area(areas, medicine):
 	return None
 
 
-def product_matches(category, medicine, areas):
-	"""The label for why ``medicine`` belongs in ``category``, or ``None`` if it doesn't.
+def _names(medicine):
+	"""The names a pattern may match: the product's name, and for an FDA row each brand
+	sold under the application (``name`` is the brands joined, which no pattern equals)."""
+	if medicine.regulator == Regulator.FDA:
+		return [medicine.name, *(medicine.brand_names or [])]
+	return [medicine.name]
 
-	``areas`` is the union of the category's subjects' ``ema_therapeutic_areas``; an empty
-	list skips the disease check. The label is ``"<pattern> · <area>"``, or just
-	``"<pattern>"`` when the check was skipped. It is what ``matched_on`` stores, so an
-	editor can see why a link exists.
-	"""
-	if medicine.regulator != Regulator.EMA or is_diagnostic(medicine):
+
+def pattern_match(category, medicine):
+	"""The pattern that puts ``medicine`` in ``category``, or ``None`` if it doesn't.
+
+	Steps 1 to 4 of the rule and the diagnostic exclusion: patterns, combinations and
+	exclusions, with no disease check. ``sync_fda_labels`` uses it to find the FDA
+	medicines whose labels are worth downloading."""
+	if is_diagnostic(medicine):
 		return None
 	patterns = category_patterns(category)
 	if not patterns:
@@ -167,12 +195,13 @@ def product_matches(category, medicine, areas):
 		category.medicine_include_combinations
 	):
 		return None
+	names = _names(medicine)
 	matched = next(
 		(
 			pattern
 			for pattern in patterns
 			if any(substance_matches(pattern, s) for s in medicine.substances)
-			or _name_matches(pattern, medicine.name)
+			or any(_name_matches(pattern, name) for name in names)
 		),
 		None,
 	)
@@ -180,6 +209,53 @@ def product_matches(category, medicine, areas):
 		return None
 	if _is_excluded(category, medicine):
 		return None
+	return matched
+
+
+@lru_cache(maxsize=512)
+def _term_regex(term):
+	# Whole words: no word character on either side. Look-arounds rather than a word
+	# boundary so a term that starts or ends with punctuation still works. "alzheimer"
+	# matches "Alzheimer's" and "Alzheimer" + a curly apostrophe (both are non-word
+	# characters), but "parkinson" does not match "parkinsonism".
+	body = r"\s+".join(re.escape(word) for word in term.split())
+	return re.compile(r"(?<!\w)" + body + r"(?!\w)", re.IGNORECASE)
+
+
+def _matching_term(terms, medicine):
+	"""The first of ``terms`` found as a whole word in the indications of any of the
+	medicine's labels."""
+	texts = [
+		entry.get("indication") or ""
+		for entry in medicine.label_indications or []
+		if isinstance(entry, dict)
+	]
+	for term in terms:
+		needle = normalise(term)
+		if needle and any(_term_regex(needle).search(text) for text in texts):
+			return term.strip()
+	return None
+
+
+def product_matches(category, medicine, areas, terms=()):
+	"""The label for why ``medicine`` belongs in ``category``, or ``None`` if it doesn't.
+
+	``areas`` is the union of the category's subjects' ``ema_therapeutic_areas`` and
+	``terms`` the union of their ``fda_indication_terms``; each applies to its own
+	regulator's rows, and an empty list skips the disease check. The label is
+	``"<pattern> · <area or term>"``, or just ``"<pattern>"`` when the check was skipped.
+	It is what ``matched_on`` stores, so an editor can see why a link exists.
+	"""
+	matched = pattern_match(category, medicine)
+	if matched is None:
+		return None
+	if medicine.regulator == Regulator.FDA:
+		if not terms:
+			return matched[:MATCHED_ON_MAX]
+		term = _matching_term(terms, medicine)
+		if term is None:
+			return None
+		return f"{matched} · {term}"[:MATCHED_ON_MAX]
 	if not areas:
 		return matched[:MATCHED_ON_MAX]
 	area = _matching_area(areas, medicine)
@@ -195,6 +271,9 @@ def subject_match(areas, medicine):
 	check of a category, with no pattern: any product approved for the area matches, except
 	a diagnostic. An empty ``areas`` matches nothing, since a subject without areas is a
 	research area, not a condition. The area is what ``matched_on`` stores.
+
+	An FDA row never matches: its disease check reads labels, and fetching a label for
+	every active application is too costly for now.
 	"""
 	if medicine.regulator != Regulator.EMA or not areas or is_diagnostic(medicine):
 		return None
@@ -207,10 +286,14 @@ def subject_match(areas, medicine):
 def _indication_text(medicine):
 	"""The product's indication in a comparable form: lowercase, the product's own name
 	removed (indications name their product: "Exelon is indicated for ..."), punctuation
-	turned into spaces and whitespace collapsed."""
+	turned into spaces and whitespace collapsed. An FDA row's labels name each brand, so
+	every brand is removed too."""
 	text = normalise(medicine.indication)
-	name = normalise(medicine.name)
-	if name:
+	names = {normalise(medicine.name)}
+	if medicine.regulator == Regulator.FDA:
+		names.update(normalise(brand) for brand in medicine.brand_names or [])
+	# Longest first: "ocrevus zunovo" before "ocrevus".
+	for name in sorted(filter(None, names), key=len, reverse=True):
 		text = text.replace(name, " ")
 	return " ".join(_PUNCTUATION.sub(" ", text).split())
 
@@ -219,35 +302,44 @@ def group_key(medicine):
 	"""The key products must share to be copies of one medicine, or ``None`` when the
 	product is never grouped.
 
-	The key is the sorted substances plus the cleaned indication. Substances alone would
-	merge different medicines (Avonex and Rebif, Tecfidera and Skilarence); the same
-	substances with the same indication are one medicine sold under several names.
+	The key is the regulator, the sorted substances and the cleaned indication. Substances
+	alone would merge different medicines (Avonex and Rebif, Tecfidera and Skilarence); the
+	same substances with the same indication are one medicine sold under several names. The
+	regulator is part of the key because the two regulators' products are never copies of
+	each other here (the frontend groups across them). On an FDA row the indication is the
+	main label's, so in practice only rows with a label can group.
 	Generics and biosimilars keep their own flags and aren't grouped, nor is a product that
 	was never authorised (a refusal or a withdrawn application is its own news), nor one
 	with no indication, since an empty text would group unrelated products.
 	"""
-	if (
-		medicine.regulator != Regulator.EMA
-		or medicine.generic
-		or medicine.biosimilar
-		or not medicine.authorisation_date
-	):
+	if medicine.generic or medicine.biosimilar or not medicine.authorisation_date:
 		return None
 	indication = _indication_text(medicine)
 	if not indication:
 		return None
 	substances = tuple(sorted(normalise(s) for s in medicine.substances))
-	return (substances, indication)
+	return (medicine.regulator, substances, indication)
+
+
+def _lead_status(medicine):
+	return "Approved" if medicine.regulator == Regulator.FDA else "Authorised"
+
+
+def _regulator_key(medicine):
+	if medicine.regulator == Regulator.FDA:
+		return medicine.fda_application_number or ""
+	return medicine.ema_product_number or ""
 
 
 def group_lead(products):
 	"""The lead of a group of products with the same ``group_key``.
 
-	An authorised product (status exactly ``Authorised``) leads over a withdrawn one, then
-	the earliest authorisation, then the lowest EMA product number."""
+	An authorised product (status exactly ``Authorised`` on EMA rows, ``Approved`` on FDA
+	rows) leads over a withdrawn or discontinued one, then the earliest authorisation, then
+	the lowest EMA product number or FDA application number."""
 	return min(
 		products,
-		key=lambda p: (p.status != "Authorised", p.authorisation_date, p.ema_product_number or ""),
+		key=lambda p: (p.status != _lead_status(p), p.authorisation_date, _regulator_key(p)),
 	)
 
 
@@ -265,3 +357,19 @@ def category_areas(category):
 				seen.add(key)
 				areas.append(area.strip())
 	return areas
+
+
+def category_fda_terms(category):
+	"""The union of the FDA indication terms of ``category``'s subjects, in a stable order.
+
+	Reads ``category.subjects.all()``, so prefetch ``subjects`` when calling this for many
+	categories."""
+	terms = []
+	seen = set()
+	for subject in sorted(category.subjects.all(), key=lambda s: s.pk):
+		for term in subject.fda_indication_terms or []:
+			key = normalise(term)
+			if key and key not in seen:
+				seen.add(key)
+				terms.append(term.strip())
+	return terms

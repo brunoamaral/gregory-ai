@@ -137,9 +137,13 @@ class ParseApplicationTests(TestCase):
 		zunovo = parse("BLA761371")
 		self.assertEqual(zunovo.fda_pharm_classes, [])
 		self.assertEqual(zunovo.pharmacotherapeutic_group, "")
-		# The FDA lists the pair as one ingredient, so the row is not flagged a combination.
-		self.assertEqual(zunovo.substances, ["ocrelizumab and hyaluronidase"])
-		self.assertFalse(zunovo.is_combination)
+		# The FDA lists the pair as one ingredient name, "OCRELIZUMAB AND HYALURONIDASE-OCSQ":
+		# it is split on the word AND, so the row is a combination of two substances.
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(zunovo.is_combination)
+		# The names stay as the FDA published them.
+		self.assertEqual(zunovo.inn, "OCRELIZUMAB AND HYALURONIDASE-OCSQ")
+		self.assertEqual(zunovo.active_substance, "OCRELIZUMAB AND HYALURONIDASE-OCSQ")
 
 	def test_kesimpta_and_arzerra_are_one_application_with_two_brands(self):
 		kesimpta = parse("BLA125326")
@@ -510,3 +514,69 @@ class DownloadPurplebookTests(TestCase):
 		fda.download_purplebook(older, url=self.URL)
 		self.assertNotIn("If-None-Match", get.call_args.kwargs["headers"])
 		self.assertNotIn("If-Modified-Since", get.call_args.kwargs["headers"])
+
+
+class IngredientSplitTests(TestCase):
+	"""Drugs@FDA sometimes writes a combination as one ingredient name."""
+
+	def record(self, *names, per_product=1):
+		ingredients = [{"name": name, "strength": "1 MG"} for name in names]
+		return {
+			"application_number": "NDA999990",
+			"sponsor_name": "ACME",
+			"products": [
+				{"brand_name": "ACME", "marketing_status": "Prescription", "active_ingredients": ingredients}
+			][:per_product],
+			"submissions": [],
+		}
+
+	def test_and_splits_one_ingredient_into_two_substances(self):
+		parsed = fda.parse_application(self.record("OCRELIZUMAB AND HYALURONIDASE-OCSQ"))
+		self.assertEqual(parsed.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(parsed.is_combination)
+
+	def test_the_split_is_case_insensitive_and_whole_word(self):
+		parsed = fda.parse_application(self.record("Amlodipine and Benazepril", "BRANDON SANDOZ"))
+		self.assertEqual(parsed.substances, ["amlodipine", "benazepril", "brandon sandoz"])
+
+	def test_a_name_containing_and_inside_a_word_is_not_split(self):
+		parsed = fda.parse_application(self.record("ANDROGEN", "LAVENDER"))
+		self.assertEqual(parsed.substances, ["androgen", "lavender"])
+		single = fda.parse_application(self.record("ANDROGEN"))
+		self.assertEqual(single.substances, ["androgen"])
+		self.assertFalse(single.is_combination)
+
+	def test_a_single_ordinary_ingredient_is_not_a_combination(self):
+		parsed = fda.parse_application(self.record("FINGOLIMOD HYDROCHLORIDE"))
+		self.assertEqual(parsed.substances, ["fingolimod hydrochloride"])
+		self.assertFalse(parsed.is_combination)
+
+	def test_an_enumeration_with_and_is_split_on_its_commas_too(self):
+		parsed = fda.parse_application(self.record("LAMIVUDINE, NEVIRAPINE, AND STAVUDINE"))
+		self.assertEqual(parsed.substances, ["lamivudine", "nevirapine", "stavudine"])
+		parsed = fda.parse_application(self.record("DOLUTEGRAVIR, EMTRICITABINE and TENOFOVIR ALAFENAMIDE"))
+		self.assertEqual(parsed.substances, ["dolutegravir", "emtricitabine", "tenofovir alafenamide"])
+
+	def test_a_name_with_a_comma_but_no_and_is_not_split(self):
+		parsed = fda.parse_application(self.record("ESTROGENS, CONJUGATED SYNTHETIC A"))
+		self.assertEqual(parsed.substances, ["estrogens, conjugated synthetic a"])
+		self.assertFalse(parsed.is_combination)
+
+	def test_a_repeated_substance_is_kept_once(self):
+		parsed = fda.parse_application(self.record("A AND B", "B AND A"))
+		self.assertEqual(parsed.substances, ["a", "b"])
+
+	def test_inn_and_active_substance_stay_as_published(self):
+		parsed = fda.parse_application(self.record("A AND B-ABCD"))
+		self.assertEqual(parsed.inn, "A AND B-ABCD")
+		self.assertEqual(parsed.active_substance, "A AND B-ABCD")
+
+	def test_two_listed_ingredients_still_make_a_combination(self):
+		parsed = fda.parse_application(self.record("EMPAGLIFLOZIN", "METFORMIN HYDROCHLORIDE"))
+		self.assertTrue(parsed.is_combination)
+
+	def test_a_cber_proper_name_is_not_split(self):
+		text = (Path(__file__).parent / "fixtures" / "fda" / "purplebook-base.csv").read_text()
+		cber, _ = fda.parse_purplebook(text)
+		for parsed in cber:
+			self.assertEqual(len(parsed.substances), 1, parsed.name)

@@ -432,6 +432,26 @@ class RawDigestTests(SyncTestCase):
 		self.assertEqual(ocrevus_row.holder, "GENENTECH, INC. (RENAMED)")
 
 
+class SplitIngredientResyncTests(SyncTestCase):
+	def test_an_unchanged_file_updates_the_derived_fields_of_a_row_stored_the_old_way(self):
+		self.sync()
+		zunovo = self.medicine("BLA761371")
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(zunovo.is_combination)
+		# Store it as the importer did before the split: raw and digest are right, the derived
+		# fields are not.
+		Medicine.objects.filter(pk=zunovo.pk).update(
+			substances=["ocrelizumab and hyaluronidase"], is_combination=False
+		)
+		output = self.sync()
+		self.assertIn("0 new, 1 changed", output)
+		zunovo.refresh_from_db()
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(zunovo.is_combination)
+		# And it settles: the next run changes nothing.
+		self.assertIn("0 new, 0 changed", self.sync())
+
+
 class MissingCderBlaTests(SyncTestCase):
 	def test_cder_blas_only_in_the_purple_book_are_reported_not_imported(self):
 		output = self.sync(drugs=None, source="purplebook")
@@ -751,10 +771,12 @@ class CheckConstraintTests(TestCase):
 		self.create(regulator=Regulator.FDA, fda_application_number="NDA000003")
 
 
-class FdaRowsStayUnlinkedTests(SyncTestCase):
-	"""PR 1 imports FDA rows but links none of them: the FDA matching rules come later."""
+class FdaRowsAreMatchedTests(SyncTestCase):
+	"""Since the labels and matching release the sync's own match_medicines step links FDA
+	rows. The disease check itself is tested in test_sync_fda_labels and test_match_medicines;
+	here only what the sync leaves behind."""
 
-	def test_the_matcher_links_nothing_to_fda_rows(self):
+	def test_the_sync_links_fda_rows_but_gives_them_no_subject_links(self):
 		from organizations.models import Organization
 
 		from gregory.models import (
@@ -771,26 +793,24 @@ class FdaRowsStayUnlinkedTests(SyncTestCase):
 		subject = Subject.objects.create(
 			subject_name="MS", subject_slug="ms", team=team, ema_therapeutic_areas=["Multiple Sclerosis"]
 		)
-		bare = TeamCategory.objects.create(
+		# The subject has EMA areas but no FDA terms, so its categories skip the FDA check and
+		# no label is ever fetched: DailyMed is not called.
+		category = TeamCategory.objects.create(
 			team=team,
 			category_name="Anti-CD20",
-			category_terms=["ocrelizumab", "natalizumab", "ofatumumab", "cladribine", "sildenafil"],
-			modality=CategoryModality.BIOLOGIC_ANTIBODY,
-		)
-		with_subject = TeamCategory.objects.create(
-			team=team,
-			category_name="With subject",
 			category_terms=["ocrelizumab"],
 			modality=CategoryModality.BIOLOGIC_ANTIBODY,
 		)
-		with_subject.subjects.add(subject)
-		# `bare` has no subjects, so it skips the disease check: it must still link no FDA row.
+		category.subjects.add(subject)
 		self.sync()
-		call_command("match_medicines", stdout=StringIO())
-		self.assertEqual(MedicineCategoryAssignment.objects.count(), 0)
+		links = MedicineCategoryAssignment.objects.filter(teamcategory=category)
+		self.assertEqual(
+			list(links.values_list("medicine__fda_application_number", "matched_on")),
+			[("BLA761053", "ocrelizumab")],
+		)
 		self.assertEqual(MedicineSubjectLink.objects.count(), 0)
+		# No FDA row has an indication yet, so none is grouped.
 		self.assertFalse(Medicine.objects.filter(grouped_under__isnull=False).exists())
-		self.assertEqual(bare.medicine_assignments.count(), 0)
 
 
 class EmaSyncIgnoresFdaRowsTests(SyncTestCase):

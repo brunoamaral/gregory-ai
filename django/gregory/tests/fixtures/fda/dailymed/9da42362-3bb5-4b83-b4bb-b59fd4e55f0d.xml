@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<document xmlns="urn:hl7-org:v3">
+  <setId root="9da42362-3bb5-4b83-b4bb-b59fd4e55f0d" />
+  <versionNumber value="24" />
+  <component>
+    <structuredBody>
+      <component>
+        <section ID="S1">
+          <id root="579d9814-35f2-4f7f-885f-76e45a59eae5" />
+          <code code="34067-9" codeSystem="2.16.840.1.113883.6.1" displayName="INDICATIONS &amp; USAGE SECTION" />
+          <title>1 INDICATIONS AND USAGE</title>
+          <text>
+            <paragraph>OCREVUS is indicated for the treatment of:</paragraph>
+            <list>
+              <item>Relapsing forms of multiple sclerosis (MS), to include clinically isolated syndrome, relapsing-remitting disease, and active secondary progressive disease, in adults </item>
+              <item>Primary progressive MS, in adults</item>
+              <item>
+                <content styleCode="xmChange">Relapsing-remitting MS, in pediatric patients 10 years of age and older who weigh 25 kg or more. </content>
+              </item>
+            </list>
+          </text>
+          <effectiveTime value="20260514" />
+          <excerpt>
+            <highlight>
+              <text>
+                <paragraph>OCREVUS is a CD20-directed cytolytic antibody indicated for the treatment of:</paragraph>
+                <list>
+                  <item>Relapsing forms of multiple sclerosis (MS), to include clinically isolated syndrome, relapsing-remitting disease, and active secondary progressive disease, in adults (<linkHtml href="#S1">1</linkHtml>) </item>
+                  <item>Primary progressive MS, in adults (<linkHtml href="#S1">1</linkHtml>)</item>
+                  <item>Relapsing-remitting MS, in pediatric patients 10 years of age and older who weigh 25 kg or more (<linkHtml href="#S1">1</linkHtml>)</item>
+                </list>
+              </text>
+            </highlight>
+          </excerpt>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</document>

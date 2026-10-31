@@ -49,6 +49,13 @@ DISCONTINUED = "Discontinued"
 REVOKED = "Revoked"
 
 _WHITESPACE = re.compile(r"\s+")
+# Drugs@FDA writes some combinations as one ingredient name: "OCRELIZUMAB AND
+# HYALURONIDASE-OCSQ". The whole word AND, in any case, separates the ingredients.
+_INGREDIENT_AND = re.compile(r"\s+and\s+", re.IGNORECASE)
+# A name that has the word AND may be an enumeration ("LAMIVUDINE, NEVIRAPINE, AND STAVUDINE"):
+# then commas separate ingredients too. A name without AND is never split on commas
+# ("ESTROGENS, CONJUGATED" is one ingredient).
+_INGREDIENT_LIST = re.compile(r"\s*,\s*(?:and\s+)?|\s+and\s+", re.IGNORECASE)
 # FDA's four-letter suffix on a biologic's name: natalizumab-sztn.
 _SUFFIX = re.compile(r"-[a-z]{4}$")
 
@@ -229,9 +236,11 @@ def parse_application(record):
 	)
 	substances = []
 	for name in ingredient_names:
-		substance = normalise_substance(name)[:255]
-		if substance and substance not in substances:
-			substances.append(substance)
+		parts = _INGREDIENT_LIST.split(name) if _INGREDIENT_AND.search(name) else [name]
+		for part in parts:
+			substance = normalise_substance(part)[:255]
+			if substance and substance not in substances:
+				substances.append(substance)
 	ingredient_text = "; ".join(ingredient_names)
 	classes = _distinct(_clip(c, 255) for c in (openfda.get("pharm_class_epc") or []))
 
@@ -286,7 +295,8 @@ def parse_application(record):
 		inn=ingredient_text[:500],
 		active_substance=ingredient_text,
 		substances=substances,
-		is_combination=any(len(p.get("active_ingredients") or []) > 1 for p in products),
+		is_combination=len(substances) > 1
+		or any(len(p.get("active_ingredients") or []) > 1 for p in products),
 		status=_product_status(products),
 		pharmacotherapeutic_group=classes[0] if classes else "",
 		fda_pharm_classes=classes,
