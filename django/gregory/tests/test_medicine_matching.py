@@ -308,11 +308,11 @@ class CategoryAreasTests(TestCase):
 class DiagnosticTests(SimpleTestCase):
 	def test_v04_v08_and_v09_are_diagnostics(self):
 		for code in ("V04CX01", "V08AB02", "V09AX06", "v09ab03"):
-			self.assertTrue(is_diagnostic(SimpleNamespace(atc_code=code)), code)
+			self.assertTrue(is_diagnostic(SimpleNamespace(regulator="ema", atc_code=code)), code)
 
 	def test_other_atc_groups_and_no_code_are_not(self):
 		for code in ("N06DX04", "L03AB07", "V03AB01", "V10XX01", "", None):
-			self.assertFalse(is_diagnostic(SimpleNamespace(atc_code=code)), code)
+			self.assertFalse(is_diagnostic(SimpleNamespace(regulator="ema", atc_code=code)), code)
 
 	def test_the_real_imaging_agents_are_diagnostics(self):
 		self.assertTrue(is_diagnostic(UNTRACKED["Neuraceq"]))
@@ -539,8 +539,8 @@ def fda_ms_medicines():
 	stands in for a label, the text written above)."""
 	fda = fda_medicines()
 	with_labels(fda["OCREVUS"], label("ocrevus", "OCREVUS (OCRELIZUMAB) INJECTION", OCREVUS_TEXT))
-	# Zunovo has its own application and its own label, which names MS: only its substance,
-	# "ocrelizumab and hyaluronidase", keeps it out of an ocrelizumab category.
+	# Zunovo has its own application and its own label, which names MS: only being a
+	# combination (ocrelizumab and hyaluronidase) keeps it out of an ocrelizumab category.
 	with_labels(fda["OCREVUS ZUNOVO"], label("zunovo", "OCREVUS ZUNOVO INJECTION", OCREVUS_TEXT))
 	with_labels(
 		fda["KESIMPTA"],
@@ -573,14 +573,24 @@ class FdaMatchingTests(SimpleTestCase):
 		self.assertEqual(result["OCREVUS"], "ocrelizumab · multiple sclerosis")
 		self.assertIsNone(result["OCREVUS ZUNOVO"])
 
-	def test_zunovo_is_one_ingredient_name_not_a_combination(self):
-		# Drugs@FDA lists "OCRELIZUMAB AND HYALURONIDASE-OCSQ" as one ingredient, so the
-		# combination rule does not stop it. Its substance is the pattern plus two words.
+	def test_zunovo_is_a_combination_of_two_substances(self):
+		# Drugs@FDA writes "OCRELIZUMAB AND HYALURONIDASE-OCSQ" as one ingredient; the parser
+		# splits it on AND.
 		zunovo = self.fda["OCREVUS ZUNOVO"]
-		self.assertFalse(zunovo.is_combination)
-		self.assertEqual(zunovo.substances, ["ocrelizumab and hyaluronidase"])
-		cat = category(["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY, medicine_include_combinations=True)
-		self.assertIsNone(product_matches(cat, zunovo, [], []))
+		self.assertTrue(zunovo.is_combination)
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+
+	def test_zunovo_links_to_an_ocrelizumab_category_that_opts_in_to_combinations(self):
+		cat = category(
+			["ocrelizumab"], CategoryModality.BIOLOGIC_ANTIBODY, medicine_include_combinations=True
+		)
+		zunovo = self.fda["OCREVUS ZUNOVO"]
+		# The label entry is SYNTHETIC: a short text that names MS.
+		with_labels(zunovo, label("zunovo", "OCREVUS ZUNOVO INJECTION", "OCREVUS ZUNOVO is indicated for multiple sclerosis (MS)."))
+		self.assertEqual(product_matches(cat, zunovo, [], FDA_MS), "ocrelizumab · multiple sclerosis")
+		# The disease check still applies, and a label that does not name MS drops it.
+		with_labels(zunovo, label("zunovo", "OCREVUS ZUNOVO INJECTION", "Indicated for lupus."))
+		self.assertIsNone(product_matches(cat, zunovo, [], FDA_MS))
 
 	def test_ofatumumab_links_kesimpta_through_its_own_label_though_arzerras_has_no_ms(self):
 		cat = category(["ofatumumab"], CategoryModality.BIOLOGIC_ANTIBODY)

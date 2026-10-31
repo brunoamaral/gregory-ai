@@ -682,6 +682,42 @@ class MedicineFeedExclusionTests(MedicineFixture, TestCase):
 		self.assertOnlyTheLead()
 
 
+class FdaGateFeedTests(MedicineFixture, TestCase):
+	"""TEMPORARY: an FDA medicine's events stay out of every feed until the FDA release can
+	label them (PR 3 removes the gate and this class)."""
+
+	def setUp(self):
+		self.build()
+		self.lead = self.make_medicine("Lead", source=CategoryAssignmentSource.MANUAL)
+		self.subject_link(self.lead)
+		self.make_event(self.lead)
+
+	def test_an_automatic_fda_link_and_its_events_show_in_no_feed(self):
+		fda = Medicine.objects.create(
+			regulator="fda",
+			ema_product_number=None,
+			fda_application_number="BLA761053",
+			name="OCREVUS FDA",
+			inn="ocrelizumab",
+			substances=["ocrelizumab"],
+			status="Approved",
+		)
+		link = self.link(fda, self.category)
+		self.subject_link(fda)
+		self.make_event(fda, kind=Kind.FDA_EFFICACY_SUPPLEMENT)
+		self.make_event(fda, kind=Kind.FDA_APPROVED, days_ago=2)
+		self.assertEqual(link.source, CategoryAssignmentSource.AUTOMATIC)
+		feeds = {
+			"subject": self.subject_feed(),
+			"category": self.category_feed(),
+			"site": self.site_feed(),
+		}
+		for name, response in feeds.items():
+			with self.subTest(feed=name):
+				self.assertEqual(response.status_code, 200)
+				self.assertEqual(self.titles(response), ["Lead (ocrelizumab): Authorised in the EU"])
+
+
 class MedicineFeedQueryCountTests(MedicineFixture, TestCase):
 	"""One render costs the same number of queries whatever the number of items."""
 

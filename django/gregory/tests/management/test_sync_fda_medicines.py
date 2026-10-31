@@ -432,6 +432,26 @@ class RawDigestTests(SyncTestCase):
 		self.assertEqual(ocrevus_row.holder, "GENENTECH, INC. (RENAMED)")
 
 
+class SplitIngredientResyncTests(SyncTestCase):
+	def test_an_unchanged_file_updates_the_derived_fields_of_a_row_stored_the_old_way(self):
+		self.sync()
+		zunovo = self.medicine("BLA761371")
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(zunovo.is_combination)
+		# Store it as the importer did before the split: raw and digest are right, the derived
+		# fields are not.
+		Medicine.objects.filter(pk=zunovo.pk).update(
+			substances=["ocrelizumab and hyaluronidase"], is_combination=False
+		)
+		output = self.sync()
+		self.assertIn("0 new, 1 changed", output)
+		zunovo.refresh_from_db()
+		self.assertEqual(zunovo.substances, ["ocrelizumab", "hyaluronidase"])
+		self.assertTrue(zunovo.is_combination)
+		# And it settles: the next run changes nothing.
+		self.assertIn("0 new, 0 changed", self.sync())
+
+
 class MissingCderBlaTests(SyncTestCase):
 	def test_cder_blas_only_in_the_purple_book_are_reported_not_imported(self):
 		output = self.sync(drugs=None, source="purplebook")

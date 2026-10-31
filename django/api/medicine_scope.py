@@ -24,7 +24,12 @@ slice (the 946 ms DISTINCT count in the API performance diagnosis).
 
 from django.db.models import Exists, OuterRef
 
-from gregory.models import MedicineCategoryAssignment, MedicineSubjectLink, TeamCategory
+from gregory.models import (
+	MedicineCategoryAssignment,
+	MedicineSubjectLink,
+	Regulator,
+	TeamCategory,
+)
 
 #: Shown on every medicine and event row, and in the API docs. EMA's terms for reusing
 #: its data ask for the source to be named wherever the data is shown.
@@ -34,6 +39,20 @@ EMA_SOURCE = "European Medicines Agency"
 VISIBLE_ATTR = "visible_medicine_subject_ids"
 
 _CATEGORY_SUBJECTS = TeamCategory.subjects.through
+
+
+def public_medicines(queryset, prefix=""):
+	"""Keep only the medicines the API and the feeds may show: EMA's.
+
+	TEMPORARY GATE, PR 3 removes it. The matcher already links FDA medicines to categories,
+	but every read path still labels a row "European Medicines Agency" and has no FDA
+	fields, so an FDA medicine, its events and its links stay out of the API, the feeds and
+	the MCP tools (which read the API) until they can describe it. The admin is not gated.
+
+	``prefix`` is the lookup path from ``queryset``'s rows to the medicine: ``""`` for
+	``Medicine`` itself, ``"medicine__"`` for a link or an event.
+	"""
+	return queryset.filter(**{prefix + "regulator": Regulator.EMA})
 
 
 def category_has_subject(subject_ids, link_ref="teamcategory_id"):
@@ -63,7 +82,9 @@ def visible_links_queryset(request):
 	The same rule decides whether a medicine is listed at all, which categories a
 	medicine shows, and what ``medicines_count`` counts.
 	"""
-	links = MedicineCategoryAssignment.objects.filter(suppressed=False)
+	links = public_medicines(
+		MedicineCategoryAssignment.objects.filter(suppressed=False), "medicine__"
+	)
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return links
@@ -78,7 +99,7 @@ def visible_subject_links_queryset(request):
 	Feeds the ``subjects`` on a medicine row and the second visibility route. Same
 	``None`` / empty-scope contract as ``visible_links_queryset``.
 	"""
-	links = MedicineSubjectLink.objects.filter(suppressed=False)
+	links = public_medicines(MedicineSubjectLink.objects.filter(suppressed=False), "medicine__")
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return links
@@ -103,6 +124,8 @@ def scope_to_visible(queryset, request, medicine_ref):
 	``medicine_ref`` is the outer column holding the medicine's id: ``"pk"`` on
 	``Medicine``, ``"medicine_id"`` on ``MedicineEvent``.
 	"""
+	# The gate comes first: with no middleware (ids is None) nothing else scopes the rows.
+	queryset = public_medicines(queryset, "" if medicine_ref == "pk" else "medicine__")
 	ids = visible_subject_ids_of(request)
 	if ids is None:
 		return queryset

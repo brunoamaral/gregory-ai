@@ -135,16 +135,16 @@ def _get(url, params=None):
 
 def list_labels(application_number):
 	"""Every label DailyMed holds under an application (``NDA022561``, ``BLA125326``), as
-	``DailyMedLabel`` entries. An application with none gives ``[]``. Raises
-	``DailyMedError`` on any failure."""
+	``DailyMedLabel`` entries. An application with none gives ``[]`` (a 200 with an empty
+	list). Raises ``DailyMedError`` on any failure, any non-200 status included."""
 	labels = []
 	for page in range(1, MAX_PAGES + 1):
 		response = _get(
 			LIST_URL,
 			{"application_number": application_number, "pagesize": PAGE_SIZE, "page": page},
 		)
-		if response.status_code == 404:
-			return labels
+		# Every non-200 is an error, 404 included: an error page must never read as "this
+		# application has no labels". An application with none answers 200 and an empty list.
 		if response.status_code != 200:
 			raise DailyMedError(f"DailyMed returned HTTP {response.status_code} for {application_number}.")
 		try:

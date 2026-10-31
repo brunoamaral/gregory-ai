@@ -55,8 +55,8 @@ class Command(BaseCommand):
 			),  # 3d. EMA medicines (one conditional download; a 304 costs nothing)
 			(
 				"sync_fda_medicines",
-				{},
-			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing)
+				{"skip_follow_up": True},
+			),  # 3e. FDA medicines: Drugs@FDA and the Purple Book (two conditional downloads; a 304 costs nothing). Its labels and matching run once, at 7c
 			("find_doi", {}),  # 4. Find missing DOI
 			("update_articles_info", {}),  # 5. Find missing data
 			("get_authors", {}),  # 6. Find missing authors

@@ -8,11 +8,12 @@ empty on them, and the FDA columns stay empty on EMA rows. Like the EMA data the
 reference data with no team, subject or organisation of its own.
 
 > **Where this stands.** FDA medicines are imported, labelled and linked to categories, and
-> visible in the Django admin. The API, the RSS feeds and the MCP tools do not tell the
-> regulators apart yet: a linked FDA medicine reaches them like an EMA one, still labelled as
-> EMA, until the API and feed release. The category page's medicine picker offers EMA
-> medicines only, and a hand-made link to an FDA medicine is refused; the matcher's own
-> links are not affected.
+> visible in the Django admin. The API, the RSS feeds and the MCP tools (which read the API)
+> do not show them yet: a temporary gate keeps FDA medicines, their events and their links out
+> of every public read path (`medicines_count` included) until they can be described as FDA
+> records, because those paths still label every row as EMA's. The category page's medicine
+> picker offers EMA medicines only, and a hand-made link to an FDA medicine is refused; the
+> matcher's own links are not affected.
 
 ## What the data is
 
@@ -45,8 +46,12 @@ Things worth knowing:
   See [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#medicines-ema-and-fda).
 - **Substances.** `substances` holds the ingredient names lowercased, with FDA's four-letter
   suffix on biologics removed (`NATALIZUMAB-SZTN` becomes `natalizumab`). A CBER proper name
-  is kept as one substance. The FDA lists a pair such as ocrelizumab and hyaluronidase as a
-  single ingredient, so such a row is not flagged `is_combination`.
+  is kept as one substance. Drugs@FDA sometimes writes a pair as one ingredient name
+  (`OCRELIZUMAB AND HYALURONIDASE-OCSQ`, Ocrevus Zunovo): the name is split on the whole word
+  AND into separate substances (`ocrelizumab`, `hyaluronidase`), and the row is flagged
+  `is_combination`. A name with AND that is an enumeration (`LAMIVUDINE, NEVIRAPINE, AND
+  STAVUDINE`) is split on its commas too; a name with commas and no AND is not. `inn` and `active_substance` keep the name as published. CBER proper names
+  are never split.
 - **Brand names are as the FDA writes them**, in upper case for Drugs@FDA.
 - **`indication` comes from the label.** It is empty until an application has been a candidate
   for a category and DailyMed holds a label for it (see [Labels](#labels)).
@@ -61,7 +66,9 @@ Things worth knowing:
 docker exec gregory python manage.py sync_fda_medicines
 ```
 
-`pipeline` runs it on every run (step 3e, after the EMA sync). It never touches `indication`,
+`pipeline` runs it on every run (step 3e, after the EMA sync), with `--skip-follow-up`: the
+pipeline's step 7c runs the labels and the matcher once, after `rebuild_categories`. Run by
+hand, the command does both itself after a write. It never touches `indication`,
 `label_indications`, `label_checked_at` or a CBER row's `url`: `sync_fda_labels` owns those. Each file is one conditional
 request (`If-Modified-Since` and `If-None-Match`), so a run on unchanged files costs two
 `304`s and nothing else. It is two halves, one per file, and they are independent: a
@@ -75,6 +82,7 @@ command then exits with an error.
 | `--purplebook-url URL` | Download this Purple Book file instead of the newest one on the downloads page |
 | `--source drugsfda\|purplebook` | Run one half only. A single local file also runs just its half |
 | `--dry-run` | Parse, compare and report; write nothing |
+| `--skip-follow-up` | Do not run `sync_fda_labels` and `match_medicines` afterwards |
 | `--force` | Download even if the file has not changed, and accept a file that is smaller than the last |
 
 **Drugs@FDA.** The command reads the current file path from openFDA's download index
@@ -105,7 +113,7 @@ only after a successful write. A bad date is logged and stored as null.
 
 **Labels and matching.** After a write the command runs `sync_fda_labels` and then
 `match_medicines`, so a new candidate is labelled and linked in the same run. A failure in
-the label step is reported and the matcher still runs.
+the label step is reported and the matcher still runs. `--skip-follow-up` skips both.
 
 **First run.** Every row is new, so the sync reconstructs history from the FDA's dates: about
 6,400 Drugs@FDA rows, about 380 CBER rows, and roughly 6,200 approvals, 5,100 efficacy supplements
@@ -141,9 +149,19 @@ For each candidate the command:
 4. On a CBER row with no `url`, sets it to the main label's DailyMed page (the Purple Book has
    no per-product page).
 
+Besides the candidates, the command refreshes **every FDA row that already has stored labels**
+(`label_checked_at` set). A medicine that stops being a candidate (a category lost its terms
+or its pattern) keeps its labels, and the category save hook links against them at once, so
+they must not go stale. That adds a handful of list calls.
+
 A DailyMed error on one application is reported, keeps that application's stored labels (and
 its `label_checked_at`) and moves on; a label that fails to download is retried on the next
-run. The command never fails the run because of DailyMed. It pauses 0.2 seconds between
+run. Every non-200 answer is an error, a 404 included. A 200 with an **empty list** for an
+application that has stored labels is treated the same way (it is reported as "emptied
+(kept)", and `label_checked_at` still moves): it is more likely a DailyMed hiccup than every
+label withdrawn, and wiping them would make `match_medicines` delete the links. A label that
+drops out while others stay listed is removed. The command never fails the run because of
+DailyMed. It pauses 0.2 seconds between
 requests and sends the importers' User-Agent.
 
 | Option | Meaning |
@@ -151,8 +169,8 @@ requests and sends the importers' User-Agent.
 | `--application NUMBER` | Refresh one application, whether or not it is a candidate |
 | `--dry-run` | List the candidates and the labels that would be downloaded; download and write nothing |
 
-The summary counts candidates, list calls, labels downloaded, unchanged, failed, and
-candidates with no label. `pipeline` runs it as step 7c, after `rebuild_categories` and
+The summary counts candidates (and the others refreshed for their stored labels), list calls,
+labels downloaded, unchanged, failed, candidates with no label, and emptied (kept). `pipeline` runs it as step 7c, after `rebuild_categories` and
 before `match_medicines`, so a category edit that creates new candidates gets their labels in
 the same run. Saving a category in the admin or through the editor API relinks it with the
 labels already stored and fetches nothing: a new FDA candidate links on the next pipeline run.
@@ -189,9 +207,9 @@ Other rules:
   (`fda_pharm_classes`) contains "diagnostic" or "contrast", ignoring case. A row with no
   openFDA block (about 3,700 applications) is not caught.
 - **Combinations.** Ocrevus Zunovo is one application whose ingredient the FDA writes as the
-  single name "ocrelizumab and hyaluronidase-ocsq", so it is not flagged `is_combination`;
-  its substance is the pattern plus two words, which the substance rule does not accept, so an
-  `ocrelizumab` category does not link it.
+  single name "ocrelizumab and hyaluronidase-ocsq"; it is split into two substances and is a
+  combination, so an `ocrelizumab` category links it only when it sets *Include combination
+  products*, and then only if a label names the subject's disease.
 - **No subject links.** An FDA medicine reaches a subject only through a category. Subject
   links would need a label for every active application.
 - **Grouping.** `grouped_under` works within one regulator. On an FDA row the indication is

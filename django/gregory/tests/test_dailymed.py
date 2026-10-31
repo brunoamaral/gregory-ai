@@ -152,9 +152,10 @@ class DownloadTests(SimpleTestCase):
 		with patch(GET, return_value=response(payload=load("list-empty.json"))):
 			self.assertEqual(dailymed.list_labels("NDA999999"), [])
 
-	def test_a_404_is_an_empty_list(self):
-		with patch(GET, return_value=response(404)):
-			self.assertEqual(dailymed.list_labels("NDA999999"), [])
+	def test_a_404_is_an_error_not_an_empty_list(self):
+		# An error page must never read as "no labels".
+		with patch(GET, return_value=response(404)), self.assertRaises(DailyMedError):
+			dailymed.list_labels("NDA999999")
 
 	def test_an_error_status_raises(self):
 		with patch(GET, return_value=response(429)), self.assertRaises(DailyMedError):

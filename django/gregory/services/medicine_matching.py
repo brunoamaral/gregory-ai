@@ -87,8 +87,7 @@ def is_diagnostic(medicine):
 	products often have none) isn't caught. FDA: one of its pharmacologic classes contains
 	"diagnostic" or "contrast"; a row with no openFDA block (about 3,700 applications)
 	isn't caught."""
-	# getattr: a bare stand-in with only an ATC code is an EMA product.
-	if getattr(medicine, "regulator", Regulator.EMA) == Regulator.FDA:
+	if medicine.regulator == Regulator.FDA:
 		return any(
 			word in (pharm_class or "").lower()
 			for pharm_class in medicine.fda_pharm_classes or []

@@ -22,8 +22,15 @@ For each candidate:
 4. On a CBER row with no ``url`` yet, set it to the main label's DailyMed page: the Purple
    Book has no per-product page.
 
+A medicine that stops being a candidate (a category lost its terms or its pattern) keeps
+the labels it has, and the category save hook links against them at once. So every FDA row
+that already has stored labels is refreshed too, candidate or not.
+
 A DailyMed error on one application is reported, keeps that application's stored labels and
-moves on. The command never fails the run because of DailyMed.
+moves on. So does a 200 with an empty list for an application that has stored labels: it is
+more likely a DailyMed hiccup than every label withdrawn, and wiping them would make
+match_medicines delete the links. A label that drops out while others stay listed is removed.
+The command never fails the run because of DailyMed.
 
 A category edit that creates new candidates is picked up by the next pipeline run; the
 category save hook links with the labels already stored and fetches nothing.
@@ -75,18 +82,21 @@ class Command(GregoryBaseCommand):
 	def handle(self, *args, **options):
 		self.dry_run = options["dry_run"]
 		prefix = "[dry run] " if self.dry_run else ""
-		medicines = self._candidates(options["application"])
+		medicines, current = self._candidates(options["application"])
 		counts = Counter()
-		counts["candidates"] = len(medicines)
+		counts["candidates"] = len(current)
+		counts["stored only"] = len(medicines) - len(current)
 		for medicine in medicines:
 			self._refresh(medicine, counts)
 
 		self.stdout.write(
-			f"{prefix}FDA labels: {counts['candidates']} candidates, "
-			f"{counts['list calls']} list calls, "
+			f"{prefix}FDA labels: {counts['candidates']} candidates"
+			+ (f" and {counts['stored only']} others with stored labels" if counts["stored only"] else "")
+			+ f", {counts['list calls']} list calls, "
 			f"{counts['downloaded']} labels {'to download' if self.dry_run else 'downloaded'}, "
 			f"{counts['unchanged']} unchanged, {counts['failed']} failed, "
-			f"{counts['no label']} candidates with no label."
+			f"{counts['no label']} candidates with no label, "
+			f"{counts['emptied']} emptied (kept)."
 		)
 		if self.dry_run:
 			self.stdout.write("Dry run: nothing was downloaded or written.")
@@ -94,13 +104,18 @@ class Command(GregoryBaseCommand):
 	# --- candidates ----------------------------------------------------
 
 	def _candidates(self, application):
-		"""The FDA medicines whose labels to refresh, as full rows (``raw`` deferred)."""
+		"""``(medicines, current)``: the FDA medicines whose labels to refresh, as full rows
+		(``raw`` deferred), and the set of primary keys among them that are candidates now.
+
+		The others are medicines that stopped being candidates (a category lost its terms or
+		its pattern) but still hold labels: the category save hook links against stored
+		labels at once, so those must not go stale."""
 		stored = Medicine.objects.filter(regulator=Regulator.FDA).defer("raw")
 		if application:
 			medicine = stored.filter(fda_application_number=application.strip().upper()).first()
 			if medicine is None:
 				raise CommandError(f"No FDA medicine has application number {application}.")
-			return [medicine]
+			return [medicine], {medicine.pk}
 
 		# Only the categories whose subjects name a disease: without terms the matcher
 		# never reads a label, so a download would be wasted.
@@ -117,7 +132,13 @@ class Command(GregoryBaseCommand):
 			if medicine.regulator == Regulator.FDA
 			and any(pattern_match(category, medicine) for category in categories)
 		}
-		return list(stored.filter(pk__in=ids).order_by("fda_application_number"))
+		with_labels = set(
+			stored.filter(label_checked_at__isnull=False)
+			.exclude(label_indications=[])
+			.values_list("pk", flat=True)
+		)
+		medicines = list(stored.filter(pk__in=ids | with_labels).order_by("fda_application_number"))
+		return medicines, ids
 
 	# --- one application -----------------------------------------------
 
@@ -136,6 +157,18 @@ class Command(GregoryBaseCommand):
 			for entry in medicine.label_indications or []
 			if isinstance(entry, dict) and entry.get("setid")
 		}
+		if not listed and stored:
+			# A 200 with an empty list over labels we hold is more likely a DailyMed hiccup than
+			# every label withdrawn: wiping them would make match_medicines delete the links.
+			counts["emptied"] += 1
+			self.stdout.write(
+				self.style.WARNING(
+					f"{number}: DailyMed lists no labels, but {len(stored)} are stored; kept them."
+				)
+			)
+			if not self.dry_run:
+				Medicine.objects.filter(pk=medicine.pk).update(label_checked_at=timezone.now())
+			return
 		entries = []
 		for label in listed:
 			old = stored.get(label.setid)

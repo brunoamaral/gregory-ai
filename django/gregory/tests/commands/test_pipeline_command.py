@@ -75,6 +75,8 @@ class PipelineCommandTest(TestCase):
 		self.assertLess(names.index("rebuild_categories"), names.index("sync_fda_labels"))
 		self.assertLess(names.index("sync_fda_labels"), names.index("match_medicines"))
 		self.assertEqual(dict(calls)["sync_fda_labels"], {})
+		# Step 7c runs the labels and the matcher; 3e must not run them a second time.
+		self.assertEqual(dict(calls)["sync_fda_medicines"], {"skip_follow_up": True})
 		self.assertEqual(dict(calls)["feedreader_patents_ops"], {"max_families": 500})
 		# A full detection pass, not --recent: links must follow trials that change.
 		self.assertEqual(dict(calls)["detect_patent_trial_links"], {})

@@ -38,6 +38,7 @@ from gregory.models import (
 	MedicineEvent,
 	MedicineSubjectLink,
 	Patents,
+	Regulator,
 	Subject,
 	TeamCategory,
 	Trials,
@@ -199,6 +200,9 @@ def _curated_medicine_events(*conditions):
 	cutoff = timezone.localdate() - timedelta(days=RECONSTRUCTED_EVENT_DAYS)
 	return MedicineEvent.objects.filter(
 		*conditions,
+		# An FDA medicine's events stay out of every feed until the FDA release can label
+		# them (PR 3 removes this gate; see api.medicine_scope.public_medicines).
+		medicine__regulator=Regulator.EMA,
 		medicine__generic=False,
 		medicine__biosimilar=False,
 		medicine__grouped_under__isnull=True,

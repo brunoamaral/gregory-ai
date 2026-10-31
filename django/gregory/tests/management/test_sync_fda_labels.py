@@ -146,7 +146,7 @@ class CandidateTests(SyncFdaLabelsTestCase):
 				"NDA022561",  # Mavenclad
 			],
 		)
-		# Ocrevus Zunovo's substance is not the pattern plus one word, so it is no candidate.
+		# Ocrevus Zunovo is a combination (ocrelizumab and hyaluronidase), so it is no candidate.
 		self.assertNotIn("BLA761371", self.dailymed.list_calls)
 		self.assertIn("7 candidates, 7 list calls", out)
 
@@ -252,14 +252,40 @@ class StoreTests(SyncFdaLabelsTestCase):
 		self.run_labels()
 		self.assertEqual({e["setid"] for e in self.medicine("NDA020895").label_indications}, {VIAGRA_SETID})
 
-	def test_an_application_that_loses_all_its_labels_is_emptied(self):
+	def test_an_empty_list_over_stored_labels_keeps_them(self):
+		# A 200 with no labels for an application we hold labels for is a DailyMed hiccup more
+		# likely than every label withdrawn; wiping them would delete the links.
 		self.run_labels()
+		stored = self.medicine("BLA761053")
 		self.dailymed.lists["BLA761053"] = []
 		out = self.run_labels()
 		ocrevus = self.medicine("BLA761053")
-		self.assertEqual(ocrevus.label_indications, [])
-		self.assertEqual(ocrevus.indication, "")
-		self.assertIn("1 candidates with no label", out)
+		self.assertEqual(ocrevus.label_indications, stored.label_indications)
+		self.assertEqual(ocrevus.indication, stored.indication)
+		self.assertGreater(ocrevus.label_checked_at, stored.label_checked_at)
+		self.assertIn("BLA761053: DailyMed lists no labels, but 1 are stored; kept them.", out)
+		self.assertIn("1 emptied (kept)", out)
+		self.assertIn("0 candidates with no label", out)
+
+	def test_an_empty_list_keeps_the_labels_in_a_dry_run_too(self):
+		self.run_labels()
+		stored = self.medicine("BLA761053")
+		self.dailymed.lists["BLA761053"] = []
+		out = self.run_labels(dry_run=True)
+		self.assertIn("1 emptied (kept)", out)
+		self.assertEqual(self.medicine("BLA761053").label_checked_at, stored.label_checked_at)
+
+	def test_a_404_from_dailymed_keeps_the_labels(self):
+		# list_labels raises on any non-200, 404 included (see test_dailymed); the command
+		# keeps what it has and does not fail.
+		self.run_labels()
+		stored = self.medicine("NDA020895")
+		self.dailymed.list_error.add("NDA020895")
+		out = self.run_labels()
+		after = self.medicine("NDA020895")
+		self.assertEqual(after.label_indications, stored.label_indications)
+		self.assertEqual(after.label_checked_at, stored.label_checked_at)
+		self.assertIn("NDA020895: DailyMed list failed", out)
 
 	def test_a_candidate_with_no_label_is_counted(self):
 		self.dailymed.lists["BLA761053"] = []
@@ -311,7 +337,7 @@ class StoreTests(SyncFdaLabelsTestCase):
 		out = self.run_labels()
 		self.assertIn(
 			"FDA labels: 2 candidates, 2 list calls, 3 labels downloaded, 0 unchanged, 0 failed, "
-			"0 candidates with no label.",
+			"0 candidates with no label, 0 emptied (kept).",
 			out,
 		)
 
@@ -357,6 +383,42 @@ class StoreTests(SyncFdaLabelsTestCase):
 		self.assertEqual(after.indication, stored.indication)
 		self.assertEqual(after.label_checked_at, stored.label_checked_at)
 		self.assertGreater(after.last_synced_at, stored.last_synced_at)  # the sync did change the row
+
+
+class StoredLabelsTests(SyncFdaLabelsTestCase):
+	"""A medicine that stops being a candidate keeps its labels fresh."""
+
+	def test_an_ex_candidate_with_stored_labels_is_still_refreshed(self):
+		ocrelizumab = self.category("Ocrelizumab", ["ocrelizumab"])
+		self.category("Sildenafil", ["sildenafil"], modality=CategoryModality.SMALL_MOLECULE)
+		self.run_labels()
+		self.dailymed.list_calls.clear()
+		self.dailymed.fetch_calls.clear()
+		ocrelizumab.delete()
+		self.dailymed.lists["BLA761053"] = fixture_list("list-ocrevus-v25.json")
+		self.dailymed.texts[OCREVUS_SETID] = "OCREVUS is indicated for multiple sclerosis, version 25."
+		out = self.run_labels()
+		# Viagra is the one candidate left; Ocrevus is refreshed only for its stored labels.
+		self.assertEqual(sorted(self.dailymed.list_calls), ["BLA761053", "NDA020895"])
+		self.assertEqual(self.dailymed.fetch_calls, [OCREVUS_SETID])
+		self.assertEqual(self.medicine("BLA761053").label_indications[0]["version"], "25")
+		self.assertIn("1 candidates and 1 others with stored labels, 2 list calls", out)
+
+	def test_a_checked_medicine_with_no_labels_is_not_asked_about_again_once_it_is_no_candidate(self):
+		ocrelizumab = self.category("Ocrelizumab", ["ocrelizumab"])
+		self.dailymed.lists["BLA761053"] = []
+		self.run_labels()
+		self.assertIsNotNone(self.medicine("BLA761053").label_checked_at)
+		self.dailymed.list_calls.clear()
+		ocrelizumab.delete()
+		self.category("Sildenafil", ["sildenafil"], modality=CategoryModality.SMALL_MOLECULE)
+		self.run_labels()
+		self.assertEqual(sorted(set(self.dailymed.list_calls)), ["NDA020895"])
+
+	def test_a_medicine_that_never_had_labels_and_is_no_candidate_is_not_asked_about(self):
+		self.category("Sildenafil", ["sildenafil"], modality=CategoryModality.SMALL_MOLECULE)
+		self.run_labels()
+		self.assertEqual(sorted(set(self.dailymed.list_calls)), ["NDA020895"])
 
 
 class CberUrlTests(SyncFdaLabelsTestCase):
@@ -457,6 +519,9 @@ class WiringTests(TestCase):
 
 	def test_labels_come_before_the_matcher(self):
 		self.assertEqual(self.sync(), ["sync_fda_labels", "match_medicines"])
+
+	def test_skip_follow_up_runs_neither(self):
+		self.assertEqual(self.sync(skip_follow_up=True), [])
 
 	def test_a_dry_run_runs_neither(self):
 		self.assertEqual(self.sync(dry_run=True), [])
