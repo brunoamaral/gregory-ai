@@ -214,3 +214,18 @@ def substance_key(substances, regulator=None, pk=None):
 		return f"medicine-{pk}" if pk is not None else ""
 	# The column is varchar(500); an absurdly long combination must not stop a sync.
 	return "+".join(sorted(parts))[:MAX_LENGTH]
+
+
+_WORD = re.compile(r"[A-Za-z][A-Za-z']*")
+
+
+def normal_case_if_caps(name):
+	"""``"OCREVUS ZUNOVO"`` becomes ``"Ocrevus Zunovo"``: each word capitalised, hyphens
+	and slashes starting a new word. A name with any lowercase letter (CBER's
+	``Kymriah``) is returned as it is.
+
+	openFDA stores brand names in capitals. The RSS feeds and ``/medicines/drugs/`` both
+	show them in normal case beside EMA's."""
+	if not name.isupper():
+		return name
+	return _WORD.sub(lambda match: match.group().capitalize(), name)

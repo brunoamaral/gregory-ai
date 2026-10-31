@@ -9,6 +9,7 @@ from gregory.utils.substance_key import (
 	SALT_WORDS,
 	STANDALONE_METALS,
 	canonical_substance,
+	normal_case_if_caps,
 	strip_salt,
 	substance_key,
 )
@@ -189,3 +190,24 @@ class AliasTests(TestCase):
 	def test_a_name_with_no_alias_is_unchanged(self):
 		self.assertEqual(canonical_substance("furosemide"), "furosemide")
 		self.assertEqual(canonical_substance("fingolimod hydrochloride"), "fingolimod")
+
+
+class NormalCaseIfCapsTests(TestCase):
+	def test_capitals_become_normal_case_word_by_word(self):
+		self.assertEqual(normal_case_if_caps("OCREVUS ZUNOVO"), "Ocrevus Zunovo")
+		self.assertEqual(normal_case_if_caps("GILENYA"), "Gilenya")
+		self.assertEqual(normal_case_if_caps("TASCENSO ODT"), "Tascenso Odt")
+
+	def test_hyphens_and_slashes_start_a_new_word(self):
+		self.assertEqual(normal_case_if_caps("ANTI-THING/OTHER"), "Anti-Thing/Other")
+
+	def test_apostrophes_stay_inside_the_word(self):
+		self.assertEqual(normal_case_if_caps("CHILDREN'S MOTRIN"), "Children's Motrin")
+
+	def test_a_name_with_any_lowercase_letter_is_left_alone(self):
+		self.assertEqual(normal_case_if_caps("Kymriah"), "Kymriah")
+		self.assertEqual(normal_case_if_caps("mAb Thing"), "mAb Thing")
+
+	def test_nothing_to_change(self):
+		self.assertEqual(normal_case_if_caps(""), "")
+		self.assertEqual(normal_case_if_caps("123"), "123")

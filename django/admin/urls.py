@@ -34,6 +34,7 @@ from api.views import (
 	SponsorViewSet,
 	PatentViewSet,
 	MedicineViewSet,
+	MedicineDrugViewSet,
 	MedicineEventViewSet,
 	post_article,
 	edit_article,
@@ -126,9 +127,12 @@ router.register(r"trials", TrialViewSet)
 router.register(r"subjects", SubjectsViewSet)
 router.register(r"sponsors", SponsorViewSet, basename="sponsors")
 router.register(r"patents", PatentViewSet, basename="patents")
-# `medicines/events` before `medicines`: the router tries routes in registration
-# order, so the other way round `events` would be read as a medicine id (the
-# medicine detail route also takes digits only, as a second guard).
+# `medicines/drugs` and `medicines/events` before `medicines`: the router tries routes in
+# registration order, so the other way round `events` would be read as a medicine id (the
+# medicine detail route also takes digits only, as a second guard). The drugs detail route
+# takes any key (spaces, `+`, dots) but only under `medicines/drugs/`, so it swallows
+# neither of the others.
+router.register(r"medicines/drugs", MedicineDrugViewSet, basename="medicine-drugs")
 router.register(r"medicines/events", MedicineEventViewSet, basename="medicine-events")
 router.register(r"medicines", MedicineViewSet, basename="medicines")
 
