@@ -732,21 +732,22 @@ class FdaFeedTests(MedicineFixture, TestCase):
 				self.assertEqual(
 					self.titles(response),
 					[
-						"OCREVUS (OCRELIZUMAB): FDA approved a new indication or use",
+						"Ocrevus (ocrelizumab): FDA approved a new indication or use",
 						"Ocrevus (ocrelizumab): Authorised in the EU",
 					],
 				)
 
 	def test_an_fda_item_has_its_title_link_guid_and_source_line(self):
 		(item,) = self.fda_items(self.category_feed())
-		self.assertEqual(item.findtext("title"), "OCREVUS (OCRELIZUMAB): FDA approved a new indication or use")
+		self.assertEqual(item.findtext("title"), "Ocrevus (ocrelizumab): FDA approved a new indication or use")
 		self.assertEqual(item.findtext("link"), self.fda.url)
 		self.assertEqual(item.find("guid").text, f"fda-medicine-event-{self.fda_event.pk}")
 		self.assertEqual(item.find("guid").get("isPermaLink"), "false")
 		self.assertEqual(
 			item.findtext("description"),
 			"<p>OCREVUS is indicated for relapsing forms of multiple sclerosis.</p>"
-			"<p>Source: U.S. Food and Drug Administration</p>",
+			"<p>Source: U.S. Food and Drug Administration; "
+			"label text from DailyMed (U.S. National Library of Medicine)</p>",
 		)
 
 	def test_an_ema_item_keeps_its_guid_and_source_line(self):
@@ -755,11 +756,56 @@ class FdaFeedTests(MedicineFixture, TestCase):
 		self.assertTrue(item.findtext("description").endswith("Source: European Medicines Agency</p>"))
 		self.assertNotIn("Food and Drug", item.findtext("description"))
 
-	def test_the_title_uses_the_first_brand_name_and_the_ingredients(self):
+	def test_the_title_uses_the_first_brand_name_and_the_substances(self):
 		other = self.make_fda("NDA022561", ["KESIMPTA", "ARZERRA"], inn="OFATUMUMAB")
 		self.make_event(other, Kind.FDA_APPROVED, days_ago=0)
 		titles = self.titles(self.category_feed())
-		self.assertIn("KESIMPTA (OFATUMUMAB): Approved by the FDA", titles)
+		self.assertIn("Kesimpta (ofatumumab): Approved by the FDA", titles)
+
+	def test_an_all_caps_brand_is_capitalised_word_by_word(self):
+		for number, brand, expected in (
+			("NDA000010", "OCREVUS ZUNOVO", "Ocrevus Zunovo"),
+			("NDA000011", "ABC-DEF/GHI", "Abc-Def/Ghi"),
+			("NDA000012", "CHILDREN'S MOTRIN", "Children's Motrin"),
+		):
+			medicine = self.make_fda(number, [brand], inn="GLATIRAMER")
+			self.make_event(medicine, Kind.FDA_APPROVED, days_ago=0)
+			cache.clear()
+			with self.subTest(brand=brand):
+				self.assertIn(f"{expected} (glatiramer): Approved by the FDA", self.titles(self.category_feed()))
+
+	def test_a_mixed_case_brand_is_left_as_it_is(self):
+		# CBER's biologics carry the name the FDA gives them, already in mixed case.
+		medicine = self.make_fda("BLA125646", ["Kymriah"], inn="TISAGENLECLEUCEL")
+		self.make_event(medicine, Kind.FDA_APPROVED, days_ago=0)
+		medicine = self.make_fda("BLA125647", ["mAbX"], inn="")
+		self.make_event(medicine, Kind.FDA_APPROVED, days_ago=0)
+		titles = self.titles(self.category_feed())
+		self.assertIn("Kymriah (tisagenlecleucel): Approved by the FDA", titles)
+		self.assertIn("mAbX: Approved by the FDA", titles)
+
+	def test_a_combination_lists_every_substance_in_lowercase(self):
+		medicine = self.make_fda(
+			"NDA202293",
+			["DUOBRAND"],
+			inn="AMLODIPINE BESYLATE, OLMESARTAN MEDOXOMIL",
+			substances=["amlodipine besylate", "olmesartan medoxomil"],
+		)
+		self.make_event(medicine, Kind.FDA_APPROVED, days_ago=0)
+		self.assertIn(
+			"Duobrand (amlodipine besylate, olmesartan medoxomil): Approved by the FDA",
+			self.titles(self.category_feed()),
+		)
+
+	def test_without_substances_the_title_falls_back_to_the_inn(self):
+		medicine = self.make_fda("NDA000013", ["NOSUBS"], inn="SOMEDRUG", substances=[])
+		self.make_event(medicine, Kind.FDA_APPROVED, days_ago=0)
+		self.assertIn("Nosubs (SOMEDRUG): Approved by the FDA", self.titles(self.category_feed()))
+
+	def test_an_ema_title_is_left_as_stored(self):
+		ema = self.make_medicine("ALLCAPS EMA", indication="x")
+		self.make_event(ema, Kind.AUTHORISED, days_ago=0)
+		self.assertIn("ALLCAPS EMA (ocrelizumab): Authorised in the EU", self.titles(self.category_feed()))
 
 	def test_without_brand_names_or_ingredients_the_title_falls_back(self):
 		cber = self.make_fda("BLA125646", [], name="Kymriah", inn="")
@@ -770,13 +816,25 @@ class FdaFeedTests(MedicineFixture, TestCase):
 		bare = self.make_fda("NDA000001", ["BARE"], url="")
 		self.make_event(bare, Kind.FDA_APPROVED, days_ago=0)
 		items = {i.findtext("title").split(" ")[0]: i for i in self.items(self.category_feed())}
-		self.assertEqual(items["BARE:"].findtext("link"), "https://www.accessdata.fda.gov/scripts/cder/daf/")
+		self.assertEqual(items["Bare:"].findtext("link"), "https://www.accessdata.fda.gov/scripts/cder/daf/")
 
 	def test_an_fda_medicine_with_no_description_still_carries_its_source(self):
 		bare = self.make_fda("NDA000002", ["QUIET"], indication="")
 		self.make_event(bare, Kind.FDA_APPROVED, days_ago=0)
-		item = [i for i in self.items(self.category_feed()) if i.findtext("title").startswith("QUIET")][0]
+		item = [i for i in self.items(self.category_feed()) if i.findtext("title").startswith("Quiet")][0]
 		self.assertEqual(item.findtext("description"), "<p>Source: U.S. Food and Drug Administration</p>")
+
+	def test_the_label_text_is_credited_to_dailymed_only_when_it_is_in_the_description(self):
+		(with_text,) = self.fda_items(self.category_feed())
+		self.assertTrue(
+			with_text.findtext("description").endswith(
+				"<p>Source: U.S. Food and Drug Administration; "
+				"label text from DailyMed (U.S. National Library of Medicine)</p>"
+			)
+		)
+		# EMA's line is untouched.
+		(ema,) = [i for i in self.items(self.category_feed()) if i.findtext("guid").startswith("ema-")]
+		self.assertNotIn("DailyMed", ema.findtext("description"))
 
 	def test_the_ninety_day_rule_applies_to_fda_events(self):
 		old = self.make_fda("NDA000003", ["OLDIE"])
@@ -785,9 +843,9 @@ class FdaFeedTests(MedicineFixture, TestCase):
 		recent = self.make_fda("NDA000004", ["RECENT"])
 		self.make_event(recent, Kind.FDA_APPROVED, days_ago=10, basis=Basis.RECONSTRUCTED)
 		titles = " ".join(self.titles(self.category_feed()))
-		self.assertNotIn("OLDIE: Approved by the FDA", titles)
-		self.assertIn("OLDIE: FDA approved a new indication or use", titles)
-		self.assertIn("RECENT: Approved by the FDA", titles)
+		self.assertNotIn("Oldie: Approved by the FDA", titles)
+		self.assertIn("Oldie: FDA approved a new indication or use", titles)
+		self.assertIn("Recent: Approved by the FDA", titles)
 
 	def test_an_fda_biosimilar_and_a_suppressed_fda_link_stay_out(self):
 		biosimilar = self.make_fda("BLA761322", ["TYRUKO"], biosimilar=True)
@@ -812,15 +870,25 @@ class FdaFeedTests(MedicineFixture, TestCase):
 			with self.subTest(route=name):
 				fda = self.get_titles(f"{url}?regulator=fda")
 				ema = self.get_titles(f"{url}?regulator=ema")
-				self.assertEqual(fda, ["OCREVUS (OCRELIZUMAB): FDA approved a new indication or use"])
+				self.assertEqual(fda, ["Ocrevus (ocrelizumab): FDA approved a new indication or use"])
 				self.assertEqual(ema, ["Ocrevus (ocrelizumab): Authorised in the EU"])
 				self.assertEqual(len(self.get_titles(url)), 2)
 
 	def test_an_unknown_regulator_is_a_404_on_every_feed(self):
 		for name, url in self.routes():
-			for value in ("who", "FDA", "", "ema,fda"):
+			for value in ("who", "FDA", "ema,fda"):
 				with self.subTest(route=name, value=value):
 					self.assertEqual(self.client.get(url, {"regulator": value}).status_code, 404)
+
+	def test_an_empty_regulator_means_both_and_keeps_the_plain_self_link(self):
+		for name, url in self.routes():
+			with self.subTest(route=name):
+				response = self.client.get(url, {"regulator": ""})
+				self.assertEqual(response.status_code, 200)
+				self.assertEqual(len(self.titles(response)), 2)
+				channel = ET.fromstring(response.content).find("./channel")
+				self_link = [l.get("href") for l in channel.findall(f"{ATOM}link") if l.get("rel") == "self"]
+				self.assertEqual(self_link, ["http://testserver" + url])
 
 	def test_the_narrowed_response_is_not_the_cached_unfiltered_one(self):
 		# cache_page keys on the full URL, query string included: warm the plain URL,
