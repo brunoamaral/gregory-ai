@@ -81,7 +81,7 @@ site: see [Patents](#patents) and [Medicines](#medicines).
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. On a site with patents it also lists `patent_links` (see [Patents](#patents)); `include_subject_links` widens them. |
 | `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
 | `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default: the top 10 co-authors plus `coauthors_total`. |
-| `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. Each row carries `patents_count_total` (0 on a site without patents). |
+| `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. Each row carries `category_description` (null when unset) and `patents_count_total` (0 on a site without patents). |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. Each row carries `patents_count`; `include_patent_applicants` also lists sponsors that only appear as patent applicants. |
 | `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/`, `/patents/stats/` | `scope` selects which (`global`, `articles`, `trials`, `patents`). |
 | `search_patents` | `GET /patents/` | Only on a site with patents. See [Patents](#patents). |

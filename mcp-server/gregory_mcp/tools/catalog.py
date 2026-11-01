@@ -35,6 +35,9 @@ async def list_categories(
 ) -> dict:
 	"""List research categories (topic tags attached to articles/trials).
 
+	Each row carries the category's `category_description` (what the
+	category covers, written by the site's editors; null when unset).
+
 	Args:
 		subject_id: Restrict to categories used within this subject.
 		search: Case-insensitive substring match against category name/terms.
@@ -54,6 +57,7 @@ async def list_categories(
 				"id": c.get("id"),
 				"category_name": c.get("category_name"),
 				"category_slug": c.get("category_slug"),
+				"category_description": c.get("category_description"),
 				"modality": c.get("modality"),
 				"article_count_total": c.get("article_count_total"),
 				"trials_count_total": c.get("trials_count_total"),
