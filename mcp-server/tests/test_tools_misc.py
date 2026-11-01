@@ -188,6 +188,33 @@ async def test_list_categories_excludes_expensive_ordering(mock_gregory):
 	assert "ordering" not in params
 
 
+async def test_list_categories_includes_description(mock_gregory):
+	mock_gregory.set_handler(
+		lambda request: httpx2.Response(
+			200,
+			json={
+				"next": None,
+				"results": [
+					{
+						"id": 1,
+						"category_name": "Apotransferrin",
+						"category_slug": "apotransferrin",
+						"category_description": "The iron-free form of transferrin.",
+						"category_terms": ["apotransferrin"],
+					},
+					{"id": 2, "category_name": "Cladribine", "category_slug": "cladribine", "category_description": None},
+				],
+			},
+		)
+	)
+
+	result = await list_categories()
+
+	descriptions = [c["category_description"] for c in result["categories"]]
+	assert descriptions == ["The iron-free form of transferrin.", None]
+	assert "category_terms" not in result["categories"][0]
+
+
 async def test_list_sponsors_is_paginated_not_exhaustive(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 500, "next": "x", "results": []}))
 
