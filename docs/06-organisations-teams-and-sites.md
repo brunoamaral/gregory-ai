@@ -131,6 +131,8 @@ On an article, trial or patent page, a staff user can only pick their own teams'
 
 Links the content already has to other teams' rows are hidden from staff and kept when they save. On articles and trials, where **teams** and **subjects** are required, those links count towards them, so staff don't have to add one of their own just to save. Superusers see and can change every link.
 
+On articles and trials, **sources** is a list of checkboxes grouped by team and subject. A line at the top names the linked sources, and the groups that hold one start open. Staff see only their own teams' groups, so other teams' links are neither listed nor counted there. Patents keep the two-pane chooser.
+
 ### Permissions for actions and custom pages
 
 Organisation scoping decides *which rows* a staff user sees. Django model permissions decide *what they may do* with them. Every bulk action in the admin declares the permission it needs: `change` for actions that edit, `delete` for actions that delete or merge, `add` for duplicating, and `view` for exports. A user with view-only access to a model is not offered the action, and a hand-made POST naming it does nothing. A test fails if someone adds an action without a permission.

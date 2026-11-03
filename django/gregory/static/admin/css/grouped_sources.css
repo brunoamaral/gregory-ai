@@ -1,0 +1,63 @@
+/* Sources checkbox list on the article and trial change pages
+   (gregory.widgets.GroupedSourceCheckboxSelectMultiple). */
+
+.grouped-sources {
+	flex: 1;
+	min-width: 0;
+}
+
+/* form .form-row: the admin's own paragraph rules would otherwise win. */
+form .form-row .grouped-sources-summary,
+.grouped-sources-summary {
+	margin: 0 0 8px;
+	padding: 6px 8px;
+	background: var(--darkened-bg);
+	border-left: 3px solid var(--primary);
+}
+
+.grouped-sources-group {
+	margin: 4px 0;
+	padding: 4px 8px;
+	border: 1px solid var(--border-color);
+	border-radius: 4px;
+}
+
+.grouped-sources-group > summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.grouped-sources-count {
+	color: var(--body-quiet-color);
+	font-weight: normal;
+}
+
+.form-row .grouped-sources ul {
+	margin: 4px 0 4px 8px;
+	padding: 0;
+	list-style: none;
+	columns: 2;
+}
+
+.form-row .grouped-sources li {
+	margin: 0;
+	padding: 2px 0;
+	list-style: none;
+	break-inside: avoid;
+}
+
+.form-row .grouped-sources li label {
+	float: none;
+	width: auto;
+	min-width: 0;
+	padding: 0;
+	display: inline;
+	font-weight: normal;
+	color: var(--body-fg);
+}
+
+@media (max-width: 767px) {
+	.form-row .grouped-sources ul {
+		columns: 1;
+	}
+}

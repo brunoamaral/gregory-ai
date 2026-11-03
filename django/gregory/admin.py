@@ -1,4 +1,5 @@
 from io import BytesIO, StringIO
+from itertools import groupby
 
 from django.contrib import admin, messages
 from django.contrib.admin.utils import unquote
@@ -38,7 +39,7 @@ from .services.patent_trial_links import (
 )
 from .services.trial_links import link_trial, remove_link, trial_label, visible_link
 from django.db import models, transaction  # Add this import for models.Count
-from django.db.models import Exists, OuterRef, Q, Subquery
+from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.db.models.functions import Cast
 from django.utils import timezone
 from django import forms
@@ -95,7 +96,7 @@ from .models import (
 )
 from .utils import patent_coverage
 from .utils.sponsor_merge import merge_sponsors
-from .widgets import MLPredictionsWidget
+from .widgets import GroupedSourceCheckboxSelectMultiple, MLPredictionsWidget
 from .fields import MLPredictionsField
 from .utils.trial_field_normalizers import NORMALIZED_TRIAL_FIELDS, raw_field_names
 
@@ -1624,7 +1625,70 @@ class TeamScopedRelationsFormMixin:
 		return cleaned_data
 
 
-class ArticleAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
+SOURCES_HELP_TEXT = (
+	"Tick the sources this record came from. Groups with a linked source start open."
+)
+
+
+def grouped_source_choices(queryset):
+	"""``queryset``'s sources grouped by team, then subject, for
+	GroupedSourceCheckboxSelectMultiple. One query.
+
+	Teams and subjects without a name sort last; ordering on the ids as well
+	keeps two teams (or subjects) with the same name in separate groups.
+	"""
+	rows = queryset.select_related("team", "subject").only(
+		"pk", "name", "team_id", "subject_id", "team__name", "subject__subject_name"
+	).order_by(
+		F("team__name").asc(nulls_last=True),
+		"team_id",
+		F("subject__subject_name").asc(nulls_last=True),
+		"subject_id",
+		"name",
+	)
+	groups = []
+	for _key, items in groupby(rows, key=lambda source: (source.team_id, source.subject_id)):
+		items = list(items)
+		team, subject = items[0].team, items[0].subject
+		label = (
+			f"{team.name if team else 'No team'} · "
+			f"{subject.subject_name if subject else 'No subject'}"
+		)
+		groups.append((label, [(source.pk, str(source)) for source in items]))
+	return groups
+
+
+class GroupedSourcesFormMixin:
+	"""Show ``sources`` as checkboxes grouped by team and subject.
+
+	List it before TeamScopedRelationsFormMixin: the choices are built from
+	the queryset that mixin has already narrowed to the user's teams, so other
+	teams' sources (and the links to them it keeps) never render. Validation
+	still runs on the queryset. Replacing the widget also drops the admin's
+	add/change icons, whose popup can't add to a checkbox list, and the
+	"Hold down Control" help text the admin gave the select.
+
+	Articles and trials only: patents keep filter_horizontal.
+	"""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		field = self.fields.get("sources")
+		if field is None:
+			# Read-only for this user: Django renders the plain list.
+			return
+		field.widget = GroupedSourceCheckboxSelectMultiple()
+		field.widget.is_required = field.required
+		field.widget.choices = grouped_source_choices(field.queryset)
+		# Rebuild the help text without the admin's Ctrl message, keeping any
+		# the form or model gives the field.
+		own_help = (self._meta.help_texts or {}).get("sources") or self._meta.model._meta.get_field(
+			"sources"
+		).help_text
+		field.help_text = f"{own_help} {SOURCES_HELP_TEXT}" if own_help else SOURCES_HELP_TEXT
+
+
+class ArticleAdminForm(GroupedSourcesFormMixin, TeamScopedRelationsFormMixin, forms.ModelForm):
 	ml_predictions_display = MLPredictionsField(required=False)
 
 	class Meta:
@@ -2198,7 +2262,7 @@ class SponsorMergeCandidateAdmin(admin.ModelAdmin):
 		self.message_user(request, f"Dismissed {updated} candidate pair(s).")
 
 
-class TrialAdminForm(TeamScopedRelationsFormMixin, forms.ModelForm):
+class TrialAdminForm(GroupedSourcesFormMixin, TeamScopedRelationsFormMixin, forms.ModelForm):
 	"""Adds plain-language labels and help text for fields that use clinical-trial jargon."""
 
 	class Meta:
