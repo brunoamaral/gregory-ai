@@ -91,15 +91,30 @@ def _editor_routes():
 			409, json={"detail": "The pipeline assigned this patent from the category's terms."}
 		),
 		"/editor/patents/31/trials/5/": httpx2.Response(
-			200, json={"patent_id": 31, "trial_id": 5, "suppressed": False, "timing": "during", "basis": "category"}
+			200,
+			json={
+				"patent_id": 31,
+				"trial_id": 5,
+				"source": "auto",
+				"suppressed": False,
+				"timing": "during",
+				"basis": "category",
+			},
 		),
+		# A pair with no link yet: PUT makes a manual one, DELETE has nothing to remove.
 		"/editor/patents/31/trials/6/": lambda r: (
 			httpx2.Response(
-				404,
+				201,
 				json={
-					"detail": "The patent and trial are not linked. Editors can't create patent-trial links, "
-					"only restore suppressed ones: links need a shared sponsor and timing, which only "
-					"the pipeline's detection computes."
+					"patent_id": 31,
+					"trial_id": 6,
+					"source": "manual",
+					"suppressed": False,
+					"sponsor_id": None,
+					"timing": "before",
+					"days_after_completion": None,
+					"days_before_start": 1241,
+					"basis": None,
 				},
 			)
 			if r.method == "PUT"
@@ -1100,16 +1115,15 @@ async def test_the_four_tools_expose_the_patent_identifiers(django):
 # --- the patent link rules --------------------------------------------------------------------
 
 
-async def test_creating_a_patent_trial_link_is_refused_with_the_reason(django, mock_editor_gregory):
+async def test_linking_an_unlinked_patent_and_trial_returns_the_created_link(django, mock_editor_gregory):
 	result = await _call("set_trial_link", {"patent_id": 31, "trial_id": 6, "linked": True})
 
-	assert result.is_error
-	text = result.content[0].text
-	assert "can't create patent-trial links" in text
-	assert "only detection does" in text
-	assert "restores a link that was hidden" in text
-	# Not the generic "not found on this site", which would suggest the patent or trial is missing.
-	assert "was not found on this site" not in text
+	assert not result.is_error, result.content[0].text
+	link = json.loads(result.content[0].text)
+	assert (link["patent_id"], link["trial_id"], link["source"]) == (31, 6, "manual")
+	assert (link["timing"], link["days_before_start"], link["sponsor_id"], link["basis"]) == ("before", 1241, None, None)
+	(request,) = _writes(mock_editor_gregory)
+	assert (request.method, request.url.path) == ("PUT", "/editor/patents/31/trials/6/")
 
 
 async def test_hiding_a_link_that_does_not_exist_is_an_ordinary_not_found(django):
@@ -1119,8 +1133,8 @@ async def test_hiding_a_link_that_does_not_exist_is_an_ordinary_not_found(django
 	assert "The link between patent 31 and trial 6 was not found on this site." in result.content[0].text
 
 
-async def test_a_trial_outside_the_site_on_a_restore_is_an_ordinary_not_found(django):
-	"""A 404 that is not the link-creation refusal keeps its normal wording."""
+async def test_a_trial_outside_the_site_on_a_link_is_an_ordinary_not_found(django):
+	"""A 404 on a link keeps the normal wording: the patent or trial is not on this site."""
 	result = await _call("set_trial_link", {"patent_id": 32, "trial_id": 9, "linked": True})
 
 	assert result.is_error
@@ -1282,11 +1296,12 @@ async def test_a_resolved_publication_number_logs_the_patent_id(django, caplog):
 async def test_a_failed_patent_edit_is_logged_as_an_error(django, caplog):
 	caplog.set_level(logging.INFO)
 
-	await _call("set_trial_link", {"patent_id": 31, "trial_id": 6, "linked": True})
+	# Patent 32 and trial 9: the trial is outside the site, so the API answers 404.
+	await _call("set_trial_link", {"patent_id": 32, "trial_id": 9, "linked": True})
 
 	(edit,) = _edits(caplog)
 	line = _formatted(edit)
-	assert (line["record_type"], line["patent_id"], line["action"], line["outcome"]) == ("patent", 31, "link", "error")
+	assert (line["record_type"], line["patent_id"], line["action"], line["outcome"]) == ("patent", 32, "link", "error")
 
 
 async def test_article_edits_still_log_an_article_id_and_no_patent_id(django, caplog):
@@ -1309,10 +1324,13 @@ def test_docstrings_name_the_patent_identifiers(fn):
 	assert "patent_id" in fn.__doc__ and "publication_number" in fn.__doc__
 
 
-def test_the_trial_link_docstring_says_editors_cannot_create_a_patent_link():
+def test_the_trial_link_docstring_says_editors_can_create_a_patent_link():
 	doc = editor.set_trial_link.__doc__
-	assert "cannot create one" in doc
-	assert "restores a hidden one" in doc
+	assert "cannot create" not in doc
+	assert "adds a link an editor vouches for" in doc
+	assert "automatic\n\tdetection never changes or removes it" in doc
+	assert "restored and becomes an" in doc
+	assert "deletes a link an editor added and hides a detected" in doc
 
 
 def test_set_article_relevance_does_not_mention_patents():

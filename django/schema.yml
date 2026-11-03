@@ -3741,8 +3741,9 @@ paths:
       operationId: editor_patents_history_retrieve
       description: 'Editor-only. Who changed this patent family''s editorial content
         for the editor''s site, its hand assignments to categories in scope, and the
-        suppressing or restoring of its links to trials in scope, and when. Newest
-        first. There are no relevance entries: patents have none. Only people''s changes
+        adding, deleting, hiding or restoring of its links to trials in scope (each
+        entry says whether the link is `manual` or detected), and when. Newest first.
+        There are no relevance entries: patents have none. Only people''s changes
         are recorded (the pipeline''s category matching and link detection write no
         history); a change made by an API key names the key instead of a person.'
       summary: Edit history of a patent (editor)
@@ -3820,13 +3821,17 @@ paths:
   /editor/patents/{patent_id}/trials/{trial_id}/:
     put:
       operationId: editor_patents_trials_update
-      description: 'Editor-only. Un-hides a link an editor suppressed. Editors cannot
-        create a patent-trial link: links need a shared sponsor and timing, which
-        only detection computes, so a pair that is not linked at all is 404 with that
-        explanation. Idempotent: a link that is not suppressed is returned unchanged
-        (200). 404 as well when the patent is outside the editor''s site patent scope
+      description: 'Editor-only. Connects the patent and a trial by hand. A pair with
+        no link gets a new `manual` link (201): its sponsor, timing and basis are
+        worked out from the data now and may be null (the patent and trial need not
+        share a sponsor, a subject or known dates), and a patent filed before the
+        trial is `timing=before`. Automatic detection never changes or removes a manual
+        link. A link that is already visible, manual or detected, is returned unchanged
+        (200) and records nothing. A link hidden by an editor is restored (200) and
+        becomes manual, since the editor now vouches for it, keeping its timing, basis
+        and sponsor. 404 when the patent is outside the editor''s site patent scope
         or the trial outside its scope.'
-      summary: Restore a suppressed patent-trial link (editor)
+      summary: Link a trial to a patent (editor)
       parameters:
       - in: query
         name: format
@@ -3851,6 +3856,15 @@ paths:
       - editorServiceAuth: []
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+            text/csv:
+              schema:
+                $ref: '#/components/schemas/EditorPatentTrialLinkResponse'
+          description: ''
+        '201':
           content:
             application/json:
               schema:
@@ -3897,11 +3911,13 @@ paths:
           description: ''
     delete:
       operationId: editor_patents_trials_destroy
-      description: 'Editor-only. Hides the link between the patent and a trial everywhere
-        (it stays, marked `suppressed`, so detection doesn''t recreate it). Idempotent:
-        an already suppressed link is returned unchanged (200). 404 when the pair
-        isn''t linked, or either side is outside the editor''s site scope.'
-      summary: Suppress a patent-trial link (editor)
+      description: Editor-only. Removes the visible link between the patent and a
+        trial. A link an editor added (`manual`) is deleted; a detected one is hidden
+        instead (it stays, marked `suppressed`, so detection doesn't recreate it).
+        The answer describes the removed link and says which happened in `removed`.
+        404 when the pair has no visible link (an already hidden one counts as none),
+        or either side is outside the editor's site scope.
+      summary: Unlink a trial from a patent (editor)
       parameters:
       - in: query
         name: format
@@ -10401,14 +10417,63 @@ components:
           type: integer
         trial_id:
           type: integer
+        source:
+          allOf:
+          - $ref: '#/components/schemas/PatentTrialLinkSourceEnum'
+          description: |-
+            `manual` when an editor added the link (detection never changes or removes it), `auto` when detection made it.
+
+            * `auto` - Detected by the pipeline
+            * `manual` - Added by an editor
         suppressed:
           type: boolean
-          description: True after a DELETE (the link is hidden everywhere), false
-            after a PUT (restored).
+          description: 'True when the link is hidden everywhere: after a DELETE of
+            a detected link. False after a PUT, and for a manual link removed by a
+            DELETE (that row is gone, not hidden).'
+        sponsor_id:
+          type: integer
+          nullable: true
+          description: The sponsor the patent's applicants and the trial share. Null
+            on a manual link with no shared sponsor.
         timing:
-          type: string
+          nullable: true
+          description: |-
+            When the patent was first filed against the trial: `before` it started, `during` it, or `after` it ended. Null on a manual link whose trial dates are unknown.
+
+            * `before` - Filed before the trial started
+            * `during` - Filed during the trial
+            * `after` - Filed after the trial ended
+          oneOf:
+          - $ref: '#/components/schemas/TimingEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        days_after_completion:
+          type: integer
+          nullable: true
+          description: 'For `after` links: days between the trial''s end and the patent''s
+            earliest priority date.'
+        days_before_start:
+          type: integer
+          nullable: true
+          description: 'For `before` links: days between the patent''s earliest priority
+            date and the trial''s start.'
         basis:
-          type: string
+          nullable: true
+          description: |-
+            What the patent and trial share: a `category`, a `subject`, or null for nothing (manual links only).
+
+            * `category` - Shared team category
+            * `subject` - Shared subject only
+          oneOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          - $ref: '#/components/schemas/NullEnum'
+        removed:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          description: |-
+            Only in the answer to a DELETE: `manual` when an editor's link was deleted, `auto` when a detected link was hidden instead.
+
+            * `auto` - auto
+            * `manual` - manual
         updated_by:
           type: string
           nullable: true
@@ -10418,7 +10483,11 @@ components:
           nullable: true
       required:
       - basis
+      - days_after_completion
+      - days_before_start
       - patent_id
+      - source
+      - sponsor_id
       - suppressed
       - timing
       - trial_id

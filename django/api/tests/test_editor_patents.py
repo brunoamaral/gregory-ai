@@ -8,6 +8,8 @@ Editors hold grants on one site each. Patents are reachable only through a site
 with ``patents_enabled`` on, so every route is 404 for an editor of site B.
 """
 
+from datetime import date, timezone
+
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase, override_settings
@@ -16,6 +18,7 @@ from rest_framework.test import APIClient
 
 from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from gregory.models import (
+	PatentApplicant,
 	PatentCategoryAssignment,
 	PatentPublication,
 	PatentSiteContent,
@@ -586,23 +589,119 @@ class TrialLinkTest(PatentEditorFixture):
 		self.assertEqual(self.send("delete", self.url()).status_code, 200)
 		self.assertTrue(PatentTrialLink.objects.get(patent=self.pat_a).suppressed)
 
-	def test_both_directions_are_idempotent_and_record_nothing_new(self):
+	def test_put_on_a_visible_link_records_nothing_new(self):
 		link = self.link(self.pat_a, self.trial_a)
-		self.assertEqual(self.send("put", self.url()).status_code, 200)  # not suppressed: no-op
+		self.assertEqual(self.send("put", self.url()).status_code, 200)  # visible: no-op
 		self.assertEqual(PatentTrialLink.history.filter(id=link.id).count(), 1)  # only the creation
+
+	def test_delete_of_an_already_hidden_link_is_404_and_records_nothing(self):
+		link = self.link(self.pat_a, self.trial_a)
 		self.send("delete", self.url())
 		count = PatentTrialLink.history.filter(id=link.id).count()
-		again = self.send("delete", self.url())  # already suppressed: no-op
-		self.assertEqual(again.status_code, 200)
-		self.assertIs(again.json()["suppressed"], True)
+		again = self.send("delete", self.url())  # already suppressed: nothing visible to remove
+		self.assertEqual(again.status_code, 404)
 		self.assertEqual(PatentTrialLink.history.filter(id=link.id).count(), count)
 
-	def test_put_cannot_create_a_link(self):
+	def test_put_creates_a_manual_link(self):
 		response = self.send("put", self.url())
-		self.assertEqual(response.status_code, 404)
-		self.assertIn("can't create patent-trial links", response.json()["detail"])
-		self.assertIn("only restore suppressed ones", response.json()["detail"])
+		self.assertEqual(response.status_code, 201, response.content)
+		body = response.json()
+		self.assertEqual((body["patent_id"], body["trial_id"]), (self.pat_a.pk, self.trial_a.pk))
+		self.assertEqual(body["source"], "manual")
+		self.assertIs(body["suppressed"], False)
+		self.assertIsNone(body["sponsor_id"])
+		self.assertEqual(body["updated_by"], "pe-ana <pe-ana@example.com>")
+		link = PatentTrialLink.objects.get(patent=self.pat_a, trial=self.trial_a)
+		self.assertEqual(link.source, "manual")
+		self.assertEqual(link.created_by, self.ana)
+		self.assertEqual(self.shown(), [self.trial_a.pk])
+		newest = PatentTrialLink.history.filter(id=link.id).order_by("-history_date").first()
+		self.assertEqual((newest.history_type, newest.via), ("+", "mcp"))
+
+	def test_put_records_what_the_pair_shares_and_when_the_patent_was_filed(self):
+		self.sponsor_pair = Sponsor.objects.create(name="Shared Sponsor", slug="shared-sponsor")
+		trial = Trials.objects.create(
+			title="Dated trial",
+			link="https://t.test/dated",
+			date_enrollement=date(2026, 10, 1),
+			recruitment_status="Recruiting",
+		)
+		# The sponsor is set with update(), as the normalisers do after the save.
+		Trials.objects.filter(pk=trial.pk).update(primary_sponsor_normalized=self.sponsor_pair)
+		trial.subjects.add(self.subject_a)
+		Patents.objects.filter(pk=self.pat_a.pk).update(earliest_priority_date=date(2023, 5, 9))
+		self.pat_a.refresh_from_db()
+		PatentApplicant.objects.create(patent=self.pat_a, raw_name="Shared Sponsor Inc", sponsor=self.sponsor_pair)
+		body = self.send("put", self.url(trial=trial)).json()
+		self.assertEqual(body["timing"], "before")
+		self.assertEqual(body["days_before_start"], 1241)
+		self.assertIsNone(body["days_after_completion"])
+		self.assertEqual(body["basis"], "subject")
+		self.assertEqual(body["sponsor_id"], self.sponsor_pair.pk)
+
+	def test_a_repeated_put_is_200_and_records_nothing_new(self):
+		self.assertEqual(self.send("put", self.url()).status_code, 201)
+		link = PatentTrialLink.objects.get(patent=self.pat_a, trial=self.trial_a)
+		count = PatentTrialLink.history.filter(id=link.id).count()
+		again = self.send("put", self.url())
+		self.assertEqual(again.status_code, 200)
+		self.assertEqual(again.json()["source"], "manual")
+		self.assertEqual(PatentTrialLink.history.filter(id=link.id).count(), count)
+		self.assertEqual(PatentTrialLink.objects.count(), 1)
+
+	def test_put_on_a_visible_detected_link_leaves_it_detected(self):
+		link = self.link(self.pat_a, self.trial_a)
+		response = self.send("put", self.url())
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["source"], "auto")
+		link.refresh_from_db()
+		self.assertEqual((link.source, link.created_by), ("auto", None))
+
+	def test_put_on_a_suppressed_detected_link_restores_it_as_manual(self):
+		link = self.link(self.pat_a, self.trial_a, suppressed=True)
+		response = self.send("put", self.url())
+		self.assertEqual(response.status_code, 200, response.content)
+		body = response.json()
+		self.assertEqual((body["source"], body["suppressed"]), ("manual", False))
+		# The detected values are kept.
+		self.assertEqual((body["timing"], body["basis"], body["sponsor_id"]), ("during", "category", self.sponsor.pk))
+		link.refresh_from_db()
+		self.assertEqual((link.source, link.created_by, link.suppressed), ("manual", self.ana, False))
+		self.assertEqual(self.shown(), [self.trial_a.pk])
+
+	def test_put_for_a_patent_or_trial_outside_the_scope_is_404(self):
+		for patent, trial in ((self.pat_other, self.trial_a), (self.pat_a, self.trial_other), (self.pat_b, self.trial_a)):
+			with self.subTest(patent=patent.title, trial=trial.title):
+				self.assertEqual(self.send("put", self.url(patent=patent, trial=trial)).status_code, 404)
 		self.assertFalse(PatentTrialLink.objects.exists())
+
+	def test_put_is_404_for_a_site_without_patents(self):
+		response = self.send("put", self.url(patent=self.pat_b, trial=self.trial_b), site=self.site_b)
+		self.assertEqual(response.status_code, 404)
+		self.assertFalse(PatentTrialLink.objects.exists())
+
+	def test_delete_of_a_manual_link_deletes_it(self):
+		self.send("put", self.url())
+		link = PatentTrialLink.objects.get(patent=self.pat_a, trial=self.trial_a)
+		response = self.send("delete", self.url())
+		self.assertEqual(response.status_code, 200, response.content)
+		body = response.json()
+		self.assertEqual((body["removed"], body["source"]), ("manual", "manual"))
+		self.assertEqual((body["patent_id"], body["trial_id"]), (self.pat_a.pk, self.trial_a.pk))
+		# Who and when come from the deletion itself.
+		self.assertEqual(body["updated_by"], "pe-ana <pe-ana@example.com>")
+		deletion = PatentTrialLink.history.filter(id=link.id, history_type="-").get()
+		self.assertEqual(body["updated_at"], deletion.history_date.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"))
+		self.assertFalse(PatentTrialLink.objects.exists())
+		self.assertEqual(self.shown(), [])
+		# Gone, so a second delete has nothing to remove.
+		self.assertEqual(self.send("delete", self.url()).status_code, 404)
+
+	def test_delete_of_a_detected_link_says_it_was_hidden(self):
+		link = self.link(self.pat_a, self.trial_a)
+		body = self.send("delete", self.url()).json()
+		self.assertEqual((body["removed"], body["source"], body["suppressed"]), ("auto", "auto", True))
+		self.assertTrue(PatentTrialLink.objects.get(pk=link.pk).suppressed)
 
 	def test_delete_of_a_pair_that_is_not_linked_is_404(self):
 		response = self.send("delete", self.url())
@@ -649,7 +748,13 @@ class HistoryTest(PatentEditorFixture):
 		self.assertEqual(suppress["via"], "mcp")
 		self.assertEqual(
 			suppress["details"],
-			{"trial_id": self.trial_a.pk, "timing": "during", "basis": "category", "suppressed": True},
+			{
+				"trial_id": self.trial_a.pk,
+				"source": "auto",
+				"timing": "during",
+				"basis": "category",
+				"suppressed": True,
+			},
 		)
 		editorial = next(e for e in body["entries"] if e["kind"] == "editorial")
 		self.assertEqual(editorial["details"]["takeaways"], "First")
@@ -666,6 +771,17 @@ class HistoryTest(PatentEditorFixture):
 		self.send("put", f"/editor/patents/{self.pat_a.pk}/trials/{self.trial_a.pk}/")
 		flags = [e["details"]["suppressed"] for e in self.get(self.url()).json()["entries"] if e["kind"] == "trial_link"]
 		self.assertEqual(flags, [False, True, False])
+
+	def test_a_manual_link_and_its_deletion_are_in_the_history(self):
+		self.send("put", f"/editor/patents/{self.pat_a.pk}/trials/{self.trial_a.pk}/")
+		self.send("delete", f"/editor/patents/{self.pat_a.pk}/trials/{self.trial_a.pk}/")
+		entries = [e for e in self.get(self.url()).json()["entries"] if e["kind"] == "trial_link"]
+		self.assertEqual([e["change"] for e in entries], ["deleted", "created"])
+		for entry in entries:
+			self.assertEqual(entry["changed_by"], "pe-ana <pe-ana@example.com>")
+			self.assertEqual(entry["via"], "mcp")
+			self.assertEqual(entry["details"]["source"], "manual")
+			self.assertEqual(entry["details"]["trial_id"], self.trial_a.pk)
 
 	def test_there_are_no_relevance_entries(self):
 		self.send("patch", f"/editor/patents/{self.pat_a.pk}/editorial/", {"takeaways": "x"})

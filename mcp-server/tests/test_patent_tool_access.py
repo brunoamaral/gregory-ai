@@ -383,9 +383,9 @@ def test_editor_instructions_for_patents_name_every_write_tool_and_the_link_rule
 
 	for name in WRITE_TOOLS | {HISTORY_TOOL}:
 		assert name in text, name
-	# The model is told, up front, that a patent's link can be hidden or restored but not made.
-	assert "hide a link to a trial or restore a hidden one" in text
-	assert "only detection creates those" in text
+	# The model is told, up front, that a patent can be connected to a trial or disconnected from one.
+	assert "connect an article or a patent and a clinical trial, or disconnect them" in text
+	assert "only detection creates those" not in text
 	assert "confirm" in text.lower()
 
 

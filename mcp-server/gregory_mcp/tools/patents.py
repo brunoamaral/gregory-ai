@@ -78,7 +78,8 @@ async def search_patents(
 	sponsor: filed while the trial was running or shortly after it ended. Only
 	links on a shared category (typically the molecule) count, unless
 	`include_subject_links` is true — links on a shared subject alone are
-	numerous and noisy for large sponsors.
+	numerous and noisy for large sponsors. A link an editor added by hand always
+	counts, whatever the sponsor, timing or subject.
 
 	Always show a patent's `link` (its Espacenet page) when you present it.
 
@@ -209,9 +210,13 @@ async def get_patent(
 	returns `claims: null` and a `claims_note`.
 
 	`trial_links` lists trials of the same sponsor the patent was filed during
-	or shortly after, on a shared category (typically the molecule). Pass
-	`include_subject_links=true` to also list links on a shared subject alone —
-	numerous and noisy for large sponsors.
+	or shortly after, on a shared category (typically the molecule), and every
+	link an editor added by hand. Each link's `source` says which: `auto`
+	(detected) or `manual` (an editor's). A manual link may have no `sponsor_id`,
+	`timing` or `basis`, and its `timing` can be `before` (the patent was filed
+	before the trial started, `days_before_start` days earlier). Pass
+	`include_subject_links=true` to also list detected links on a shared subject
+	alone — numerous and noisy for large sponsors.
 
 	Always show the record's `link` (its Espacenet page) when you present it.
 

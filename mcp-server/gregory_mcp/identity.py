@@ -41,13 +41,11 @@ _EDIT_TOOLS = (
 
 # The same tools for a site that shows patents. Patents are named here only for
 # such a site: elsewhere the patent tools are hidden and the text must not point
-# at what is absent. A patent's trial links come only from detection, so the
-# tool can hide or restore one but not make one.
+# at what is absent.
 _EDIT_TOOLS_WITH_PATENTS = (
 	"update_editorial (set an article's or a patent's takeaways and plain-English summary for this site), "
 	"set_article_relevance (mark an article relevant, not relevant or not reviewed for a subject), "
-	"set_trial_link (connect an article and a clinical trial, or disconnect them; for a patent, hide a link "
-	"to a trial or restore a hidden one, since only detection creates those), "
+	"set_trial_link (connect an article or a patent and a clinical trial, or disconnect them), "
 	"create_category and update_category (add a category or change its name, terms or subjects), "
 	"set_category_assignment (put an article or a patent in a category by hand, or take it out)"
 )

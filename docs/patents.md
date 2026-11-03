@@ -192,6 +192,16 @@ How the two interact:
   both the patent and the trial. `include_subject_links` only controls detected
   subject-basis links. See [Trial links](03-api-and-rss-feeds.md#trial-links).
 
+#### Adding and removing a link over the editor API and MCP
+
+`PUT /editor/patents/{patent_id}/trials/{trial_id}/` (the MCP tool `set_trial_link` with
+`linked=true`) makes the same manual link as the admin, through the same service: `201` when
+it creates a row, `200` when the pair already had a visible link or a hidden detected one was
+brought back as manual. `DELETE` (`linked=false`) deletes a manual link and hides a detected
+one, and the answer's `removed` says which. The patent and the trial must both be in the
+site's scope, else `404`. The editor's name and `via="mcp"` go in the history, and a deleted
+link appears there as a `deleted` entry. See [the editor routes](03-api-and-rss-feeds.md#patent-routes).
+
 #### Adding and removing a link in the admin
 
 From the trial page (*Gregory > Trials*) or the patent page (*Gregory > Patents*), in
