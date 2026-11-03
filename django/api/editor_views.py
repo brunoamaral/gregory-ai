@@ -123,6 +123,7 @@ from gregory.models import (
 	Trials,
 )
 from gregory.services.medicine_linking import link_category
+from gregory.services.patent_trial_links import link_patent_trial, unlink_patent_trial
 from gregory.services.trial_links import link_trial, unlink_trial
 from gregory.utils.patent_numbers import publication_number_q
 from gregory.visibility import site_scope_subject_ids
@@ -1053,9 +1054,10 @@ class EditorArticleHistoryView(_EditorView):
 #
 # The same actions as the article routes, on patent families. Differences:
 # a patent is found through the site's PATENT scope (a site with
-# ``patents_enabled`` off has none, so every route is 404), editors cannot
-# create a patent-trial link (only detection can: it needs a shared sponsor and
-# timing), and patents have no relevance verdict.
+# ``patents_enabled`` off has none, so every route is 404), an editor can add a
+# patent-trial link by hand (``source="manual"``: detection never changes or
+# removes it, and its sponsor, timing and basis are worked out when it is made and
+# may be NULL) as well as hide a detected one, and patents have no relevance verdict.
 
 _PATENT_ERRORS = {
 	401: EditorErrorSerializer,
@@ -1216,13 +1218,20 @@ class EditorPatentCategoryView(_CategoryScopeMixin, _EditorView):
 		}
 
 
-def _patent_link_payload(link):
-	updated_by, updated_at = _last_change(PatentTrialLink.history, id=link.pk)
+def _patent_link_payload(link, link_id=None):
+	"""The response for one patent-trial link. ``link_id`` is for a link that has just been
+	deleted (its instance no longer has a pk): the editor and time then come from the
+	deletion's own history row."""
+	updated_by, updated_at = _last_change(PatentTrialLink.history, id=link_id or link.pk)
 	return {
 		"patent_id": link.patent_id,
 		"trial_id": link.trial_id,
+		"source": link.source,
 		"suppressed": link.suppressed,
+		"sponsor_id": link.sponsor_id,
 		"timing": link.timing,
+		"days_after_completion": link.days_after_completion,
+		"days_before_start": link.days_before_start,
 		"basis": link.basis,
 		"updated_by": updated_by,
 		"updated_at": updated_at,
@@ -1230,59 +1239,50 @@ def _patent_link_payload(link):
 
 
 @extend_schema(
-	summary="Restore a suppressed patent-trial link (editor)",
+	summary="Link a trial to a patent (editor)",
 	description=(
-		"Editor-only. Un-hides a link an editor suppressed. Editors cannot create "
-		"a patent-trial link: links need a shared sponsor and timing, which only "
-		"detection computes, so a pair that is not linked at all is 404 with that "
-		"explanation. Idempotent: a link that is not suppressed is returned "
-		"unchanged (200). 404 as well when the patent is outside the editor's "
-		"site patent scope or the trial outside its scope."
+		"Editor-only. Connects the patent and a trial by hand. A pair with no link "
+		"gets a new `manual` link (201): its sponsor, timing and basis are worked out "
+		"from the data now and may be null (the patent and trial need not share a "
+		"sponsor, a subject or known dates), and a patent filed before the trial is "
+		"`timing=before`. Automatic detection never changes or removes a manual link. "
+		"A link that is already visible, manual or detected, is returned unchanged "
+		"(200) and records nothing. A link hidden by an editor is restored (200) and "
+		"becomes manual, since the editor now vouches for it, keeping its timing, "
+		"basis and sponsor. 404 when the patent is outside the editor's site patent "
+		"scope or the trial outside its scope."
 	),
 	request=None,
 	responses={
 		200: EditorPatentTrialLinkResponseSerializer,
+		201: EditorPatentTrialLinkResponseSerializer,
 		429: EditorErrorSerializer,
 		**_PATENT_ERRORS,
 	},
 	auth=[{"editorServiceAuth": []}],
 )
 class EditorPatentTrialDetailView(_EditorView):
-	"""``PUT`` (restore) and ``DELETE`` (suppress) ``/editor/patents/{patent_id}/trials/{trial_id}/``"""
+	"""``PUT`` (link) and ``DELETE`` (unlink) ``/editor/patents/{patent_id}/trials/{trial_id}/``"""
 
-	def set_suppressed(self, request, patent_id, trial_id, suppressed, missing_message):
-		"""Set ``suppressed`` on the link, locked, and return its payload. A link
-		already in that state is returned unchanged and records nothing."""
+	def put(self, request, patent_id, trial_id):
 		patent = self.get_patent(patent_id)
 		trial = self.get_trial(trial_id)
 		with transaction.atomic(), editing_as(request.user, "mcp"):
-			link = PatentTrialLink.objects.select_for_update().filter(patent=patent, trial=trial).first()
-			if link is None:
-				raise NotFound(missing_message)
-			if link.suppressed != suppressed:
-				link.suppressed = suppressed
-				link.save(update_fields=["suppressed"])
-		return Response(_patent_link_payload(link))
-
-	def put(self, request, patent_id, trial_id):
-		return self.set_suppressed(
-			request,
-			patent_id,
-			trial_id,
-			False,
-			"The patent and trial are not linked. Editors can't create patent-trial links, "
-			"only restore suppressed ones: links need a shared sponsor and timing, which "
-			"only the pipeline's detection computes.",
+			link, created = link_patent_trial(patent, trial, request.user)
+		return Response(
+			_patent_link_payload(link),
+			status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
 		)
 
 	@extend_schema(
-		summary="Suppress a patent-trial link (editor)",
+		summary="Unlink a trial from a patent (editor)",
 		description=(
-			"Editor-only. Hides the link between the patent and a trial everywhere "
-			"(it stays, marked `suppressed`, so detection doesn't recreate it). "
-			"Idempotent: an already suppressed link is returned unchanged (200). "
-			"404 when the pair isn't linked, or either side is outside the editor's "
-			"site scope."
+			"Editor-only. Removes the visible link between the patent and a trial. A "
+			"link an editor added (`manual`) is deleted; a detected one is hidden "
+			"instead (it stays, marked `suppressed`, so detection doesn't recreate "
+			"it). The answer describes the removed link and says which happened in "
+			"`removed`. 404 when the pair has no visible link (an already hidden one "
+			"counts as none), or either side is outside the editor's site scope."
 		),
 		request=None,
 		responses={
@@ -1293,7 +1293,25 @@ class EditorPatentTrialDetailView(_EditorView):
 		auth=[{"editorServiceAuth": []}],
 	)
 	def delete(self, request, patent_id, trial_id):
-		return self.set_suppressed(request, patent_id, trial_id, True, "The patent and trial are not linked.")
+		patent = self.get_patent(patent_id)
+		trial = self.get_trial(trial_id)
+		with transaction.atomic(), editing_as(request.user, "mcp"):
+			# Lock and keep the instance: a deleted manual link is described from it.
+			link = (
+				PatentTrialLink.objects.select_for_update()
+				.filter(patent=patent, trial=trial, suppressed=False)
+				.first()
+			)
+			if link is None:
+				raise NotFound("The patent and trial are not linked.")
+			link_id = link.pk
+			removed = unlink_patent_trial(patent, trial)
+			if removed == PatentTrialLink.SOURCE_MANUAL:
+				# The row is gone: the editor and time come from its deletion's history row.
+				payload = _patent_link_payload(link, link_id=link_id)
+			else:
+				payload = _patent_link_payload(PatentTrialLink.objects.get(pk=link_id))
+		return Response({**payload, "removed": removed})
 
 
 @extend_schema(
@@ -1301,7 +1319,8 @@ class EditorPatentTrialDetailView(_EditorView):
 	description=(
 		"Editor-only. Who changed this patent family's editorial content for the "
 		"editor's site, its hand assignments to categories in scope, and the "
-		"suppressing or restoring of its links to trials in scope, and when. "
+		"adding, deleting, hiding or restoring of its links to trials in scope "
+		"(each entry says whether the link is `manual` or detected), and when. "
 		"Newest first. There are no relevance entries: patents have none. Only "
 		"people's changes are recorded (the pipeline's category matching and link "
 		"detection write no history); a change made by an API key names the key "
@@ -1343,6 +1362,7 @@ class EditorPatentHistoryView(_EditorView):
 					row,
 					{
 						"trial_id": row.trial_id,
+						"source": row.source,
 						"timing": row.timing,
 						"basis": row.basis,
 						"suppressed": row.suppressed,

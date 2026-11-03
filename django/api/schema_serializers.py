@@ -412,11 +412,57 @@ class EditorPatentCategoryUnassignResponseSerializer(serializers.Serializer):
 class EditorPatentTrialLinkResponseSerializer(serializers.Serializer):
 	patent_id = serializers.IntegerField()
 	trial_id = serializers.IntegerField()
-	suppressed = serializers.BooleanField(
-		help_text="True after a DELETE (the link is hidden everywhere), false after a PUT (restored)."
+	source = serializers.ChoiceField(
+		choices=PATENT_TRIAL_LINK_SOURCE_CHOICES,
+		help_text=(
+			"`manual` when an editor added the link (detection never changes or removes it), "
+			"`auto` when detection made it."
+		),
 	)
-	timing = serializers.CharField()
-	basis = serializers.CharField()
+	suppressed = serializers.BooleanField(
+		help_text=(
+			"True when the link is hidden everywhere: after a DELETE of a detected link. "
+			"False after a PUT, and for a manual link removed by a DELETE (that row is "
+			"gone, not hidden)."
+		)
+	)
+	sponsor_id = serializers.IntegerField(
+		allow_null=True,
+		help_text=(
+			"The sponsor the patent's applicants and the trial share. Null on a manual "
+			"link with no shared sponsor."
+		),
+	)
+	timing = serializers.ChoiceField(
+		choices=PATENT_TRIAL_LINK_TIMING_CHOICES,
+		allow_null=True,
+		help_text=(
+			"When the patent was first filed against the trial: `before` it started, "
+			"`during` it, or `after` it ended. Null on a manual link whose trial dates "
+			"are unknown."
+		),
+	)
+	days_after_completion = serializers.IntegerField(
+		allow_null=True,
+		help_text="For `after` links: days between the trial's end and the patent's earliest priority date.",
+	)
+	days_before_start = serializers.IntegerField(
+		allow_null=True,
+		help_text="For `before` links: days between the patent's earliest priority date and the trial's start.",
+	)
+	basis = serializers.ChoiceField(
+		choices=PATENT_TRIAL_LINK_BASIS_CHOICES,
+		allow_null=True,
+		help_text="What the patent and trial share: a `category`, a `subject`, or null for nothing (manual links only).",
+	)
+	removed = serializers.ChoiceField(
+		choices=EDITOR_TRIAL_LINK_SOURCE_CHOICES,
+		required=False,
+		help_text=(
+			"Only in the answer to a DELETE: `manual` when an editor's link was deleted, "
+			"`auto` when a detected link was hidden instead."
+		),
+	)
 	updated_by = serializers.CharField(allow_null=True)
 	updated_at = serializers.DateTimeField(allow_null=True)
 

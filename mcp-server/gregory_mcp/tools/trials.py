@@ -86,8 +86,8 @@ async def search_trials(
 	sponsor (filed while the trial was running or shortly after it ended); false
 	keeps the rest. Only links on a shared category (typically the molecule)
 	count, unless `include_subject_links` is true — links on a shared subject
-	alone are numerous and noisy for large sponsors. It matches nothing on a
-	site that has no patents.
+	alone are numerous and noisy for large sponsors. A link an editor added by
+	hand always counts. It matches nothing on a site that has no patents.
 
 	A zero-hit response adds a `guidance` key: which filters were applied,
 	ranked suggestions for what's most likely over-constraining the search,
@@ -170,9 +170,13 @@ async def get_trial(trial_id: int, include_subject_links: bool = False) -> dict:
 
 	On a site that has patents, the record also lists `patent_links`: patent
 	families of the same sponsor filed while the trial was running or shortly
-	after it ended, on a shared category (typically the molecule). Pass
-	`include_subject_links=true` to also list links on a shared subject alone —
-	numerous and noisy for large sponsors.
+	after it ended, on a shared category (typically the molecule), and every
+	link an editor added by hand. Each link's `source` says which: `auto`
+	(detected) or `manual` (an editor's). A manual link may have no `sponsor_id`,
+	`timing` or `basis`, and its `timing` can be `before` (the patent was filed
+	before the trial started, `days_before_start` days earlier). Pass
+	`include_subject_links=true` to also list detected links on a shared subject
+	alone — numerous and noisy for large sponsors.
 
 	Raises:
 		ToolError: If the trial can't be found.

@@ -295,8 +295,7 @@ async def set_trial_link(
 	patent_id: int | None = None,
 	publication_number: str | None = None,
 ) -> dict:
-	"""Link a clinical trial to an article, or remove the link; for a patent,
-	hide or restore the link to a trial.
+	"""Link a clinical trial to an article or a patent, or remove the link.
 
 	Articles. `linked=true` adds a link that automatic detection will not
 	change or duplicate; linking a pair that is already linked returns the
@@ -304,17 +303,22 @@ async def set_trial_link(
 	deleted, and one found automatically is hidden, so automatic detection does
 	not bring it back.
 
-	Patents. Links between a patent and a trial come only from detection (they
-	need a shared sponsor and timing), so an editor cannot create one:
-	`linked=false` hides a link, `linked=true` restores a hidden one, and a pair
-	with no link at all is refused.
+	Patents. `linked=true` adds a link an editor vouches for: automatic
+	detection never changes or removes it. The patent and trial need not share
+	a sponsor or a subject. The link records, once, the sponsor they share (if
+	any), whether the patent was filed `before`, `during` or `after` the trial
+	(if the trial's dates are known; a patent filed before the trial is fine)
+	and what they share. If the pair is already linked, the existing link
+	is returned unchanged; a link that was hidden is restored and becomes an
+	editor's. `linked=false` deletes a link an editor added and hides a detected
+	one (`removed` says which). The answer's `source` is `manual` or `auto`.
 
 	The trial itself cannot be edited. Live immediately and recorded under the
 	signed-in person's name.
 
 	Args:
 		trial_id: The trial's id.
-		linked: true to link (or restore), false to remove (or hide) the link.
+		linked: true to link (or restore a hidden link), false to remove (or hide) the link.
 		article_id: An article's id.
 		doi: An article's DOI.
 		patent_id: A patent family's id.
@@ -332,13 +336,6 @@ async def set_trial_link(
 			stored = await get_client().delete(f"/editor/articles/{record_id}/trials/{trial_id}/")
 	except GregoryAPIError as exc:
 		_log_edit("set_trial_link", record_id, ["trial_link"], "error", action=action, record_type=record)
-		if record == "patent" and linked and exc.status_code == 404 and "create patent-trial links" in _detail_message(exc):
-			# Not a missing record: there is simply no link, and editors cannot make one.
-			raise ToolError(
-				f"Patent {record_id} and trial {trial_id} are not linked, and editors can't create "
-				"patent-trial links: only detection does (it needs a shared sponsor and timing). "
-				"linked=true only restores a link that was hidden."
-			) from exc
 		what = (
 			f"{_label(record, record_id)} or trial {trial_id}"
 			if linked
