@@ -1,0 +1,11 @@
+<div class="grouped-sources"{% if widget.attrs.id %} id="{{ widget.attrs.id }}"{% endif %}>
+	<p class="grouped-sources-summary">{% if widget.linked_labels %}<strong>Linked ({{ widget.linked_labels|length }}):</strong> {{ widget.linked_labels|join:", " }}{% else %}Linked: none{% endif %}</p>
+	{% for group in widget.groups %}
+	<details class="grouped-sources-group"{% if group.linked %} open{% endif %}>
+		<summary>{{ group.label }} <span class="grouped-sources-count">({{ group.linked }} linked / {{ group.total }})</span></summary>
+		<ul>
+			{% for option in group.options %}<li>{% include option.template_name with widget=option %}</li>{% endfor %}
+		</ul>
+	</details>
+	{% endfor %}
+</div>
