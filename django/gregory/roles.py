@@ -45,7 +45,9 @@ EDITOR_PERMISSIONS = {
 	"gregory.articlecategoryassignment": FULL,
 	"gregory.trialcategoryassignment": FULL,
 	"gregory.patentcategoryassignment": FULL,
-	"gregory.patenttriallink": VIEW_CHANGE,
+	# A patent-trial link: editors add one by hand and remove one (a detected link is hidden
+	# rather than deleted) from the trial or the patent page. The inlines are team-edit gated.
+	"gregory.patenttriallink": FULL,
 	# Removing an automatic medicine link from a category suppresses it rather than
 	# deleting it, but the category page's inline still needs add and delete.
 	"gregory.medicinecategoryassignment": FULL,

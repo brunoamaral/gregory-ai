@@ -192,9 +192,27 @@ How the two interact:
   both the patent and the trial. `include_subject_links` only controls detected
   subject-basis links. See [Trial links](03-api-and-rss-feeds.md#trial-links).
 
-The model and the rules are in place; the admin pages and the editor API for adding and
-removing links come in later changes, so for now a manual link is created from the shell
-with `link_patent_trial(patent, trial, user)`.
+#### Adding and removing a link in the admin
+
+From the trial page (*Gregory > Trials*) or the patent page (*Gregory > Patents*), in
+either direction. Both pages have the same two inlines:
+
+- **Linked patents** (on a trial) or **Linked trials** (on a patent) lists every link whose
+  other side your organisations can see (a superuser sees them all), hidden ones included, with its source, timing, days, basis, sponsor, who added it and when.
+  Ticking a row's *Delete* box and saving removes the link by the rule above: a manual link
+  is deleted, a detected one is hidden. A hidden link has no box.
+- **Add a patent link** (on a trial) or **Add a trial link** (on a patent) takes blank rows
+  with a search box. On a trial, search a patent by title, publication number or family id;
+  on a patent, search a trial by title, acronym, database id or registry identifier (paste
+  an NCT or EudraCT number). Saving makes the manual link and records the editor in the
+  history. A pair that already has a visible link, or one listed twice, is refused. A pair
+  whose detected link was hidden is accepted and brings the link back.
+
+Adding or removing a link needs permission to edit the page you are on (the trial or the
+patent belongs to one of your teams), and the other side only has to be visible to your
+organisation. A link counts as yours from either page: it is editable when you can edit its
+patent or its trial. The *Editor* role holds the add and delete permissions on patent-trial
+links; after updating the code, run `python manage.py setup_roles` to sync the group.
 
 ## Administration
 
@@ -230,10 +248,15 @@ organisations' categories. Categories only name known drugs, so a compound filed
 it has a name will not match; combine both filters, and for drugs a sponsor is testing
 look at category-basis links under *Patent-trial links*.
 
-*Gregory > Patent-trial links* lists the detected signals grouped by patent. It defaults
-to the category basis (a *basis* filter switches to subject-only or all), and the
-*Suppress* action dismisses links. Staff only see links of patents from their own
-organisations' sources.
+*Gregory > Patent-trial links* lists the links grouped by patent, with their *source*
+(detected or added by an editor) and who added them. It defaults to the category basis plus
+every link an editor added, whatever it shares (a *basis* filter switches to subject-only or
+all; a *source* filter picks detected or manual), and the *Suppress* action dismisses links,
+manual ones included (nothing recreates a suppressed manual link). Staff only see links of
+patents from their own organisations' sources. Links are added and removed from the trial
+and patent pages (see [Links added by editors](#links-added-by-editors)); this list has no
+add button, and only a superuser can delete from it (deleting a detected link here, instead
+of hiding it, would let detection recreate it).
 
 ## Licence and the API
 

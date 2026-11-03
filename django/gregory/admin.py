@@ -30,6 +30,12 @@ from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from .services.medicine_linking import link_category
 from .utils.dailymed import label_page_url
+from .services.patent_trial_links import (
+	link_patent_trial,
+	patent_label,
+	remove_patent_trial_link,
+	visible_link as visible_patent_trial_link,
+)
 from .services.trial_links import link_trial, remove_link, trial_label, visible_link
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, OuterRef, Q, Subquery
@@ -650,6 +656,254 @@ class ArticleTrialLinkAddInline(TeamEditInlineMixin, admin.TabularInline):
 			(formset,),
 			{"link_user": request.user, "link_allowed": self.has_add_permission(request, obj)},
 		)
+
+
+class PatentTrialLinkListFormSet(forms.BaseInlineFormSet):
+	"""The patent-trial links of a trial or a patent: every row is read-only, and ticking a
+	row's delete box unlinks it with the same rule as the editor API
+	(gregory.services.patent_trial_links): a manual link is deleted, a detected one is
+	hidden so detect_patent_trial_links doesn't recreate it. A row that is already hidden
+	has nothing left to remove."""
+
+	def add_fields(self, form, index):
+		super().add_fields(form, index)
+		if form.instance.pk and form.instance.suppressed and DELETION_FIELD_NAME in form.fields:
+			# No box on a hidden row. Disabled as well, so a forged delete is ignored.
+			field = form.fields[DELETION_FIELD_NAME]
+			field.widget = forms.HiddenInput()
+			field.disabled = True
+
+	def delete_existing(self, obj, commit=True):
+		if obj.suppressed:
+			return
+		if commit:
+			remove_patent_trial_link(obj)
+		if obj.source != PatentTrialLink.SOURCE_MANUAL and obj in self.deleted_objects:
+			# The row stays, so the change message should say "changed", not "deleted".
+			self.deleted_objects.remove(obj)
+			self.changed_objects.append((obj, ["suppressed"]))
+
+
+class PatentTrialLinkAddFormSet(forms.BaseInlineFormSet):
+	"""Blank "add" rows only, for the trial page (``side = "trial"``: the parent is the
+	trial and each row picks a patent) or the patent page (``side = "patent"``). Saving a
+	row links the pair through patent_trial_links.link_patent_trial (a manual link,
+	attributed to the user) instead of saving the form, and a pair that already has a
+	visible link is a form error. A pair whose link is hidden is allowed: linking brings
+	it back."""
+
+	side = "trial"
+	# Set by the inline: who is saving, and whether they may add.
+	link_user = None
+	link_allowed = False
+
+	@property
+	def picked_field(self):
+		return "patent" if self.side == "trial" else "trial"
+
+	def get_queryset(self):
+		return self.model._default_manager.none()
+
+	def initial_form_count(self):
+		# Whatever a crafted POST says, every submitted row is a new one.
+		return 0
+
+	def validate_unique(self):
+		# The unique (patent, trial) constraint would also reject a pair whose link is
+		# hidden, which linking is meant to restore. clean() checks the visible ones.
+		pass
+
+	def _pair(self, picked):
+		if self.side == "trial":
+			return picked, self.instance
+		return self.instance, picked
+
+	def clean(self):
+		super().clean()
+		field = self.picked_field
+		seen = set()
+		for form in self.forms:
+			picked = getattr(form, "cleaned_data", {}).get(field)
+			if picked is None:
+				continue
+			if picked.pk in seen:
+				form.add_error(field, f"This {field} is listed twice.")
+			elif self.instance.pk:
+				patent, trial = self._pair(picked)
+				if visible_patent_trial_link(patent, trial) is not None:
+					form.add_error(field, f"This {field} is already linked to the {self.side}.")
+			seen.add(picked.pk)
+
+	def save_new(self, form, commit=True):
+		if not self.link_allowed:
+			raise PermissionDenied
+		patent, trial = self._pair(form.cleaned_data[self.picked_field])
+		link, _created = link_patent_trial(patent, trial, self.link_user)
+		return link
+
+
+class PatentTrialLinkAddForm(forms.ModelForm):
+	class Meta:
+		model = PatentTrialLink
+		fields = []
+
+	def validate_unique(self):
+		pass  # See PatentTrialLinkAddFormSet.validate_unique.
+
+	def validate_constraints(self):
+		pass
+
+
+class _PatentTrialLinkListInline(TeamEditInlineMixin, admin.TabularInline):
+	"""The links of a trial or a patent, every row shown, hidden ones included. Read-only:
+	new links go through the matching add inline. The delete box is shown on a visible row
+	of a page the user may edit."""
+
+	model = PatentTrialLink
+	formset = PatentTrialLinkListFormSet
+	extra = 0
+	readonly_fields = [
+		"other_label",
+		"source",
+		"timing",
+		"days_before_start",
+		"days_after_completion",
+		"basis",
+		"sponsor",
+		"suppressed",
+		"discovered_date",
+		"created_by",
+	]
+	fields = readonly_fields
+	classes = ["collapse"]
+	# The other end of the link on this page ("patent" on the trial page, "trial" on the
+	# patent page) and its model. Set by the subclasses.
+	counterpart_field = None
+	counterpart_model = None
+
+	def get_queryset(self, request):
+		qs = (
+			super()
+			.get_queryset(request)
+			.select_related("patent", "trial", "sponsor", "created_by")
+			.order_by("source", "id")
+		)
+		if not request.user.is_superuser:
+			# Only links whose other end this user's organisations can see, the same rows
+			# the add inline's picker offers. A link to another organisation's patent (or
+			# trial) is neither shown nor removable here, and since the formset only
+			# accepts rows from this queryset, a forged delete of one is refused too.
+			visible = self.admin_site._registry[self.counterpart_model].get_queryset(request)
+			qs = qs.filter(**{f"{self.counterpart_field}__in": visible.order_by().values("pk")})
+		return qs
+
+	def has_add_permission(self, request, obj=None):
+		return False  # New links come from the add inline.
+
+
+class _PatentTrialLinkAddInline(TeamEditInlineMixin, admin.TabularInline):
+	"""Add a patent-trial link by hand, from the trial page or the patent page. Shown only
+	to someone who may edit the page's own record, and only as blank rows (the existing
+	links are in the list inline, which can't be both locked and have an editable new
+	row).
+
+	The picker is an autocomplete, which scopes to the user's organisation but can't stop
+	a forged id, so the field validates against the same scope.
+	"""
+
+	model = PatentTrialLink
+	formset = PatentTrialLinkAddFormSet
+	form = PatentTrialLinkAddForm
+	extra = 0
+	can_delete = False
+	# The page this inline is on: "trial" or "patent". Set by the subclasses.
+	side = "trial"
+
+	@property
+	def picked_field(self):
+		return "patent" if self.side == "trial" else "trial"
+
+	def get_queryset(self, request):
+		return super().get_queryset(request).none()
+
+	def has_view_permission(self, request, obj=None):
+		return False  # There is nothing to view: existing links are in the list above.
+
+	def has_change_permission(self, request, obj=None):
+		return self.has_add_permission(request, obj)
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+	def formfield_for_foreignkey(self, db_field, request, **kwargs):
+		picked_model, label = (Patents, patent_label) if self.side == "trial" else (Trials, trial_label)
+		if db_field.name == self.picked_field and not request.user.is_superuser:
+			# The same rows the picked model's admin shows this user (source -> team ->
+			# organisation). The autocomplete endpoint applies it too, but this field
+			# validates against its own queryset: without it a forged id gets through.
+			kwargs["queryset"] = self.admin_site._registry[picked_model].get_queryset(request)
+		field = super().formfield_for_foreignkey(db_field, request, **kwargs)
+		if db_field.name == self.picked_field:
+			field.label_from_instance = label
+		return field
+
+	def get_formset(self, request, obj=None, **kwargs):
+		formset = super().get_formset(request, obj, **kwargs)
+		return type(
+			formset.__name__,
+			(formset,),
+			{
+				"side": self.side,
+				"link_user": request.user,
+				"link_allowed": self.has_add_permission(request, obj),
+			},
+		)
+
+
+class TrialPatentLinkInline(_PatentTrialLinkListInline):
+	"""The patents linked to a trial."""
+
+	fk_name = "trial"
+	counterpart_field = "patent"
+	counterpart_model = Patents
+	verbose_name = "Linked patent"
+	verbose_name_plural = "Linked patents"
+
+	@admin.display(description="Patent")
+	def other_label(self, obj):
+		return patent_label(obj.patent)
+
+
+class TrialPatentLinkAddInline(_PatentTrialLinkAddInline):
+	fk_name = "trial"
+	side = "trial"
+	fields = ["patent"]
+	autocomplete_fields = ["patent"]
+	verbose_name = "patent link"
+	verbose_name_plural = "Add a patent link"
+
+
+class PatentTrialLinkInline(_PatentTrialLinkListInline):
+	"""The trials linked to a patent."""
+
+	fk_name = "patent"
+	counterpart_field = "trial"
+	counterpart_model = Trials
+	verbose_name = "Linked trial"
+	verbose_name_plural = "Linked trials"
+
+	@admin.display(description="Trial")
+	def other_label(self, obj):
+		return trial_label(obj.trial)
+
+
+class PatentTrialLinkAddInline(_PatentTrialLinkAddInline):
+	fk_name = "patent"
+	side = "patent"
+	fields = ["trial"]
+	autocomplete_fields = ["trial"]
+	verbose_name = "trial link"
+	verbose_name_plural = "Add a trial link"
 
 
 class TrialArticleReferenceInline(admin.TabularInline):
@@ -2138,6 +2392,8 @@ class TrialAdmin(
 	inlines = [
 		TrialOrgContentInline,
 		TrialArticleReferenceInline,
+		TrialPatentLinkInline,
+		TrialPatentLinkAddInline,
 		TrialCategoryAssignmentInline,
 		TrialCountryInline,
 		TrialSiteInline,
@@ -5057,31 +5313,16 @@ class PatentCategoryAssignmentInline(_BaseCategoryAssignmentInline):
 	model = PatentCategoryAssignment
 
 
-class PatentTrialLinkInline(admin.TabularInline):
-	"""Read-only list of the trials a patent is linked to."""
-
-	model = PatentTrialLink
-	extra = 0
-	can_delete = False
-	fields = ("trial", "sponsor", "timing", "days_after_completion", "basis", "suppressed")
-	readonly_fields = fields
-
-	def has_add_permission(self, request, obj=None):
-		return False
-
-	def get_queryset(self, request):
-		return super().get_queryset(request).select_related("trial", "sponsor")
-
-
 class LinkBasisFilter(admin.SimpleListFilter):
-	"""Defaults to the strong signal (a shared team category); 'all' shows both."""
+	"""Defaults to the strong signal (a shared team category) plus the links an editor
+	added, whatever they share (the API's rule too); 'all' shows everything."""
 
 	title = "basis"
 	parameter_name = "basis"
 
 	def lookups(self, request, model_admin):
 		return (
-			("category", "Shared category (strong)"),
+			("category", "Shared category or added by an editor"),
 			("subject", "Shared subject only"),
 			("all", "All"),
 		)
@@ -5098,8 +5339,12 @@ class LinkBasisFilter(admin.SimpleListFilter):
 			}
 
 	def queryset(self, request, queryset):
-		if self.value() in ("category", "subject"):
-			return queryset.filter(basis=self.value())
+		if self.value() == "category":
+			return queryset.filter(
+				Q(basis=PatentTrialLink.BASIS_CATEGORY) | Q(source=PatentTrialLink.SOURCE_MANUAL)
+			)
+		if self.value() == "subject":
+			return queryset.filter(basis=PatentTrialLink.BASIS_SUBJECT)
 		return queryset
 
 
@@ -5214,11 +5459,13 @@ class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 		"timing",
 		"days_after_completion",
 		"basis",
+		"source",
+		"created_by",
 		"suppressed",
 		"discovered_date",
 	]
-	list_filter = [LinkBasisFilter, "timing", "suppressed"]
-	list_select_related = ["patent", "trial", "sponsor"]
+	list_filter = [LinkBasisFilter, "source", "timing", "suppressed"]
+	list_select_related = ["patent", "trial", "sponsor", "created_by"]
 	ordering = ["patent_id", "trial_id"]
 	search_fields = ["patent__title", "trial__title", "sponsor__name"]
 	readonly_fields = [
@@ -5226,8 +5473,11 @@ class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 		"trial",
 		"sponsor",
 		"timing",
+		"days_before_start",
 		"days_after_completion",
 		"basis",
+		"source",
+		"created_by",
 		"discovered_date",
 	]
 	fields = readonly_fields + ["suppressed"]
@@ -5250,6 +5500,14 @@ class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 		return _patent_export_response(
 			self, request, patent_qs, "export_patents_xlsx_action"
 		)
+
+	def has_delete_permission(self, request, obj=None):
+		# Editors remove a link from the trial or patent page, where an editor's link is
+		# deleted and a detected one hidden. Deleting here (the delete view or the
+		# "delete selected" action) would hard-delete a detected link, and detection would
+		# recreate it, so it is for superusers only. The inlines check the model
+		# permission themselves and are not affected.
+		return request.user.is_superuser
 
 	def has_add_permission(self, request):
 		return False
@@ -5400,6 +5658,7 @@ class PatentAdmin(
 		PatentPublicationInline,
 		PatentApplicantInline,
 		PatentTrialLinkInline,
+		PatentTrialLinkAddInline,
 		PatentCategoryAssignmentInline,
 		PatentSiteContentInline,
 	]
