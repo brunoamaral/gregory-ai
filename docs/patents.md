@@ -138,20 +138,63 @@ is noisy for sponsors with many trials and patents in one subject.
 | `--recent --days N` | Only patents discovered in the last N days (default 30). |
 | `--patent-id N` | One patent. |
 | `--after-months N` | Length of the "after" window (default 24). |
-| `--reset` | Delete the selected patents' non-suppressed links first. |
+| `--reset` | Delete the selected patents' detected, non-suppressed links first. Links an editor added are kept. |
 | `--dry-run` | Report without writing. |
 
 Links that no longer qualify are removed on the next run. Links an editor suppressed in
-the admin are never recreated, modified or removed. Two limits are inherent to patents:
+the admin are never recreated, modified or removed, and neither are links an editor added
+(see below). Two limits are inherent to patents:
 applications publish about 18 months after the priority date, so a filing made during a
 trial can take that long to show up; and a later PCT or regional filing does not move the
 family's priority date.
 
 The admin summary email gains a "Sponsors filing patents around their trials" section
 listing links not yet sent to that subscriber for that list, discovered within the list's
-look-back window (category basis first, at most 15, then a count of the rest). A link
-counts for a list only when a subject shared by the patent and the trial is one of the
-list's subjects.
+look-back window (links an editor added first, then category basis, at most 15, then a
+count of the rest). A link counts for a list only when a subject shared by the patent and
+the trial is one of the list's subjects, so a link between a patent and a trial that share
+no subject never appears in it. A link an editor added reads "added by an editor", with the
+timing when known ("filed 1,241 days before"), and prints no sponsor when it has none.
+
+### Links added by editors
+
+Detection cannot find every link an editor can see is right. It needs a shared sponsor row
+and a priority date during the trial or up to 24 months after it, so it misses a patent
+filed years before the trial (a drug is usually patented before it is tested in people) and
+a patent whose applicant and trial sponsor are two rows for the same company. An editor can
+therefore add a link by hand. It is a `PatentTrialLink` with `source="manual"` and
+`created_by` set to the editor; one row per (patent, trial), as for detected links.
+
+The editor does not choose the details. They are worked out once, when the link is made,
+by `gregory/services/patent_trial_links.py` (`describe_link`), and any of them can be empty:
+
+- `sponsor`: the trial's sponsor when it is also one of the patent's applicants, else empty.
+- `timing`: `before` when the patent's earliest priority date is earlier than the trial's
+  start (`days_before_start` says by how much), `during` inside the trial's window,
+  `after` once the trial has ended (`days_after_completion`, with no 24-month limit). Empty
+  when the patent has no priority date or the trial's dates cannot be determined.
+- `basis`: `category` or `subject` when the two share one, else empty. The editor is the
+  judge, so a pair that shares neither can still be linked.
+
+They are not recomputed if the trial's dates change later.
+
+How the two interact:
+
+- Detection never creates, changes or removes a manual link. A pair that has one is skipped
+  (the summary line counts "N manual link(s) left alone"), the removal of links that no
+  longer match leaves it, and `--reset` keeps it.
+- Adding a link for a pair that already has a visible link (detected or manual) changes
+  nothing. A detected link that an editor had hidden is brought back and becomes manual, so
+  it no longer disappears when detection stops matching.
+- Removing a manual link deletes it (its history records the deletion). Removing a detected
+  link hides it, and detection never recreates it.
+- A manual link is visible whatever its basis, including none, to every caller who can see
+  both the patent and the trial. `include_subject_links` only controls detected
+  subject-basis links. See [Trial links](03-api-and-rss-feeds.md#trial-links).
+
+The model and the rules are in place; the admin pages and the editor API for adding and
+removing links come in later changes, so for now a manual link is created from the shell
+with `link_patent_trial(patent, trial, user)`.
 
 ## Administration
 
@@ -254,7 +297,7 @@ no visible subject go on a "No subject" sheet, so none disappears silently.
 | About this file | Source, licence, citation, the EPO attribution and terms of use, and a summary of every sheet. |
 | One per subject | One row per family, newest priority date first: identity, abstract, claims (cut off at Excel's 32,767-character cell limit; `claims_length` and `claims_truncated` show it), classification, inventors, applicants (raw name and matched sponsor), publication summary, subjects, teams, sources, categories and trial-link summary. A family in two subjects appears on both sheets. |
 | No subject | Admin export only: selected families with no visible subject. |
-| Trial links | One row per [sponsor-timing link](#sponsor-timing-signal), dismissed ones included and flagged, with the trial's details and its window (`trial_window_start`/`end`, computed by the detector's own function). |
+| Trial links | One row per [sponsor-timing link](#sponsor-timing-signal), dismissed ones included and flagged, with the trial's details and its window (`trial_window_start`/`end`, computed by the detector's own function). `source` says whether detection or an editor made the link; [editor links](#links-added-by-editors) come first and can have no sponsor or basis. In the patent sheet, the trial-links summary counts them as `manual: N` before the detected ones. |
 | Publications | One row per published document of every exported family. |
 | Categories | Each category's search terms and the patent matching settings. |
 | Glossary | A description of every column. |

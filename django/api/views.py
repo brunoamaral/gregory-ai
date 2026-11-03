@@ -3505,11 +3505,14 @@ class PatentViewSet(
 
 	# Trial links:
 	`trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
-	not suppressed, its trial is visible to the caller, and its basis is
+	not suppressed, its trial is visible to the caller, and either its basis is
 	`category`, meaning the patent and the trial share a team category,
-	typically the molecule. Links that rest on a shared subject only (`basis`
-	= `subject`) are 82% of all links and noisy for large sponsors; they appear
-	only with `?include_subject_links=true`. The mirror is `patent_links` on
+	typically the molecule, or an editor added it (`source` = `manual`).
+	Detected links that rest on a shared subject only (`basis` = `subject`)
+	are 82% of all links and noisy for large sponsors; they appear only with
+	`?include_subject_links=true`. An editor's link can have no `timing`,
+	`basis` or `sponsor_id`, and its `timing` can be `before` (with
+	`days_before_start`). The mirror is `patent_links` on
 	`GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
 
 	# Stats Endpoint:

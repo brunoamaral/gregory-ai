@@ -12,9 +12,11 @@ A link is visible when ALL of these hold:
   - its trial carries a subject in ``request.visible_subject_ids``;
   - its patent carries a subject in ``request.visible_patent_subject_ids``,
     which only counts sites with ``patents_enabled`` on;
-  - ``basis == "category"``, unless the caller passed
+  - ``basis == "category"`` or ``source == "manual"``, unless the caller passed
     ``include_subject_links=true``. Subject-basis links are 82% of all links
-    and are noisy for large sponsors, so they are opt-in.
+    and are noisy for large sponsors, so they are opt-in. A link an editor
+    added by hand is always shown, whatever its basis (even none): the editor
+    is the judge, not the sponsor-and-subject heuristic.
 
 The trial and patent checks are not redundant with the viewset's own scoping.
 ``/trials/`` selects a trial on the strength of one of its subjects, which says
@@ -31,7 +33,7 @@ that fallback: it fails closed and returns no links, since nothing says who
 is asking.
 """
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 
 from gregory.models import PatentTrialLink, Patents, Trials
 
@@ -66,7 +68,9 @@ def visible_patent_trial_links_queryset(request, include_subject_links=None):
 
 	qs = PatentTrialLink.objects.filter(suppressed=False)
 	if not include_subject_links:
-		qs = qs.filter(basis=PatentTrialLink.BASIS_CATEGORY)
+		qs = qs.filter(
+			Q(basis=PatentTrialLink.BASIS_CATEGORY) | Q(source=PatentTrialLink.SOURCE_MANUAL)
+		)
 
 	trial_subject_ids = getattr(request, "visible_subject_ids", None)
 	if trial_subject_ids is not None:

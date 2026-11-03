@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 
-from django.db.models import F, Prefetch, GeneratedField
+from django.db.models import Case, F, GeneratedField, Prefetch, When
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
@@ -22,7 +22,7 @@ from gregory.exports.xlsx_common import (
 	_sanitise_sheet_name,
 	_write_safe_text_cell,
 )
-from gregory.management.commands.detect_patent_trial_links import trial_window
+from gregory.services.patent_trial_links import trial_window
 from gregory.management.commands.feedreader_patents_ops import espacenet_url, is_grant_kind
 from gregory.models import (
 	PatentApplicant,
@@ -105,7 +105,9 @@ _PLACED_COLS = (
 
 TRIAL_LINK_COLS = [
 	"link_id",
+	"source",
 	"timing",
+	"days_before_start",
 	"days_after_completion",
 	"basis",
 	"suppressed",
@@ -369,15 +371,27 @@ PATENT_GLOSSARY = {
 	),
 	"trial_links_summary": (
 		"Trial links summary",
-		"Links by basis and timing, e.g. category: 2 during, 1 after; subject: 4 during; suppressed: 1. "
+		"Links added by an editor first, then detected links by basis and timing, e.g. manual: 1; "
+		"category: 2 during, 1 after; subject: 4 during; suppressed: 1. "
 		"See the Data source sheet for what these terms mean.",
 	),
 	# Trial links
 	"link_id": ("Link ID", "Gregory's number for this link."),
+	"source": (
+		"Source",
+		"auto: detected by Gregory from a shared sponsor and the dates. manual: added by an editor, "
+		"who judged the patent relevant to the trial.",
+	),
 	"timing": (
 		"Timing",
 		"during: the patent's priority date falls inside the trial's running period. after: it falls "
-		"within 24 months after the trial ended.",
+		"after the trial ended (within 24 months for an auto link; any time for a manual one). "
+		"before: it predates the trial's start (manual links only). Empty when the trial's dates "
+		"are unknown.",
+	),
+	"days_before_start": (
+		"Days before start",
+		"For 'before' links, days between the patent's priority date and the trial's start.",
 	),
 	"days_after_completion": (
 		"Days after completion",
@@ -386,11 +400,12 @@ PATENT_GLOSSARY = {
 	"basis": (
 		"Basis",
 		"category: the patent and the trial share a category (usually the same molecule), the strong "
-		"signal. subject: they only share a research subject, which is noisy for large sponsors.",
+		"signal. subject: they only share a research subject, which is noisy for large sponsors. "
+		"Empty on a manual link whose patent and trial share neither.",
 	),
 	"suppressed": ("Dismissed", "True when an editor dismissed the link as not meaningful."),
 	"discovered_date": ("Discovered", "When Gregory created the link."),
-	"sponsor_id": ("Sponsor ID", "Gregory id of the sponsor that is both a patent applicant and the trial's sponsor."),
+	"sponsor_id": ("Sponsor ID", "Gregory id of the sponsor that is both a patent applicant and the trial's sponsor. Empty on a manual link when they share none."),
 	"sponsor_name": ("Sponsor", "Name of that shared sponsor."),
 	"sponsor_type": ("Sponsor type", "Kind of organisation, where known."),
 	"shared_subjects": ("Shared subjects", "Research subjects that both the patent and the trial are filed under."),
@@ -603,7 +618,10 @@ DATA_SOURCE_SECTIONS = [
 		"date falls inside the trial's period; \"after\" means it falls up to 24 months after the "
 		"trial ended. The basis column says how strong the link is: \"category\" means the patent "
 		"and the trial share a category, usually the same molecule; \"subject\" means they only "
-		"share a research subject, which is noisy for sponsors with many trials. Dismissed "
+		"share a research subject, which is noisy for sponsors with many trials. An editor can also "
+		"link a patent to a trial by hand (source \"manual\"): such a link is never changed or "
+		"removed by detection, can be \"before\" (the patent predates the trial's start), has no "
+		"24-month limit, and may have no sponsor or basis. Dismissed "
 		"(suppressed) links are links an editor judged not meaningful; they stay in the Trial links "
 		"sheet, flagged. Two built-in delays apply: a patent is published about 18 months after "
 		"filing, so a recent filing may not be visible yet; and the priority date is fixed at the "
@@ -739,13 +757,19 @@ def _applicant_cell(applicant):
 def _trial_links_summary(links):
 	counts = {}
 	suppressed = 0
+	manual = 0
 	for link in links:
 		if link.suppressed:
 			suppressed += 1
 			continue
+		if link.source == PatentTrialLink.SOURCE_MANUAL:
+			manual += 1
+			continue
 		counts.setdefault(link.basis, {}).setdefault(link.timing, 0)
 		counts[link.basis][link.timing] += 1
 	parts = []
+	if manual:
+		parts.append(f"manual: {manual}")
 	for basis in (PatentTrialLink.BASIS_CATEGORY, PatentTrialLink.BASIS_SUBJECT):
 		timings = counts.get(basis)
 		if timings:
@@ -912,8 +936,10 @@ def _build_trial_links_sheet(wb, patent_ids, scope, context):
 		qs.select_related("patent", "trial", "sponsor")
 		.prefetch_related("trial__subjects", "trial__categories")
 		.order_by(
-			# category first, then not-suppressed first, then newest priority date
-			F("basis").asc(),
+			# an editor's links first, then category, then not-suppressed first,
+			# then newest priority date
+			Case(When(source=PatentTrialLink.SOURCE_MANUAL, then=0), default=1),
+			F("basis").asc(nulls_last=True),
 			"suppressed",
 			F("patent__earliest_priority_date").desc(nulls_last=True),
 			"patent_id",
@@ -941,14 +967,16 @@ def _build_trial_links_sheet(wb, patent_ids, scope, context):
 		w_end = window[1] if window and window[1] else ""
 		values = {
 			"link_id": link.pk,
+			"source": link.source,
 			"timing": link.timing,
+			"days_before_start": link.days_before_start,
 			"days_after_completion": link.days_after_completion,
 			"basis": link.basis,
 			"suppressed": link.suppressed,
 			"discovered_date": link.discovered_date,
-			"sponsor_id": sponsor.pk,
-			"sponsor_name": sponsor.name,
-			"sponsor_type": sponsor.sponsor_type,
+			"sponsor_id": sponsor.pk if sponsor else None,
+			"sponsor_name": sponsor.name if sponsor else None,
+			"sponsor_type": sponsor.sponsor_type if sponsor else None,
 			"shared_subjects": _join(shared_subjects),
 			"shared_categories": _join(shared_categories),
 			"patent_id": patent.pk,

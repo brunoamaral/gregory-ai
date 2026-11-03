@@ -5649,11 +5649,14 @@ paths:
 
         # Trial links:
         `trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
-        not suppressed, its trial is visible to the caller, and its basis is
+        not suppressed, its trial is visible to the caller, and either its basis is
         `category`, meaning the patent and the trial share a team category,
-        typically the molecule. Links that rest on a shared subject only (`basis`
-        = `subject`) are 82% of all links and noisy for large sponsors; they appear
-        only with `?include_subject_links=true`. The mirror is `patent_links` on
+        typically the molecule, or an editor added it (`source` = `manual`).
+        Detected links that rest on a shared subject only (`basis` = `subject`)
+        are 82% of all links and noisy for large sponsors; they appear only with
+        `?include_subject_links=true`. An editor's link can have no `timing`,
+        `basis` or `sponsor_id`, and its `timing` can be `before` (with
+        `days_before_start`). The mirror is `patent_links` on
         `GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
 
         # Stats Endpoint:
@@ -5748,7 +5751,8 @@ paths:
         schema:
           type: boolean
         description: 'true: families with at least one visible, unsuppressed link
-          to a trial; false: without. Counts category-basis links only unless include_subject_links=true.'
+          to a trial; false: without. Counts category-basis links and links an editor
+          added by hand; subject-basis detected links only with include_subject_links=true.'
       - in: query
         name: include
         schema:
@@ -5772,8 +5776,9 @@ paths:
         schema:
           type: boolean
         description: Count and show links that rest on a shared subject only. They
-          are noisy for large sponsors, so by default only links on a shared category
-          are used (has_trial_link, trial_links, trial_links_count).
+          are noisy for large sponsors, so by default only links on a shared category,
+          and links an editor added by hand, are used (has_trial_link, trial_links,
+          trial_links_count).
       - in: query
         name: ordering
         schema:
@@ -5948,11 +5953,14 @@ paths:
 
         # Trial links:
         `trial_links` (and `trial_links_count`, `has_trial_link`) show a link only when it is
-        not suppressed, its trial is visible to the caller, and its basis is
+        not suppressed, its trial is visible to the caller, and either its basis is
         `category`, meaning the patent and the trial share a team category,
-        typically the molecule. Links that rest on a shared subject only (`basis`
-        = `subject`) are 82% of all links and noisy for large sponsors; they appear
-        only with `?include_subject_links=true`. The mirror is `patent_links` on
+        typically the molecule, or an editor added it (`source` = `manual`).
+        Detected links that rest on a shared subject only (`basis` = `subject`)
+        are 82% of all links and noisy for large sponsors; they appear only with
+        `?include_subject_links=true`. An editor's link can have no `timing`,
+        `basis` or `sponsor_id`, and its `timing` can be `before` (with
+        `days_before_start`). The mirror is `patent_links` on
         `GET /trials/{id}/` and the `has_patent_link` filter on `/trials/`.
 
         # Stats Endpoint:
@@ -7289,9 +7297,10 @@ paths:
         schema:
           type: boolean
         description: 'true: trials with at least one visible, unsuppressed link to
-          a patent family; false: without. Counts category-basis links only unless
-          include_subject_links=true. Only sites with patents enabled count: for any
-          other caller this matches nothing.'
+          a patent family; false: without. Counts category-basis links and links an
+          editor added by hand; subject-basis detected links only with include_subject_links=true.
+          Only sites with patents enabled count: for any other caller this matches
+          nothing.'
       - in: query
         name: has_results
         schema:
@@ -7347,7 +7356,8 @@ paths:
           type: boolean
         description: Count and show patent links that rest on a shared subject only
           (has_patent_link, patent_links on a single trial). They are noisy for large
-          sponsors, so by default only links on a shared category are used.
+          sponsors, so by default only links on a shared category, and links an editor
+          added by hand, are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -8206,9 +8216,10 @@ paths:
         schema:
           type: boolean
         description: 'true: trials with at least one visible, unsuppressed link to
-          a patent family; false: without. Counts category-basis links only unless
-          include_subject_links=true. Only sites with patents enabled count: for any
-          other caller this matches nothing.'
+          a patent family; false: without. Counts category-basis links and links an
+          editor added by hand; subject-basis detected links only with include_subject_links=true.
+          Only sites with patents enabled count: for any other caller this matches
+          nothing.'
       - in: query
         name: has_results
         schema:
@@ -8256,7 +8267,8 @@ paths:
           type: boolean
         description: Count and show patent links that rest on a shared subject only
           (has_patent_link, patent_links on a single trial). They are noisy for large
-          sponsors, so by default only links on a shared category are used.
+          sponsors, so by default only links on a shared category, and links an editor
+          added by hand, are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -8868,14 +8880,15 @@ paths:
                   type: boolean
                   description: 'true: trials with at least one visible, unsuppressed
                     link to a patent family; false: without. Counts category-basis
-                    links only unless include_subject_links=true. Only sites with
-                    patents enabled count: for any other caller this matches nothing.'
+                    links and links an editor added by hand; subject-basis detected
+                    links only with include_subject_links=true. Only sites with patents
+                    enabled count: for any other caller this matches nothing.'
                 include_subject_links:
                   type: boolean
                   description: Count and show patent links that rest on a shared subject
                     only (has_patent_link, patent_links on a single trial). They are
                     noisy for large sponsors, so by default only links on a shared
-                    category are used.
+                    category, and links an editor added by hand, are used.
                 subjects:
                   type: array
                   items:
@@ -9114,9 +9127,10 @@ paths:
         schema:
           type: boolean
         description: 'true: trials with at least one visible, unsuppressed link to
-          a patent family; false: without. Counts category-basis links only unless
-          include_subject_links=true. Only sites with patents enabled count: for any
-          other caller this matches nothing.'
+          a patent family; false: without. Counts category-basis links and links an
+          editor added by hand; subject-basis detected links only with include_subject_links=true.
+          Only sites with patents enabled count: for any other caller this matches
+          nothing.'
       - in: query
         name: has_results
         schema:
@@ -9153,7 +9167,8 @@ paths:
           type: boolean
         description: Count and show patent links that rest on a shared subject only
           (has_patent_link, patent_links on a single trial). They are noisy for large
-          sponsors, so by default only links on a shared category are used.
+          sponsors, so by default only links on a shared category, and links an editor
+          added by hand, are used.
       - in: query
         name: inclusion_agemax
         schema:
@@ -12651,10 +12666,30 @@ components:
           readOnly: true
         sponsor_id:
           type: integer
+          nullable: true
           description: The sponsor shared by the patent (as applicant) and the trial.
+            NULL only on a manual link whose patent and trial share no sponsor.
           readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/PatentTrialLinkSourceEnum'
+          description: |-
+            Who made the link. Detection never creates, changes or deletes a 'manual' row.
+
+            * `auto` - Detected by the pipeline
+            * `manual` - Added by an editor
         timing:
-          $ref: '#/components/schemas/TimingEnum'
+          nullable: true
+          description: |-
+            When the patent was first filed against the trial. Detected links are 'during' or 'after'. A manual link is also 'before' when the patent predates the trial, and NULL when the trial's dates are unknown.
+
+            * `before` - Filed before the trial started
+            * `during` - Filed during the trial
+            * `after` - Filed after the trial ended
+          oneOf:
+          - $ref: '#/components/schemas/TimingEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         days_after_completion:
           type: integer
           maximum: 2147483647
@@ -12662,20 +12697,36 @@ components:
           nullable: true
           description: 'For ''after'' links: days between the trial''s completion
             and the patent''s earliest priority date.'
+        days_before_start:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: 'For ''before'' links: days between the patent''s earliest
+            priority date and the trial''s start.'
         basis:
-          allOf:
-          - $ref: '#/components/schemas/BasisEnum'
+          nullable: true
           description: |-
-            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.
+            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors. On a manual link NULL means they share neither.
 
             * `category` - Shared team category
             * `subject` - Shared subject only
+          oneOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
       required:
-      - basis
       - sponsor_id
-      - timing
       - trial_id
       - trial_title
+    PatentTrialLinkSourceEnum:
+      enum:
+      - auto
+      - manual
+      type: string
+      description: |-
+        * `auto` - Detected by the pipeline
+        * `manual` - Added by an editor
     PatentsByPriorityYear:
       type: object
       description: One entry of ``GET /patents/stats/`` ``by_priority_year``.
@@ -13048,10 +13099,12 @@ components:
       - id
     TimingEnum:
       enum:
+      - before
       - during
       - after
       type: string
       description: |-
+        * `before` - Filed before the trial started
         * `during` - Filed during the trial
         * `after` - Filed after the trial ended
     TokenObtainPair:
@@ -13803,6 +13856,10 @@ components:
       description: |-
         A patent family linked to a trial, as nested on the trial detail
         (``patent_links``). The mirror of ``PatentTrialLinkSerializer``.
+
+        ``source`` says who made the link: ``auto`` (detected) or ``manual`` (an editor).
+        A manual link can have no ``timing``, ``basis`` or ``sponsor_id`` (null), and its
+        ``timing`` can be ``before``, with ``days_before_start`` set.
       properties:
         patent_id:
           type: integer
@@ -13813,8 +13870,26 @@ components:
         representative_publication:
           type: string
           readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/PatentTrialLinkSourceEnum'
+          description: |-
+            Who made the link. Detection never creates, changes or deletes a 'manual' row.
+
+            * `auto` - Detected by the pipeline
+            * `manual` - Added by an editor
         timing:
-          $ref: '#/components/schemas/TimingEnum'
+          nullable: true
+          description: |-
+            When the patent was first filed against the trial. Detected links are 'during' or 'after'. A manual link is also 'before' when the patent predates the trial, and NULL when the trial's dates are unknown.
+
+            * `before` - Filed before the trial started
+            * `during` - Filed during the trial
+            * `after` - Filed after the trial ended
+          oneOf:
+          - $ref: '#/components/schemas/TimingEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         days_after_completion:
           type: integer
           maximum: 2147483647
@@ -13822,19 +13897,27 @@ components:
           nullable: true
           description: 'For ''after'' links: days between the trial''s completion
             and the patent''s earliest priority date.'
+        days_before_start:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+          description: 'For ''before'' links: days between the patent''s earliest
+            priority date and the trial''s start.'
         basis:
-          allOf:
-          - $ref: '#/components/schemas/BasisEnum'
+          nullable: true
           description: |-
-            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.
+            'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors. On a manual link NULL means they share neither.
 
             * `category` - Shared team category
             * `subject` - Shared subject only
+          oneOf:
+          - $ref: '#/components/schemas/BasisEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
       required:
-      - basis
       - patent_id
       - representative_publication
-      - timing
       - title
     TrialSite:
       type: object

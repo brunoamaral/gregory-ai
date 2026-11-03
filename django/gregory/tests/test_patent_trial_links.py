@@ -86,6 +86,7 @@ class LinkTestCase(TestCase):
 		)
 		Trials.objects.filter(pk=trial.pk).update(primary_sponsor_normalized=sponsor or self.sponsor)
 		trial.subjects.add(subject or self.subject)
+		trial.refresh_from_db()  # the sponsor was set with update()
 		return trial
 
 	def make_patent(self, priority=D(2021, 3, 1), subject=None, sponsor=None, individual=False):
@@ -532,6 +533,70 @@ class AdminSummaryLinksTests(LinkTestCase):
 		self.assertIn("SPONSORS FILING PATENTS AROUND THEIR TRIALS", text)
 		self.assertIn("Acme Neuro filed during", text)
 		self.assertIn("shared category", text)
+
+	def manual_link(self, **values):
+		patent, trial = self.make_patent(D(2023, 5, 9)), self.make_trial(
+			status="Recruiting", start=D(2026, 10, 1), end=None
+		)
+		defaults = {
+			"patent": patent,
+			"trial": trial,
+			"source": PatentTrialLink.SOURCE_MANUAL,
+			"sponsor": None,
+			"timing": "before",
+			"days_before_start": 1241,
+			"basis": None,
+		}
+		defaults.update(values)
+		return PatentTrialLink.objects.create(**defaults)
+
+	def test_manual_links_come_first(self):
+		self.manual_link(basis="subject")
+		links, _ = self.links()
+		self.assertEqual(
+			[(l.source, l.basis) for l in links],
+			[("manual", "subject"), ("auto", "category"), ("auto", "subject")],
+		)
+
+	def test_a_manual_link_with_no_sponsor_and_before_timing_renders_in_both_templates(self):
+		from django.template.loader import get_template
+
+		self.manual_link(basis="subject")
+		links, extra = self.links()
+		context = {"patent_links": links, "patent_links_extra": extra, "content_stats": {}, "title": "Gregory"}
+		text = get_template("emails/admin_summary.txt").render(context)
+		html = get_template("emails/admin_summary.html").render(context)
+		for body in (text, html):
+			self.assertIn("filed 1,241 days before", body)
+			self.assertIn("added by an editor", body)
+			# A NULL sponsor prints nothing, not "None" or an empty name
+			self.assertNotIn("None", body)
+		self.assertIn("Acme Neuro filed during", text)
+		self.assertIn("shared category", text)
+		manual_line = next(l for l in text.splitlines() if "added by an editor" in l)
+		self.assertTrue(manual_line.startswith('- filed 1,241 days before "'))
+
+	def test_a_manual_link_with_unknown_timing_prints_no_timing(self):
+		from django.template.loader import get_template
+
+		self.manual_link(timing=None, days_before_start=None)
+		links, extra = self.links()
+		context = {"patent_links": links, "patent_links_extra": extra, "content_stats": {}, "title": "Gregory"}
+		text = get_template("emails/admin_summary.txt").render(context)
+		html = get_template("emails/admin_summary.html").render(context)
+		manual_line = next(l for l in text.splitlines() if "added by an editor" in l)
+		self.assertTrue(manual_line.startswith('- "'))
+		self.assertNotIn("filed None", text + html)
+		self.assertIn("added by an editor", html)
+
+	def test_after_wording_is_unchanged_for_a_detected_link(self):
+		from gregory.templatetags.gregory_tags import patent_link_basis, patent_link_timing
+
+		link = PatentTrialLink(timing="after", days_after_completion=1, basis="subject")
+		self.assertEqual(patent_link_timing(link), "filed 1 day after")
+		link.days_after_completion = 10
+		self.assertEqual(patent_link_timing(link), "filed 10 days after")
+		self.assertEqual(patent_link_basis(link), "shared subject only")
 
 
 class ReviewFixTests(LinkTestCase):

@@ -21,47 +21,27 @@ Patent applications publish about 18 months after the priority date, so a filing
 during a trial becomes visible up to 18 months later: the signal answers "did the
 sponsor file during or just after the trial", not "is it filing right now".
 
-Links an editor suppressed are never recreated or modified.
+Links an editor suppressed are never recreated or modified. Links an editor added by
+hand (``source="manual"``) are left alone too: a pair that has one is skipped, and neither
+the removal of links that no longer match nor ``--reset`` touches it. They are counted in
+the summary line.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 
-from dateutil.relativedelta import relativedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from gregory.models import PatentTrialLink, Patents, Trials
-from gregory.utils.trial_field_normalizers import TrialRecruitmentStatus
 
-ONGOING_STATUSES = frozenset(
-	{
-		TrialRecruitmentStatus.NOT_YET_RECRUITING.value,
-		TrialRecruitmentStatus.RECRUITING.value,
-		TrialRecruitmentStatus.ENROLLING_BY_INVITATION.value,
-		TrialRecruitmentStatus.ACTIVE_NOT_RECRUITING.value,
-		TrialRecruitmentStatus.SUSPENDED.value,
-	}
+# The rules live in the service, shared with the editor links. Re-exported so
+# `from ...detect_patent_trial_links import trial_window` keeps working.
+from gregory.services.patent_trial_links import (  # noqa: F401
+	DEFAULT_AFTER_MONTHS,
+	ONGOING_STATUSES,
+	classify,
+	trial_window,
 )
-DEFAULT_AFTER_MONTHS = 24
-
-
-def trial_window(trial):
-	"""(start, end) of a trial, where end is None for an open window. Returns None when
-	the window cannot be determined or the trial is withdrawn."""
-	status = trial.recruitment_status_normalized
-	if status == TrialRecruitmentStatus.WITHDRAWN.value:
-		return None
-	start = trial.date_enrollement or (
-		trial.published_date.date() if trial.published_date else None
-	)
-	if start is None:
-		return None
-	if status in ONGOING_STATUSES:
-		return start, None
-	end = trial.primary_completion_date or trial.completion_date
-	if end is None:
-		return None
-	return start, end
 
 
 # PatentTrialLink keeps a history so an editor's suppress/restore shows up, but
@@ -77,21 +57,6 @@ def delete_without_history(queryset):
 	Only for rows nothing depends on (a link has no dependents; its history rows
 	are not foreign keys)."""
 	queryset._raw_delete(queryset.db)
-
-
-def classify(priority_date: date, window, after_months=DEFAULT_AFTER_MONTHS):
-	"""Return (timing, days_after_completion) for a priority date against a trial window,
-	or None when there is no signal."""
-	if window is None or priority_date is None:
-		return None
-	start, end = window
-	if priority_date < start:
-		return None
-	if end is None or priority_date <= end:
-		return "during", None
-	if priority_date <= end + relativedelta(months=after_months):
-		return "after", (priority_date - end).days
-	return None
 
 
 class Command(BaseCommand):
@@ -114,7 +79,7 @@ class Command(BaseCommand):
 		parser.add_argument(
 			"--reset",
 			action="store_true",
-			help="Delete the existing non-suppressed links of the selected patents before scanning.",
+			help="Delete the existing detected, non-suppressed links of the selected patents before scanning. Links added by an editor are kept.",
 		)
 		parser.add_argument("--dry-run", action="store_true", help="Report without writing.")
 
@@ -137,7 +102,7 @@ class Command(BaseCommand):
 		if options["reset"]:
 			resettable = PatentTrialLink.objects.filter(
 				suppressed=False, patent__in=patents
-			)
+			).exclude(source=PatentTrialLink.SOURCE_MANUAL)
 			count = resettable.count()
 			if dry_run:
 				# Remember them so the scan below sees them as already deleted
@@ -158,7 +123,7 @@ class Command(BaseCommand):
 				)
 			return trials_by_sponsor[sponsor_id]
 
-		created = updated = removed = skipped_suppressed = 0
+		created = updated = removed = skipped_suppressed = skipped_manual = 0
 		patent_count = 0
 
 		for patent in patents:
@@ -199,6 +164,9 @@ class Command(BaseCommand):
 						link = PatentTrialLink(patent=patent, trial_id=trial_id, **values)
 						link.skip_history_when_saving = True
 						link.save()
+				elif link.source == PatentTrialLink.SOURCE_MANUAL:
+					# An editor's link: never updated, not even a suppressed one
+					skipped_manual += 1
 				elif link.suppressed:
 					skipped_suppressed += 1
 				elif any(getattr(link, key) != value for key, value in values.items()):
@@ -210,7 +178,11 @@ class Command(BaseCommand):
 						link.save()
 
 			stale = [
-				link for trial_id, link in existing.items() if trial_id not in wanted and not link.suppressed
+				link
+				for trial_id, link in existing.items()
+				if trial_id not in wanted
+				and not link.suppressed
+				and link.source != PatentTrialLink.SOURCE_MANUAL
 			]
 			removed += len(stale)
 			if stale and not dry_run:
@@ -222,6 +194,7 @@ class Command(BaseCommand):
 		self.stdout.write(
 			self.style.SUCCESS(
 				f"{prefix}create {created}, update {updated}, remove {removed} link(s) across "
-				f"{patent_count} patent(s); {skipped_suppressed} suppressed link(s) left alone."
+				f"{patent_count} patent(s); {skipped_suppressed} suppressed link(s) left alone; "
+				f"{skipped_manual} manual link(s) left alone."
 			)
 		)

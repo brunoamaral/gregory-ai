@@ -216,3 +216,35 @@ def author_profile_url(orcid, base=""):
 	if not base:
 		return f"https://orcid.org/{orcid}"
 	return f"{base.rstrip('/')}/{orcid}/"
+
+
+def _days(count):
+	return f"{count:,} day{'' if count == 1 else 's'}"
+
+
+@register.filter
+def patent_link_timing(link):
+	"""How a patent-trial link's timing reads in the admin summary email.
+
+	``filed during``, ``filed 1,241 days before`` or ``filed 5 days after``; an empty
+	string when the timing is unknown (a link an editor added for a trial without dates).
+	One place for the text and HTML versions of the email.
+	"""
+	if link.timing == "during":
+		return "filed during"
+	if link.timing == "before" and link.days_before_start is not None:
+		return f"filed {_days(link.days_before_start)} before"
+	if link.timing == "after" and link.days_after_completion is not None:
+		return f"filed {_days(link.days_after_completion)} after"
+	return ""
+
+
+@register.filter
+def patent_link_basis(link):
+	"""The bracketed note after a patent-trial link in the admin summary email:
+	``added by an editor`` for a manual link, else what the pair shares."""
+	if link.source == "manual":
+		return "added by an editor"
+	if link.basis == "category":
+		return "shared category"
+	return "shared subject only"

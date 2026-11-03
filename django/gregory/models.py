@@ -2809,12 +2809,27 @@ class PatentCategoryAssignment(models.Model):
 
 
 class PatentTrialLink(models.Model):
-	"""A sponsor filed a patent while one of its trials was running, or shortly after it
-	ended. Materialised by detect_patent_trial_links; modelled on ArticleTrialReference."""
+	"""A patent tied to a clinical trial, either detected or added by an editor.
 
+	``source="auto"`` rows come from detect_patent_trial_links: a sponsor filed a patent
+	while one of its trials was running, or shortly after it ended. They always have a
+	sponsor, a timing (``during`` or ``after``) and a basis. ``source="manual"`` rows are
+	added by an editor, and detection never creates, changes or deletes them. Their
+	sponsor, timing and basis are worked out when the link is made and can be NULL (no
+	shared sponsor, unknown trial dates, nothing in common). Modelled on
+	ArticleTrialReference."""
+
+	SOURCE_AUTO = "auto"
+	SOURCE_MANUAL = "manual"
+	SOURCE_CHOICES = [
+		(SOURCE_AUTO, "Detected by the pipeline"),
+		(SOURCE_MANUAL, "Added by an editor"),
+	]
+	TIMING_BEFORE = "before"
 	TIMING_DURING = "during"
 	TIMING_AFTER = "after"
 	TIMING_CHOICES = [
+		(TIMING_BEFORE, "Filed before the trial started"),
 		(TIMING_DURING, "Filed during the trial"),
 		(TIMING_AFTER, "Filed after the trial ended"),
 	]
@@ -2831,29 +2846,58 @@ class PatentTrialLink(models.Model):
 	trial = models.ForeignKey(
 		"Trials", on_delete=models.CASCADE, related_name="patent_links"
 	)
+	source = models.CharField(
+		max_length=10,
+		choices=SOURCE_CHOICES,
+		default=SOURCE_AUTO,
+		db_index=True,
+		help_text="Who made the link. Detection never creates, changes or deletes a 'manual' row.",
+	)
+	created_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="+",
+		help_text="The editor who added a manual link. NULL for detected links.",
+	)
 	sponsor = models.ForeignKey(
 		"Sponsor", on_delete=models.CASCADE, related_name="patent_trial_links",
-		help_text="The sponsor shared by the patent (as applicant) and the trial.",
+		null=True,
+		blank=True,
+		help_text="The sponsor shared by the patent (as applicant) and the trial. NULL only on a manual link whose patent and trial share no sponsor.",
 	)
-	timing = models.CharField(max_length=10, choices=TIMING_CHOICES)
+	timing = models.CharField(
+		max_length=10,
+		choices=TIMING_CHOICES,
+		null=True,
+		blank=True,
+		help_text="When the patent was first filed against the trial. Detected links are 'during' or 'after'. A manual link is also 'before' when the patent predates the trial, and NULL when the trial's dates are unknown.",
+	)
 	days_after_completion = models.IntegerField(
 		null=True,
 		blank=True,
 		help_text="For 'after' links: days between the trial's completion and the patent's earliest priority date.",
 	)
+	days_before_start = models.IntegerField(
+		null=True,
+		blank=True,
+		help_text="For 'before' links: days between the patent's earliest priority date and the trial's start.",
+	)
 	basis = models.CharField(
 		max_length=10,
 		choices=BASIS_CHOICES,
-		help_text="'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors.",
+		null=True,
+		blank=True,
+		help_text="'category' when the patent and the trial share a team category (typically the molecule), the strong signal. 'subject' when they share only a subject; noisy for large sponsors. On a manual link NULL means they share neither.",
 	)
 	suppressed = models.BooleanField(
 		default=False,
 		help_text="Set when an editor dismissed the link. Detection never recreates or changes a suppressed link.",
 	)
 	discovered_date = models.DateTimeField(auto_now_add=True, db_index=True)
-	# Records suppressing and restoring a link (admin, an MCP editor) and
-	# detection's own creations and changes, so an editor's history can show
-	# when a link was dismissed.
+	# Records an editor's changes: suppressing, restoring, adding and removing a
+	# link (admin, an MCP editor). Detection skips history on purpose.
 	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	def __str__(self):
