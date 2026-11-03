@@ -1094,7 +1094,7 @@ The list returns:
 
 ### Trial links
 
-A sponsor can file a patent while one of its trials is running or shortly after it ends; detection records that as a link (`source` `auto`). An editor can also link a patent and a trial by hand (`source` `manual`), for example a patent filed before the trial started. They are shown in both directions: `trial_links` on a patent, `patent_links` (`patent_id`, `title`, `representative_publication`, `source`, `timing`, `days_after_completion`, `days_before_start`, `basis`) on `GET /trials/{id}/`. A link shows only when all of these hold:
+A sponsor can file a patent while one of its trials is running or shortly after it ends; detection records that as a link (`source` `auto`). An editor can also link a patent and a trial by hand (`source` `manual`), for example a patent filed before the trial started. They are shown in both directions: `trial_links` on a patent, `patent_links` (`patent_id`, `title`, `representative_publication`, `link` (the patent's Espacenet page), `source`, `timing`, `days_after_completion`, `days_before_start`, `basis`) on `GET /trials/{id}/`. A link shows only when all of these hold:
 
 - it is not suppressed (an editor dismissed it), ever;
 - its trial is visible to the caller;
