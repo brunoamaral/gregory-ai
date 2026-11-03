@@ -1301,8 +1301,9 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Has a linked patent family",
 		help_text=(
 			"true: trials with at least one visible, unsuppressed link to a "
-			"patent family; false: without. Counts category-basis links only "
-			"unless include_subject_links=true. Only sites with patents "
+			"patent family; false: without. Counts category-basis links and "
+			"links an editor added by hand; subject-basis detected links only "
+			"with include_subject_links=true. Only sites with patents "
 			"enabled count: for any other caller this matches nothing."
 		),
 	)
@@ -1313,7 +1314,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"Count and show patent links that rest on a shared subject only "
 			"(has_patent_link, patent_links on a single trial). They are "
 			"noisy for large sponsors, so by default only links on a shared "
-			"category are used."
+			"category, and links an editor added by hand, are used."
 		),
 	)
 
@@ -2096,7 +2097,8 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Has a linked clinical trial",
 		help_text=(
 			"true: families with at least one visible, unsuppressed link to a "
-			"trial; false: without. Counts category-basis links only unless "
+			"trial; false: without. Counts category-basis links and links an "
+			"editor added by hand; subject-basis detected links only with "
 			"include_subject_links=true."
 		),
 	)
@@ -2106,7 +2108,8 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 		help_text=(
 			"Count and show links that rest on a shared subject only. They are "
 			"noisy for large sponsors, so by default only links on a shared "
-			"category are used (has_trial_link, trial_links, trial_links_count)."
+			"category, and links an editor added by hand, are used "
+			"(has_trial_link, trial_links, trial_links_count)."
 		),
 	)
 

@@ -349,6 +349,9 @@ SPECTACULAR_SETTINGS = {
 	'ENUM_NAME_OVERRIDES': {
 		'KindEnum': 'api.schema_serializers.EDITOR_HISTORY_KIND_CHOICES',
 		'BasisEnum': 'api.schema_serializers.PATENT_TRIAL_LINK_BASIS_CHOICES',
+		'SourceEnum': 'api.schema_serializers.EDITOR_TRIAL_LINK_SOURCE_CHOICES',
+		'PatentTrialLinkSourceEnum': 'api.schema_serializers.PATENT_TRIAL_LINK_SOURCE_CHOICES',
+		'TimingEnum': 'api.schema_serializers.PATENT_TRIAL_LINK_TIMING_CHOICES',
 		'MedicineEventKindEnum': 'api.schema_serializers.MEDICINE_EVENT_KIND_CHOICES',
 		'MedicineEventBasisEnum': 'api.schema_serializers.MEDICINE_EVENT_BASIS_CHOICES',
 	},

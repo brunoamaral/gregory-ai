@@ -46,8 +46,8 @@ def get_patent_links_for_list(lst, subscriber, days, limit=15):
 	"""
 	Patent-trial links (a trial sponsor filing a patent during or just after a trial)
 	for the list's subjects that were discovered in the last `days` days and have not
-	yet been sent to this subscriber in this list. Strongest signal first (shared
-	category before shared subject, then newest). Dismissed (suppressed) links are
+	yet been sent to this subscriber in this list. Strongest signal first (an editor's
+	link, then shared category, then shared subject, then newest). Dismissed (suppressed) links are
 	excluded, and a link only counts when the subject that qualified it (shared by the
 	patent and the trial) belongs to the list. Returns (links, extra) where `extra` is
 	how many more matched beyond `limit`.
@@ -71,8 +71,9 @@ def get_patent_links_for_list(lst, subscriber, days, limit=15):
 		.select_related("patent", "trial", "sponsor")
 		.annotate(
 			basis_rank=Case(
-				When(basis=PatentTrialLink.BASIS_CATEGORY, then=Value(0)),
-				default=Value(1),
+				When(source=PatentTrialLink.SOURCE_MANUAL, then=Value(0)),
+				When(basis=PatentTrialLink.BASIS_CATEGORY, then=Value(1)),
+				default=Value(2),
 				output_field=IntegerField(),
 			)
 		)

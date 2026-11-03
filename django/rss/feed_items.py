@@ -24,7 +24,7 @@ that readers render as HTML.
 from datetime import datetime, time, timezone
 from types import SimpleNamespace
 
-from django.db.models import Prefetch
+from django.db.models import Case, Prefetch, When
 from django.http import QueryDict
 from django.template.defaultfilters import linebreaksbr
 from django.utils.html import escape, format_html, format_html_join
@@ -42,6 +42,7 @@ from gregory.models import (
 	PatentApplicant,
 	Patents,
 	PatentSiteContent,
+	PatentTrialLink,
 	Regulator,
 	Subject,
 	TeamCategory,
@@ -461,10 +462,16 @@ def patent_applicant_names(patent):
 def _patent_trial_line(link):
 	trial = link.trial
 	title = Truncator(trial.title).chars(MAX_FEED_TRIAL_TITLE)
-	timing = "during" if link.timing == "during" else "after"
 	href = _http_url(trial._feed_link)
 	label = format_html('<a href="{}">{}</a>', href, title) if href else escape(title)
-	return format_html("Filed {} trial: {} ({})", timing, label, link.sponsor.name)
+	# A link an editor added can lack a timing and a sponsor.
+	if link.timing in ("before", "during", "after"):
+		line = format_html("Filed {} trial: {}", link.timing, label)
+	else:
+		line = format_html("Linked trial: {}", label)
+	if link.sponsor is not None:
+		line = format_html("{} ({})", line, link.sponsor.name)
+	return line
 
 
 def patent_description(patent):
@@ -529,7 +536,8 @@ def hydrate_patents(ids, site, settings_row, subject_ids, scope=None):
 	  - applicants that resolved to a canonical sponsor and aren't individuals
 	  - linked trials, through api.patent_links.visible_patent_trial_links_queryset,
 	    the single rule for which links are visible: not suppressed,
-	    basis="category" (subject-basis links are noisy for large sponsors) and
+	    basis="category" or added by an editor (subject-basis detected links are
+	    noisy for large sponsors) and
 	    the trial in the SITE's scope (`scope`, defaulting to subject_ids) --
 	    a link is a fact about the site, not about which feed it appears in.
 	  - raw OPS text is deferred (see the licence note above)
@@ -578,8 +586,16 @@ def hydrate_patents(ids, site, settings_row, subject_ids, scope=None):
 		visible_patent_trial_links_queryset(shim, include_subject_links=False)
 		.filter(patent_id__in=ids)
 		.select_related("trial", "sponsor")
-		# "during" before "after" (the stronger signal), then a stable order.
-		.order_by("-timing", "trial_id")
+		# "during" before "after" (the stronger signal), then the links an editor
+		# added with another timing or none, then a stable order.
+		.order_by(
+			Case(
+				When(timing=PatentTrialLink.TIMING_DURING, then=0),
+				When(timing=PatentTrialLink.TIMING_AFTER, then=1),
+				default=2,
+			),
+			"trial_id",
+		)
 	):
 		link.trial._feed_link = trial_url(link.trial, site, settings_row)
 		links_by_patent.setdefault(link.patent_id, []).append(link)

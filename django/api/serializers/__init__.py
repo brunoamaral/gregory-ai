@@ -671,7 +671,11 @@ class ArticleSerializer(
 
 class TrialPatentLinkSerializer(serializers.ModelSerializer):
 	"""A patent family linked to a trial, as nested on the trial detail
-	(``patent_links``). The mirror of ``PatentTrialLinkSerializer``."""
+	(``patent_links``). The mirror of ``PatentTrialLinkSerializer``.
+
+	``source`` says who made the link: ``auto`` (detected) or ``manual`` (an editor).
+	A manual link can have no ``timing``, ``basis`` or ``sponsor_id`` (null), and its
+	``timing`` can be ``before``, with ``days_before_start`` set."""
 
 	title = serializers.CharField(source="patent.title", read_only=True)
 	representative_publication = serializers.CharField(
@@ -684,8 +688,10 @@ class TrialPatentLinkSerializer(serializers.ModelSerializer):
 			"patent_id",
 			"title",
 			"representative_publication",
+			"source",
 			"timing",
 			"days_after_completion",
+			"days_before_start",
 			"basis",
 		]
 
@@ -702,8 +708,10 @@ class PatentTrialLinkSerializer(serializers.ModelSerializer):
 			"trial_id",
 			"trial_title",
 			"sponsor_id",
+			"source",
 			"timing",
 			"days_after_completion",
+			"days_before_start",
 			"basis",
 		]
 

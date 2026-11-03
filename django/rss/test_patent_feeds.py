@@ -412,6 +412,23 @@ class PatentFeedContentTests(PatentFixture, TestCase):
 		self.link_trial(patent, self.make_trial("Finished trial"), timing=PatentTrialLink.TIMING_AFTER)
 		self.assertIn("Filed after trial: ", self.description(self.subject_feed()))
 
+	def test_a_manual_link_shows_whatever_its_basis_and_may_lack_timing_and_sponsor(self):
+		patent = self.make_patent("Linked")
+		manual = dict(source=PatentTrialLink.SOURCE_MANUAL, basis=None)
+		PatentTrialLink.objects.create(
+			patent=patent, trial=self.make_trial("Predated trial"), timing="before", days_before_start=30, **manual
+		)
+		PatentTrialLink.objects.create(
+			patent=patent, trial=self.make_trial("Dateless trial"), timing=None, **manual
+		)
+		description = self.description(self.subject_feed())
+		self.assertIn("Filed before trial: ", description)
+		self.assertIn("Linked trial: ", description)
+		self.assertIn("Predated trial", description)
+		self.assertIn("Dateless trial", description)
+		self.assertNotIn("None", description)
+		self.assertNotIn("(Acme Pharma)", description)
+
 	def test_at_most_three_links_then_and_n_more(self):
 		patent = self.make_patent("Many links")
 		for i in range(5):

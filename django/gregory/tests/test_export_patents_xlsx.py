@@ -470,6 +470,50 @@ class TrialLinksSheetTests(PatentExportTestCase):
 		self.assertEqual(wb["Trial links"]["A2"].value, "No trial links found.")
 
 
+class ManualTrialLinkExportTests(PatentExportTestCase):
+	"""A link an editor added: no sponsor, timing 'before', counted on its own."""
+
+	def setUp(self):
+		super().setUp()
+		self.trial_manual = self.make_trial("Manual trial", "recruiting", D(2026, 10, 1), None)
+		self.manual = PatentTrialLink.objects.create(
+			patent=self.p1,
+			trial=self.trial_manual,
+			source=PatentTrialLink.SOURCE_MANUAL,
+			timing="before",
+			days_before_start=1241,
+		)
+
+	def test_summary_counts_manual_links_separately_and_first(self):
+		row = self.ms_rows()[self.p1.pk]
+		self.assertEqual(row["trial_link_count"], 5)
+		self.assertEqual(
+			row["trial_links_summary"],
+			"manual: 1; category: 1 during, 1 after; subject: 1 during; suppressed: 1",
+		)
+
+	def test_sheet_has_source_and_days_before_start(self):
+		rows = rows_by_header(self.build()["Trial links"])
+		manual = next(r for r in rows if r["trial_id"] == self.trial_manual.pk)
+		self.assertEqual(manual["source"], "manual")
+		self.assertEqual(manual["timing"], "before")
+		self.assertEqual(manual["days_before_start"], 1241)
+		self.assertIn(manual["basis"], (None, ""))
+		for col in ("sponsor_id", "sponsor_name", "sponsor_type"):
+			self.assertIn(manual[col], (None, ""), col)
+		self.assertEqual(
+			{r["source"] for r in rows if r["trial_id"] != self.trial_manual.pk}, {"auto"}
+		)
+
+	def test_manual_links_are_listed_first(self):
+		rows = rows_by_header(self.build()["Trial links"])
+		self.assertEqual(rows[0]["source"], "manual")
+		self.assertEqual(
+			[(r["basis"], r["suppressed"]) for r in rows[1:]],
+			[("category", False), ("category", False), ("subject", False), ("subject", True)],
+		)
+
+
 class PublicationsSheetTests(PatentExportTestCase):
 	def test_one_row_per_member(self):
 		wb = self.build()

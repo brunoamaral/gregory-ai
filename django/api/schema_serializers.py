@@ -26,6 +26,11 @@ from gregory.models import (
 MEDICINE_EVENT_KIND_CHOICES = MedicineEvent.Kind.choices
 MEDICINE_EVENT_BASIS_CHOICES = MedicineEvent.Basis.choices
 PATENT_TRIAL_LINK_BASIS_CHOICES = PatentTrialLink.BASIS_CHOICES
+PATENT_TRIAL_LINK_SOURCE_CHOICES = PatentTrialLink.SOURCE_CHOICES
+# The article editor link's `source`; pinned so the patent link's own `source` enum
+# (same values, other labels) doesn't rename it.
+EDITOR_TRIAL_LINK_SOURCE_CHOICES = ["auto", "manual"]
+PATENT_TRIAL_LINK_TIMING_CHOICES = PatentTrialLink.TIMING_CHOICES
 EDITOR_HISTORY_KIND_CHOICES = ["editorial", "relevance", "trial_link", "category"]
 
 
@@ -325,7 +330,7 @@ class EditorTrialLinkRequestSerializer(serializers.Serializer):
 class EditorTrialLinkResponseSerializer(serializers.Serializer):
 	article_id = serializers.IntegerField()
 	trial_id = serializers.IntegerField()
-	source = serializers.ChoiceField(choices=["auto", "manual"])
+	source = serializers.ChoiceField(choices=EDITOR_TRIAL_LINK_SOURCE_CHOICES)
 	identifier_type = serializers.CharField()
 	identifier_value = serializers.CharField()
 	updated_by = serializers.CharField(allow_null=True)

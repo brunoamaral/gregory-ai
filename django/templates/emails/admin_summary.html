@@ -106,11 +106,11 @@
         </h3>
         {% for link in patent_links %}
         <p class="patent-links-text" style="color: #1e3a8a; font-size: 13px; margin: 0 0 8px 0;">
-            <strong>{{ link.sponsor.name }}</strong>
-            {% if link.timing == "during" %}filed during{% else %}filed {{ link.days_after_completion }} day{{ link.days_after_completion|pluralize }} after{% endif %}
+            {% if link.sponsor %}<strong>{{ link.sponsor.name }}</strong>{% endif %}
+            {{ link|patent_link_timing }}
             <a href="{{ link.trial.link }}" style="color: #1d4ed8;">{{ link.trial.title|truncatechars:90 }}</a>:
             <a href="{{ link.patent.link }}" style="color: #1d4ed8;">{{ link.patent.title|truncatechars:90 }}</a>
-            {% if link.basis == "category" %}(shared category){% else %}(shared subject only){% endif %}
+            ({{ link|patent_link_basis }})
         </p>
         {% endfor %}
         {% if patent_links_extra %}<p style="color: #1e3a8a; font-size: 12px; margin: 0;">+{{ patent_links_extra }} more in the admin.</p>{% endif %}

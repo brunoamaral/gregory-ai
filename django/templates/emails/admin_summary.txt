@@ -33,7 +33,7 @@ Admin Actions: Review the articles above and mark them as relevant in the admin 
 {% if patent_links %}
 SPONSORS FILING PATENTS AROUND THEIR TRIALS
 ========================================
-{% for link in patent_links %}- {{ link.sponsor.name }} {% if link.timing == "during" %}filed during{% else %}filed {{ link.days_after_completion }} day{{ link.days_after_completion|pluralize }} after{% endif %} "{{ link.trial.title|truncatechars:90 }}" ({{ link.trial.link }}): {{ link.patent.title|truncatechars:90 }} ({{ link.patent.link }}) [{% if link.basis == "category" %}shared category{% else %}shared subject only{% endif %}]
+{% for link in patent_links %}- {% if link.sponsor %}{{ link.sponsor.name }} {% endif %}{% with timing=link|patent_link_timing %}{% if timing %}{{ timing }} {% endif %}{% endwith %}"{{ link.trial.title|truncatechars:90 }}" ({{ link.trial.link }}): {{ link.patent.title|truncatechars:90 }} ({{ link.patent.link }}) [{{ link|patent_link_basis }}]
 {% endfor %}{% if patent_links_extra %}+{{ patent_links_extra }} more in the admin.
 {% endif %}{% endif %}
 {% if ml_drift %}{% with ml_drift_total=ml_drift.stale_ml_score|add:ml_drift.missing_relevant|add:ml_drift.unexpected_relevant %}

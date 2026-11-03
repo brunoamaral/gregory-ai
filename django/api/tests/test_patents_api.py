@@ -255,7 +255,16 @@ class PatentTrialLinkVisibilityTest(PatentFixture):
 		link = next(l for l in response.data["trial_links"] if l["trial_id"] == self.t_on.pk)
 		self.assertEqual(
 			set(link),
-			{"trial_id", "trial_title", "sponsor_id", "timing", "days_after_completion", "basis"},
+			{
+				"trial_id",
+				"trial_title",
+				"sponsor_id",
+				"source",
+				"timing",
+				"days_after_completion",
+				"days_before_start",
+				"basis",
+			},
 		)
 		self.assertEqual(link["trial_title"], "Trial on")
 		self.assertEqual(link["sponsor_id"], self.sponsor.pk)
@@ -317,8 +326,10 @@ class PatentTrialLinkVisibilityTest(PatentFixture):
 				"patent_id",
 				"title",
 				"representative_publication",
+				"source",
 				"timing",
 				"days_after_completion",
+				"days_before_start",
 				"basis",
 			},
 		)
@@ -1305,3 +1316,104 @@ class ReviewFixesTest(PatentFixture):
 
 		via_exists = Patents.objects.filter(Exists(filtered), pk=self.p_both.pk)
 		self.assertEqual([p.pk for p in via_exists], [self.p_both.pk])
+
+
+class ManualPatentTrialLinkVisibilityTest(PatentFixture):
+	"""A link an editor added is always shown, whatever its basis (even none),
+	but still only to a caller who can see both the patent and the trial."""
+
+	@classmethod
+	def setUpTestData(cls):
+		super().setUpTestData()
+		cls.t_subject = _trial("Trial manual subject", cls.s_on)
+		cls.t_nothing = _trial("Trial manual nothing", cls.s_on)
+		cls.t_auto_subject = _trial("Trial auto subject", cls.s_on)
+		cls.t_off = _trial("Trial manual off", cls.s_off)
+
+		def manual(patent, trial, basis=None, timing=None, sponsor=None, **extra):
+			return PatentTrialLink.objects.create(
+				patent=patent,
+				trial=trial,
+				sponsor=sponsor,
+				timing=timing,
+				basis=basis,
+				source=PatentTrialLink.SOURCE_MANUAL,
+				**extra,
+			)
+
+		cls.l_manual_subject = manual(
+			cls.p_on, cls.t_subject, basis="subject", timing="before", days_before_start=1241
+		)
+		cls.l_manual_nothing = manual(cls.p_on, cls.t_nothing)
+		cls.l_auto_subject = _link(cls.p_on, cls.t_auto_subject, cls.sponsor, basis="subject")
+		# The trial is only in site B's scope; the patent is visible through site A.
+		cls.l_manual_hidden_trial = manual(cls.p_on, cls.t_off)
+		# The patent is only in site B's scope; the trial is visible through site A.
+		cls.l_manual_hidden_patent = manual(cls.p_off, cls.t_subject)
+		cls.l_manual_suppressed = manual(cls.p_both, cls.t_nothing, suppressed=True)
+
+	def a(self, path):
+		sep = "&" if "?" in path else "?"
+		return self.client.get(f"{path}{sep}site_id={self.site_a.pk}")
+
+	def trial_ids(self, response):
+		return {link["trial_id"] for link in response.data["trial_links"]}
+
+	def test_manual_links_show_without_include_subject_links(self):
+		response = self.a(f"/patents/{self.p_on.pk}/")
+		self.assertEqual(self.trial_ids(response), {self.t_subject.pk, self.t_nothing.pk})
+		self.assertEqual(response.data["trial_links_count"], 2)
+
+	def test_a_detected_subject_link_still_needs_the_opt_in(self):
+		response = self.a(f"/patents/{self.p_on.pk}/?include_subject_links=true")
+		self.assertEqual(
+			self.trial_ids(response), {self.t_subject.pk, self.t_nothing.pk, self.t_auto_subject.pk}
+		)
+
+	def test_manual_link_fields_may_be_null_and_timing_may_be_before(self):
+		response = self.a(f"/patents/{self.p_on.pk}/")
+		by_trial = {l["trial_id"]: l for l in response.data["trial_links"]}
+		before = by_trial[self.t_subject.pk]
+		self.assertEqual(before["source"], "manual")
+		self.assertEqual(before["timing"], "before")
+		self.assertEqual(before["days_before_start"], 1241)
+		self.assertIsNone(before["days_after_completion"])
+		self.assertIsNone(before["sponsor_id"])
+		nothing = by_trial[self.t_nothing.pk]
+		self.assertIsNone(nothing["timing"])
+		self.assertIsNone(nothing["basis"])
+
+	def test_a_manual_link_to_a_trial_outside_the_callers_subjects_is_not_shown(self):
+		response = self.a(f"/patents/{self.p_on.pk}/?include_subject_links=true")
+		self.assertNotIn(self.t_off.pk, self.trial_ids(response))
+		self.assertNotIn("Trial manual off", str(response.data))
+
+	def test_a_suppressed_manual_link_is_not_shown(self):
+		response = self.a(f"/patents/{self.p_both.pk}/?include_subject_links=true")
+		self.assertEqual(response.data["trial_links"], [])
+
+	def test_has_trial_link_counts_manual_links(self):
+		linked = self.a("/patents/?has_trial_link=true")
+		self.assertEqual(_titles(linked), ["Patent on"])
+		# p_both has only a suppressed manual link; p_off is not in the site's scope.
+		unlinked = self.a("/patents/?has_trial_link=false")
+		self.assertEqual(_titles(unlinked), ["Patent both"])
+
+	def test_trial_detail_shows_manual_patent_links(self):
+		response = self.a(f"/trials/{self.t_subject.pk}/")
+		self.assertEqual(
+			[l["patent_id"] for l in response.data["patent_links"]], [self.p_on.pk]
+		)
+		link = response.data["patent_links"][0]
+		self.assertEqual(link["source"], "manual")
+		self.assertEqual(link["timing"], "before")
+		self.assertEqual(link["days_before_start"], 1241)
+		self.assertEqual(link["basis"], "subject")
+
+	def test_has_patent_link_counts_manual_links(self):
+		linked = self.a("/trials/?has_patent_link=true")
+		self.assertEqual(
+			_titles(linked), sorted(["Trial manual subject", "Trial manual nothing"])
+		)
+		unlinked = self.a("/trials/?has_patent_link=false")
+		self.assertEqual(_titles(unlinked), ["Trial auto subject"])
