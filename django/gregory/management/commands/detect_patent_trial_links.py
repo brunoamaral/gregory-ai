@@ -30,6 +30,7 @@ the summary line.
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from gregory.models import PatentTrialLink, Patents, Trials
@@ -159,11 +160,27 @@ class Command(BaseCommand):
 			for trial_id, values in wanted.items():
 				link = existing.get(trial_id)
 				if link is None:
+					if dry_run:
+						created += 1
+						continue
+					link = PatentTrialLink(patent=patent, trial_id=trial_id, **values)
+					link.skip_history_when_saving = True
+					try:
+						# A savepoint, so a lost race doesn't break the caller's transaction.
+						with transaction.atomic():
+							link.save()
+					except IntegrityError:
+						# Someone added the pair after `existing` was read: an editor's
+						# link (or another detection run). Leave the row that won as it is.
+						winner = PatentTrialLink.objects.filter(patent=patent, trial_id=trial_id).first()
+						if winner is None:
+							raise
+						if winner.source == PatentTrialLink.SOURCE_MANUAL:
+							skipped_manual += 1
+						elif winner.suppressed:
+							skipped_suppressed += 1
+						continue
 					created += 1
-					if not dry_run:
-						link = PatentTrialLink(patent=patent, trial_id=trial_id, **values)
-						link.skip_history_when_saving = True
-						link.save()
 				elif link.source == PatentTrialLink.SOURCE_MANUAL:
 					# An editor's link: never updated, not even a suppressed one
 					skipped_manual += 1

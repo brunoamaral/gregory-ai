@@ -3,6 +3,7 @@ by hand (describe_link, link_patent_trial, unlink_patent_trial, patent_label) an
 detection leaves those links alone."""
 
 import datetime
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 
@@ -359,3 +360,32 @@ class DetectionLeavesManualLinksAloneTests(LinkTestCase):
 		self.detect()
 		self.assertIsNotNone(self.link(other, trial))
 		self.assertEqual(PatentTrialLink.objects.filter(source="auto").count(), 1)
+
+	def test_a_manual_link_added_mid_run_does_not_abort_detection(self):
+		# An editor links the pair after detection has read the existing links and
+		# before it inserts its own row: the unique (patent, trial) key rejects the
+		# insert, and detection must keep the editor's row and carry on.
+		raced, other = self.make_patent(D(2021, 3, 1)), self.make_patent(D(2021, 3, 1))
+		trial = self.make_trial()
+		real_filter = PatentTrialLink.objects.filter
+
+		def racing_filter(*args, **kwargs):
+			if kwargs == {"patent": raced}:
+				# Detection's read of the patent's existing links: it sees none, then
+				# the editor's link lands before detection inserts its own.
+				snapshot = real_filter(pk__in=[])
+				link_patent_trial(raced, trial, self.user)
+				return snapshot
+			return real_filter(*args, **kwargs)
+
+		with mock.patch.object(PatentTrialLink.objects, "filter", side_effect=racing_filter):
+			out = self.detect()
+
+		manual = self.link(raced, trial)
+		self.assertEqual(manual.source, "manual")
+		self.assertEqual(manual.created_by, self.user)
+		self.assertEqual(manual.timing, "during")
+		self.assertEqual(PatentTrialLink.history.filter(id=manual.pk).count(), 1)  # the editor's "+" only
+		self.assertEqual(self.link(other, trial).source, "auto")
+		self.assertIn("create 1", out)
+		self.assertIn("1 manual link(s) left alone", out)
