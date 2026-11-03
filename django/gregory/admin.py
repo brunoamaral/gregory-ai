@@ -776,14 +776,26 @@ class _PatentTrialLinkListInline(TeamEditInlineMixin, admin.TabularInline):
 	]
 	fields = readonly_fields
 	classes = ["collapse"]
+	# The other end of the link on this page ("patent" on the trial page, "trial" on the
+	# patent page) and its model. Set by the subclasses.
+	counterpart_field = None
+	counterpart_model = None
 
 	def get_queryset(self, request):
-		return (
+		qs = (
 			super()
 			.get_queryset(request)
 			.select_related("patent", "trial", "sponsor", "created_by")
 			.order_by("source", "id")
 		)
+		if not request.user.is_superuser:
+			# Only links whose other end this user's organisations can see, the same rows
+			# the add inline's picker offers. A link to another organisation's patent (or
+			# trial) is neither shown nor removable here, and since the formset only
+			# accepts rows from this queryset, a forged delete of one is refused too.
+			visible = self.admin_site._registry[self.counterpart_model].get_queryset(request)
+			qs = qs.filter(**{f"{self.counterpart_field}__in": visible.order_by().values("pk")})
+		return qs
 
 	def has_add_permission(self, request, obj=None):
 		return False  # New links come from the add inline.
@@ -852,6 +864,8 @@ class TrialPatentLinkInline(_PatentTrialLinkListInline):
 	"""The patents linked to a trial."""
 
 	fk_name = "trial"
+	counterpart_field = "patent"
+	counterpart_model = Patents
 	verbose_name = "Linked patent"
 	verbose_name_plural = "Linked patents"
 
@@ -873,6 +887,8 @@ class PatentTrialLinkInline(_PatentTrialLinkListInline):
 	"""The trials linked to a patent."""
 
 	fk_name = "patent"
+	counterpart_field = "trial"
+	counterpart_model = Trials
 	verbose_name = "Linked trial"
 	verbose_name_plural = "Linked trials"
 
@@ -5484,6 +5500,14 @@ class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 		return _patent_export_response(
 			self, request, patent_qs, "export_patents_xlsx_action"
 		)
+
+	def has_delete_permission(self, request, obj=None):
+		# Editors remove a link from the trial or patent page, where an editor's link is
+		# deleted and a detected one hidden. Deleting here (the delete view or the
+		# "delete selected" action) would hard-delete a detected link, and detection would
+		# recreate it, so it is for superusers only. The inlines check the model
+		# permission themselves and are not affected.
+		return request.user.is_superuser
 
 	def has_add_permission(self, request):
 		return False

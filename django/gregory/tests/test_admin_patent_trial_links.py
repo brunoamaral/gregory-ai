@@ -599,3 +599,83 @@ class PickerTests(PatentTrialLinkFixture):
 		(result,) = self._search(self.editor, NCT_A, "patenttriallink", "trial")
 		self.assertEqual(result["text"], trial_label(self.trial))
 		self.assertEqual(self._search(self.editor, "NCT09999999", "patenttriallink", "trial"), [])
+
+
+class OrganisationBoundaryTests(PatentTrialLinkFixture):
+	"""The link lists only show links whose other end the user's organisations can see,
+	as the pickers do, so another organisation's patent or trial is neither shown nor
+	removable."""
+
+	def _forged_delete(self, response, form_id, inline_class, link):
+		"""The page's data plus a forged existing row for `link`, delete box ticked."""
+		data = _page_data(response, form_id)
+		prefix = _formset(response, inline_class).prefix
+		n = int(data[f"{prefix}-TOTAL_FORMS"][0])
+		data[f"{prefix}-TOTAL_FORMS"] = [str(n + 1)]
+		data[f"{prefix}-INITIAL_FORMS"] = [str(n + 1)]
+		data[f"{prefix}-{n}-id"] = [str(link.pk)]
+		data[f"{prefix}-{n}-{inline_class.fk_name}"] = [str(getattr(link, f"{inline_class.fk_name}_id"))]
+		data[f"{prefix}-{n}-DELETE"] = ["on"]
+		data["_continue"] = ["Save and continue editing"]
+		return data
+
+	def test_the_trial_page_hides_a_link_to_another_organisations_patent(self):
+		own = self._link()
+		foreign = self._link(self.foreign_patent)
+		forms = _formset(self._page(self.editor, self.trial_url), TrialPatentLinkInline).forms
+		self.assertEqual({f.instance.pk for f in forms}, {own.pk})
+		forms = _formset(self._page(self.superuser, self.trial_url), TrialPatentLinkInline).forms
+		self.assertEqual({f.instance.pk for f in forms}, {own.pk, foreign.pk})
+
+	def test_the_patent_page_hides_a_link_to_another_organisations_trial(self):
+		own = self._link()
+		self._link(trial=self.foreign_trial)
+		forms = _formset(self._page(self.editor, self.patent_url), PatentTrialLinkInline).forms
+		self.assertEqual({f.instance.pk for f in forms}, {own.pk})
+
+	def test_a_forged_delete_of_another_organisations_link_changes_nothing(self):
+		foreign = self._manual_link(self.foreign_patent)
+		response = self._page(self.editor, self.trial_url)
+		self.client.post(self.trial_url, self._forged_delete(response, "trials_form", TrialPatentLinkInline, foreign))
+		foreign.refresh_from_db()  # still there, still visible
+		self.assertFalse(foreign.suppressed)
+
+		auto = self._link(trial=self.foreign_trial)
+		response = self._page(self.editor, self.patent_url)
+		self.client.post(self.patent_url, self._forged_delete(response, "patents_form", PatentTrialLinkInline, auto))
+		auto.refresh_from_db()
+		self.assertFalse(auto.suppressed)
+
+
+class StandaloneDeleteTests(PatentTrialLinkFixture):
+	"""Editors remove links from the trial or patent page. The links list's own delete
+	view and "delete selected" action would hard-delete a detected link (and detection
+	would recreate it), so they are for superusers only."""
+
+	def setUp(self):
+		super().setUp()
+		self.link = self._manual_link()
+		self.delete_url = reverse("admin:gregory_patenttriallink_delete", args=[self.link.pk])
+		self.changelist_url = reverse("admin:gregory_patenttriallink_changelist")
+
+	def test_an_editor_cannot_open_the_delete_view(self):
+		self.client.force_login(self.editor)
+		self.assertEqual(self.client.get(self.delete_url).status_code, 403)
+		self.assertEqual(self.client.post(self.delete_url, {"post": "yes"}).status_code, 403)
+		self.assertTrue(PatentTrialLink.objects.filter(pk=self.link.pk).exists())
+
+	def test_an_editor_has_no_delete_selected_action(self):
+		self.client.force_login(self.editor)
+		response = self.client.get(self.changelist_url)
+		self.assertEqual(response.status_code, 200)
+		self.assertNotIn("delete_selected", dict(response.context["action_form"].fields["action"].choices))
+		self.client.post(
+			self.changelist_url,
+			{"action": "delete_selected", "_selected_action": [str(self.link.pk)], "post": "yes"},
+		)
+		self.assertTrue(PatentTrialLink.objects.filter(pk=self.link.pk).exists())
+
+	def test_a_superuser_can_still_delete(self):
+		self.client.force_login(self.superuser)
+		self.assertEqual(self.client.post(self.delete_url, {"post": "yes"}).status_code, 302)
+		self.assertFalse(PatentTrialLink.objects.filter(pk=self.link.pk).exists())

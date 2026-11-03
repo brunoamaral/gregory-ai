@@ -197,8 +197,8 @@ How the two interact:
 From the trial page (*Gregory > Trials*) or the patent page (*Gregory > Patents*), in
 either direction. Both pages have the same two inlines:
 
-- **Linked patents** (on a trial) or **Linked trials** (on a patent) lists every link,
-  hidden ones included, with its source, timing, days, basis, sponsor, who added it and when.
+- **Linked patents** (on a trial) or **Linked trials** (on a patent) lists every link whose
+  other side your organisations can see (a superuser sees them all), hidden ones included, with its source, timing, days, basis, sponsor, who added it and when.
   Ticking a row's *Delete* box and saving removes the link by the rule above: a manual link
   is deleted, a detected one is hidden. A hidden link has no box.
 - **Add a patent link** (on a trial) or **Add a trial link** (on a patent) takes blank rows
@@ -255,7 +255,8 @@ all; a *source* filter picks detected or manual), and the *Suppress* action dism
 manual ones included (nothing recreates a suppressed manual link). Staff only see links of
 patents from their own organisations' sources. Links are added and removed from the trial
 and patent pages (see [Links added by editors](#links-added-by-editors)); this list has no
-add button.
+add button, and only a superuser can delete from it (deleting a detected link here, instead
+of hiding it, would let detection recreate it).
 
 ## Licence and the API
 
