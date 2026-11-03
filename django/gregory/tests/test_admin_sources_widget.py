@@ -226,6 +226,28 @@ class _SourcesWidgetTests:
 		self.assertFalse(form.is_valid())
 		self.assertIn("sources", form.errors)
 
+	def test_a_failed_save_keeps_the_posted_ticks(self):
+		form = self._form(self.staff, {"sources": [self.zeta.pk, self.foreign.pk]})
+		self.assertFalse(form.is_valid())
+		html = str(form["sources"])
+		self.assertRegex(html, rf'<input[^>]*value="{self.zeta.pk}"[^>]*checked')
+		self.assertNotRegex(html, rf'<input[^>]*value="{self.alpha.pk}"[^>]*checked')
+		self.assertIn("<strong>Linked (1):</strong> Zeta", html)
+
+	def test_form_help_text_is_kept_alongside_ours(self):
+		form_class = self.model_admin.form
+
+		class WithHelp(form_class):
+			class Meta(form_class.Meta):
+				help_texts = {**(form_class.Meta.__dict__.get("help_texts") or {}), "sources": "Own help."}
+
+		request = RequestFactory().get("/")
+		request.user = self.superuser
+		form = modelform_factory(self.content_model, form=WithHelp, fields=["sources"])(
+			instance=self.content, request=request
+		)
+		self.assertEqual(form.fields["sources"].help_text, f"Own help. {SOURCES_HELP_TEXT}")
+
 	# Superuser
 
 	def test_superuser_sees_and_can_untick_every_source(self):
@@ -256,6 +278,9 @@ class _SourcesWidgetTests:
 		row = row[: row.index('class="form-row', 1)]
 		self.assertIn("grouped-sources", row)
 		self.assertNotIn("Hold down", row)
+		# The help text is wired to the field for screen readers.
+		self.assertIn('aria-describedby="id_sources_helptext"', row)
+		self.assertIn('id="id_sources_helptext"', row)
 
 
 class ArticleSourcesWidgetTests(_SourcesWidgetTests, TestCase):

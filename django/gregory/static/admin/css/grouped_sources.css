@@ -6,6 +6,8 @@
 	min-width: 0;
 }
 
+/* form .form-row: the admin's own paragraph rules would otherwise win. */
+form .form-row .grouped-sources-summary,
 .grouped-sources-summary {
 	margin: 0 0 8px;
 	padding: 6px 8px;

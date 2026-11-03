@@ -1637,7 +1637,9 @@ def grouped_source_choices(queryset):
 	Teams and subjects without a name sort last; ordering on the ids as well
 	keeps two teams (or subjects) with the same name in separate groups.
 	"""
-	rows = queryset.select_related("team", "subject").order_by(
+	rows = queryset.select_related("team", "subject").only(
+		"pk", "name", "team_id", "subject_id", "team__name", "subject__subject_name"
+	).order_by(
 		F("team__name").asc(nulls_last=True),
 		"team_id",
 		F("subject__subject_name").asc(nulls_last=True),
@@ -1678,7 +1680,12 @@ class GroupedSourcesFormMixin:
 		field.widget = GroupedSourceCheckboxSelectMultiple()
 		field.widget.is_required = field.required
 		field.widget.choices = grouped_source_choices(field.queryset)
-		field.help_text = SOURCES_HELP_TEXT
+		# Rebuild the help text without the admin's Ctrl message, keeping any
+		# the form or model gives the field.
+		own_help = (self._meta.help_texts or {}).get("sources") or self._meta.model._meta.get_field(
+			"sources"
+		).help_text
+		field.help_text = f"{own_help} {SOURCES_HELP_TEXT}" if own_help else SOURCES_HELP_TEXT
 
 
 class ArticleAdminForm(GroupedSourcesFormMixin, TeamScopedRelationsFormMixin, forms.ModelForm):

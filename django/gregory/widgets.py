@@ -37,6 +37,14 @@ class GroupedSourceCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
 	class Media:
 		css = {"all": ["admin/css/grouped_sources.css"]}
 
+	def id_for_label(self, id_, index=None):
+		# CheckboxSelectMultiple returns "" for the field as a whole, which
+		# leaves the admin's aria-describedby pointing at "_helptext". The
+		# wrapper div carries the id, so the field can use it.
+		if index is None:
+			return id_
+		return super().id_for_label(id_, index)
+
 	def get_context(self, name, value, attrs):
 		context = super().get_context(name, value, attrs)
 		groups, linked = [], []
