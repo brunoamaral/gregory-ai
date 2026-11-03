@@ -675,11 +675,19 @@ class TrialPatentLinkSerializer(serializers.ModelSerializer):
 
 	``source`` says who made the link: ``auto`` (detected) or ``manual`` (an editor).
 	A manual link can have no ``timing``, ``basis`` or ``sponsor_id`` (null), and its
-	``timing`` can be ``before``, with ``days_before_start`` set."""
+	``timing`` can be ``before``, with ``days_before_start`` set.
+
+	``link`` is the patent's canonical page (Espacenet), the same as ``link`` on
+	``/patents/{id}/``, so a trial page can link out without a second request."""
 
 	title = serializers.CharField(source="patent.title", read_only=True)
 	representative_publication = serializers.CharField(
 		source="patent.representative_publication", read_only=True
+	)
+	link = serializers.URLField(
+		source="patent.link",
+		read_only=True,
+		help_text="The patent family's canonical page (Espacenet). Empty when unknown.",
 	)
 
 	class Meta:
@@ -688,6 +696,7 @@ class TrialPatentLinkSerializer(serializers.ModelSerializer):
 			"patent_id",
 			"title",
 			"representative_publication",
+			"link",
 			"source",
 			"timing",
 			"days_after_completion",

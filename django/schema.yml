@@ -13929,6 +13929,9 @@ components:
         ``source`` says who made the link: ``auto`` (detected) or ``manual`` (an editor).
         A manual link can have no ``timing``, ``basis`` or ``sponsor_id`` (null), and its
         ``timing`` can be ``before``, with ``days_before_start`` set.
+
+        ``link`` is the patent's canonical page (Espacenet), the same as ``link`` on
+        ``/patents/{id}/``, so a trial page can link out without a second request.
       properties:
         patent_id:
           type: integer
@@ -13939,6 +13942,12 @@ components:
         representative_publication:
           type: string
           readOnly: true
+        link:
+          type: string
+          format: uri
+          readOnly: true
+          description: The patent family's canonical page (Espacenet). Empty when
+            unknown.
         source:
           allOf:
           - $ref: '#/components/schemas/PatentTrialLinkSourceEnum'
@@ -13985,6 +13994,7 @@ components:
           - $ref: '#/components/schemas/BlankEnum'
           - $ref: '#/components/schemas/NullEnum'
       required:
+      - link
       - patent_id
       - representative_publication
       - title

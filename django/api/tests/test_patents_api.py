@@ -326,6 +326,7 @@ class PatentTrialLinkVisibilityTest(PatentFixture):
 				"patent_id",
 				"title",
 				"representative_publication",
+				"link",
 				"source",
 				"timing",
 				"days_after_completion",
@@ -334,6 +335,16 @@ class PatentTrialLinkVisibilityTest(PatentFixture):
 			},
 		)
 		self.assertEqual(link["title"], "Patent on")
+
+	def test_trial_detail_patent_links_carry_the_patent_link(self):
+		Patents.objects.filter(pk=self.p_on.pk).update(
+			link="https://worldwide.espacenet.com/publicationDetails/biblio?CC=WO&NR=2024233642A1&KC=&FT=E"
+		)
+		link = self.a(f"/trials/{self.t_on.pk}/").data["patent_links"][0]
+		self.assertEqual(
+			link["link"],
+			"https://worldwide.espacenet.com/publicationDetails/biblio?CC=WO&NR=2024233642A1&KC=&FT=E",
+		)
 
 	def test_trial_detail_omits_suppressed_and_subject_links(self):
 		# t_on has a category link (p_on) and a suppressed one (p_both).
