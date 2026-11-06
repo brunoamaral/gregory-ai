@@ -69,7 +69,14 @@ from rss.feed_scope import (
 	resolve_scoped_subject,
 	site_feed_scope,
 )
-from rss.views import _homepage, _page_ids, _SelfLinkMixin
+from rss.views import (
+	_category_link_params,
+	_category_topic,
+	_channel_link,
+	_page_ids,
+	_SelfLinkMixin,
+	_with_about,
+)
 
 MEDICINE_FEED_LIMIT = 50
 
@@ -133,10 +140,15 @@ class SiteMedicineEventsByCategoryFeed(
 		return f"Medicines{_TITLE_TAGS[obj._regulator]}: {obj.category_name} — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		params = _category_link_params(obj, obj._cat_subject_ids)
+		params.append(("regulator", obj._regulator))
+		return _channel_link(obj._site, "medicines", "category", params)
 
 	def description(self, obj):
-		return f"New regulatory events on {obj.category_name}. {_SOURCE_NOTES[obj._regulator]}"
+		topic = _category_topic(obj, obj._cat_subject_ids)
+		return _with_about(
+			obj, f"New regulatory events on {topic}. {_SOURCE_NOTES[obj._regulator]}"
+		)
 
 	def items(self, obj):
 		queryset = medicine_event_base_qs({obj.pk: obj._cat_subject_ids}, obj._regulator)
@@ -162,7 +174,8 @@ class SiteMedicineEventsBySubjectFeed(
 		return f"Medicines{_TITLE_TAGS[obj._regulator]}: {obj.subject_name} — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		params = [("subject_id", obj.pk), ("regulator", obj._regulator)]
+		return _channel_link(obj._site, "medicines", "subject", params)
 
 	def description(self, obj):
 		return (
@@ -195,7 +208,7 @@ class SiteMedicineEventsFeed(_RegulatorSelfLinkMixin, MedicineEventFeedItemMixin
 		return f"Medicine approvals{_TITLE_TAGS[obj._regulator]} — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		return _channel_link(obj._site, "medicines", "all", [("regulator", obj._regulator)])
 
 	def description(self, obj):
 		return (

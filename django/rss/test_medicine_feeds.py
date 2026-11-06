@@ -11,6 +11,7 @@ test). Nothing here calls EMA: medicines and events are built directly.
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone as dt_timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import parse_qsl, urlsplit
 
 from django.contrib.sites.models import Site
 from django.core.cache import cache
@@ -437,7 +438,18 @@ class MedicineFeedContentTests(MedicineFixture, TestCase):
 		root = ET.fromstring(self.category_feed().content)
 		channel = root.find("./channel")
 		self.assertEqual(channel.findtext("title"), "Medicines: Reader Category — Reader Site")
-		self.assertEqual(channel.findtext("link"), "https://reader.example.com/")
+		self.assert_channel_link(
+			channel.findtext("link"),
+			"medicines",
+			"category",
+			category_id=self.category.pk,
+			subject_id=self.subject.pk,
+		)
+		self.assertTrue(
+			channel.findtext("description").startswith(
+				"New regulatory events on Reader Category (Reader Subject)."
+			)
+		)
 		self.assertIn("European Medicines Agency", channel.findtext("description"))
 		self_link = [
 			link.get("href") for link in channel.findall(f"{ATOM}link") if link.get("rel") == "self"
@@ -581,7 +593,9 @@ class MedicineSubjectFeedTests(MedicineFixture, TestCase):
 		root = ET.fromstring(self.subject_feed().content)
 		channel = root.find("./channel")
 		self.assertEqual(channel.findtext("title"), "Medicines: Reader Subject — Reader Site")
-		self.assertEqual(channel.findtext("link"), "https://reader.example.com/")
+		self.assert_channel_link(
+			channel.findtext("link"), "medicines", "subject", subject_id=self.subject.pk
+		)
 		self.assertIn("whether or not they're filed under a category", channel.findtext("description"))
 		self.assertIn("European Medicines Agency", channel.findtext("description"))
 		self_link = [
@@ -880,6 +894,18 @@ class FdaFeedTests(MedicineFixture, TestCase):
 				with self.subTest(route=name, value=value):
 					self.assertEqual(self.client.get(url, {"regulator": value}).status_code, 404)
 
+	def test_channel_link_keeps_the_regulator(self):
+		for name, url in self.routes():
+			with self.subTest(route=name):
+				root = ET.fromstring(self.client.get(url, {"regulator": "fda"}).content)
+				query = dict(parse_qsl(urlsplit(root.findtext("./channel/link")).query))
+				self.assertEqual(query["kind"], "medicines")
+				self.assertEqual(query["regulator"], "fda")
+				cache.clear()
+				root = ET.fromstring(self.client.get(url).content)
+				query = dict(parse_qsl(urlsplit(root.findtext("./channel/link")).query))
+				self.assertNotIn("regulator", query)
+
 	def test_an_empty_regulator_means_both_and_keeps_the_plain_self_link(self):
 		for name, url in self.routes():
 			with self.subTest(route=name):
@@ -1016,12 +1042,13 @@ class MedicineFeedQueryCountTests(MedicineFixture, TestCase):
 		queries, items = self.count_queries(self.category_url(BY_CATEGORY, self.big))
 		self.assertEqual(items, 50)
 		# The site, its settings row, the scope subjects, the category, its
-		# subjects, the page of ids, and the events hydrated with their medicines.
-		self.assertEqual(queries, 7)
+		# subjects, the page of ids, the events hydrated with their medicines,
+		# and the subject names for the channel description.
+		self.assertEqual(queries, 8)
 		site_queries, site_items = self.count_queries(self.url(SITE_FEED))
 		self.assertEqual(site_items, 50)
-		# The same, with one query for every category in the scope instead of two
-		# for the one category.
+		# The same, with one query for every category in the scope instead of the
+		# category's two, and no subject names.
 		self.assertEqual(site_queries, 6)
 		subject_queries, subject_items = self.count_queries(self.subject_url(BY_SUBJECT))
 		self.assertEqual(subject_items, 50)

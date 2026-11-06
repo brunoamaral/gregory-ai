@@ -12,6 +12,7 @@ answer the next.
 import xml.etree.ElementTree as ET
 from datetime import timedelta
 from email.utils import parsedate_to_datetime
+from urllib.parse import parse_qsl, urlsplit
 
 from django.contrib.sites.models import Site
 from django.core.cache import cache
@@ -80,6 +81,16 @@ class FeedFixture:
 			category_slug="reader-category",
 		)
 		self.category.subjects.add(self.subject, self.other_subject)
+
+	def assert_channel_link(self, link, kind, feed, **params):
+		"""link is the homepage, carrying kind, params and the RSS UTM tags."""
+		parts = urlsplit(link)
+		self.assertEqual(
+			f"{parts.scheme}://{parts.netloc}{parts.path}", f"https://{self.site.domain}/"
+		)
+		expected = {"kind": kind, **{key: str(value) for key, value in params.items()}}
+		expected.update(utm_medium="rss", utm_source=f"{kind}_{feed}_feed")
+		self.assertEqual(dict(parse_qsl(parts.query)), expected)
 
 	def make_article(
 		self,
@@ -361,7 +372,14 @@ class CategoryFeedTests(FeedFixture, TestCase):
 		response = self.client.get(self.category_url("site_articles_by_category_feed"))
 		root = ET.fromstring(response.content)
 		self.assertEqual(root.findtext("./channel/title"), "Reader Category — Reader Site")
-		self.assertEqual(root.findtext("./channel/link"), "https://reader.example.com/")
+		# Only one of the category's two subjects is in scope, so it is named.
+		self.assert_channel_link(
+			root.findtext("./channel/link"),
+			"articles",
+			"category",
+			category_id=self.category.pk,
+			subject_id=self.subject.pk,
+		)
 		cache.clear()
 		response = self.client.get(
 			self.category_url("site_relevant_articles_by_category_feed")
@@ -370,6 +388,67 @@ class CategoryFeedTests(FeedFixture, TestCase):
 		self.assertEqual(
 			root.findtext("./channel/title"), "Relevant research: Reader Category — Reader Site"
 		)
+		self.assert_channel_link(
+			root.findtext("./channel/link"),
+			"articles",
+			"category",
+			category_id=self.category.pk,
+			subject_id=self.subject.pk,
+			relevant="true",
+		)
+
+	def test_channel_link_leaves_out_subject_when_category_has_several_here(self):
+		self.settings_row.scope_subjects.add(self.other_subject)
+		root = ET.fromstring(
+			self.client.get(self.category_url("site_articles_by_category_feed")).content
+		)
+		self.assert_channel_link(
+			root.findtext("./channel/link"), "articles", "category", category_id=self.category.pk
+		)
+
+	def test_description_names_subjects_and_starts_with_category_description(self):
+		self.category.category_description = "  A chemokine\r\n\r\nfor myelin repair  "
+		self.category.save()
+		root = ET.fromstring(
+			self.client.get(self.category_url("site_articles_by_category_feed")).content
+		)
+		# Whitespace collapsed, a full stop added; the out-of-scope subject is not named.
+		self.assertEqual(
+			root.findtext("./channel/description"),
+			"A chemokine for myelin repair. All new research on Reader Category "
+			"(Reader Subject), newest first. Not filtered by relevance.",
+		)
+
+	def test_description_without_category_description(self):
+		root = ET.fromstring(
+			self.client.get(self.category_url("site_relevant_articles_by_category_feed")).content
+		)
+		self.assertTrue(
+			root.findtext("./channel/description").startswith(
+				"New research on Reader Category (Reader Subject) marked relevant"
+			)
+		)
+
+
+class SubjectFeedChannelLinkTests(FeedFixture, TestCase):
+	def setUp(self):
+		self.build_fixture()
+
+	def test_subject_feeds_link_to_the_homepage_with_the_subject(self):
+		for name, params in (
+			("site_articles_by_subject_feed", {}),
+			("site_relevant_articles_by_subject_feed", {"relevant": "true"}),
+		):
+			with self.subTest(route=name):
+				cache.clear()
+				root = ET.fromstring(self.client.get(self.subject_url(name)).content)
+				self.assert_channel_link(
+					root.findtext("./channel/link"),
+					"articles",
+					"subject",
+					subject_id=self.subject.pk,
+					**params,
+				)
 
 
 class RelevantVariantTests(FeedFixture, TestCase):
@@ -501,10 +580,11 @@ class RecruitingFeedTests(FeedFixture, TestCase):
 				cache.clear()
 				root = ET.fromstring(self.client.get(self.subject_url(name)).content)
 				self.assertEqual(root.findtext("./channel/title"), expected)
-				# The trials feeds keep linking to the subject's trials page.
-				self.assertEqual(
-					root.findtext("./channel/link"),
-					"https://reader.example.com/trials/subject/reader-subject/",
+				params = {"subject_id": self.subject.pk}
+				if name == "site_recruiting_trials_by_subject_feed":
+					params["recruitment_status_normalized"] = "recruiting,not_yet_recruiting"
+				self.assert_channel_link(
+					root.findtext("./channel/link"), "trials", "subject", **params
 				)
 
 

@@ -487,7 +487,9 @@ class PatentFeedContentTests(PatentFixture, TestCase):
 		root = ET.fromstring(self.subject_feed().content)
 		channel = root.find("./channel")
 		self.assertEqual(channel.findtext("title"), "Reader Subject patents — Reader Site")
-		self.assertEqual(channel.findtext("link"), "https://reader.example.com/")
+		self.assert_channel_link(
+			channel.findtext("link"), "patents", "subject", subject_id=self.subject.pk
+		)
 		self.assertIn("European Patent Office", channel.findtext("description"))
 		self.assertIn("first publication", channel.findtext("description"))
 		self_link = [
@@ -499,6 +501,13 @@ class PatentFeedContentTests(PatentFixture, TestCase):
 		category_root = ET.fromstring(self.client.get(self.category_url(BY_CATEGORY)).content)
 		self.assertEqual(
 			category_root.findtext("./channel/title"), "Patents: Reader Category — Reader Site"
+		)
+		self.assert_channel_link(
+			category_root.findtext("./channel/link"),
+			"patents",
+			"category",
+			category_id=self.category.pk,
+			subject_id=self.subject.pk,
 		)
 
 	def test_cached_for_an_hour(self):
@@ -678,7 +687,14 @@ class PatentSearchFeedTests(PatentFixture, TestCase):
 			linked.findtext("./channel/title"),
 			"Patent search: no grant published · no linked trial — Reader Site",
 		)
-		self.assertEqual(channel.findtext("link"), "https://reader.example.com/")
+		self.assert_channel_link(
+			channel.findtext("link"),
+			"patents",
+			"search",
+			applicant_sponsor_slug="acme-pharma",
+			has_grant="true",
+			search="remyelination",
+		)
 
 	def test_robots_txt_disallows_patent_search(self):
 		self.assertIn(

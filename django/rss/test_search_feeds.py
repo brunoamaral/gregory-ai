@@ -354,9 +354,52 @@ class ArticleSearchFeedTests(SearchFeedBase, TestCase):
 			with self.subTest(query=query):
 				self.assertEqual(self.channel(self.feed(ARTICLES, query)).findtext("title"), expected)
 
-	def test_channel_link_is_the_homepage(self):
+	def test_channel_link_without_parameters_is_the_homepage_with_kind(self):
+		self.assert_channel_link(self.channel(self.feed(ARTICLES)).findtext("link"), "articles", "search")
+
+	def test_channel_link_carries_the_canonical_query_and_not_noise(self):
+		link = self.channel(
+			self.feed(ARTICLES, "utm_source=x&search=%20ms%20&relevant=TRUE")
+		).findtext("link")
+		self.assert_channel_link(link, "articles", "search", relevant="true", search="ms")
+
+	def test_channel_link_adds_category_id_and_its_only_subject(self):
+		slug = self.category.category_slug
+		cases = {
+			# One of the category's subjects is in scope: it is added.
+			f"category_slug={slug}": {},
+			# The reader's own subject_id is kept as given.
+			f"category_slug={slug}&subject_id={self.subject.pk}": {},
+		}
+		for query in cases:
+			with self.subTest(query=query):
+				link = self.channel(self.feed(ARTICLES, query)).findtext("link")
+				self.assert_channel_link(
+					link,
+					"articles",
+					"search",
+					category_id=self.category.pk,
+					category_slug=slug,
+					subject_id=self.subject.pk,
+				)
+		cache.clear()
+		self.settings_row.scope_subjects.add(self.other_subject)
+		link = self.channel(self.feed(ARTICLES, f"category_slug={slug}")).findtext("link")
+		self.assert_channel_link(
+			link, "articles", "search", category_id=self.category.pk, category_slug=slug
+		)
+
+	def test_description_starts_with_the_category_description(self):
+		self.category.category_description = "A chemokine for myelin repair."
+		self.category.save()
+		slug = self.category.category_slug
 		self.assertEqual(
-			self.channel(self.feed(ARTICLES)).findtext("link"), "https://reader.example.com/"
+			self.channel(self.feed(ARTICLES, f"category_slug={slug}")).findtext("description"),
+			"A chemokine for myelin repair. The newest articles matching this search, newest first.",
+		)
+		self.assertEqual(
+			self.channel(self.feed(ARTICLES, "search=ms")).findtext("description"),
+			"The newest articles matching this search, newest first.",
 		)
 
 	def test_items_carry_this_sites_editorial_content(self):
@@ -378,6 +421,25 @@ class TrialSearchFeedTests(SearchFeedBase, TestCase):
 		if fields:
 			Trials.objects.filter(pk=trial.pk).update(**fields)
 		return trial
+
+	def test_channel_link_and_description(self):
+		self.category.category_description = "Trials on a topic"
+		self.category.save()
+		query = f"category_slug={self.category.category_slug}&phase_normalized=phase_3"
+		channel = self.channel(self.feed(TRIALS, query))
+		self.assert_channel_link(
+			channel.findtext("link"),
+			"trials",
+			"search",
+			category_id=self.category.pk,
+			category_slug=self.category.category_slug,
+			phase_normalized="phase_3",
+			subject_id=self.subject.pk,
+		)
+		self.assertEqual(
+			channel.findtext("description"),
+			"Trials on a topic. The newest clinical trials matching this search, newest first.",
+		)
 
 	def test_no_parameters_returns_the_whole_scope(self):
 		self.make("In scope")

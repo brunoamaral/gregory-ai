@@ -46,7 +46,14 @@ from rss.feed_scope import (
 	site_feed_scope,
 )
 from rss.search_feeds import _SearchFeedMixin
-from rss.views import _homepage, _page_ids, _SelfLinkMixin
+from rss.views import (
+	_category_link_params,
+	_category_topic,
+	_channel_link,
+	_page_ids,
+	_SelfLinkMixin,
+	_with_about,
+)
 
 PATENT_FEED_LIMIT = 50
 
@@ -96,7 +103,7 @@ class SitePatentsBySubjectFeed(_SelfLinkMixin, PatentFeedItemMixin, Feed):
 		return f"{obj.subject_name} patents — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		return _channel_link(obj._site, "patents", "subject", [("subject_id", obj.pk)])
 
 	def description(self, obj):
 		return f"New {obj.subject_name} patent families. {_SOURCE_NOTE}"
@@ -129,10 +136,12 @@ class SitePatentsByCategoryFeed(_SelfLinkMixin, PatentFeedItemMixin, Feed):
 		return f"Patents: {obj.category_name} — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		params = _category_link_params(obj, obj._cat_subject_ids)
+		return _channel_link(obj._site, "patents", "category", params)
 
 	def description(self, obj):
-		return f"New patent families on {obj.category_name}. {_SOURCE_NOTE}"
+		topic = _category_topic(obj, obj._cat_subject_ids)
+		return _with_about(obj, f"New patent families on {topic}. {_SOURCE_NOTE}")
 
 	def items(self, obj):
 		queryset = patent_base_qs(obj._cat_subject_ids).filter(
@@ -159,6 +168,7 @@ class SitePatentsSearchFeed(_SearchFeedMixin, PatentFeedItemMixin, Feed):
 
 	params_allowlist = PATENT_SEARCH_PARAMS
 	cache_namespace = "patents-search"
+	link_kind = "patents"
 	filter_class = PatentFilter
 	empty_title = "All patents"
 	title_prefix = "Patent search"
@@ -188,7 +198,9 @@ class SitePatentsSearchFeed(_SearchFeedMixin, PatentFeedItemMixin, Feed):
 		return labels
 
 	def description(self, obj):
-		return f"The newest patent families matching this search. {_SOURCE_NOTE}"
+		return _with_about(
+			obj.category, f"The newest patent families matching this search. {_SOURCE_NOTE}"
+		)
 
 	def items(self, obj):
 		return hydrate_patents(obj.ids, obj.site, obj.settings_row, obj.scope)
