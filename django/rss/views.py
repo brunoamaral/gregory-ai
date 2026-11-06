@@ -66,13 +66,15 @@ reader never sees an error, so a silent 404 loses a subscriber permanently
 rather than visibly. See docs/03-api-and-rss-feeds.md#old-feed-urls--permanent-redirect.
 """
 
+from urllib.parse import urlencode
+
 from django.contrib.syndication.views import Feed
 from django.db.models import Exists, F, OuterRef
 from django.http import Http404, HttpResponsePermanentRedirect
 from django.urls import reverse
 
 from api.filters import relevant_articles_q
-from gregory.models import ArticleCategoryAssignment, Authors
+from gregory.models import ArticleCategoryAssignment, Authors, Subject
 from gregory.functions import normalize_orcid
 from sitesettings.utils import author_page_base
 
@@ -162,14 +164,70 @@ class _SelfLinkMixin:
 
 
 
-def _homepage(site):
-	"""Channel <link> for the subject/category feeds: the site's homepage.
+def _channel_link(site, kind, feed, params=()):
+	"""Channel <link>: the site's homepage, carrying what the feed shows.
 
 	Per-subject and per-category pages aren't something every frontend has,
-	and there is no setting yet saying which paths exist. The existing trials
-	feed keeps its /trials/subject/<slug>/ link, which is already in use.
+	and there is no setting saying which paths exist, so the link is the
+	homepage. Its query string says where the feed comes from, so a frontend
+	can send the reader on to the matching page:
+
+	  kind         articles, trials, patents or medicines
+	  ...          the feed's filters under the search feeds' own parameter
+	               names (subject_id, category_id, relevant, search, ...),
+	               sorted, empty ones dropped
+	  utm_medium   always "rss" (the emails use "email")
+	  utm_source   which feed, e.g. "articles_category_feed"
+
+	A frontend that doesn't act on them ignores them and shows its homepage.
 	"""
-	return f"https://{site.domain}/"
+	query = [("kind", kind)]
+	query += sorted((key, str(value)) for key, value in params if value not in (None, ""))
+	query += [("utm_medium", "rss"), ("utm_source", f"{kind}_{feed}_feed")]
+	return f"https://{site.domain}/?{urlencode(query)}"
+
+
+def _category_link_params(category, subject_ids):
+	"""category_id, and subject_id when the category has exactly one subject here.
+
+	subject_ids is the category's subjects inside the site's scope. With one,
+	the frontend can open that subject's page; with several it has to pick.
+	"""
+	params = [("category_id", category.pk)]
+	if len(subject_ids) == 1:
+		params.append(("subject_id", next(iter(subject_ids))))
+	return params
+
+
+def _category_about(category):
+	"""The category's description on one line, ending in a full stop, or ''.
+
+	Prepended to the channel <description> so a reader can see what the
+	category is about without leaving the feed reader.
+	"""
+	text = " ".join((category.category_description or "").split())
+	if text and text[-1] not in ".!?":
+		text += "."
+	return text
+
+
+def _with_about(category, text):
+	about = _category_about(category) if category is not None else ""
+	return f"{about} {text}" if about else text
+
+
+def _category_topic(category, subject_ids):
+	"""'Fractalkine (Multiple Sclerosis)': the category and its subjects here.
+
+	The channel title names only the category; the subjects say which
+	research it is drawn from.
+	"""
+	names = ", ".join(
+		Subject.objects.filter(pk__in=subject_ids)
+		.order_by("subject_name")
+		.values_list("subject_name", flat=True)
+	)
+	return f"{category.category_name} ({names})" if names else category.category_name
 
 
 def _page_ids(queryset, limit):
@@ -274,7 +332,10 @@ class SiteArticlesBySubjectFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
 		return f"{prefix}{obj.subject_name} research — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		params = [("subject_id", obj.pk)]
+		if self.relevant_only:
+			params.append(("relevant", "true"))
+		return _channel_link(obj._site, "articles", "subject", params)
 
 	def description(self, obj):
 		if self.relevant_only:
@@ -325,19 +386,22 @@ class SiteArticlesByCategoryFeed(_SelfLinkMixin, ArticleFeedItemMixin, Feed):
 		return f"{obj.category_name} — {obj._site.name}"
 
 	def link(self, obj):
-		return _homepage(obj._site)
+		params = _category_link_params(obj, obj._cat_subject_ids)
+		if self.relevant_only:
+			params.append(("relevant", "true"))
+		return _channel_link(obj._site, "articles", "category", params)
 
 	def description(self, obj):
+		topic = _category_topic(obj, obj._cat_subject_ids)
 		if self.relevant_only:
-			return (
-				f"New research on {obj.category_name} marked relevant by an editor, "
+			text = (
+				f"New research on {topic} marked relevant by an editor, "
 				"or that our models agree is relevant and no editor has rejected, "
 				"newest first."
 			)
-		return (
-			f"All new research on {obj.category_name}, newest first. "
-			"Not filtered by relevance."
-		)
+		else:
+			text = f"All new research on {topic}, newest first. Not filtered by relevance."
+		return _with_about(obj, text)
 
 	def items(self, obj):
 		queryset = article_base_qs(obj._cat_subject_ids).filter(
@@ -370,8 +434,14 @@ class SiteTrialsBySubjectFeed(_SelfLinkMixin, TrialFeedItemMixin, Feed):
 	def title(self, obj):
 		return f"{obj.subject_name} clinical trials — {obj._site.name}"
 
+	# The statuses the feed is narrowed to, for the channel link (recruiting variant).
+	link_statuses = ()
+
 	def link(self, obj):
-		return f"https://{obj._site.domain}/trials/subject/{obj.subject_slug}/"
+		params = [("subject_id", obj.pk)]
+		if self.link_statuses:
+			params.append(("recruitment_status_normalized", ",".join(self.link_statuses)))
+		return _channel_link(obj._site, "trials", "subject", params)
 
 	def description(self, obj):
 		return f"RSS feed for clinical trials related to {obj.subject_name}."
@@ -392,6 +462,8 @@ class SiteRecruitingTrialsBySubjectFeed(SiteTrialsBySubjectFeed):
 	"recruiting" later does not bring it back (status changes are a different
 	kind of item). A NULL status is left out.
 	"""
+
+	link_statuses = RECRUITING_STATUSES
 
 	def title(self, obj):
 		return f"Recruiting {obj.subject_name} trials — {obj._site.name}"

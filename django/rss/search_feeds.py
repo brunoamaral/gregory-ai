@@ -84,10 +84,11 @@ from rss.feed_scope import (
 )
 from rss.views import (
 	FEED_CACHE_SECONDS,
+	_channel_link,
 	_discovery_order,
-	_homepage,
 	_page_ids,
 	_SelfLinkMixin,
+	_with_about,
 )
 
 ARTICLE_SEARCH_PARAMS = (
@@ -252,6 +253,8 @@ class _SearchFeedMixin(_SelfLinkMixin):
 	cache_namespace = ""
 	filter_class = None
 	content_word = ""
+	# The channel link's `kind` (rss.views._channel_link).
+	link_kind = ""
 	empty_title = ""
 	title_prefix = "Search"
 	# True for the patent search feed: it needs CustomSetting.patents_enabled
@@ -327,6 +330,8 @@ class _SearchFeedMixin(_SelfLinkMixin):
 			scope=scope,
 			canonical=canonical,
 			label_title=self.channel_title(params, site, subject, category),
+			category=category,
+			link_params=self.link_params(params, category, subject_ids),
 		)
 		url = request.build_absolute_uri(request.path)
 		# _SelfLinkMixin._request_url drops the query string; a search feed's
@@ -344,7 +349,21 @@ class _SearchFeedMixin(_SelfLinkMixin):
 		return obj.label_title
 
 	def link(self, obj):
-		return _homepage(obj.site)
+		return _channel_link(obj.site, self.link_kind, "search", obj.link_params)
+
+	def link_params(self, params, category, subject_ids):
+		"""The feed's own (canonical) filters, plus category_id for a category.
+
+		subject_ids is the narrowed set: with a category and no subject_id,
+		a category that has one subject here also gets its subject_id, as on
+		the category feeds.
+		"""
+		link_params = list(params.items())
+		if category is not None:
+			link_params.append(("category_id", category.pk))
+			if "subject_id" not in params and len(subject_ids) == 1:
+				link_params.append(("subject_id", next(iter(subject_ids))))
+		return link_params
 
 	def channel_title(self, params, site, subject, category):
 		labels = self.labels(params, subject, category)
@@ -373,6 +392,7 @@ class SiteArticlesSearchFeed(_SearchFeedMixin, ArticleFeedItemMixin, Feed):
 
 	params_allowlist = ARTICLE_SEARCH_PARAMS
 	cache_namespace = "articles-search"
+	link_kind = "articles"
 	filter_class = ArticleFilter
 	empty_title = "All articles"
 
@@ -405,7 +425,7 @@ class SiteArticlesSearchFeed(_SearchFeedMixin, ArticleFeedItemMixin, Feed):
 		return labels
 
 	def description(self, obj):
-		return "The newest articles matching this search, newest first."
+		return _with_about(obj.category, "The newest articles matching this search, newest first.")
 
 	def items(self, obj):
 		return hydrate_articles(obj.ids, obj.site, obj.scope)
@@ -416,6 +436,7 @@ class SiteTrialsSearchFeed(_SearchFeedMixin, TrialFeedItemMixin, Feed):
 
 	params_allowlist = TRIAL_SEARCH_PARAMS
 	cache_namespace = "trials-search"
+	link_kind = "trials"
 	filter_class = TrialFilter
 	empty_title = "All clinical trials"
 
@@ -450,7 +471,9 @@ class SiteTrialsSearchFeed(_SearchFeedMixin, TrialFeedItemMixin, Feed):
 		return labels
 
 	def description(self, obj):
-		return "The newest clinical trials matching this search, newest first."
+		return _with_about(
+			obj.category, "The newest clinical trials matching this search, newest first."
+		)
 
 	def items(self, obj):
 		return hydrate_trials(obj.ids, obj.site, obj.settings_row, obj.scope)
