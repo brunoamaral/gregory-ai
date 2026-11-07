@@ -4,9 +4,10 @@ They live here rather than in api.views so CategorySerializer can use them
 without importing the views module (which imports the serializers).
 """
 
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q, Window
+from django.db.models.functions import RowNumber
 
-from gregory.models import ArticleCategoryAssignment
+from gregory.models import ArticleCategoryAssignment, Authors
 
 
 def _visible_content_q(content_prefix, visible_subject_ids):
@@ -66,3 +67,64 @@ def category_authors_counts(category_ids, visible_subject_ids=None):
 	counts = dict.fromkeys(category_ids, 0)
 	counts.update(rows)
 	return counts
+
+
+# The Authors fields CategoryTopAuthorSerializer reads. category_top_authors
+# selects these in its ranking query instead of loading the authors after.
+TOP_AUTHOR_FIELDS = ("author_id", "given_name", "family_name", "full_name", "ORCID", "country")
+
+
+def category_top_authors(
+	category_ids, visible_subject_ids=None, max_authors=10, date_filters=None
+):
+	"""Each category's top authors by number of visible articles in it, as
+	``{category_id: [Authors, ...]}``, for a list of ids -- a page of
+	results -- in one query however many categories there are (the
+	per-category form ran one each).
+
+	Each author carries ``category_articles_count``: their distinct articles
+	in that category, counting only articles the caller may see (see
+	_visible_content_q) and, when given, inside *date_filters* (keys such as
+	``articles__published_date__gte``, as CategoryViewSet builds them).
+	Ranked by that count, highest first; ties go to the lower author_id so
+	the list is stable between requests. A category with no authored
+	articles maps to ``[]``.
+	"""
+	category_ids = list(category_ids)
+	if not category_ids:
+		return {}
+	qs = ArticleCategoryAssignment.objects.filter(
+		teamcategory_id__in=category_ids, articles__authors__isnull=False
+	)
+	visible_q = _visible_content_q("articles__", visible_subject_ids)
+	if visible_q is not None:
+		qs = qs.filter(visible_q)
+	if date_filters:
+		qs = qs.filter(**date_filters)
+	author_fields = {
+		f"author_{name}": F(f"articles__authors__{name}") for name in TOP_AUTHOR_FIELDS
+	}
+	ranked = (
+		qs.order_by()
+		.values("teamcategory_id", **author_fields)
+		.annotate(n=Count("articles_id", distinct=True))
+		.annotate(
+			rank=Window(
+				RowNumber(),
+				partition_by=F("teamcategory_id"),
+				order_by=[F("n").desc(), F("author_author_id").asc()],
+			)
+		)
+		.filter(rank__lte=max_authors)
+	)
+	result = {category_id: [] for category_id in category_ids}
+	for row in sorted(ranked, key=lambda r: (r["teamcategory_id"], r["rank"])):
+		# Built from the row rather than fetched: one query for the page.
+		# A separate instance per category, since the same author can rank
+		# in several categories on the page with a different count in each.
+		author = Authors(
+			**{name: row[f"author_{name}"] for name in TOP_AUTHOR_FIELDS}
+		)
+		author.category_articles_count = row["n"]
+		result[row["teamcategory_id"]].append(author)
+	return result

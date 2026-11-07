@@ -1013,6 +1013,8 @@ Many trials share a rank, so ties are broken automatically by `-discovery_date` 
 
 `authors_count` counts only authors of articles the caller can see: an article whose subjects are all outside the caller's scope adds no authors, even when the category itself is visible through another subject. The number is the same whether or not the request sorts by it, and on the detail view (`GET /categories/<id>/`) and `GET /teams/<team_id>/subjects/<subject_id>/categories/`.
 
+`top_authors` (with `include_authors=true`, the default) follows the same rule: authors are ranked by how many of the category's visible articles they appear on, within `date_from`/`date_to`/`timeframe` when given, highest first, ties broken by the lower `author_id`, up to `max_authors` per category. Each author's `articles_count` is that number. The lists for the whole page are built in one query.
+
 `authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. An unsorted request counts authors for the categories on the page it returns, in one query for the whole page. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters.
 
 ### Sponsor canonicalization

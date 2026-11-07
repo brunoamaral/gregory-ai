@@ -2132,6 +2132,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	- **get_categories** - comma-separated list of category IDs (e.g., 1,2,3)
 	- **include_authors** - Include top authors data (default: true)
 	- **max_authors** - Maximum number of top authors to return per category (default: 10, max: 50)
+	  Top authors are ranked by the category's articles the caller can see (ties: lower author_id first).
 	- **date_from** - Filter articles from this date (YYYY-MM-DD)
 	- **date_to** - Filter articles to this date (YYYY-MM-DD)
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
