@@ -1013,13 +1013,15 @@ Many trials share a rank, so ties are broken automatically by `-discovery_date` 
 
 `authors_count` counts only authors of articles the caller can see: an article whose subjects are all outside the caller's scope adds no authors, even when the category itself is visible through another subject. The number is the same whether or not the request sorts by it, and on the detail view (`GET /categories/<id>/`) and `GET /teams/<team_id>/subjects/<subject_id>/categories/`.
 
+`top_authors` (with `include_authors=true`, the default) follows the same rule: authors are ranked by how many of the category's visible articles they appear on, within `date_from`/`date_to`/`timeframe` when given, highest first, ties broken by the lower `author_id`, up to `max_authors` per category. Each author's `articles_count` is that number. The lists for the whole page are built in one query.
+
 `authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. An unsorted request counts authors for the categories on the page it returns, in one query for the whole page. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters.
 
 ### Category authors
 
 `GET /categories/{id}/authors/` lists the authors of a category's articles, each with `articles_count`: how many of the category's articles they are on. It follows the same rule as `authors_count`: only articles the caller can see count. An article must carry at least one subject in the caller's scope; an article whose subjects are all outside it, or that has no subject, is left out. So in a category shared between a public and a private subject, an author who is only on the private subject's articles is not listed, and those articles add nothing to other authors' counts. An article that carries both a visible and a hidden subject counts once.
 
-`date_from`, `date_to` and `timeframe` narrow the articles counted, as on `GET /categories/`. `min_articles` (default 1) applies to the visible count. `sort_by=articles_count` (default) or `author_name`, `order=desc` (default) or `asc`; ties go to the lower `author_id` either way.
+`date_from`, `date_to` and `timeframe` narrow the articles counted, as on `GET /categories/`. `min_articles` (default 1) applies to the visible count. `sort_by=articles_count` (default) or `author_name`, `order=desc` (default) or `asc`; ties go to the lower `author_id` either way. For the same category and date filters, the list (highest count first) matches the category's `top_authors`.
 
 ### Sponsor canonicalization
 
