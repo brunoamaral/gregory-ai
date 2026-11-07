@@ -51,7 +51,7 @@ from api.editorial import (
 	patent_site_contents,
 )
 from api.serializers.mixins import ScopedSerializerMixin
-from api.category_counts import category_authors_counts
+from api.category_counts import category_authors_counts, category_top_authors
 from api.patent_links import visible_patent_trial_links_queryset
 
 
@@ -168,13 +168,14 @@ def _request_visible_subject_ids(context):
 
 
 class CategoryListSerializer(serializers.ListSerializer):
-	"""Fills in authors_count for every category being serialized with one
-	grouped query, instead of one query per category (issue #816).
+	"""Fills in authors_count, and top_authors when requested, for every
+	category being serialized with a fixed number of queries, instead of one
+	query per category for each (issue #816).
 
 	Runs on the rows actually being serialized -- the page, when the view
 	paginates -- so the work stays bounded by page size. Rows that already
 	carry ``authors_count_annotated`` (the view adds it when a client sorts
-	by it) are left alone.
+	by it) keep that count.
 	"""
 
 	def to_representation(self, data):
@@ -187,6 +188,16 @@ class CategoryListSerializer(serializers.ListSerializer):
 			for obj in items:
 				if obj.pk in counts:
 					obj.authors_count_annotated = counts[obj.pk]
+		author_params = self.context.get("author_params", {})
+		if items and author_params.get("include_authors", False):
+			top = category_top_authors(
+				[obj.pk for obj in items],
+				_request_visible_subject_ids(self.context),
+				author_params.get("max_authors", 10),
+				author_params.get("date_filters", {}),
+			)
+			for obj in items:
+				obj.top_authors_batched = top[obj.pk]
 		return super().to_representation(items)
 
 
@@ -269,55 +280,22 @@ class CategorySerializer(serializers.ModelSerializer):
 		)[obj.pk]
 
 	def get_top_authors(self, obj) -> list:
-		"""Optimized top authors calculation avoiding complex JOINs"""
-		# Get author parameters from serializer context
-		context = self.context
-		author_params = context.get("author_params", {})
-
-		# Check if author data should be included
+		"""The category's top authors by visible articles in it, when the
+		request asks for them (``include_authors``). Lists get them
+		pre-filled by CategoryListSerializer; a single category (detail
+		view) runs the same query for its one row."""
+		author_params = self.context.get("author_params", {})
 		if not author_params.get("include_authors", False):
 			return []
-
-		# Get parameters
-		max_authors = author_params.get("max_authors", 10)
-		date_filters = author_params.get("date_filters", {})
-
-		# Use a more efficient approach with subqueries instead of complex JOINs
-		# Get article IDs for this category first
-		article_ids = obj.articles.values_list("article_id", flat=True)
-
-		# Apply date filters if needed
-		if date_filters:
-			articles_qs = obj.articles.all()
-			# Adjust the date filter keys for the Articles model
-			articles_date_filters = {}
-			for key, value in date_filters.items():
-				if key.startswith("articles__"):
-					articles_date_filters[key.replace("articles__", "")] = value
-				else:
-					articles_date_filters[f"{key}"] = value
-			if articles_date_filters:
-				articles_qs = articles_qs.filter(**articles_date_filters)
-			article_ids = articles_qs.values_list("article_id", flat=True)
-
-		# Get authors with article counts using a simpler subquery approach
-		# This avoids the complex GROUP BY queries that hang the database
-		from django.db.models import Subquery
-		from gregory.models import Authors
-
-		top_authors = (
-			Authors.objects.filter(articles__article_id__in=Subquery(article_ids))
-			.annotate(
-				category_articles_count=Count(
-					"articles",
-					filter=Q(articles__article_id__in=Subquery(article_ids)),
-					distinct=True,
-				)
-			)
-			.order_by("-category_articles_count")[:max_authors]
-		)
-
-		return CategoryTopAuthorSerializer(top_authors, many=True).data
+		top = getattr(obj, "top_authors_batched", None)
+		if top is None:
+			top = category_top_authors(
+				[obj.pk],
+				_request_visible_subject_ids(self.context),
+				author_params.get("max_authors", 10),
+				author_params.get("date_filters", {}),
+			)[obj.pk]
+		return CategoryTopAuthorSerializer(top, many=True).data
 
 	def get_monthly_counts(self, obj) -> Optional[dict]:
 		"""Get monthly counts of articles and trials when requested"""

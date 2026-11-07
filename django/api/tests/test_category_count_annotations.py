@@ -506,3 +506,152 @@ class CategoryAuthorsCountBatchingTests(TestCase):
 
 		self.assertEqual(rows_after, rows_before + 4)
 		self.assertEqual(queries_after, queries_before)
+
+
+class CategoryTopAuthorsBatchingTests(TestCase):
+	"""top_authors on a category list is built for the whole page in a fixed
+	number of queries, not one per category, and ranks only articles the
+	caller may see."""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(
+			name="Top Authors Org", slug="top-authors-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Top Authors Team", slug="top-authors-team", organization=self.organization
+		)
+		self.public_subject = Subject.objects.create(
+			subject_name="Top Authors Public", subject_slug="top-authors-public", team=self.team
+		)
+		self.hidden_subject = Subject.objects.create(
+			subject_name="Top Authors Hidden", subject_slug="top-authors-hidden", team=self.team
+		)
+		publish_subjects(self.public_subject, organization=self.organization)
+		private_site_publishing(self.hidden_subject, organization=self.organization)
+
+		self.category = _make_category(self.team, self.public_subject, "Top Authors Category")
+		self.category.subjects.add(self.hidden_subject)
+
+		self.a, self.b, self.c, self.hidden_only = (
+			self._author(name) for name in ("Alpha", "Bravo", "Charlie", "Hidden")
+		)
+		# Visible: a on 3 articles, b on 2, c on 1.
+		self._article(self.category, self.public_subject, [self.a, self.b, self.c])
+		self._article(self.category, self.public_subject, [self.a, self.b])
+		self._article(self.category, self.public_subject, [self.a])
+		# Hidden-only articles: they must neither rank hidden_only nor lift c.
+		for _ in range(5):
+			self._article(self.category, self.hidden_subject, [self.hidden_only, self.c])
+
+		self.client = APIClient()
+
+	def _author(self, name):
+		return Authors.objects.create(
+			given_name=name, family_name="Top", full_name=f"{name} Top"
+		)
+
+	def _article(self, category, subject, authors, published=None):
+		n = Articles.objects.count()
+		article = Articles.objects.create(
+			title=f"Top Authors Article {n}",
+			link=f"https://example.com/top-authors-{n}",
+			published_date=published or timezone.now(),
+		)
+		article.categories.add(category)
+		article.subjects.add(subject)
+		article.authors.add(*authors)
+		return article
+
+	def _results(self, response):
+		return response.data["results"] if "results" in response.data else response.data
+
+	def _top(self, **params):
+		params = {"team_id": self.team.id, **params}
+		response = self.client.get(reverse("categories-list"), params)
+		self.assertEqual(response.status_code, 200)
+		return {
+			row["id"]: [(a["author_id"], a["articles_count"]) for a in row["top_authors"]]
+			for row in self._results(response)
+		}
+
+	def test_ranks_visible_articles_only(self):
+		self.assertEqual(
+			self._top()[self.category.id],
+			[(self.a.pk, 3), (self.b.pk, 2), (self.c.pk, 1)],
+		)
+
+	def test_ties_go_to_lower_author_id(self):
+		low, high = sorted([self._author("Delta"), self._author("Echo")], key=lambda a: a.pk)
+		cat = _make_category(self.team, self.public_subject, "Tie Category")
+		self._article(cat, self.public_subject, [high, low])
+		self.assertEqual(self._top()[cat.id], [(low.pk, 1), (high.pk, 1)])
+
+	def test_max_authors_applies_per_category(self):
+		other = _make_category(self.team, self.public_subject, "Other Category")
+		self._article(other, self.public_subject, [self.b, self.c])
+		top = self._top(max_authors=2)
+		self.assertEqual(top[self.category.id], [(self.a.pk, 3), (self.b.pk, 2)])
+		self.assertEqual(top[other.id], [(self.b.pk, 1), (self.c.pk, 1)])
+
+	def test_date_from_limits_the_articles_counted(self):
+		old = timezone.now() - timezone.timedelta(days=400)
+		cat = _make_category(self.team, self.public_subject, "Dated Category")
+		self._article(cat, self.public_subject, [self.a], published=old)
+		self._article(cat, self.public_subject, [self.b])
+		since = (timezone.now() - timezone.timedelta(days=30)).date().isoformat()
+		self.assertEqual(self._top(date_from=since)[cat.id], [(self.b.pk, 1)])
+
+	def test_detail_matches_list(self):
+		response = self.client.get(reverse("categories-detail", args=[self.category.id]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(
+			[(a["author_id"], a["articles_count"]) for a in response.data["top_authors"]],
+			self._top()[self.category.id],
+		)
+
+	def test_category_without_authors_has_empty_list(self):
+		empty = _make_category(self.team, self.public_subject, "Empty Category")
+		self.assertEqual(self._top()[empty.id], [])
+
+	def test_include_authors_false_returns_empty_list(self):
+		self.assertEqual(self._top(include_authors="false")[self.category.id], [])
+
+	def test_query_count_does_not_grow_with_categories_on_page(self):
+		def count_queries():
+			with CaptureQueriesContext(connection) as ctx:
+				rows = self._top()
+			return len(rows), len(ctx.captured_queries)
+
+		self._top()  # warm the caller's site scope cache
+		rows_before, queries_before = count_queries()
+		for i in range(4):
+			cat = _make_category(self.team, self.public_subject, f"Extra Top {i}")
+			self._article(cat, self.public_subject, [self.a, self.b])
+		rows_after, queries_after = count_queries()
+
+		self.assertEqual(rows_after, rows_before + 4)
+		self.assertEqual(queries_after, queries_before)
+
+	def test_author_fields_cover_the_top_author_serializer(self):
+		"""Authors are built from the ranking query's row, so every field the
+		serializer reads must be selected there, or it comes back blank."""
+		from api.category_counts import TOP_AUTHOR_FIELDS
+		from api.serializers import CategoryTopAuthorSerializer
+
+		read = set(CategoryTopAuthorSerializer.Meta.fields) - {"articles_count"}
+		self.assertLessEqual(read, set(TOP_AUTHOR_FIELDS))
+
+	def test_author_details_come_through(self):
+		self.a.ORCID = "0000-0001-2345-6789"
+		self.a.country = "PT"
+		self.a.save()
+		response = self.client.get(reverse("categories-list"), {"team_id": self.team.id})
+		row = next(r for r in self._results(response) if r["id"] == self.category.id)
+		first = row["top_authors"][0]
+		self.assertEqual(
+			(first["author_id"], first["full_name"], first["ORCID"], first["country"]),
+			(self.a.pk, "Alpha Top", "0000-0001-2345-6789", "PT"),
+		)
