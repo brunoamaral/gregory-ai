@@ -657,7 +657,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Authors | `GET /authors/{id}/coauthors/` | `id` (path) | Co-authors of the given author |
 | Categories | `GET /categories/` | `team_id`, `subject_id`, `subjects_any`, `category_id`, `category_terms`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents), and `medicines_count`, scoped to its [medicine scope](#which-sites-show-medicines) |
 | Categories | `GET /categories/{id}/` | `id` (path) | Includes `category_terms` and `category_exclude_terms` |
-| Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by`, `order`, date filters | Author stats for a category |
+| Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by` (`articles_count`, `author_name`), `order` (`asc`, `desc`), `date_from`, `date_to`, `timeframe`, pagination | Author stats for a category, counting only the articles the caller can see — see [Category authors](#category-authors) |
 | Sources | `GET /sources/` | `source_id`, `team_id`, `subject_id`, `active`, `source_for`, `link`, `search`, `ordering` (`name`, `source_id`), pagination | `search` matches name and description; `link` is a case-insensitive substring of the feed or search URL; `active=true\|false` filters on whether the pipeline polls it. `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
 | Sponsors | `GET /sponsors/` | `sponsor_type`, `subject_id`, `subjects_any`, `include_patent_applicants`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below. Each row carries `trials_count` and `patents_count`; `include_patent_applicants=true` also lists sponsors that only applied for patents ([Patents](#patents)). `subject_id` / `subjects_any` keep sponsors with at least one trial in the subject(s) |
@@ -1014,6 +1014,12 @@ Many trials share a rank, so ties are broken automatically by `-discovery_date` 
 `authors_count` counts only authors of articles the caller can see: an article whose subjects are all outside the caller's scope adds no authors, even when the category itself is visible through another subject. The number is the same whether or not the request sorts by it, and on the detail view (`GET /categories/<id>/`) and `GET /teams/<team_id>/subjects/<subject_id>/categories/`.
 
 `authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. An unsorted request counts authors for the categories on the page it returns, in one query for the whole page. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters.
+
+### Category authors
+
+`GET /categories/{id}/authors/` lists the authors of a category's articles, each with `articles_count`: how many of the category's articles they are on. It follows the same rule as `authors_count`: only articles the caller can see count. An article must carry at least one subject in the caller's scope; an article whose subjects are all outside it, or that has no subject, is left out. So in a category shared between a public and a private subject, an author who is only on the private subject's articles is not listed, and those articles add nothing to other authors' counts. An article that carries both a visible and a hidden subject counts once.
+
+`date_from`, `date_to` and `timeframe` narrow the articles counted, as on `GET /categories/`. `min_articles` (default 1) applies to the visible count. `sort_by=articles_count` (default) or `author_name`, `order=desc` (default) or `asc`; ties go to the lower `author_id` either way.
 
 ### Sponsor canonicalization
 
