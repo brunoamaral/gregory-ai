@@ -188,6 +188,7 @@ from api.medicine_scope import (
 	visible_subject_links_queryset,
 )
 from api.models import APIAccessSchemeLog
+from api.category_counts import _visible_content_q
 from api.utils.exceptions import (
 	APIAccessDeniedError,
 	APIInvalidAPIKeyError,
@@ -1880,37 +1881,6 @@ class ArticleViewSet(
 ###
 
 
-def _visible_content_q(content_prefix, visible_subject_ids):
-	"""Q object: the content reached via *content_prefix* carries at least
-	one subject in ``visible_subject_ids``.
-
-	*content_prefix* is the ORM path to Articles/Trials -- ``""`` when the
-	queryset being filtered IS Articles/Trials, or e.g. ``"articles__"``
-	when filtering a related model that reaches them through that relation.
-
-	The category-aggregate counterpart of the list rule (PR #863 review
-	finding 4): a category shared between a visible and a hidden subject
-	must not have its counts inflated, or its authors disclosed, by rows the
-	caller cannot otherwise see.
-
-	Content with NO subject is excluded, exactly as
-	SubjectVisibilityMixin.get_queryset excludes it -- an Exists() over the
-	subjects through table fails for a row with no through rows, which
-	api/tests/test_visibility_org_filter_edge_cases.py pins as
-	test_subject_less_article_stays_invisible. Counting it here would make a
-	category report rows that its own list endpoint will not return, which
-	is a worse failure than under-counting: the numbers stop describing the
-	data the caller can actually reach.
-
-	Returns ``None`` when ``visible_subject_ids`` is ``None`` (no middleware
-	/ no scoping active), so callers can skip filtering entirely -- same
-	fallback contract as SubjectVisibilityMixin.
-	"""
-	if visible_subject_ids is None:
-		return None
-	return Q(**{f"{content_prefix}subjects__id__in": visible_subject_ids})
-
-
 def _category_through_count_subquery(through_model, content_fk, visible_subject_ids=None):
 	"""Correlated scalar count of a category's rows in a single M2M through
 	table (article or trial category assignments).
@@ -2175,7 +2145,8 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 	  matching the filters rather than just the page being returned. It is
 	  therefore annotated only for requests that sort by it — note this changes
 	  *where* the count comes from, not whether it is computed, since the
-	  serializer otherwise derives `authors_count` per row on its own.
+	  serializer otherwise counts `authors_count` for the page in one query.
+	  Either way it counts only authors of articles the caller can see.
 
 	# Response includes:
 	- Category basic information
@@ -2306,17 +2277,15 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# fallback an unknown name gets, precisely because this one passes the
 		# ordering_fields whitelist.
 		#
-		# The count itself is not avoided by skipping the annotation: the
-		# serializer derives authors_count per row when it is absent (see
-		# CategorySerializer.get_authors_count), so a default list response
-		# still runs one such query per category on the page. What the
-		# annotation changes is the scope — ordering is applied before
-		# pagination, so ranking by this value forces the distinct-author
-		# count for every category matching the filters, not just the page.
-		# Annotating on demand keeps that whole-result-set cost on the
-		# requests that asked to be sorted by it. (Those requests get the
-		# serializer's per-row queries for free in exchange, since the
-		# annotation is then present.)
+		# The count itself is not avoided by skipping the annotation: when it
+		# is absent, CategoryListSerializer counts authors for the page in one
+		# grouped query (api.category_counts.category_authors_counts, issue
+		# #816). What the annotation changes is the scope — ordering is
+		# applied before pagination, so ranking by this value forces the
+		# distinct-author count for every category matching the filters, not
+		# just the page. Annotating on demand keeps that whole-result-set cost
+		# on the requests that asked to be sorted by it. (Those requests skip
+		# the page query, since the annotation is then present.)
 		#
 		# Deliberately not date-filtered: because the serializer prefers this
 		# annotation over its own fallback, filtering it here would make a
