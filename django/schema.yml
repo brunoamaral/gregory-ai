@@ -2232,9 +2232,16 @@ paths:
       description: |-
         Get detailed author statistics for a specific category.
 
+        Only the category's articles the caller can see count: an article
+        must carry a subject in a site the caller can reach. Authors who
+        appear only on other articles are not listed, and those articles do
+        not add to anyone's ``articles_count``. Same rule as ``authors_count``
+        and ``top_authors`` on the category itself.
+
         # Query Parameters:
         - **min_articles** - Minimum articles per author (default: 1)
-        - **sort_by** - 'articles_count', 'author_name' (default: 'articles_count')
+        - **sort_by** - 'articles_count', 'author_name' (default: 'articles_count');
+          ties go to the lower author_id
         - **order** - 'asc', 'desc' (default: 'desc')
         - Date filtering parameters (same as main endpoint)
 

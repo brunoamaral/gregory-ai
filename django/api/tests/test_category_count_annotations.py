@@ -655,3 +655,140 @@ class CategoryTopAuthorsBatchingTests(TestCase):
 			(first["author_id"], first["full_name"], first["ORCID"], first["country"]),
 			(self.a.pk, "Alpha Top", "0000-0001-2345-6789", "PT"),
 		)
+
+
+class CategoryAuthorsActionVisibilityTests(TestCase):
+	"""/categories/<id>/authors/ lists and counts only the category's
+	articles the caller may see: an article carrying only a hidden subject
+	neither lists its authors nor lifts anyone's articles_count -- the same
+	rule as authors_count and top_authors on the category."""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(
+			name="Authors Action Org", slug="authors-action-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Authors Action Team", slug="authors-action-team", organization=self.organization
+		)
+		self.public_subject = Subject.objects.create(
+			subject_name="Authors Action Public", subject_slug="authors-action-public", team=self.team
+		)
+		self.hidden_subject = Subject.objects.create(
+			subject_name="Authors Action Hidden", subject_slug="authors-action-hidden", team=self.team
+		)
+		publish_subjects(self.public_subject, organization=self.organization)
+		private_site_publishing(self.hidden_subject, organization=self.organization)
+
+		self.category = _make_category(self.team, self.public_subject, "Authors Action Category")
+		self.category.subjects.add(self.hidden_subject)
+
+		self.a, self.b, self.c, self.hidden_only = (
+			self._author(name) for name in ("Alpha", "Bravo", "Charlie", "Hidden")
+		)
+		# Visible: a on 3 articles, b on 2, c on 1.
+		self._article(self.category, [self.public_subject], [self.a, self.b, self.c])
+		self._article(self.category, [self.public_subject], [self.a, self.b])
+		self._article(self.category, [self.public_subject], [self.a])
+		# Hidden-only articles: they must neither list hidden_only nor lift c.
+		for _ in range(5):
+			self._article(self.category, [self.hidden_subject], [self.hidden_only, self.c])
+
+		self.client = APIClient()
+
+	def _author(self, name):
+		return Authors.objects.create(
+			given_name=name, family_name="Action", full_name=f"{name} Action"
+		)
+
+	def _article(self, category, subjects, authors, published=None):
+		n = Articles.objects.count()
+		article = Articles.objects.create(
+			title=f"Authors Action Article {n}",
+			link=f"https://example.com/authors-action-{n}",
+			published_date=published or timezone.now(),
+		)
+		article.categories.add(category)
+		article.subjects.add(*subjects)
+		article.authors.add(*authors)
+		return article
+
+	def _authors(self, category=None, **params):
+		category = category or self.category
+		response = self.client.get(
+			reverse("categories-authors", args=[category.id]), params
+		)
+		self.assertEqual(response.status_code, 200)
+		rows = response.data["results"] if "results" in response.data else response.data
+		return [(row["author_id"], row["articles_count"]) for row in rows]
+
+	def test_lists_and_counts_visible_articles_only(self):
+		self.assertEqual(
+			self._authors(),
+			[(self.a.pk, 3), (self.b.pk, 2), (self.c.pk, 1)],
+		)
+
+	def test_min_articles_ignores_hidden_articles(self):
+		# c has 6 articles in the category, but only 1 the caller can see.
+		self.assertEqual(
+			self._authors(min_articles=2), [(self.a.pk, 3), (self.b.pk, 2)]
+		)
+
+	def test_sort_by_author_name_lists_visible_authors_only(self):
+		self.assertEqual(
+			self._authors(sort_by="author_name", order="asc"),
+			[(self.a.pk, 3), (self.b.pk, 2), (self.c.pk, 1)],
+		)
+
+	def test_article_with_visible_and_hidden_subject_counts_once(self):
+		cat = _make_category(self.team, self.public_subject, "Both Subjects Category")
+		self._article(cat, [self.public_subject, self.hidden_subject], [self.a])
+		self.assertEqual(self._authors(cat), [(self.a.pk, 1)])
+
+	def test_subject_less_article_is_not_counted(self):
+		cat = _make_category(self.team, self.public_subject, "Subjectless Category")
+		self._article(cat, [], [self.a])
+		self._article(cat, [self.public_subject], [self.b])
+		self.assertEqual(self._authors(cat), [(self.b.pk, 1)])
+
+	def test_ties_go_to_lower_author_id(self):
+		low, high = sorted([self._author("Delta"), self._author("Echo")], key=lambda a: a.pk)
+		cat = _make_category(self.team, self.public_subject, "Tie Category")
+		self._article(cat, [self.public_subject], [high, low])
+		self.assertEqual(self._authors(cat), [(low.pk, 1), (high.pk, 1)])
+		self.assertEqual(self._authors(cat, order="asc"), [(low.pk, 1), (high.pk, 1)])
+
+	def test_date_from_limits_the_articles_counted(self):
+		old = timezone.now() - timezone.timedelta(days=400)
+		cat = _make_category(self.team, self.public_subject, "Dated Category")
+		self._article(cat, [self.public_subject], [self.a], published=old)
+		self._article(cat, [self.public_subject], [self.a, self.b])
+		since = (timezone.now() - timezone.timedelta(days=30)).date().isoformat()
+		self.assertEqual(
+			self._authors(cat, date_from=since), [(self.a.pk, 1), (self.b.pk, 1)]
+		)
+
+	def test_matches_the_category_authors_count(self):
+		response = self.client.get(reverse("categories-detail", args=[self.category.id]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["authors_count"], len(self._authors()))
+
+	def test_matches_the_category_top_authors(self):
+		"""Same authors, counts and order as top_authors on the category,
+		with and without a date filter."""
+		low, high = sorted([self._author("Delta"), self._author("Echo")], key=lambda a: a.pk)
+		self._article(self.category, [self.public_subject], [high, low])
+		self._article(self.category, [self.public_subject, self.hidden_subject], [self.a])
+		self._article(self.category, [], [self.b])
+		since = (timezone.now() - timezone.timedelta(days=30)).date().isoformat()
+		for params in ({}, {"date_from": since}):
+			with self.subTest(**params):
+				response = self.client.get(
+					reverse("categories-detail", args=[self.category.id]),
+					{"max_authors": 50, **params},
+				)
+				self.assertEqual(response.status_code, 200)
+				top = [(a["author_id"], a["articles_count"]) for a in response.data["top_authors"]]
+				self.assertEqual(self._authors(**params), top)

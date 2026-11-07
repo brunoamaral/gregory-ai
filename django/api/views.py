@@ -2414,9 +2414,16 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		"""
 		Get detailed author statistics for a specific category.
 
+		Only the category's articles the caller can see count: an article
+		must carry a subject in a site the caller can reach. Authors who
+		appear only on other articles are not listed, and those articles do
+		not add to anyone's ``articles_count``. Same rule as ``authors_count``
+		and ``top_authors`` on the category itself.
+
 		# Query Parameters:
 		- **min_articles** - Minimum articles per author (default: 1)
-		- **sort_by** - 'articles_count', 'author_name' (default: 'articles_count')
+		- **sort_by** - 'articles_count', 'author_name' (default: 'articles_count');
+		  ties go to the lower author_id
 		- **order** - 'asc', 'desc' (default: 'desc')
 		- Date filtering parameters (same as main endpoint)
 
@@ -2438,33 +2445,27 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
 		# Build date filters
 		date_filters = self._build_date_filters(date_from, date_to, timeframe)
 
-		# Build filter for articles in this category
-		article_filter = Q(categories=category)
-		if date_filters:
-			# Adjust the date filter keys for the Articles model
-			articles_date_filters = {}
-			for key, value in date_filters.items():
-				if key.startswith("articles__"):
-					articles_date_filters[key.replace("articles__", "")] = value
-			article_filter &= Q(**articles_date_filters)
+		# The category's articles the caller may see (a visible subject, as
+		# _visible_content_q defines it) inside the date filters. Authors are
+		# listed, and counted, over these only, so an article carrying solely
+		# hidden subjects neither lists its authors nor lifts anyone's count --
+		# the same rule as the list's authors_count and top_authors.
+		articles = Articles.objects.filter(
+			categories=category,
+			**{
+				key.removeprefix("articles__"): value
+				for key, value in date_filters.items()
+			},
+		)
+		visible_q = _visible_content_q("", getattr(request, "visible_subject_ids", None))
+		if visible_q is not None:
+			articles = articles.filter(visible_q)
 
-		# Get authors with article counts in this category
+		# One subquery for the article ids, so the subject join's fan-out
+		# stays inside it and the count below is one row per author-article.
 		authors_queryset = (
-			Authors.objects.filter(articles__categories=category)
-			.annotate(
-				category_articles_count=Count(
-					"articles",
-					filter=Q(articles__categories=category)
-					& Q(
-						**{
-							f"articles__{k}": v
-							for k, v in date_filters.items()
-							if k.startswith("articles__")
-						}
-					),
-					distinct=True,
-				)
-			)
+			Authors.objects.filter(articles__in=articles.values("pk"))
+			.annotate(category_articles_count=Count("articles", distinct=True))
 			.filter(category_articles_count__gte=min_articles)
 		)
 
