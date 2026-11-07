@@ -35,6 +35,7 @@ from sitesettings.models import CustomSetting
 from django.contrib.sites.models import Site
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import models
 from django.db.models import Count, Q
 
 from api.editorial import (
@@ -50,6 +51,7 @@ from api.editorial import (
 	patent_site_contents,
 )
 from api.serializers.mixins import ScopedSerializerMixin
+from api.category_counts import category_authors_counts
 from api.patent_links import visible_patent_trial_links_queryset
 
 
@@ -158,6 +160,36 @@ class CategoryTopAuthorSerializer(serializers.ModelSerializer):
 		return obj.country.code if obj.country else None
 
 
+def _request_visible_subject_ids(context):
+	"""The caller's visible subject ids from the serializer context's
+	request, or None when there is no request or no scoping is active."""
+	request = context.get("request")
+	return getattr(request, "visible_subject_ids", None) if request is not None else None
+
+
+class CategoryListSerializer(serializers.ListSerializer):
+	"""Fills in authors_count for every category being serialized with one
+	grouped query, instead of one query per category (issue #816).
+
+	Runs on the rows actually being serialized -- the page, when the view
+	paginates -- so the work stays bounded by page size. Rows that already
+	carry ``authors_count_annotated`` (the view adds it when a client sorts
+	by it) are left alone.
+	"""
+
+	def to_representation(self, data):
+		items = list(data.all() if isinstance(data, models.manager.BaseManager) else data)
+		missing = [obj.pk for obj in items if not hasattr(obj, "authors_count_annotated")]
+		if missing:
+			counts = category_authors_counts(
+				missing, _request_visible_subject_ids(self.context)
+			)
+			for obj in items:
+				if obj.pk in counts:
+					obj.authors_count_annotated = counts[obj.pk]
+		return super().to_representation(items)
+
+
 class CategorySerializer(serializers.ModelSerializer):
 	article_count_total = serializers.SerializerMethodField()
 	trials_count_total = serializers.SerializerMethodField()
@@ -169,6 +201,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 	class Meta:
 		model = TeamCategory
+		list_serializer_class = CategoryListSerializer
 		fields = [
 			"id",
 			"category_description",
@@ -225,19 +258,15 @@ class CategorySerializer(serializers.ModelSerializer):
 		return getattr(obj, "medicines_count_annotated", None) or 0
 
 	def get_authors_count(self, obj) -> int:
-		"""Optimized authors count avoiding complex JOINs"""
-		# Use annotated count if available
+		"""Distinct authors behind the category's articles that the caller
+		may see. Lists get it pre-filled by CategoryListSerializer, or from
+		the view's annotation when sorting by it; a single category (detail
+		view) counts it here with the same scoped query."""
 		if hasattr(obj, "authors_count_annotated"):
 			return obj.authors_count_annotated
-
-		# Use a more efficient subquery approach instead of complex JOINs
-		# This avoids the hanging queries by using EXISTS instead of JOIN + COUNT + GROUP BY
-		from django.db.models import Exists, OuterRef
-		from gregory.models import Authors
-
-		return Authors.objects.filter(
-			Exists(obj.articles.filter(authors=OuterRef("pk")))
-		).count()
+		return category_authors_counts(
+			[obj.pk], _request_visible_subject_ids(self.context)
+		)[obj.pk]
 
 	def get_top_authors(self, obj) -> list:
 		"""Optimized top authors calculation avoiding complex JOINs"""

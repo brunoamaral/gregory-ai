@@ -22,7 +22,7 @@ from django.utils.text import slugify
 from rest_framework.test import APIClient
 
 from api.serializers import CategorySerializer
-from api.tests.visibility_helpers import publish_subjects
+from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from api.views import CategoryViewSet, _category_through_count_subquery
 from gregory.models import (
 	ArticleCategoryAssignment,
@@ -389,3 +389,120 @@ class CategoryAuthorsCountOrderingTests(TestCase):
 		self.assertEqual(response.status_code, 200)
 		names = [row["category_name"] for row in self._results(response)]
 		self.assertEqual(names, sorted(names))
+
+
+class CategoryAuthorsCountBatchingTests(TestCase):
+	"""authors_count on a category list is counted for the whole page in one
+	query, not once per category (issue #816), and only over articles the
+	caller may see -- the same number a sorted request reports."""
+
+	def setUp(self):
+		self.organization = Organization.objects.create(
+			name="Authors Batch Org", slug="authors-batch-org"
+		)
+		OrganizationApiSettings.objects.filter(organization=self.organization).update(
+			make_api_public=True
+		)
+		self.team = Team.objects.create(
+			name="Authors Batch Team",
+			slug="authors-batch-team",
+			organization=self.organization,
+		)
+		self.public_subject = Subject.objects.create(
+			subject_name="Authors Batch Public",
+			subject_slug="authors-batch-public",
+			team=self.team,
+		)
+		self.hidden_subject = Subject.objects.create(
+			subject_name="Authors Batch Hidden",
+			subject_slug="authors-batch-hidden",
+			team=self.team,
+		)
+		publish_subjects(self.public_subject, organization=self.organization)
+		private_site_publishing(self.hidden_subject, organization=self.organization)
+
+		# Shared between a visible and a hidden subject, so the category
+		# itself is listed for an anonymous caller.
+		self.category = _make_category(self.team, self.public_subject, "Shared Category")
+		self.category.subjects.add(self.hidden_subject)
+
+		self._authors = 0
+		self._add_article(self.category, self.public_subject, n_authors=1)
+		# Carries only the hidden subject: its two authors must not count.
+		self._add_article(self.category, self.hidden_subject, n_authors=2)
+
+		self.client = APIClient()
+
+	def _add_article(self, category, subject, n_authors):
+		article = Articles.objects.create(
+			title=f"Authors Batch Article {Articles.objects.count()}",
+			link=f"https://example.com/authors-batch-{Articles.objects.count()}",
+			published_date=timezone.now(),
+		)
+		article.categories.add(category)
+		article.subjects.add(subject)
+		for _ in range(n_authors):
+			self._authors += 1
+			article.authors.add(
+				Authors.objects.create(
+					given_name=f"Batch{self._authors}",
+					family_name="Author",
+					full_name=f"Batch{self._authors} Author",
+				)
+			)
+
+	def _results(self, response):
+		return response.data["results"] if "results" in response.data else response.data
+
+	def _list(self, **params):
+		params = {"team_id": self.team.id, "include_authors": "false", **params}
+		response = self.client.get(reverse("categories-list"), params)
+		self.assertEqual(response.status_code, 200)
+		return {row["id"]: row["authors_count"] for row in self._results(response)}
+
+	def test_list_counts_only_visible_articles(self):
+		self.assertEqual(self._list()[self.category.id], 1)
+
+	def test_list_matches_sorted_list(self):
+		"""Sorting by the count must not change the count reported."""
+		self.assertEqual(
+			self._list(), self._list(ordering="-authors_count_annotated")
+		)
+
+	def test_detail_counts_only_visible_articles(self):
+		response = self.client.get(
+			reverse("categories-detail", args=[self.category.id])
+		)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["authors_count"], 1)
+
+	def test_categories_by_team_and_subject_counts_only_visible_articles(self):
+		response = self.client.get(
+			f"/teams/{self.team.id}/subjects/{self.public_subject.id}/categories/",
+			{"include_authors": "false"},
+		)
+		self.assertEqual(response.status_code, 200)
+		rows = {row["id"]: row["authors_count"] for row in self._results(response)}
+		self.assertEqual(rows[self.category.id], 1)
+
+	def test_category_without_authors_reports_zero(self):
+		empty = _make_category(self.team, self.public_subject, "No Authors")
+		self.assertEqual(self._list()[empty.id], 0)
+
+	def test_query_count_does_not_grow_with_categories_on_page(self):
+		def count_queries():
+			with CaptureQueriesContext(connection) as ctx:
+				rows = self._list()
+			return len(rows), len(ctx.captured_queries)
+
+		# Warm up first: the first request also resolves (and caches) the
+		# caller's site scope, which is one query the later ones skip.
+		self._list()
+		rows_before, queries_before = count_queries()
+		for i in range(4):
+			cat = _make_category(self.team, self.public_subject, f"Extra {i}")
+			self._add_article(cat, self.public_subject, n_authors=i + 1)
+		rows_after, queries_after = count_queries()
+
+		self.assertEqual(rows_after, rows_before + 4)
+		self.assertEqual(queries_after, queries_before)

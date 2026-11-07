@@ -1011,7 +1011,9 @@ Many trials share a rank, so ties are broken automatically by `-discovery_date` 
 
 `authors_count_annotated` sorts by the number of distinct authors across a category's articles — the same number reported as `authors_count` in the response body. Expect it to be slower than the other four on teams with large categories.
 
-`authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters, where an unsorted request only counts the ones on the page it returns.
+`authors_count` counts only authors of articles the caller can see: an article whose subjects are all outside the caller's scope adds no authors, even when the category itself is visible through another subject. The number is the same whether or not the request sorts by it, and on the detail view (`GET /categories/<id>/`) and `GET /teams/<team_id>/subjects/<subject_id>/categories/`.
+
+`authors_count` is present in every response regardless of ordering, so this sort does not introduce the author counting; it widens it. An unsorted request counts authors for the categories on the page it returns, in one query for the whole page. Ordering is applied before pagination, so ranking by this value counts distinct authors for every category matching the filters.
 
 ### Sponsor canonicalization
 

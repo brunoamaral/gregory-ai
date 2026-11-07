@@ -1968,7 +1968,8 @@ paths:
           matching the filters rather than just the page being returned. It is
           therefore annotated only for requests that sort by it — note this changes
           *where* the count comes from, not whether it is computed, since the
-          serializer otherwise derives `authors_count` per row on its own.
+          serializer otherwise counts `authors_count` for the page in one query.
+          Either way it counts only authors of articles the caller can see.
 
         # Response includes:
         - Category basic information
@@ -2167,7 +2168,8 @@ paths:
           matching the filters rather than just the page being returned. It is
           therefore annotated only for requests that sort by it — note this changes
           *where* the count comes from, not whether it is computed, since the
-          serializer otherwise derives `authors_count` per row on its own.
+          serializer otherwise counts `authors_count` for the page in one query.
+          Either way it counts only authors of articles the caller can see.
 
         # Response includes:
         - Category basic information
@@ -9997,7 +9999,11 @@ components:
           readOnly: true
         authors_count:
           type: integer
-          description: Optimized authors count avoiding complex JOINs
+          description: |-
+            Distinct authors behind the category's articles that the caller
+            may see. Lists get it pre-filled by CategoryListSerializer, or from
+            the view's annotation when sorting by it; a single category (detail
+            view) counts it here with the same scoped query.
           readOnly: true
         top_authors:
           type: array
