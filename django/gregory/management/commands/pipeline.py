@@ -71,6 +71,10 @@ class Command(BaseCommand):
 				{},
 			),  # 6c. Author positions and institutions from OpenAlex, for articles with a DOI and authors
 			(
+				"rebuild_labs",
+				{},
+			),  # 6d. Group authors into labs from the authorships just fetched (writes nothing when nothing changed; refuses to delete over half the labs)
+			(
 				"rebuild_categories",
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
