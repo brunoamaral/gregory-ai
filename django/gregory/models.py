@@ -1299,6 +1299,122 @@ class ArticleAuthorship(models.Model):
 		]
 
 
+class Lab(models.Model):
+	"""A research lab: a senior author (the head) plus the people who repeatedly publish
+	with them. Computed by ``rebuild_labs``; a superuser can name, re-head and correct it,
+	and those corrections survive every rebuild. Global data, superuser-only in the admin."""
+
+	head = models.OneToOneField(
+		Authors,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="headed_lab",
+		help_text="Null only after the head's author row was deleted.",
+	)
+	name = models.CharField(
+		max_length=200,
+		blank=True,
+		help_text="When blank the lab shows as the head's full name followed by 'lab'.",
+	)
+	institution = models.ForeignKey(
+		Institution,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="labs",
+	)
+	is_manual = models.BooleanField(
+		default=False,
+		help_text="Set when a superuser creates the lab or edits its name, head or institution. "
+				  "A rebuild never renames, re-heads, re-homes or deletes it.",
+	)
+	needs_review = models.BooleanField(default=False, db_index=True)
+	review_reason = models.CharField(max_length=200, blank=True)
+	notes = models.TextField(blank=True)
+	member_count = models.PositiveIntegerField(
+		default=0, help_text="Author rows with the role member, not counting the head's rows."
+	)
+	core_count = models.PositiveIntegerField(
+		default=0,
+		help_text="Of the members, those who share an institution with the head. "
+				  "Members minus core is external plus unknown.",
+	)
+	collaborator_count = models.PositiveIntegerField(default=0)
+	last_author_articles = models.PositiveIntegerField(
+		default=0, help_text="Signal papers the head is last author of."
+	)
+	computed_at = models.DateTimeField(
+		null=True,
+		blank=True,
+		help_text="When a rebuild last changed this lab's computed data. A rebuild that "
+				  "finds nothing new writes nothing, so this stays put.",
+	)
+	history = HistoricalRecords()
+
+	def __str__(self):
+		if self.name:
+			return self.name
+		if self.head_id:
+			return f"{self.head.full_name} lab"
+		return f"Lab {self.pk}"
+
+	class Meta:
+		db_table = "labs"
+
+
+class LabMembership(models.Model):
+	"""Which lab one author row belongs to. At most one row per author: one current lab."""
+
+	class Role(models.TextChoices):
+		HEAD = "head", "Head"
+		MEMBER = "member", "Member"
+		COLLABORATOR = "collaborator", "Collaborator"
+
+	class Source(models.TextChoices):
+		COMPUTED = "computed", "Computed"
+		MANUAL = "manual", "Manual"
+
+	author = models.OneToOneField(
+		Authors, on_delete=models.CASCADE, related_name="lab_membership"
+	)
+	lab = models.ForeignKey(
+		Lab,
+		on_delete=models.CASCADE,
+		null=True,
+		blank=True,
+		related_name="memberships",
+		help_text="Null means pinned to no lab, which only a superuser can set.",
+	)
+	role = models.CharField(max_length=12, choices=Role.choices, default=Role.MEMBER)
+	same_institution = models.BooleanField(
+		null=True,
+		blank=True,
+		help_text="True shows as Core, False as External, null as Unknown.",
+	)
+	source = models.CharField(
+		max_length=8, choices=Source.choices, default=Source.COMPUTED
+	)
+	shared_articles = models.PositiveIntegerField(
+		default=0,
+		help_text="Papers shared with the head; for a head, their last-author papers.",
+	)
+	last_shared_year = models.PositiveSmallIntegerField(null=True, blank=True)
+	history = HistoricalRecords()
+
+	def __str__(self):
+		return f"{self.author_id} in lab {self.lab_id} ({self.role})"
+
+	class Meta:
+		db_table = "lab_memberships"
+		constraints = [
+			models.CheckConstraint(
+				condition=models.Q(lab__isnull=False) | models.Q(source="manual"),
+				name="labmember_null_lab_manual",
+			)
+		]
+
+
 class ArticleMeshHeading(models.Model):
 	"""One MeSH descriptor on an article, or one descriptor/qualifier pair (the
 	MEDLINE flattening). Replaced in full each time the article's record is fetched."""

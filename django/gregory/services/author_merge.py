@@ -10,6 +10,8 @@ The merge, per removed author:
     already holds),
   * moves OpenAlex authorship rows onto the survivor (dropping one where the survivor
     already has a row on the same article) and recomputes the survivor's ``openalex_id``,
+  * carries lab rows across (a manual lab membership wins over a computed one; a lab
+    the removed author heads passes to the survivor, or merges into the survivor's own),
   * fills blank survivor fields (given_name/family_name/country/orcid_check)
     from the removed author,
   * deletes the removed author.
@@ -23,6 +25,7 @@ import logging
 
 from gregory.functions import normalize_orcid
 from gregory.models import ArticleAuthorship
+from gregory.services.labs import merge_author_lab_rows
 from gregory.services.openalex_authorships import recompute_author_openalex_ids
 
 logger = logging.getLogger(__name__)
@@ -89,6 +92,8 @@ def merge_authors(keep, remove, *, stdout=None):
 		ArticleAuthorship.objects.filter(author=author).exclude(article_id__in=keep_articles).update(
 			author=keep
 		)
+
+		merge_author_lab_rows(keep, author)
 
 		if not keep.given_name and author.given_name:
 			keep.given_name = author.given_name

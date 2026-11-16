@@ -161,6 +161,25 @@ normal.
 On an install that has none of this yet: `manage.py fetch_openalex_authorships --limit 60000`.
 It stops by itself if the daily budget runs out; run it again the next day.
 
+### Author labs
+
+`rebuild_labs` groups authors into labs from those authorships. A person who is last
+author of 3 or more papers (of 2 to 30 authors) heads a lab; someone who shares 2 or more
+of those papers with a head is a member of it, and someone who shares exactly one is a
+collaborator, listed apart. Author rows that share an OpenAlex author ID count as one
+person. Recent papers weigh more, so the lab someone publishes with now wins over an older
+one. The result is stored in the `Lab` and `LabMembership` tables (see
+[02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#lab)); nothing in
+the API, feeds or MCP server exposes it.
+
+- It runs in the `pipeline` command right after `fetch_openalex_authorships`, and writes
+  nothing when the data hasn't changed. It never touches a manual membership, and never
+  renames, re-heads, re-homes or deletes a manual lab.
+- `--dry-run` prints what it would change. It refuses to delete more than half of the
+  existing labs, which usually means the authorship table is empty or half loaded; `--force`
+  overrides that.
+- Run it by hand with `manage.py rebuild_labs --dry-run`, then `manage.py rebuild_labs`.
+
 ---
 
 ## Endpoints by subject and category
