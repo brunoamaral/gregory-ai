@@ -101,7 +101,13 @@ def set_confirmed(article, trial, confirmed):
 	"""
 	changed = []
 	with transaction.atomic():
-		rows = ArticleTrialReference.objects.filter(article=article, trial=trial, suppressed=False).order_by("id")
+		# Locked: each row is saved whole, so without the lock a row another request
+		# hid after this read would be written back visible.
+		rows = (
+			ArticleTrialReference.objects.select_for_update()
+			.filter(article=article, trial=trial, suppressed=False)
+			.order_by("id")
+		)
 		for row in rows:
 			if row.confirmed == confirmed:
 				continue
