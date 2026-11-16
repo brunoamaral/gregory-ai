@@ -342,6 +342,20 @@ class DetectTrialReferencesEditorLinksTest(TestCase):
 		self.assertIn("Would delete 0 existing references", out.getvalue())
 		self.assertEqual(ArticleTrialReference.objects.count(), 1)
 
+	def test_dry_run_reset_reports_the_links_it_would_recreate(self):
+		from gregory.models import ArticleTrialReference
+
+		call_command("detect_trial_references", stdout=StringIO())
+		before = set(ArticleTrialReference.objects.values_list("pk", flat=True))
+		self.assertEqual(len(before), 2)
+
+		out = StringIO()
+		call_command("detect_trial_references", "--reset", "--dry-run", stdout=out)
+		self.assertIn("Would delete 2 existing references", out.getvalue())
+		self.assertIn("Would have created 2 article-trial links", out.getvalue())
+		self.assertIn("0 pairs already linked", out.getvalue())
+		self.assertEqual(set(ArticleTrialReference.objects.values_list("pk", flat=True)), before)
+
 	def test_detection_respects_a_suppressed_pair_under_every_identifier(self):
 		from gregory.models import ArticleTrialReference
 

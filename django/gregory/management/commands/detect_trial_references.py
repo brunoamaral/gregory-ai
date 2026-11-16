@@ -61,12 +61,16 @@ class Command(BaseCommand):
 		# Handle optional reset of auto-detected references. Manual links are an
 		# editor's work and unlinked ones (suppressed) are an editor's decision,
 		# so neither is something detection may regenerate or throw away.
+		# Rows a --reset preview would have deleted: still in the database on a
+		# dry run, so the scan below must not count them as already linked.
+		reset_pks = set()
 		if options["reset"]:
 			resettable = ArticleTrialReference.objects.filter(
 				source=ArticleTrialReference.SOURCE_AUTO, suppressed=False
 			)
 			count = resettable.count()
 			if options["dry_run"]:
+				reset_pks = set(resettable.values_list("pk", flat=True))
 				self.stdout.write(f"Would delete {count} existing references (dry run)")
 			else:
 				resettable.delete()
@@ -128,7 +132,7 @@ class Command(BaseCommand):
 		# once so a full scan only writes what is missing. get_or_create below
 		# stays the actual write, so a concurrent run cannot duplicate a row.
 		existing_keys = set(
-			ArticleTrialReference.objects.values_list(
+			ArticleTrialReference.objects.exclude(pk__in=reset_pks).values_list(
 				"article_id", "trial_id", "identifier_type"
 			)
 		)
