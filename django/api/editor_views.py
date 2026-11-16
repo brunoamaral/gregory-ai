@@ -613,6 +613,7 @@ def _link_payload(reference, trial):
 		"source": reference.source,
 		"identifier_type": reference.identifier_type,
 		"identifier_value": reference.identifier_value,
+		"confirmed": reference.confirmed,
 		"updated_by": updated_by,
 		"updated_at": updated_at,
 	}
@@ -624,8 +625,10 @@ def _link_payload(reference, trial):
 		"Editor-only. Adds a manual link between the article and a trial. Both "
 		"must be inside the editor's site scope, else 404. Idempotent: linking a "
 		"pair that is already linked returns the existing link (200) and creates "
-		"nothing; a new link is 201. A link an editor added is never changed or "
-		"duplicated by `detect_trial_references`."
+		"nothing; a new link is 201. A link an editor added is confirmed from the "
+		"start, and linking a pair that `detect_trial_references` already found "
+		"confirms it (200, `confirmed: true`). A link an editor added is never "
+		"changed or duplicated by `detect_trial_references`."
 	),
 	request=EditorTrialLinkRequestSerializer,
 	responses={
@@ -1039,6 +1042,7 @@ class EditorArticleHistoryView(_EditorView):
 						"trial_id": row.trial_id,
 						"source": row.source,
 						"suppressed": row.suppressed,
+						"confirmed": row.confirmed,
 						"identifier_type": row.identifier_type,
 					},
 				)
