@@ -298,8 +298,9 @@ async def set_trial_link(
 	"""Link a clinical trial to an article or a patent, or remove the link.
 
 	Articles. `linked=true` adds a link that automatic detection will not
-	change or duplicate; linking a pair that is already linked returns the
-	existing link. `linked=false` removes the link: one added by an editor is
+	change or duplicate, already `confirmed`. Linking a pair that is already
+	linked returns the existing link; if the pair was found automatically,
+	this confirms it (the answer carries `confirmed: true`). `linked=false` removes the link: one added by an editor is
 	deleted, and one found automatically is hidden, so automatic detection does
 	not bring it back.
 

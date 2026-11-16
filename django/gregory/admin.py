@@ -37,7 +37,7 @@ from .services.patent_trial_links import (
 	remove_patent_trial_link,
 	visible_link as visible_patent_trial_link,
 )
-from .services.trial_links import link_trial, remove_link, trial_label, visible_link
+from .services.trial_links import link_trial, remove_link, set_confirmed, trial_label, visible_link
 from django.db import models, transaction  # Add this import for models.Count
 from django.db.models import Exists, F, OuterRef, Q, Subquery
 from django.db.models.functions import Cast
@@ -530,6 +530,14 @@ class ArticleTrialReferenceFormSet(forms.BaseInlineFormSet):
 			field = form.fields[DELETION_FIELD_NAME]
 			field.widget = forms.HiddenInput()
 			field.disabled = True
+		if (
+			form.instance.pk
+			and "confirmed" in form.fields
+			and (form.instance.suppressed or form.instance.source == ArticleTrialReference.SOURCE_MANUAL)
+		):
+			# A manual row is always confirmed and a hidden one is not vouched for. Disabled,
+			# so a forged value is ignored.
+			form.fields["confirmed"].disabled = True
 
 	def delete_existing(self, obj, commit=True):
 		if obj.suppressed:
@@ -543,9 +551,11 @@ class ArticleTrialReferenceFormSet(forms.BaseInlineFormSet):
 
 
 class ArticleTrialReferenceInline(TeamEditInlineMixin, admin.TabularInline):
-	"""The article's trial links, every row shown, hidden ones included. Read-only: new
-	links go through ArticleTrialLinkAddInline. The delete box is shown on a visible row
-	of an article the user may edit."""
+	"""The article's trial links, every row shown, hidden ones included. Read-only apart
+	from `confirmed`, which a user who may edit the article ticks on a visible auto row
+	(the formset disables it on manual and hidden rows): new links go through
+	ArticleTrialLinkAddInline. The delete box is shown on a visible row of an article the
+	user may edit."""
 
 	model = ArticleTrialReference
 	formset = ArticleTrialReferenceFormSet
@@ -555,10 +565,11 @@ class ArticleTrialReferenceInline(TeamEditInlineMixin, admin.TabularInline):
 		"identifier_type",
 		"identifier_value",
 		"source",
+		"confirmed",
 		"suppressed",
 		"discovered_date",
 	]
-	readonly_fields = fields
+	readonly_fields = [name for name in fields if name != "confirmed"]
 	verbose_name_plural = "Referenced Trials"
 	verbose_name = "Trial Reference"
 	classes = ["collapse"]
@@ -916,6 +927,7 @@ class TrialArticleReferenceInline(admin.TabularInline):
 		"identifier_type",
 		"identifier_value",
 		"source",
+		"confirmed",
 		"suppressed",
 		"discovered_date",
 	]
@@ -5590,6 +5602,81 @@ class PatentTrialLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 		self.message_user(request, f"Restored {updated} link(s).")
 
 
+class ArticleTrialReferenceAdmin(TeamEditMixin, admin.ModelAdmin):
+	"""Every article-trial link, for review: confirm the ones that are right, hide the
+	ones that are not. Scoped to the caller's organisations through the article's sources
+	(OrganizationFilterMixin cannot do this: the model has no sources of its own). Links
+	are added from the article page, so there is no add form."""
+
+	list_display = [
+		"article",
+		"trial_name",
+		"identifier_type",
+		"identifier_value",
+		"source",
+		"confirmed",
+		"suppressed",
+		"discovered_date",
+	]
+	list_filter = ["confirmed", "source", "identifier_type", "suppressed"]
+	list_select_related = ["article", "trial"]
+	ordering = ["-id"]
+	search_fields = ["article__title", "trial__title", "identifier_value"]
+	readonly_fields = [
+		"article",
+		"trial",
+		"identifier_type",
+		"identifier_value",
+		"source",
+		"created_by",
+		"suppressed",
+		"discovered_date",
+	]
+	fields = readonly_fields + ["confirmed"]
+	actions = ["confirm_links", "hide_links"]
+
+	def get_queryset(self, request):
+		qs = super().get_queryset(request)
+		if request.user.is_superuser:
+			return qs
+		user_orgs = get_user_organizations(request.user)
+		return qs.filter(article__sources__team__organization__id__in=user_orgs).distinct()
+
+	@admin.display(description="Trial", ordering="trial__title")
+	def trial_name(self, obj):
+		return trial_label(obj.trial)
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		# Hiding is "Hide selected links", which keeps a detected link from coming back.
+		# Deleting here would hard-delete a detected link and detection would recreate it,
+		# so it is for superusers only.
+		return request.user.is_superuser
+
+	def get_readonly_fields(self, request, obj=None):
+		readonly = list(super().get_readonly_fields(request, obj))
+		if obj is not None and (obj.suppressed or obj.source == ArticleTrialReference.SOURCE_MANUAL):
+			readonly.append("confirmed")  # See ArticleTrialReferenceFormSet.add_fields.
+		return readonly
+
+	@admin.action(permissions=["change"], description="Confirm selected links")
+	def confirm_links(self, request, queryset):
+		changed = 0
+		for pair in set(queryset.filter(suppressed=False).values_list("article_id", "trial_id")):
+			changed += len(set_confirmed(Articles(pk=pair[0]), Trials(pk=pair[1]), True))
+		self.message_user(request, f"Confirmed {changed} link(s).")
+
+	@admin.action(permissions=["change"], description="Hide selected links")
+	def hide_links(self, request, queryset):
+		hidden = 0
+		for link in queryset.filter(suppressed=False):
+			remove_link(link)
+			hidden += 1
+		self.message_user(request, f"Hid {hidden} link(s).")
+
+
 class PriorityYearFilter(admin.SimpleListFilter):
 	"""Filter patent families by the year of their earliest priority date."""
 
@@ -6371,6 +6458,7 @@ admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)
 admin.site.register(Patents, PatentAdmin)
 admin.site.register(PatentTrialLink, PatentTrialLinkAdmin)
+admin.site.register(ArticleTrialReference, ArticleTrialReferenceAdmin)
 admin.site.register(Sponsor, SponsorAdmin)
 admin.site.register(SponsorMergeCandidate, SponsorMergeCandidateAdmin)
 
@@ -6571,12 +6659,3 @@ try:
 except admin.sites.NotRegistered:
 	pass
 admin.site.register(User, CustomUserAdmin)
-
-# Register ArticleTrialReference model with default admin
-# @admin.register(ArticleTrialReference)
-# class ArticleTrialReferenceAdmin(admin.ModelAdmin):
-#     list_display = ['article', 'trial', 'identifier_type', 'identifier_value', 'discovered_date']
-#     list_filter = ['identifier_type', 'discovered_date']
-#     search_fields = ['article__title', 'trial__title', 'identifier_value']
-#     date_hierarchy = 'discovered_date'
-#     readonly_fields = ['discovered_date']

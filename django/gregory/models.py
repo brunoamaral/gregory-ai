@@ -2638,6 +2638,11 @@ class ArticleTrialReference(models.Model):
 		"hidden from every read and detect_trial_references leaves it alone, "
 		"so the next detection run doesn't recreate the link.",
 	)
+	confirmed = models.BooleanField(
+		default=False,
+		help_text="Set when a person vouches for the link: an editor added it, or checked "
+		"an auto-detected one. Detection never sets it, and --reset keeps confirmed rows.",
+	)
 	history = HistoricalRecords(bases=[ApiKeyHistoryMixin, EditorHistoryMixin])
 
 	class Meta:

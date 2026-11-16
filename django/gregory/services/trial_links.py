@@ -5,9 +5,12 @@ The one place that knows the rules for an editor's link, shared by the MCP edito
 endpoints (``api/editor_views.py``) and the Django admin article page:
 
 - Adding makes a ``source="manual"`` row with ``identifier_type="manual"``. A pair that
-  already has a visible link (manual or auto) gets nothing new.
-- Removing deletes a manual row. An auto-detected row is kept and marked ``suppressed``,
-  so ``detect_trial_references`` does not recreate the link.
+  already has a visible link (manual or auto) gets nothing new, but every visible row of
+  the pair is confirmed: linking a pair detection found is an editor vouching for it.
+- A manual row is created ``confirmed``. ``set_confirmed`` sets or clears the flag on an
+  auto-detected pair; a manual row stays confirmed.
+- Removing deletes a manual row. An auto-detected row is kept and marked ``suppressed``
+  (and unconfirmed), so ``detect_trial_references`` does not recreate the link.
 
 These functions do not choose who gets recorded in the history: the caller does. The
 editor endpoints wrap them in ``editing_as(user, "mcp")``; the admin calls them inside
@@ -65,12 +68,15 @@ def link_trial(article, trial, user):
 	"""Link ``trial`` to ``article`` by hand. Returns ``(reference, created)``.
 
 	Idempotent: a pair that already has a visible link returns that link and creates
-	nothing. A hidden auto row does not count, so re-adding a hidden pair creates a manual
-	row next to it.
+	nothing, but confirms every visible row of the pair that is not yet confirmed. A
+	hidden auto row does not count, so re-adding a hidden pair creates a manual row next
+	to it.
 	"""
 	with transaction.atomic():
 		existing = visible_link(article, trial)
 		if existing is not None:
+			set_confirmed(article, trial, True)
+			existing.refresh_from_db()
 			return existing, False
 		# get_or_create on the unique (article, trial, identifier_type) key,
 		# so two identical requests at once both answer instead of one 500ing.
@@ -82,16 +88,45 @@ def link_trial(article, trial, user):
 				"identifier_value": primary_identifier(trial),
 				"source": ArticleTrialReference.SOURCE_MANUAL,
 				"created_by": user,
+				"confirmed": True,
 			},
 		)
 
 
+def set_confirmed(article, trial, confirmed):
+	"""Set ``confirmed`` on every visible row of the pair. Returns the rows changed.
+
+	A manual row is always confirmed, so it is skipped when unconfirming. Each row is
+	saved on its own so the history records who did it.
+	"""
+	changed = []
+	with transaction.atomic():
+		# Locked: each row is saved whole, so without the lock a row another request
+		# hid after this read would be written back visible.
+		rows = (
+			ArticleTrialReference.objects.select_for_update()
+			.filter(article=article, trial=trial, suppressed=False)
+			.order_by("id")
+		)
+		for row in rows:
+			if row.confirmed == confirmed:
+				continue
+			if not confirmed and row.source == ArticleTrialReference.SOURCE_MANUAL:
+				continue
+			row.confirmed = confirmed
+			row.save()
+			changed.append(row)
+	return changed
+
+
 def remove_link(link):
-	"""Remove one link: delete a manual row, hide an auto one (``suppressed=True``)."""
+	"""Remove one link: delete a manual row, hide an auto one (``suppressed=True``,
+	and unconfirmed: a hidden link is not vouched for)."""
 	if link.source == ArticleTrialReference.SOURCE_MANUAL:
 		link.delete()
 	else:
 		link.suppressed = True
+		link.confirmed = False
 		link.save()
 
 

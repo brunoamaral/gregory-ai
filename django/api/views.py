@@ -1653,6 +1653,7 @@ class ArticleViewSet(
 	- **source_id** - filter by source ID
 	- **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
 	- **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+	  Each article lists its linked trials in `clinical_trials`, once per trial, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
 	- **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
 	- **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
 	- **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
@@ -2552,6 +2553,8 @@ class TrialViewSet(
 	"""
 	List all clinical trials by discovery date with comprehensive filtering options.
 	CSV responses are automatically streamed for better performance with large datasets.
+
+	Each trial lists the articles that mention it in `articles`, once per article, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
 
 	# Core Query Parameters:
 	- **trial_id** - filter by specific trial ID

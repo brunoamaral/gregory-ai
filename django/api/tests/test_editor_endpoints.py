@@ -427,6 +427,31 @@ class TrialLinkTest(EditorFixture):
 		self.assertEqual(response.json()["source"], "auto")
 		self.assertEqual(ArticleTrialReference.objects.count(), 1)
 
+	def test_manual_link_is_confirmed_from_the_start(self):
+		response = self.send("post", self.url(), {"trial_id": self.trial_a.pk})
+		self.assertEqual(response.status_code, 201)
+		self.assertIs(response.json()["confirmed"], True)
+
+	def test_linking_an_auto_pair_confirms_it_and_the_history_names_the_editor(self):
+		ref = ArticleTrialReference.objects.create(
+			article=self.art_a, trial=self.trial_a, identifier_type="nct", identifier_value="NCT00000001"
+		)
+		self.assertIs(ref.confirmed, False)
+
+		response = self.send("post", self.url(), {"trial_id": self.trial_a.pk})
+
+		self.assertEqual(response.status_code, 200)
+		body = response.json()
+		self.assertEqual((body["source"], body["confirmed"]), ("auto", True))
+		ref.refresh_from_db()
+		self.assertTrue(ref.confirmed)
+		self.assertEqual(ArticleTrialReference.objects.count(), 1)
+		latest = ArticleTrialReference.history.filter(id=ref.id).latest("history_date")
+		self.assertTrue(latest.confirmed)
+		self.assertEqual((latest.via, latest.history_user_id), ("mcp", self.ana.pk))
+		entries = self.get(f"/editor/articles/{self.art_a.pk}/history/").json()["entries"]
+		self.assertTrue(entries[0]["details"]["confirmed"])
+
 	def test_an_existing_manual_link_is_reported_over_an_auto_one(self):
 		ArticleTrialReference.objects.create(
 			article=self.art_a, trial=self.trial_a, identifier_type="nct", identifier_value="NCT00000001"

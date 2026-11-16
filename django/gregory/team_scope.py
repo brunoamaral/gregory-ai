@@ -14,8 +14,8 @@ What "belongs to a team" means per model:
   belongs to a team when one of its sources is the team's (attached at
   ingestion) or a curator tagged it with the team (``teams``).
 - Sources, subjects, team categories and prediction run logs have a ``team``.
-- Rows that hang off content (site content, trial organisation content) follow their
-  article, trial or patent. A patent-trial link follows its patent or its trial: it is
+- Rows that hang off content (site content, trial organisation content, an article's
+  trial link) follow their article, trial or patent. A patent-trial link follows its patent or its trial: it is
   edited from either page, so a team that owns either side may change it.
 - Medicine-category links follow their category's team, and medicine-subject links
   their subject's team.
@@ -52,6 +52,7 @@ def team_editable(user, queryset):
 		return queryset
 	from gregory.models import (
 		ArticleSiteContent,
+		ArticleTrialReference,
 		Articles,
 		MedicineCategoryAssignment,
 		MedicineSubjectLink,
@@ -77,6 +78,9 @@ def team_editable(user, queryset):
 		# Team settings and membership are access control: superusers only.
 		return queryset.none()
 	if model is ArticleSiteContent:
+		return queryset.filter(article__in=team_editable(user, Articles.objects.all()))
+	if model is ArticleTrialReference:
+		# Edited from the article's page only: the trial's page lists it read-only.
 		return queryset.filter(article__in=team_editable(user, Articles.objects.all()))
 	if model is PatentSiteContent:
 		return queryset.filter(patent__in=team_editable(user, Patents.objects.all()))

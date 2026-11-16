@@ -67,6 +67,7 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+          Each article lists its linked trials in `clinical_trials`, once per trial, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
         - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
         - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
@@ -439,6 +440,7 @@ paths:
         - **source_id** - filter by source ID
         - **category_modality** - filter by the intervention modality of the article's categories; one of the `CategoryModality` values
         - **has_clinical_trials** - filter for articles linked to one or more clinical trials (true/false)
+          Each article lists its linked trials in `clinical_trials`, once per trial, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
         - **has_takeaways** - true/false: whether the caller's own site has written takeaways for the article
         - **include** - `editorial` adds an `editorial` list (one entry per site the caller may read, each with its `takeaways` and `summary_plain_english`); JSON only
         - **search** - search in title and summary (supports boolean operators, e.g. `a OR b`)
@@ -2800,7 +2802,9 @@ paths:
       description: 'Editor-only. Adds a manual link between the article and a trial.
         Both must be inside the editor''s site scope, else 404. Idempotent: linking
         a pair that is already linked returns the existing link (200) and creates
-        nothing; a new link is 201. A link an editor added is never changed or duplicated
+        nothing; a new link is 201. A link an editor added is confirmed from the start,
+        and linking a pair that `detect_trial_references` already found confirms it
+        (200, `confirmed: true`). A link an editor added is never changed or duplicated
         by `detect_trial_references`.'
       summary: Link a trial to an article (editor)
       parameters:
@@ -6999,6 +7003,8 @@ paths:
         List all clinical trials by discovery date with comprehensive filtering options.
         CSV responses are automatically streamed for better performance with large datasets.
 
+        Each trial lists the articles that mention it in `articles`, once per article, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
+
         # Core Query Parameters:
         - **trial_id** - filter by specific trial ID
         - **team_id** - filter by team ID
@@ -7729,6 +7735,8 @@ paths:
       description: |-
         List all clinical trials by discovery date with comprehensive filtering options.
         CSV responses are automatically streamed for better performance with large datasets.
+
+        Each trial lists the articles that mention it in `articles`, once per article, with `link_confirmed` (a person vouched for the link) and `link_type` (`manual`, `identifier` or `acronym`).
 
         # Core Query Parameters:
         - **trial_id** - filter by specific trial ID
@@ -9715,8 +9723,8 @@ components:
             saved.
         clinical_trials:
           type: array
-          items: {}
-          description: Get trials referenced in the article
+          items:
+            $ref: '#/components/schemas/TrialReference'
           readOnly: true
       required:
       - article_id
@@ -9781,6 +9789,45 @@ components:
       required:
       - descriptor
       - qualifier
+    ArticleReference:
+      type: object
+      properties:
+        article_id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        link:
+          type: string
+          format: uri
+          description: First URL seen for this article; stable after first import.
+            Corresponds to "link" in the API response.
+          maxLength: 2000
+        link_confirmed:
+          type: boolean
+          readOnly: true
+          default: false
+          description: 'True when a person has vouched for the link: an editor added
+            it, or checked one detection found. False for a link no one has reviewed.'
+        link_type:
+          allOf:
+          - $ref: '#/components/schemas/LinkTypeEnum'
+          readOnly: true
+          description: |-
+            How the link was made. `manual`: an editor added it. `identifier`: detection found a registry id of the trial in the text. `acronym`: detection matched the trial's acronym.
+
+            * `manual` - manual
+            * `identifier` - identifier
+            * `acronym` - acronym
+      required:
+      - article_id
+      - link
+      - link_confirmed
+      - link_type
+      - title
     ArticleSubjectRelevance:
       type: object
       properties:
@@ -10853,6 +10900,10 @@ components:
           type: string
         identifier_value:
           type: string
+        confirmed:
+          type: boolean
+          description: True when a person has vouched for the link. A link an editor
+            adds is confirmed from the start.
         updated_by:
           type: string
           nullable: true
@@ -10862,6 +10913,7 @@ components:
           nullable: true
       required:
       - article_id
+      - confirmed
       - identifier_type
       - identifier_value
       - source
@@ -11077,6 +11129,16 @@ components:
         * `relevance` - relevance
         * `trial_link` - trial_link
         * `category` - category
+    LinkTypeEnum:
+      enum:
+      - manual
+      - identifier
+      - acronym
+      type: string
+      description: |-
+        * `manual` - manual
+        * `identifier` - identifier
+        * `acronym` - acronym
     MLPredictionSubject:
       type: object
       properties:
@@ -13521,13 +13583,8 @@ components:
           readOnly: true
         articles:
           type: array
-          items: {}
-          description: |-
-            Get articles that reference this trial.
-
-            Uses the prefetched ``article_references`` cache when available (populated
-            by TrialViewSet via prefetch_related('article_references__article'))
-            to avoid one query per trial on list responses.
+          items:
+            $ref: '#/components/schemas/ArticleReference'
           readOnly: true
         subjects:
           type: array
@@ -13893,13 +13950,8 @@ components:
           readOnly: true
         articles:
           type: array
-          items: {}
-          description: |-
-            Get articles that reference this trial.
-
-            Uses the prefetched ``article_references`` cache when available (populated
-            by TrialViewSet via prefetch_related('article_references__article'))
-            to avoid one query per trial on list responses.
+          items:
+            $ref: '#/components/schemas/ArticleReference'
           readOnly: true
         subjects:
           type: array
@@ -14017,6 +14069,43 @@ components:
       - patent_id
       - representative_publication
       - title
+    TrialReference:
+      type: object
+      properties:
+        trial_id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+        summary:
+          type: string
+          nullable: true
+        link:
+          type: string
+          format: uri
+          maxLength: 2000
+        link_confirmed:
+          type: boolean
+          readOnly: true
+          default: false
+          description: 'True when a person has vouched for the link: an editor added
+            it, or checked one detection found. False for a link no one has reviewed.'
+        link_type:
+          allOf:
+          - $ref: '#/components/schemas/LinkTypeEnum'
+          readOnly: true
+          description: |-
+            How the link was made. `manual`: an editor added it. `identifier`: detection found a registry id of the trial in the text. `acronym`: detection matched the trial's acronym.
+
+            * `manual` - manual
+            * `identifier` - identifier
+            * `acronym` - acronym
+      required:
+      - link
+      - link_confirmed
+      - link_type
+      - title
+      - trial_id
     TrialSite:
       type: object
       description: |-

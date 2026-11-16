@@ -333,6 +333,9 @@ class EditorTrialLinkResponseSerializer(serializers.Serializer):
 	source = serializers.ChoiceField(choices=EDITOR_TRIAL_LINK_SOURCE_CHOICES)
 	identifier_type = serializers.CharField()
 	identifier_value = serializers.CharField()
+	confirmed = serializers.BooleanField(
+		help_text="True when a person has vouched for the link. A link an editor adds is confirmed from the start."
+	)
 	updated_by = serializers.CharField(allow_null=True)
 	updated_at = serializers.DateTimeField(allow_null=True)
 
