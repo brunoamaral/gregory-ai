@@ -26,6 +26,7 @@ class World:
 		self.total = {}  # author -> articles linked, when it differs from the papers added
 		self.manual_heads = set()
 		self.existing_heads = set()
+		self.not_heads = set()
 		self.insts = options.get("insts", {})
 		self._next = 1
 
@@ -66,6 +67,7 @@ class World:
 			article_author_counts=self.counts,
 			manual_heads=self.manual_heads,
 			existing_heads=self.existing_heads,
+			not_heads=self.not_heads,
 			today=TODAY,
 		)
 
@@ -323,7 +325,7 @@ class PersonTests(TestCase):
 		w.paper(last=1, others=[3])
 		result = w.compute()
 		self.assertEqual({(a.role, a.head_id) for k, a in result.assignments.items() if k in (2, 3)}, {("member", 1)})
-		self.assertEqual(result.labs[1].member_count, 3)  # 9, 2 and 3
+		self.assertEqual(result.labs[1].member_count, 2)  # 9, and the one person behind rows 2 and 3
 
 	def test_authors_without_an_openalex_id_are_their_own_person(self):
 		w = World()
@@ -349,3 +351,36 @@ class ManualHeadTests(TestCase):
 		w.author(1)
 		w.manual_heads = {1}
 		self.assertEqual(set(w.compute().labs), {1})
+
+
+class NotHeadTests(TestCase):
+	"""An author a superuser placed by hand as a non-head never heads a computed lab."""
+
+	def world(self):
+		w = World()
+		w.papers(3, last=1, others=[2])  # 1 would be a head, 2 their member
+		w.papers(3, last=5, others=[1, 2])  # 5 is a head too; 1 and 2 publish under them
+		return w
+
+	def test_without_the_bar_they_head_their_own_lab(self):
+		self.assertEqual(set(self.world().compute().labs), {1, 5})
+
+	def test_a_hand_placed_member_does_not_head_a_lab(self):
+		w = self.world()
+		w.not_heads = {1}
+		result = w.compute()
+		self.assertEqual(set(result.labs), {5})
+		self.assertEqual((result.assignments[2].head_id, result.assignments[2].role), (5, "member"))
+
+	def test_any_row_of_the_person_bars_the_person(self):
+		w = self.world()
+		w.author(1, openalex_id="A1")
+		w.author(7, openalex_id="A1")
+		w.not_heads = {7}
+		self.assertEqual(set(w.compute().labs), {5})
+
+	def test_a_manual_labs_head_stays_a_head(self):
+		w = self.world()
+		w.not_heads = {1}
+		w.manual_heads = {1}
+		self.assertEqual(set(w.compute().labs), {1, 5})

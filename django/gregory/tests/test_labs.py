@@ -282,10 +282,22 @@ class CommandTests(TestCase):
 		self.run_command()
 		self.assertEqual(Lab.objects.get().head, self.head)
 
+	def test_a_head_moved_by_hand_to_another_lab_does_not_get_their_lab_back(self):
+		self.run_command()
+		other = Lab.objects.create(head=author(9), is_manual=True)
+		LabMembership.objects.filter(author=self.head).update(
+			lab=other, role="member", source=MANUAL
+		)
+		self.run_command("--force")  # the only computed lab goes, which trips the safety stop
+		self.assertFalse(Lab.objects.filter(head=self.head).exists())
+		moved = LabMembership.objects.get(author=self.head)
+		self.assertEqual((moved.lab, moved.role, moved.source), (other, "member", MANUAL))
+		self.assertFalse(LabMembership.objects.filter(author=self.member).exists())
+
 	def test_load_inputs_runs_a_fixed_number_of_queries(self):
 		from gregory.services.labs import load_inputs
 
-		with self.assertNumQueries(6):
+		with self.assertNumQueries(7):
 			inputs = load_inputs()
 		self.assertEqual(len(inputs.rows), 6)
 		self.assertEqual(inputs.authors[self.head.pk][2], 3)

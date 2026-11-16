@@ -42,7 +42,8 @@ class LabResult:
 	head_rows: list  # every author row of the head's person, the head row included
 	institution_id: int | None
 	last_author_articles: int
-	member_count: int = 0  # member rows, not counting the head's rows
+	# People, not author rows: duplicate rows of one person count once.
+	member_count: int = 0  # members, not counting the head
 	core_count: int = 0  # of those, the ones that share an institution with the head
 	collaborator_count: int = 0
 
@@ -54,7 +55,15 @@ class LabsResult:
 
 
 def compute_labs(
-	rows, *, authors, article_years, article_author_counts, manual_heads, existing_heads, today
+	rows,
+	*,
+	authors,
+	article_years,
+	article_author_counts,
+	manual_heads,
+	existing_heads,
+	today,
+	not_heads=frozenset(),
 ):
 	"""Group authors into labs.
 
@@ -65,6 +74,10 @@ def compute_labs(
 	``manual_heads``: author ids heading a manual lab, always heads. ``existing_heads``:
 	author ids heading any lab now, so a person's head row stays stable between runs.
 	``today``: a date; the recency window is relative to its year.
+	``not_heads``: author ids a superuser placed by hand as something other than a head
+	(a member or collaborator of some lab, or pinned to no lab). Their person never heads
+	a computed lab, or the rebuild would recreate a lab around someone who was moved out
+	of it. A manual lab's head is still a head.
 	"""
 	base_year = today.year - RECENCY_YEARS
 
@@ -115,6 +128,7 @@ def compute_labs(
 
 	# Rule 3: heads.
 	head_people = {p for p, papers in last_papers.items() if len(papers) >= MIN_LAST}
+	head_people -= {person(a) for a in not_heads}
 	head_people |= {person(a) for a in manual_heads}
 
 	# Rule 4: the head's row, stable across runs.
@@ -200,10 +214,10 @@ def compute_labs(
 			result.assignments[row] = Assignment(
 				row, lab.head_id, role, same_institution, len(papers), year
 			)
-			if role == ROLE_MEMBER:
-				lab.member_count += 1
-				lab.core_count += bool(same_institution)
-			else:
-				lab.collaborator_count += 1
+		if role == ROLE_MEMBER:
+			lab.member_count += 1
+			lab.core_count += bool(same_institution)
+		else:
+			lab.collaborator_count += 1
 
 	return result

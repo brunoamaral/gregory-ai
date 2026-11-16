@@ -1333,7 +1333,9 @@ class Lab(models.Model):
 	review_reason = models.CharField(max_length=200, blank=True)
 	notes = models.TextField(blank=True)
 	member_count = models.PositiveIntegerField(
-		default=0, help_text="Author rows with the role member, not counting the head's rows."
+		default=0,
+		help_text="People with the role member, not counting the head. Duplicate author "
+				  "rows of one person count once.",
 	)
 	core_count = models.PositiveIntegerField(
 		default=0,

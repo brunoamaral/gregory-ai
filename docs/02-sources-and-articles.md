@@ -167,7 +167,8 @@ It stops by itself if the daily budget runs out; run it again the next day.
 author of 3 or more papers (of 2 to 30 authors) heads a lab; someone who shares 2 or more
 of those papers with a head is a member of it, and someone who shares exactly one is a
 collaborator, listed apart. Author rows that share an OpenAlex author ID count as one
-person. Recent papers weigh more, so the lab someone publishes with now wins over an older
+person, in the grouping and in a lab's member counts. Someone a superuser placed by hand
+as a member or collaborator, or pinned to no lab, never heads a computed lab. Recent papers weigh more, so the lab someone publishes with now wins over an older
 one. The result is stored in the `Lab` and `LabMembership` tables (see
 [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#lab)); nothing in
 the API, feeds or MCP server exposes it.

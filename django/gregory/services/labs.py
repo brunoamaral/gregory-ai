@@ -42,6 +42,7 @@ class LabInputs:
 	article_author_counts: dict
 	manual_heads: set
 	existing_heads: set
+	not_heads: set
 
 	def as_kwargs(self):
 		return dict(
@@ -50,11 +51,12 @@ class LabInputs:
 			article_author_counts=self.article_author_counts,
 			manual_heads=self.manual_heads,
 			existing_heads=self.existing_heads,
+			not_heads=self.not_heads,
 		)
 
 
 def load_inputs():
-	"""Everything ``compute_labs`` needs, in six ``values_list`` queries."""
+	"""Everything ``compute_labs`` needs, in seven ``values_list`` queries."""
 	institutions = defaultdict(list)
 	through = ArticleAuthorship.institutions.through
 	for authorship_id, institution_id in through.objects.values_list(
@@ -89,6 +91,12 @@ def load_inputs():
 		).values_list("article_id", "published_date").iterator(chunk_size=20000)
 	}
 	labs = list(Lab.objects.filter(head__isnull=False).values_list("head_id", "is_manual"))
+	# Placed by hand as something other than a head: never the head of a computed lab.
+	not_heads = set(
+		LabMembership.objects.filter(source=LabMembership.Source.MANUAL)
+		.exclude(role=LabMembership.Role.HEAD)
+		.values_list("author_id", flat=True)
+	)
 	return LabInputs(
 		rows=rows,
 		authors=authors,
@@ -96,6 +104,7 @@ def load_inputs():
 		article_author_counts=dict(article_author_counts),
 		manual_heads={head for head, manual in labs if manual},
 		existing_heads={head for head, _ in labs},
+		not_heads=not_heads,
 	)
 
 
