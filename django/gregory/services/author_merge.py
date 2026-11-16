@@ -8,6 +8,8 @@ Used by:
 The merge, per removed author:
   * transfers article M2M links onto the survivor (skipping ones the survivor
     already holds),
+  * moves OpenAlex authorship rows onto the survivor (dropping one where the survivor
+    already has a row on the same article) and recomputes the survivor's ``openalex_id``,
   * fills blank survivor fields (given_name/family_name/country/orcid_check)
     from the removed author,
   * deletes the removed author.
@@ -20,6 +22,8 @@ value (set it on ``keep`` before calling). Assumes it runs inside
 import logging
 
 from gregory.functions import normalize_orcid
+from gregory.models import ArticleAuthorship
+from gregory.services.openalex_authorships import recompute_author_openalex_ids
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +83,13 @@ def merge_authors(keep, remove, *, stdout=None):
 					article.authors.add(keep)
 					total_transferred += 1
 
+		# Authorships follow the author. Where the survivor already has a row on the same
+		# article, its row stays and the removed author's is dropped with the author.
+		keep_articles = ArticleAuthorship.objects.filter(author=keep).values("article_id")
+		ArticleAuthorship.objects.filter(author=author).exclude(article_id__in=keep_articles).update(
+			author=keep
+		)
+
 		if not keep.given_name and author.given_name:
 			keep.given_name = author.given_name
 		if not keep.family_name and author.family_name:
@@ -96,4 +107,6 @@ def merge_authors(keep, remove, *, stdout=None):
 		author.delete()
 
 	keep.save()
+	recompute_author_openalex_ids([keep.author_id])
+	keep.refresh_from_db(fields=["openalex_id"])
 	return keep, total_transferred

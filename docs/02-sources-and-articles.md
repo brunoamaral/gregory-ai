@@ -132,6 +132,35 @@ This uses the same `SciencePaper.refresh()` CrossRef/Unpaywall client as the
 `update_articles_info` pipeline command — see
 [gregory/services/crossref_refresh.py](../django/gregory/services/crossref_refresh.py).
 
+### Author positions and institutions (OpenAlex)
+
+`fetch_openalex_authorships` asks [OpenAlex](https://openalex.org) for each article that
+has a DOI and linked authors, and stores where each author stands in the paper's author
+list (`first`, `middle` or `last`), whether they are the corresponding author, and the
+institutions and printed affiliation OpenAlex lists for them. The rows are
+`ArticleAuthorship` records (see [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#articleauthorship)),
+kept beside the existing article-author link, which doesn't change. Authors are never
+created from OpenAlex: each OpenAlex author is matched to one of the article's own
+authors, by ORCID first and then by family name plus initial. A link with no match is
+normal.
+
+- It runs in the `pipeline` command after `refresh_pubmed_records`, 2,000 articles at most
+  per run (`--limit`), newest first. DOIs go 100 to a request.
+- A DOI OpenAlex doesn't know yet is retried after 2 days, then 4, 8, 16 and every 30
+  (`--all` ignores that wait). `--refresh` re-fetches articles already done, oldest first;
+  `--article-id` fetches one; `--dry-run` only counts what is due.
+- A budget or rate-limit answer from OpenAlex stops the run and marks nothing; run it
+  again later.
+- `OPENALEX_API_KEY` is optional. Without it OpenAlex shares one small daily budget with
+  everyone on the same IP address; the volume here (a few requests a day once caught up)
+  fits it. The command never sends an email address to OpenAlex.
+- The data is used in the admin only: no API endpoint, feed or MCP tool exposes it. The
+  printed affiliation text can contain email addresses, so it is never shown outside the
+  admin.
+
+On an install that has none of this yet: `manage.py fetch_openalex_authorships --limit 60000`.
+It stops by itself if the daily budget runs out; run it again the next day.
+
 ---
 
 ## Endpoints by subject and category

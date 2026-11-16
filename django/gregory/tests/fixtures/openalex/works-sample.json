@@ -1,0 +1,456 @@
+{
+	"meta": {
+		"count": 3,
+		"cost_usd": 0.0001
+	},
+	"results": [
+		{
+			"id": "https://openalex.org/W4385549237",
+			"doi": "https://doi.org/10.1186/s12974-023-02861-3",
+			"publication_year": 2023,
+			"authorships": [
+				{
+					"author_position": "first",
+					"author": {
+						"id": "https://openalex.org/A5086435829",
+						"display_name": "Alize M Proust",
+						"orcid": "https://orcid.org/0000-0003-2809-2835"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						}
+					],
+					"is_corresponding": true,
+					"raw_author_name": "Alizé Proust",
+					"raw_affiliation_strings": [
+						"Tuberculosis Laboratory, The Francis Crick Institute, London, NW1 1AT, UK. person@example.org"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5033638830",
+						"display_name": "Christophe J. Queval",
+						"orcid": null
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Christophe J. Queval",
+					"raw_affiliation_strings": [
+						"High Throughput Screening Laboratory, The Francis Crick Institute, London, NW1 1AT, UK"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5029512529",
+						"display_name": "Ruth Harvey",
+						"orcid": "https://orcid.org/0000-0002-1428-9621"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Ruth Harvey",
+					"raw_affiliation_strings": [
+						"Worldwide Influenza Centre, The Francis Crick Institute, London, NW1 1AT, UK"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5032427544",
+						"display_name": "Lorin Adams",
+						"orcid": "https://orcid.org/0000-0001-8357-2327"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Lorin Adams",
+					"raw_affiliation_strings": [
+						"Worldwide Influenza Centre, The Francis Crick Institute, London, NW1 1AT, UK"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": null,
+						"display_name": "Michael Bennett",
+						"orcid": null
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Michael Bennett",
+					"raw_affiliation_strings": [
+						"Worldwide Influenza Centre, The Francis Crick Institute, London, NW1 1AT, UK"
+					]
+				},
+				{
+					"author_position": "last",
+					"author": {
+						"id": "https://openalex.org/A5029089921",
+						"display_name": "Robert John Wilkinson",
+						"orcid": "https://orcid.org/0000-0002-2753-1800"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I157614274",
+							"display_name": "University of Cape Town",
+							"ror": "https://ror.org/03p74gp79",
+							"country_code": "ZA",
+							"type": "education"
+						},
+						{
+							"id": "https://openalex.org/I2801081054",
+							"display_name": "The Francis Crick Institute",
+							"ror": "https://ror.org/04tnbqb63",
+							"country_code": "GB",
+							"type": "facility"
+						},
+						{
+							"id": "https://openalex.org/I4210138455",
+							"display_name": "Wellcome Centre for Infectious Diseases Research in Africa",
+							"ror": "https://ror.org/040b19m18",
+							"country_code": "ZA",
+							"type": "facility"
+						},
+						{
+							"id": "https://openalex.org/I4405266898",
+							"display_name": "Institute of Infectious Disease and Molecular Medicine",
+							"ror": "https://ror.org/00900dw59",
+							"country_code": "ZA",
+							"type": "education"
+						},
+						{
+							"id": "https://openalex.org/I47508984",
+							"display_name": "Imperial College London",
+							"ror": "https://ror.org/041kmwe10",
+							"country_code": "GB",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Robert J. Wilkinson",
+					"raw_affiliation_strings": [
+						"Department of Infectious Diseases, Imperial College London, London, W12 0NN, UK",
+						"Institute of Infectious Disease and Molecular Medicine and Department of Medicine, Wellcome Centre for Infectious Diseases Research in Africa, University of Cape Town, Observatory, Cape Town, 7925, Republic of South Africa",
+						"Tuberculosis Laboratory, The Francis Crick Institute, London, NW1 1AT, UK"
+					]
+				}
+			]
+		},
+		{
+			"id": "https://openalex.org/W4384301782",
+			"doi": "https://doi.org/10.1016/j.crmeth.2023.100533",
+			"publication_year": 2023,
+			"authorships": [
+				{
+					"author_position": "first",
+					"author": {
+						"id": "https://openalex.org/A5046801262",
+						"display_name": "Hanane Touil",
+						"orcid": "https://orcid.org/0000-0002-9601-4364"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2799503643",
+							"display_name": "Columbia University Irving Medical Center",
+							"ror": "https://ror.org/01esghr10",
+							"country_code": "US",
+							"type": "healthcare"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Hanane Touil",
+					"raw_affiliation_strings": [
+						"Center for Translational & Computational Neuroimmunology, Department of Neurology, Columbia University Irving Medical Center, New York, NY 10032, USA"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5000640857",
+						"display_name": "Tina Roostaei",
+						"orcid": "https://orcid.org/0000-0001-7699-9007"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2799503643",
+							"display_name": "Columbia University Irving Medical Center",
+							"ror": "https://ror.org/01esghr10",
+							"country_code": "US",
+							"type": "healthcare"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Tina Roostaei",
+					"raw_affiliation_strings": [
+						"Center for Translational & Computational Neuroimmunology, Department of Neurology, Columbia University Irving Medical Center, New York, NY 10032, USA"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5026577087",
+						"display_name": "Daniela Calini",
+						"orcid": null
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I118019719",
+							"display_name": "F. Hoffmann-La Roche AG",
+							"ror": "https://ror.org/00by1q217",
+							"country_code": "CH",
+							"type": "company"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Daniela Calini",
+					"raw_affiliation_strings": [
+						"Neuroscience and Rare Diseases (NRD), F. Hoffmann-La Roche, Ltd., Grenzacherstrasse, 4070 Basel, Switzerland"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5025489064",
+						"display_name": "Claudiu I. Diaconu",
+						"orcid": null
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2799503643",
+							"display_name": "Columbia University Irving Medical Center",
+							"ror": "https://ror.org/01esghr10",
+							"country_code": "US",
+							"type": "healthcare"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Claudiu Diaconu",
+					"raw_affiliation_strings": [
+						"Center for Translational & Computational Neuroimmunology, Department of Neurology, Columbia University Irving Medical Center, New York, NY 10032, USA",
+						"Columbia Multiple Sclerosis Center, Department of Neurology, Columbia University Irving Medical Center, New York, NY 10032, USA"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": null,
+						"display_name": "Samantha Epstein",
+						"orcid": "https://orcid.org/0000-0003-1158-5430"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I2799503643",
+							"display_name": "Columbia University Irving Medical Center",
+							"ror": "https://ror.org/01esghr10",
+							"country_code": "US",
+							"type": "healthcare"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Samantha Epstein",
+					"raw_affiliation_strings": [
+						"Columbia Multiple Sclerosis Center, Department of Neurology, Columbia University Irving Medical Center, New York, NY 10032, USA"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5065460630",
+						"display_name": "Catarina Raposo",
+						"orcid": "https://orcid.org/0000-0002-1466-1542"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I118019719",
+							"display_name": "F. Hoffmann-La Roche AG",
+							"ror": "https://ror.org/00by1q217",
+							"country_code": "CH",
+							"type": "company"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Catarina Raposo",
+					"raw_affiliation_strings": [
+						"gRED OMNI-Biomarker Development, F. Hoffmann-La Roche, Ltd., Grenzacherstrasse, Basel, Switzerland"
+					]
+				}
+			]
+		},
+		{
+			"id": "https://openalex.org/W4385551404",
+			"doi": "https://doi.org/10.1186/s44280-023-00019-7",
+			"publication_year": 2023,
+			"authorships": [
+				{
+					"author_position": "first",
+					"author": {
+						"id": "https://openalex.org/A5007890172",
+						"display_name": "Yiduo Liu",
+						"orcid": "https://orcid.org/0000-0003-2869-5484"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Yiduo Liu",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5100599586",
+						"display_name": "Yulan Chen",
+						"orcid": "https://orcid.org/0000-0001-9726-8908"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Yulan Chen",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5111164818",
+						"display_name": "Zhengmin Liang",
+						"orcid": "https://orcid.org/0000-0001-6473-4511"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Zhengmin Liang",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5101050946",
+						"display_name": "Lijia Luo",
+						"orcid": null
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Lijia Luo",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5101513572",
+						"display_name": "Yuanzhi Wang",
+						"orcid": "https://orcid.org/0000-0002-7500-022X"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Yuanzhi Wang",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				},
+				{
+					"author_position": "middle",
+					"author": {
+						"id": "https://openalex.org/A5115694836",
+						"display_name": "Haoran Wang",
+						"orcid": "https://orcid.org/0009-0000-1505-1191"
+					},
+					"institutions": [
+						{
+							"id": "https://openalex.org/I52158045",
+							"display_name": "China Agricultural University",
+							"ror": "https://ror.org/04v3ywz14",
+							"country_code": "CN",
+							"type": "education"
+						}
+					],
+					"is_corresponding": false,
+					"raw_author_name": "Haoran Wang",
+					"raw_affiliation_strings": [
+						"College of Veterinary Medicine, National Key Laboratory of Veterinary Public Health and Safety, China Agricultural University, Beijing, China"
+					]
+				}
+			]
+		}
+	]
+}

@@ -86,11 +86,22 @@ class Authors(models.Model):
 	orcid_verified_email = models.BooleanField(
 		null=True, blank=True, help_text="Whether the ORCID record has a verified email."
 	)
+	openalex_id = models.CharField(
+		max_length=20,
+		blank=True,
+		null=True,
+		db_index=True,
+		help_text="Bare OpenAlex author ID (e.g. A5086435829): the most frequent one across "
+				  "this author's authorships, a tie going to the most recent article. Not unique: "
+				  "two rows with the same value are probably the same person.",
+	)
 	# Optimized uppercase column for fast text search
 	ufull_name = GeneratedField(
 		expression=Upper("full_name"), output_field=models.TextField(), db_persist=True
 	)
-	history = HistoricalRecords()
+	# openalex_id is recomputed in bulk after each OpenAlex fetch; tracking it would make
+	# history attribute that churn to whichever unrelated save came next.
+	history = HistoricalRecords(excluded_fields=["openalex_id"])
 
 	def save(self, *args, **kwargs):
 		# Auto-populate full_name from given_name and family_name
@@ -1008,8 +1019,28 @@ class Articles(models.Model):
 		db_index=True,
 		help_text="When the PubMed record was last fetched and applied.",
 	)
+	openalex_id = models.CharField(
+		max_length=20,
+		blank=True,
+		null=True,
+		help_text="Bare OpenAlex work ID (e.g. W4385452307).",
+	)
+	openalex_checked_at = models.DateTimeField(
+		blank=True,
+		null=True,
+		db_index=True,
+		help_text="When the authorships were last fetched from OpenAlex and applied.",
+	)
+	# Same back-off contract as the other enrichment markers: a paper OpenAlex doesn't
+	# know yet is retried later. Not tracked in article history.
+	openalex_next_check = models.DateTimeField(blank=True, null=True)
+	openalex_attempts = models.PositiveSmallIntegerField(default=0)
 	history = HistoricalRecords(
 		excluded_fields=[
+			# OpenAlex bookkeeping, rewritten on every fetch.
+			"openalex_checked_at",
+			"openalex_next_check",
+			"openalex_attempts",
 			# PubMed bookkeeping, rewritten on every refresh with update() (which skips
 			# history); tracking these columns would make history attribute their
 			# changes to whichever unrelated save came next.
@@ -1186,6 +1217,86 @@ class Articles(models.Model):
 		verbose_name_plural = "articles"
 		db_table = "articles"
 		ordering = ["-discovery_date"]
+
+
+class Institution(models.Model):
+	"""A research institution as OpenAlex describes it. Only the OpenAlex fetch creates rows."""
+
+	openalex_id = models.CharField(
+		max_length=20, unique=True, help_text="Bare OpenAlex institution ID, e.g. I2801081054."
+	)
+	ror = models.CharField(
+		max_length=20,
+		blank=True,
+		null=True,
+		db_index=True,
+		help_text="Bare ROR ID, e.g. 04tnbqb63.",
+	)
+	name = models.CharField(
+		max_length=255, help_text="Overwritten by ID on every fetch, so renames flow through."
+	)
+	country_code = models.CharField(max_length=2, blank=True)
+	type = models.CharField(
+		max_length=20, blank=True, help_text="OpenAlex's type: education, healthcare, company, ..."
+	)
+
+	def __str__(self):
+		return self.name
+
+	class Meta:
+		db_table = "institutions"
+		ordering = ["name"]
+
+
+class ArticleAuthorship(models.Model):
+	"""Position and affiliation of one author on one article, as OpenAlex describes it.
+
+	Sits beside the ``articles_authors`` many-to-many and doesn't replace it. An article's
+	rows are replaced in full each time its OpenAlex record is fetched. A link with no row
+	is normal: OpenAlex didn't know the paper, or the name didn't match.
+	"""
+
+	class Position(models.TextChoices):
+		FIRST = "first", "First"
+		MIDDLE = "middle", "Middle"
+		LAST = "last", "Last"
+
+	article = models.ForeignKey(
+		Articles, on_delete=models.CASCADE, related_name="authorships"
+	)
+	author = models.ForeignKey(
+		Authors, on_delete=models.CASCADE, related_name="authorships"
+	)
+	position = models.CharField(max_length=6, choices=Position.choices)
+	author_index = models.PositiveSmallIntegerField(
+		help_text="0-based place in the paper's author list."
+	)
+	is_corresponding = models.BooleanField(default=False)
+	openalex_author_id = models.CharField(
+		max_length=20,
+		blank=True,
+		db_index=True,
+		help_text="Bare OpenAlex author ID, e.g. A5086435829.",
+	)
+	institutions = models.ManyToManyField(
+		Institution, blank=True, related_name="authorships"
+	)
+	raw_affiliation = models.TextField(
+		blank=True,
+		help_text="The printed affiliation strings, one per line. Can contain email "
+				  "addresses: admin only, never serialised.",
+	)
+
+	def __str__(self):
+		return f"{self.author_id} on {self.article_id} ({self.position})"
+
+	class Meta:
+		db_table = "article_authorships"
+		constraints = [
+			models.UniqueConstraint(
+				fields=["article", "author"], name="unique_article_authorship"
+			)
+		]
 
 
 class ArticleMeshHeading(models.Model):

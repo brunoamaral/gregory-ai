@@ -99,7 +99,8 @@ python manage.py merge_authors 0000-0000-0000-1234 --keep-author 42 --force
 3. **Transfer articles**: Moves all article associations from duplicate authors to the target author
 4. **Upgrade ORCID**: If keeping an author with `http://`, upgrades to `https://` if available
 5. **Preserve data**: Updates the target author with any missing information from duplicates
-6. **Clean up**: Deletes the duplicate author records
+6. **Move OpenAlex authorships**: The removed authors' `ArticleAuthorship` rows (author position and institutions on each article, see [02-sources-and-articles.md](02-sources-and-articles.md#author-positions-and-institutions-openalex)) move to the target author. Where the target already has a row on the same article, the target's row stays and the other is dropped. The target's `openalex_id` is then recomputed.
+7. **Clean up**: Deletes the duplicate author records
 
 ## Safety Features
 
@@ -187,7 +188,7 @@ For one-off cleanups where you're browsing the Authors list rather than working 
 **ORCID compatibility check**: the action refuses to merge authors whose ORCIDs disagree. A blank ORCID is treated as compatible with any value, and comparison is normalized (`https://orcid.org/0000-0000-0000-1234`, `http://orcid.org/0000-0000-0000-1234`, and the bare `0000-0000-0000-1234` are all treated as the same ORCID) since stored values mix URL and bare-ID forms. If two selected authors have genuinely different non-blank ORCIDs, the action shows an error and makes no changes.
 
 Once confirmed, the merge:
-- transfers every article from the other authors onto the one kept,
+- transfers every article from the other authors onto the one kept, along with their OpenAlex authorship rows (the kept author's row wins on an article both have) and recomputes the kept author's `openalex_id`,
 - fills any blank `given_name`, `family_name`, `country`, or `orcid_check` field on the kept author from the others,
 - stores the kept author's ORCID as the shared bare ID (no URL prefix),
 - permanently deletes the other authors.
