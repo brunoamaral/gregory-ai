@@ -7,11 +7,15 @@ from gregory.models import Articles, Trials, ArticleTrialReference
 from gregory.utils.trial_identifiers import (
 	extract_identifiers,
 	extract_identifiers_from_trial_identifiers,
+	may_contain_identifier,
 )
 
 
 class Command(BaseCommand):
-	help = "Detects trial identifiers in article summaries and creates ArticleTrialReference objects"
+	help = (
+		"Detects trial identifiers in the title and summary of every article and "
+		"creates the ArticleTrialReference rows that are missing"
+	)
 
 	def add_arguments(self, parser):
 		parser.add_argument(
@@ -36,7 +40,10 @@ class Command(BaseCommand):
 		parser.add_argument(
 			"--recent",
 			action="store_true",
-			help="Process only articles from the last 30 days (or days specified by --days)",
+			help=(
+				"Process only articles discovered in the last 30 days (or --days). "
+				"Off by default: the pipeline scans every article."
+			),
 		)
 		parser.add_argument(
 			"--days",
@@ -76,29 +83,25 @@ class Command(BaseCommand):
 			).values_list("article_id", "trial_id")
 		)
 
-		# Setup article query
+		# Setup article query. Every article is read, whatever its summary: a
+		# registry id in a title alone is a link.
 		if options["article_id"]:
 			articles = Articles.objects.filter(article_id=options["article_id"])
 			self.stdout.write(
 				f"Processing specific article ID: {options['article_id']}"
 			)
 		else:
-			articles = Articles.objects.filter(summary__isnull=False).exclude(
-				summary=""
-			)
-
-			# Filter for recent articles if the option is specified
+			articles = Articles.objects.all()
 			if options["recent"]:
 				days = options["days"]
 				date_threshold = timezone.now() - timedelta(days=days)
 				articles = articles.filter(discovery_date__gte=date_threshold)
 				self.stdout.write(f"Processing articles from the last {days} days")
 			else:
-				self.stdout.write(f"Processing all articles with summaries")
+				self.stdout.write("Processing all articles")
 
-		# Apply limit if specified
 		if options["limit"]:
-			articles = articles[: options["limit"]]
+			articles = articles.order_by("article_id")[: options["limit"]]
 			self.stdout.write(f"Limiting to {options['limit']} articles")
 
 		# Setup trial query
@@ -109,67 +112,81 @@ class Command(BaseCommand):
 			trials = Trials.objects.filter(identifiers__isnull=False).exclude(
 				identifiers={}
 			)
-			self.stdout.write(f"Scanning for all trials with identifiers")
-
-		self.stdout.write(
-			f"Found {articles.count()} articles and {trials.count()} trials to process"
-		)
 
 		# Build a canonical-identifier -> [trial_id, ...] index once, instead of
 		# re-scanning every trial's identifiers for every article.
 		identifier_index = defaultdict(list)
-		for trial in trials:
+		trial_count = 0
+		for trial in trials.only("trial_id", "identifiers").iterator(chunk_size=2000):
+			trial_count += 1
 			for canonical_id in extract_identifiers_from_trial_identifiers(
 				trial.identifiers
 			):
 				identifier_index[canonical_id].append(trial.trial_id)
 
-		# Track statistics
-		total_references = 0
-		total_articles_with_refs = set()
-		total_trials_with_refs = set()
+		# Every (article, trial, identifier_type) that already has a row, loaded
+		# once so a full scan only writes what is missing. get_or_create below
+		# stays the actual write, so a concurrent run cannot duplicate a row.
+		existing_keys = set(
+			ArticleTrialReference.objects.values_list(
+				"article_id", "trial_id", "identifier_type"
+			)
+		)
 
-		# Process each article once: extract its identifiers and look them up.
-		for article in articles:
-			if not article.summary:
+		created = 0
+		already_linked_pairs = set()
+		skipped_pairs = set()
+		articles_scanned = 0
+		linked_articles = set()
+		linked_trials = set()
+		verbose = options["verbosity"] >= 2
+		dry_run = options["dry_run"]
+
+		# One streamed pass over the articles: the corpus is large, so only the
+		# three columns detection needs are read.
+		rows = articles.values_list("article_id", "title", "summary")
+		for article_id, title, summary in rows.iterator(chunk_size=2000):
+			articles_scanned += 1
+			text = f"{title or ''} {summary or ''}"
+			if not may_contain_identifier(text):
 				continue
-
-			text = f"{article.title or ''} {article.summary}"
-			article_refs_count = 0
 
 			for canonical_id in extract_identifiers(text):
 				id_type, id_value = canonical_id
 				for trial_id in identifier_index.get(canonical_id, []):
-					if (article.article_id, trial_id) in skip_pairs:
+					pair = (article_id, trial_id)
+					if pair in skip_pairs:
+						skipped_pairs.add(pair)
 						continue
-					total_references += 1
-					article_refs_count += 1
-					total_articles_with_refs.add(article.article_id)
-					total_trials_with_refs.add(trial_id)
+					key = (article_id, trial_id, id_type)
+					if key in existing_keys:
+						already_linked_pairs.add(pair)
+						continue
 
-					if options["dry_run"]:
+					created += 1
+					linked_articles.add(article_id)
+					linked_trials.add(trial_id)
+					existing_keys.add(key)
+					if verbose:
+						prefix = "Would create" if dry_run else "Created"
 						self.stdout.write(
-							f"Would create: Article {article.article_id} -> Trial {trial_id} via {id_type}={id_value} (dry run)"
+							f"{prefix}: Article {article_id} -> Trial {trial_id} via {id_type}={id_value}"
 						)
-					else:
+					if not dry_run:
 						ArticleTrialReference.objects.get_or_create(
-							article=article,
+							article_id=article_id,
 							trial_id=trial_id,
 							identifier_type=id_type,
-							identifier_value=id_value,
+							defaults={"identifier_value": id_value},
 						)
 
-			# Print progress for articles with references
-			if article_refs_count > 0:
-				self.stdout.write(
-					f"Article {article.article_id}: Found {article_refs_count} trial references"
-				)
-
-		# Print summary
-		action = "Would have created" if options["dry_run"] else "Created"
+		action = "Would have created" if dry_run else "Created"
 		self.stdout.write(
 			self.style.SUCCESS(
-				f"{action} {total_references} article-trial references "
-				f"involving {len(total_articles_with_refs)} articles and {len(total_trials_with_refs)} trials"
+				f"Scanned {articles_scanned} articles against {trial_count} trials. "
+				f"{action} {created} article-trial links "
+				f"involving {len(linked_articles)} articles and {len(linked_trials)} trials; "
+				f"{len(already_linked_pairs)} pairs already linked; "
+				f"{len(skipped_pairs)} pairs skipped (suppressed or manual)"
 			)
 		)

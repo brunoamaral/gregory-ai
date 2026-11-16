@@ -18,6 +18,8 @@ from django.test import SimpleTestCase
 from gregory.utils.trial_identifiers import (
 	extract_identifiers,
 	extract_identifiers_from_trial_identifiers,
+	may_contain_identifier,
+	PATTERNS,
 	normalize_trial_identifiers,
 )
 
@@ -476,3 +478,54 @@ class NormalizeTrialIdentifiersTest(SimpleTestCase):
 			[{"id": "NCT01234567", "type": "OTHER", "domain": "", "link": ""}],
 		)
 		self.assertEqual(result, ["nct:NCT01234567"])
+
+
+# One valid example per PATTERNS entry. A pattern added without an example
+# here, or without a matching pre-check alternative, fails the tests below.
+_PATTERN_EXAMPLES = {
+	"ctis": "2020-001205-23-01",
+	"eudract": "2020-001205-23",
+	"nct": "NCT04578639",
+	"isrctn": "ISRCTN12345678",
+	"actrn": "ACTRN12345678901234",
+	"drks": "DRKS00012345",
+	"ctri": "CTRI/2020/01/012345",
+	"pactr": "PACTR202001234567890",
+	"rpcec": "RPCEC00000123",
+	"tctr": "TCTR20200101001",
+	"slctr": "SLCTR/2020/001",
+	"itmctr": "ITMCTR2000001234",
+	"umin": "UMIN000012345",
+	"jrct": "jRCTs031180248",
+	"rbr": "RBR-7abc12",
+	"irct": "IRCT20200101046000N1",
+	"chictr": "ChiCTR-IOR-17012345",
+	"nl_omon": "NL-OMON12345",
+	"nl": "NL1234",
+	"ntr": "NTR1234",
+	"repec": "PER-123-20",
+	"lbctr": "LBCTR2020123456",
+	"utn": "U1111-1234-5678",
+	"japic": "JapicCTI-123456",
+}
+
+
+class MayContainIdentifierTest(SimpleTestCase):
+	def test_every_pattern_has_an_example(self):
+		self.assertEqual({name for name, _ in PATTERNS}, set(_PATTERN_EXAMPLES))
+
+	def test_precheck_is_true_wherever_extraction_finds_something(self):
+		for name, pattern in PATTERNS:
+			example = _PATTERN_EXAMPLES[name]
+			# The example must itself match its own pattern, or the test proves nothing.
+			self.assertTrue(pattern.search(example), f"example for {name!r} does not match")
+			for text in (example, f"Registered as {example}.", f"({example.lower()})", f"{example.upper()};"):
+				if extract_identifiers(text):
+					self.assertTrue(
+						may_contain_identifier(text),
+						f"pre-check misses pattern {name!r} in {text!r}",
+					)
+
+	def test_text_without_identifiers_is_rejected(self):
+		for text in (None, "", "Only a channel of MS research in the nation", "Results in 2020-2021"):
+			self.assertFalse(may_contain_identifier(text))

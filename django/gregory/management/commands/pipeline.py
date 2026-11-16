@@ -7,12 +7,6 @@ class Command(BaseCommand):
 
 	def add_arguments(self, parser):
 		parser.add_argument(
-			"--recent-days",
-			type=int,
-			default=30,
-			help="Number of days to look back when processing trial references (default: 30)",
-		)
-		parser.add_argument(
 			"--categories-days",
 			type=int,
 			default=30,
@@ -166,15 +160,11 @@ class Command(BaseCommand):
 				self.style.ERROR(f"Error running refresh_article_relevance: {str(e)}")
 			)
 
-		# Run detect_trial_references with recent articles only
+		# Run detect_trial_references over every article: links must follow
+		# trials that change after their articles were found.
 		try:
-			days = options.get("recent_days", 30)
-			self.stdout.write(
-				self.style.SUCCESS(
-					f"Running detect_trial_references for articles from the last {days} days"
-				)
-			)
-			call_command("detect_trial_references", recent=True, days=days)
+			self.stdout.write(self.style.SUCCESS("Running detect_trial_references"))
+			call_command("detect_trial_references")
 			self.stdout.write(
 				self.style.SUCCESS("Finished running detect_trial_references")
 			)

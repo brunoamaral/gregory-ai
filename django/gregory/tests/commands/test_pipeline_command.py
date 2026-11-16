@@ -161,7 +161,12 @@ class PipelineCommandTest(TestCase):
 
 		out = StringIO()
 		err = StringIO()
-		call_command("pipeline", "--recent-days", "10", stdout=out, stderr=err)
+		call_command("pipeline", stdout=out, stderr=err)
 		self.assertIn("Error running command feedreader_trials", err.getvalue())
 		called_commands = [c[0][0] if c[0] else None for c in mock_call.call_args_list]
 		self.assertIn("detect_trial_references", called_commands)
+		# A full scan: no --recent window and no days argument.
+		detect_calls = [c for c in mock_call.call_args_list if c[0] and c[0][0] == "detect_trial_references"]
+		self.assertEqual(len(detect_calls), 1)
+		self.assertEqual(detect_calls[0].args, ("detect_trial_references",))
+		self.assertEqual(detect_calls[0].kwargs, {})

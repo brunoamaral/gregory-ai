@@ -88,6 +88,29 @@ _PREFIXES = {
 }
 
 
+# A loose superset of every PATTERNS entry, used only to skip articles that
+# contain nothing identifier-shaped before the 30 precise patterns run. Each
+# alternative is the literal prefix plus the first character the precise
+# pattern requires after it, so ordinary words ("only", "channel") do not
+# trigger it. Keep it in step with PATTERNS: the test that loops over PATTERNS
+# fails when a pattern is added without a matching alternative here.
+_PRECHECK = re.compile(
+	r"\d{4}-\d{6}-\d{2}"
+	r"|NCT[\s-]?\d|ISRCTN\d|ACTRN\d|DRKS\d|CTRI/\d|PACTR\d|RPCEC\d|TCTR\d"
+	r"|SLCTR/\d|ITMCTR\d|UMIN\d|jRCT[a-z]?\d|RBR-?[A-Za-z0-9]|IRCT[A-Za-z0-9]"
+	r"|ChiCTR|NL-OMON\d|NL\d|NTR\d|PER-\d|LBCTR\d|U1111-\d|JapicCTI-\d",
+	_FLAGS,
+)
+
+
+def may_contain_identifier(text: str | None) -> bool:
+	"""Cheap pre-check: False means extract_identifiers(text) is certainly
+	empty, so the caller can skip it. True means it might find something."""
+	if not text:
+		return False
+	return _PRECHECK.search(text) is not None
+
+
 def _normalize_match(canonical_type: str, match: re.Match) -> str:
 	"""Rebuild a canonical identifier string from a regex match, independent
 	of whatever casing/spacing/dashes appeared in the source text."""
