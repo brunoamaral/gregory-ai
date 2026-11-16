@@ -803,9 +803,14 @@ class Command(BaseCommand):
 								)
 							)
 						elif col_name == "articles":
-							refs = [
-								r for r in trial.article_references.all() if not r.suppressed
-							]
+							# One article per link: a pair can have a row per identifier type.
+							refs = list(
+								{
+									r.article_id: r
+									for r in trial.article_references.all()
+									if not r.suppressed
+								}.values()
+							)
 							if refs:
 								links = "; ".join(r.article.link for r in refs)
 								row_data.append(f"{len(refs)}: {links}")

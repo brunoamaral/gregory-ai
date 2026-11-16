@@ -31,7 +31,8 @@ class Command(BaseCommand):
 			action="store_true",
 			help=(
 				"Remove the auto-detected article-trial references before scanning. "
-				"Links added by an editor and links an editor unlinked are kept."
+				"Links added by an editor, links an editor confirmed and links an "
+				"editor unlinked are kept."
 			),
 		)
 		parser.add_argument(
@@ -59,14 +60,16 @@ class Command(BaseCommand):
 
 	def handle(self, *args, **options):
 		# Handle optional reset of auto-detected references. Manual links are an
-		# editor's work and unlinked ones (suppressed) are an editor's decision,
-		# so neither is something detection may regenerate or throw away.
+		# editor's work, unlinked ones (suppressed) and confirmed ones are an
+		# editor's decision, so none is something detection may regenerate or throw away.
 		# Rows a --reset preview would have deleted: still in the database on a
 		# dry run, so the scan below must not count them as already linked.
 		reset_pks = set()
 		if options["reset"]:
 			resettable = ArticleTrialReference.objects.filter(
-				source=ArticleTrialReference.SOURCE_AUTO, suppressed=False
+				source=ArticleTrialReference.SOURCE_AUTO,
+				suppressed=False,
+				confirmed=False,
 			)
 			count = resettable.count()
 			if options["dry_run"]:

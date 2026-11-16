@@ -606,6 +606,68 @@ class ArticleMeshHeadingSerializer(serializers.ModelSerializer):
 		fields = ["descriptor", "qualifier", "major_topic"]
 
 
+def _one_per_linked_record(references, side):
+	"""One entry per linked trial (``side="trial"``) or article (``side="article"``).
+
+	A pair can have several ``ArticleTrialReference`` rows (one per identifier type), but
+	to a reader it is one link. Hidden (suppressed) rows are left out. The two values the
+	reader gets are set on the record as ``link_confirmed`` (any visible row confirmed)
+	and ``link_type`` (``manual`` when any row is manual, else ``identifier`` when any row
+	is not an acronym match, else ``acronym``). Uses only the rows passed in, so the
+	prefetch is enough.
+	"""
+	grouped = {}
+	for ref in references:
+		if ref.suppressed:
+			continue
+		record = getattr(ref, side)
+		entry = grouped.setdefault(record.pk, [record, False, False, False])
+		entry[1] = entry[1] or ref.confirmed
+		entry[2] = entry[2] or ref.source == "manual"
+		entry[3] = entry[3] or (ref.source != "manual" and ref.identifier_type != "acronym")
+	records = []
+	for record, confirmed, manual, identifier in grouped.values():
+		record.link_confirmed = confirmed
+		record.link_type = "manual" if manual else ("identifier" if identifier else "acronym")
+		records.append(record)
+	return records
+
+
+_LINK_CONFIRMED_HELP = (
+	"True when a person has vouched for the link: an editor added it, or checked one "
+	"detection found. False for a link no one has reviewed."
+)
+_LINK_TYPE_HELP = (
+	"How the link was made. `manual`: an editor added it. `identifier`: detection found "
+	"a registry id of the trial in the text. `acronym`: detection matched the trial's "
+	"acronym."
+)
+
+
+# Simple Trial serializer for use in Article references
+class TrialReferenceSerializer(serializers.ModelSerializer):
+	link_confirmed = serializers.BooleanField(read_only=True, default=False, help_text=_LINK_CONFIRMED_HELP)
+	link_type = serializers.ChoiceField(
+		choices=["manual", "identifier", "acronym"], read_only=True, help_text=_LINK_TYPE_HELP
+	)
+
+	class Meta:
+		model = Trials
+		fields = ["trial_id", "title", "summary", "link", "link_confirmed", "link_type"]
+
+
+# Simple Article serializer for use in Trial references
+class ArticleReferenceSerializer(serializers.ModelSerializer):
+	link_confirmed = serializers.BooleanField(read_only=True, default=False, help_text=_LINK_CONFIRMED_HELP)
+	link_type = serializers.ChoiceField(
+		choices=["manual", "identifier", "acronym"], read_only=True, help_text=_LINK_TYPE_HELP
+	)
+
+	class Meta:
+		model = Articles
+		fields = ["article_id", "title", "summary", "link", "link_confirmed", "link_type"]
+
+
 class ArticleSerializer(
 	SiteEditorialFieldMixin,
 	ScopedSerializerMixin, serializers.HyperlinkedModelSerializer
@@ -667,12 +729,13 @@ class ArticleSerializer(
 		"""PubMed publication type names, e.g. ``["Journal Article", "Review"]``."""
 		return [t.name for t in obj.publication_types.all()]
 
+	@extend_schema_field(TrialReferenceSerializer(many=True))
 	def get_clinical_trials(self, obj) -> list:
 		"""Get trials referenced in the article"""
 		references = obj.trial_references.all()
 		# The view's prefetch already drops suppressed links; this keeps an
 		# unprefetched caller from listing one.
-		trials = [ref.trial for ref in references if not ref.suppressed]
+		trials = _one_per_linked_record(references, "trial")
 		return TrialReferenceSerializer(trials, many=True).data
 
 
@@ -1004,6 +1067,7 @@ class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.Hy
 		]
 		read_only_fields = ("discovery_date", "articles")
 
+	@extend_schema_field(ArticleReferenceSerializer(many=True))
 	def get_articles(self, obj) -> list:
 		"""Get articles that reference this trial.
 
@@ -1012,7 +1076,7 @@ class TrialSerializer(EditorialFieldMixin, ScopedSerializerMixin, serializers.Hy
 		to avoid one query per trial on list responses.
 		"""
 		references = obj.article_references.all()
-		articles = [ref.article for ref in references if not ref.suppressed]
+		articles = _one_per_linked_record(references, "article")
 		return ArticleReferenceSerializer(articles, many=True).data
 
 	def get_countries_normalized(self, obj) -> Optional[list]:
@@ -1218,20 +1282,6 @@ class CoauthorSerializer(serializers.ModelSerializer):
 
 	def get_country(self, obj) -> Optional[str]:
 		return obj.country.code if obj.country else None
-
-
-# Simple Trial serializer for use in Article references
-class TrialReferenceSerializer(serializers.ModelSerializer):
-	class Meta:
-		model = Trials
-		fields = ["trial_id", "title", "summary", "link"]
-
-
-# Simple Article serializer for use in Trial references
-class ArticleReferenceSerializer(serializers.ModelSerializer):
-	class Meta:
-		model = Articles
-		fields = ["article_id", "title", "summary", "link"]
 
 
 class PublicSiteSerializer(serializers.Serializer):

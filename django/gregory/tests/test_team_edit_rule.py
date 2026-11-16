@@ -293,9 +293,11 @@ class AdminRegistryTest(TestCase):
 	def test_every_content_admin_applies_the_team_rule(self):
 		from gregory.admin import TeamEditMixin
 
-		from gregory.models import Patents, PatentTrialLink, PredictionRunLog
+		from gregory.models import ArticleTrialReference, Patents, PatentTrialLink, PredictionRunLog
 
-		for model in (Articles, Trials, Patents, Sources, Subject, TeamCategory, PatentTrialLink, PredictionRunLog):
+		for model in (
+			Articles, Trials, Patents, Sources, Subject, TeamCategory, PatentTrialLink, ArticleTrialReference, PredictionRunLog
+		):
 			with self.subTest(model=model.__name__):
 				self.assertIsInstance(admin.site.get_model_admin(model), TeamEditMixin)
 

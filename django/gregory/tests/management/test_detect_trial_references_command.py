@@ -333,6 +333,36 @@ class DetectTrialReferencesEditorLinksTest(TestCase):
 		self.assertFalse(ArticleTrialReference.objects.filter(pk=auto.pk).exists())
 		self.assertTrue(ArticleTrialReference.objects.filter(pk=suppressed.pk).exists())
 
+	def test_reset_keeps_a_confirmed_auto_row(self):
+		from gregory.models import ArticleTrialReference
+
+		call_command("detect_trial_references", stdout=StringIO())
+		confirmed = ArticleTrialReference.objects.get(trial=self.trial, identifier_type="nct")
+		confirmed.confirmed = True
+		confirmed.save()
+		unconfirmed = ArticleTrialReference.objects.get(trial=self.trial, identifier_type="eudract")
+
+		call_command("detect_trial_references", "--reset", stdout=StringIO())
+
+		self.assertTrue(ArticleTrialReference.objects.filter(pk=confirmed.pk, confirmed=True).exists())
+		self.assertFalse(ArticleTrialReference.objects.filter(pk=unconfirmed.pk).exists())
+		# The unconfirmed row was rebuilt, nothing was doubled.
+		self.assertEqual(ArticleTrialReference.objects.filter(trial=self.trial).count(), 2)
+
+	def test_dry_run_reset_does_not_count_a_confirmed_row_as_deleted(self):
+		from gregory.models import ArticleTrialReference
+
+		call_command("detect_trial_references", stdout=StringIO())
+		ArticleTrialReference.objects.filter(trial=self.trial, identifier_type="nct").update(confirmed=True)
+
+		out = StringIO()
+		call_command("detect_trial_references", "--reset", "--dry-run", stdout=out)
+
+		self.assertIn("Would delete 1 existing references", out.getvalue())
+		self.assertIn("Would have created 1 article-trial links", out.getvalue())
+		self.assertIn("1 pairs already linked", out.getvalue())
+		self.assertEqual(ArticleTrialReference.objects.count(), 2)
+
 	def test_dry_run_reset_counts_only_what_it_would_delete(self):
 		from gregory.models import ArticleTrialReference
 
