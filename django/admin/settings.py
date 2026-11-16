@@ -505,6 +505,10 @@ EMAIL_DOMAIN = os.environ.get('EMAIL_DOMAIN')
 EMAIL_POSTMARK_API_KEY = os.environ.get('EMAIL_POSTMARK_API_KEY')
 EMAIL_POSTMARK_API_URL = os.environ.get('EMAIL_POSTMARK_API_URL')
 
+# OpenAlex (author positions and institutions). Optional: the API works without a key,
+# with a smaller shared daily budget.
+OPENALEX_API_KEY = os.environ.get('OPENALEX_API_KEY', '')
+
 # Logging
 LOGGING = {
 	'version': 1,

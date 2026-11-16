@@ -52,6 +52,7 @@ from organizations.admin import OrganizationAdmin as BaseOrganizationAdmin
 from .models import (
 	Articles,
 	ArticleMeshHeading,
+	Institution,
 	MeshTerm,
 	PublicationType,
 	Medicine,
@@ -3779,6 +3780,8 @@ class AuthorsAdmin(admin.ModelAdmin):
 	list_filter = ["country", ArticleCountFilter]
 	inlines = [AuthorArticlesInline]
 	readonly_fields = ["biography", "recheck_orcid_button"]
+	# Filled by fetch_openalex_authorships; the author form is unchanged.
+	exclude = ["openalex_id"]
 	actions = ["merge_selected_authors"]
 
 	def get_search_results(self, request, queryset, search_term):
@@ -6335,6 +6338,34 @@ class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 
 
 admin.site.register(Authors, AuthorsAdmin)
+
+
+class InstitutionAdmin(admin.ModelAdmin):
+	"""Read-only and superuser-only: rows come from the OpenAlex fetch. Registered so the
+	autocompletes that later work on labs can search institutions by name and ROR."""
+
+	list_display = ["name", "country_code", "type", "ror", "openalex_id"]
+	list_filter = ["type", "country_code"]
+	search_fields = ["name", "ror"]
+	ordering = ["name"]
+
+	def has_module_permission(self, request):
+		return request.user.is_superuser
+
+	def has_view_permission(self, request, obj=None):
+		return request.user.is_superuser
+
+	def has_add_permission(self, request):
+		return False
+
+	def has_change_permission(self, request, obj=None):
+		return False
+
+	def has_delete_permission(self, request, obj=None):
+		return False
+
+
+admin.site.register(Institution, InstitutionAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)

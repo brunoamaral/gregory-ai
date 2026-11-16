@@ -67,6 +67,10 @@ class Command(BaseCommand):
 				{},
 			),  # 6b. PubMed's record (abstract, publication types, MeSH, retractions) for articles with a PMID
 			(
+				"fetch_openalex_authorships",
+				{},
+			),  # 6c. Author positions and institutions from OpenAlex, for articles with a DOI and authors
+			(
 				"rebuild_categories",
 				rebuild_kwargs,
 			),  # 7. Assign categories (incremental by default; covers patents too)
