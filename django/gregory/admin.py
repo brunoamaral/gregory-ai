@@ -28,7 +28,13 @@ from .utils.ncbi import NcbiClient
 from .utils.pubmed_search import PUBMED_VOLUME_WARNING_PER_30_DAYS
 from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .team_scope import can_edit, team_editable, user_team_ids
-from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
+from .services.author_merge import (
+	ConflictingOrcidError,
+	OutreachConflictError,
+	merge_authors,
+	shared_orcid,
+)
+from .admin_author_merge import register as register_author_merge_admin
 from .services.medicine_linking import link_category
 from .admin_labs import (
 	AuthorLabMembershipInline,
@@ -3984,6 +3990,9 @@ class AuthorsAdmin(admin.ModelAdmin):
 					if orcid_id and author_to_keep.ORCID != orcid_id:
 						author_to_keep.ORCID = orcid_id
 					_, transferred = merge_authors(author_to_keep, others)
+			except OutreachConflictError as e:
+				self.message_user(request, str(e), level=messages.ERROR)
+				return
 			except Exception:
 				logger.exception(
 					"Author merge failed (keep=%s, others=%s)",
@@ -6518,6 +6527,7 @@ class InstitutionAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 
 admin.site.register(Institution, InstitutionAdmin)
 admin.site.register(Lab, LabAdmin)
+register_author_merge_admin(admin.site)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)

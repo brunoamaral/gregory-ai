@@ -1,0 +1,132 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+	<a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+	&rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+	&rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+	.amc-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+	.amc-tabs a { padding: 6px 12px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; text-decoration: none; }
+	.amc-tabs a.active { background: var(--selected-row, #e8f0f8); font-weight: 600; }
+	.amc-group { margin: 0 0 20px; padding: 12px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; }
+	.amc-group table { width: 100%; }
+	.amc-group h3 { margin: 0 0 8px; }
+	.amc-reason { color: var(--error-fg, #ba2121); font-weight: 600; }
+	.amc-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+	.amc-actions form { display: inline-flex; gap: 8px; align-items: center; }
+	.amc-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+	.amc-pagination { margin: 16px 0; display: flex; gap: 12px; align-items: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<p>
+	Author rows that share an OpenAlex author ID are probably the same person.
+	<strong>Clear-cut</strong>: same family name and given initial, no conflict.
+	<strong>Names differ</strong>: no conflict, but the names don't match that rule; read them before merging.
+	<strong>Blocked</strong>: two different ORCIDs, or both rows were already emailed for the same site; these cannot be merged here.
+	A merge is permanent: the removed rows are deleted and their pages stop existing.
+</p>
+
+<div class="amc-toolbar">
+	<nav class="amc-tabs">
+		{% for tab in tabs %}
+		<a href="{{ tab.url }}" class="{% if tab.active %}active{% endif %}">{{ tab.label }} ({{ tab.count }})</a>
+		{% endfor %}
+	</nav>
+	<form method="get">
+		<input type="hidden" name="class" value="{{ status }}">
+		<input type="search" name="q" value="{{ search }}" placeholder="Name, ORCID, OpenAlex ID or author ID">
+		<input type="submit" value="Search">
+	</form>
+	{% if counts.clear_cut %}
+	<a class="button" href="{{ merge_all_url }}">Merge all clear-cut groups ({{ counts.clear_cut }})</a>
+	{% endif %}
+</div>
+
+{% for group in page %}
+<div class="amc-group" id="g-{{ group.openalex_id }}">
+	<h3>
+		{{ group.names }}
+		<small>
+			&mdash; OpenAlex <a href="https://openalex.org/{{ group.openalex_id }}" target="_blank" rel="noopener">{{ group.openalex_id }}</a>,
+			{{ group.total_articles }} article link{{ group.total_articles|pluralize }} in total
+		</small>
+	</h3>
+	{% if group.status == "blocked" %}<p class="amc-reason">Blocked: {{ group.reason }}</p>{% endif %}
+	{% if group.dismissed %}<p><em>Dismissed as not the same person.</em></p>{% endif %}
+
+	<form method="post" action="{{ merge_url }}">
+		{% csrf_token %}
+		<input type="hidden" name="openalex_id" value="{{ group.openalex_id }}">
+		{% for key, value in return_params.items %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+		<table>
+			<thead>
+				<tr>
+					<th>Keep</th><th>Merge</th><th>ID</th><th>Name</th><th>ORCID</th>
+					<th>Articles</th><th>Emails</th><th>Lab</th><th>Outreach rows</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for row in group.rows %}
+				<tr>
+					<td><input type="radio" name="keep" value="{{ row.author_id }}" aria-label="Keep {{ row.full_name }}" {% if row.author_id == group.survivor_id %}checked{% endif %}></td>
+					<td><input type="checkbox" name="merge" value="{{ row.author_id }}" aria-label="Merge {{ row.full_name }}" checked></td>
+					<td><a href="{% url 'admin:gregory_authors_change' row.author_id %}">{{ row.author_id }}</a></td>
+					<td>{{ row.full_name }}</td>
+					<td>{{ row.ORCID|default:"-" }}</td>
+					<td>{{ row.article_count }}</td>
+					<td>{% if row.has_emails %}yes{% else %}no{% endif %}</td>
+					<td>{{ row.lab }}</td>
+					<td>{{ row.outreach_count }}</td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+		<div class="amc-actions">
+			{% if group.status != "blocked" and not group.dismissed %}
+			<input type="submit" value="Merge" class="default">
+			{% endif %}
+		</div>
+	</form>
+
+	<div class="amc-actions">
+		{% if group.dismissed %}
+		<form method="post" action="{{ restore_url }}">
+			{% csrf_token %}
+			<input type="hidden" name="openalex_id" value="{{ group.openalex_id }}">
+			{% for key, value in return_params.items %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+			<input type="submit" value="Show again">
+		</form>
+		{% else %}
+		<form method="post" action="{{ dismiss_url }}">
+			{% csrf_token %}
+			<input type="hidden" name="openalex_id" value="{{ group.openalex_id }}">
+			{% for row in group.rows %}<input type="hidden" name="ids" value="{{ row.author_id }}">{% endfor %}
+			{% for key, value in return_params.items %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+			<input type="text" name="note" placeholder="Note (optional)" size="30">
+			<input type="submit" value="Not the same person">
+		</form>
+		{% endif %}
+	</div>
+</div>
+{% empty %}
+<p>No groups here.</p>
+{% endfor %}
+
+{% if page.paginator.num_pages > 1 %}
+<div class="amc-pagination">
+	{% if page.has_previous %}<a href="?{% if pagination_base %}{{ pagination_base }}&amp;{% endif %}page={{ page.previous_page_number }}">&laquo; Previous</a>{% endif %}
+	<span>Page {{ page.number }} of {{ page.paginator.num_pages }} ({{ page.paginator.count }} groups)</span>
+	{% if page.has_next %}<a href="?{% if pagination_base %}{{ pagination_base }}&amp;{% endif %}page={{ page.next_page_number }}">Next &raquo;</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

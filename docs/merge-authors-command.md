@@ -189,10 +189,48 @@ For one-off cleanups where you're browsing the Authors list rather than working 
 **ORCID compatibility check**: the action refuses to merge authors whose ORCIDs disagree. A blank ORCID is treated as compatible with any value, and comparison is normalized (`https://orcid.org/0000-0000-0000-1234`, `http://orcid.org/0000-0000-0000-1234`, and the bare `0000-0000-0000-1234` are all treated as the same ORCID) since stored values mix URL and bare-ID forms. If two selected authors have genuinely different non-blank ORCIDs, the action shows an error and makes no changes.
 
 Once confirmed, the merge:
-- transfers every article from the other authors onto the one kept, along with their OpenAlex authorship rows (the kept author's row wins on an article both have) and recomputes the kept author's `openalex_id`,
+- transfers every article from the other authors onto the one kept (a few set-based queries on the `articles_authors` table), along with their OpenAlex authorship rows (the kept author's row wins on an article both have) and recomputes the kept author's `openalex_id`,
 - carries lab memberships and labs across (a manual membership wins over a computed one, a lab headed by a removed author passes to the kept author or merges into theirs),
+- moves the removed authors' author-outreach rows and contact opt-outs onto the kept author, and unions their `emails` into the kept author's (in order, case-insensitive),
 - fills any blank `given_name`, `family_name`, `country`, or `orcid_check` field on the kept author from the others,
 - stores the kept author's ORCID as the shared bare ID (no URL prefix),
 - permanently deletes the other authors.
 
 This shares its implementation (`gregory.services.author_merge.merge_authors`) with the `merge_authors` command above, so both paths behave identically — the admin action just adds ORCID-conflict validation and a `keep`-author picker UI on top for cases where you don't already know the ORCID to search for.
+
+### Outreach rows and the outreach conflict
+
+`AuthorOutreach` rows (the audit trail of the one-time author emails, see [author-outreach.md](author-outreach.md)) are protected from deletion and unique per site and author. `merge_authors` moves them to the kept author. If the kept author and a removed one (or two removed ones) each hold an outreach row for the **same site**, the merge cannot keep both rows, so it raises `OutreachConflictError` before changing anything. The admin action shows the message; the candidates screen below calls such a group **blocked**. `AuthorContactOptOut` rows (the "never contact" list) are repointed to the kept author instead of losing their author when the row is deleted.
+
+Other tables that point at an author, and what a merge does with them: `articles_authors` (moved), `article_authorships` (moved, kept author's row wins on an article both have), `labs.head` and `lab_memberships` (see above), `AuthorOutreach` and `AuthorContactOptOut` (moved). `Articles` history does not track the `authors` link, so the set-based transfer loses no history.
+
+## Author merge candidates (admin screen)
+
+Superusers only: **Admin > Gregory > Author merge candidates** (other staff get a 403 and do not see it in the index). It lists the groups of author rows that share an OpenAlex author ID (`Authors.openalex_id`, filled by `fetch_openalex_authorships`), which usually means one person split into several rows. Nothing is stored for the groups: they are computed every time the page loads, in a fixed number of queries.
+
+Each group is one of:
+
+| Class | Meaning |
+| --- | --- |
+| **Clear-cut** | No ORCID conflict, no outreach conflict, every row has a family name and a given name, all rows have the same normalised family name (accents, case, hyphens and dots ignored) and the same first letter of the given name. |
+| **Names differ** | No conflict, but the names do not fit that rule (for example "Samar Farouk Ahmed" and "S. Ahmed Farouk"). Read them before merging. |
+| **Blocked** | Two different ORCIDs, or two rows with an outreach row for the same site. The reason is shown and the group cannot be merged from the screen or the command; fix the data first (for example remove a wrong ORCID) or leave it. |
+| **Dismissed** | A group a superuser marked "Not the same person". |
+
+Tabs show the count of each class. You can search by name, ORCID, OpenAlex ID or author ID. Groups are ordered by total article count, descending, 50 per page. Per row the screen shows the author ID (linked to the author page), name, ORCID, article count, whether emails are held, lab, and number of outreach rows.
+
+- **Merge**: choose the survivor (radio; default is the row with an ORCID, then the most articles, then the lowest ID) and untick rows you do not want merged. The group is reloaded and re-checked first, so a blocked group is refused even from a stale page. It runs in one transaction, sets the survivor's ORCID to the shared one, and reports what moved.
+- **Not the same person**: records a dismissal (with an optional note) for that exact set of author IDs. The group is hidden while it still has exactly those IDs; if a row joins or leaves, it shows again. **Show again** on the Dismissed tab removes the dismissal. Dismissals live in the `author_merge_dismissals` table and are not in the admin or API.
+- **Merge all clear-cut groups**: a confirmation page with the count and a sample of 20, then merges up to 300 groups per click (stopping earlier if it nears two minutes, well under the gunicorn timeout) and reports how many are left; click again until none are. Dismissed, "names differ" and blocked groups are never bulk-merged.
+
+A merged-away author ID simply stops existing: its page 404s. There is no redirect and no record of the merge.
+
+## `merge_author_candidates` command and the pipeline
+
+```bash
+python manage.py merge_author_candidates [--dry-run] [--limit N]
+```
+
+Merges clear-cut, non-dismissed groups only (default `--limit 500` groups per run), each in its own transaction, and prints the groups merged, the author rows removed, the clear-cut groups left over the limit, and the groups skipped by reason (`names_differ`, `blocked`, `dismissed`). It takes a lock so two runs cannot overlap. `--dry-run` changes nothing.
+
+`pipeline` runs it with `--limit 500` after `fetch_openalex_authorships` and before `rebuild_labs`, so duplicates the fetch just revealed are merged before labs are built. The cap means a large backlog (tens of thousands of groups) clears over a couple of weeks of twice-daily runs, unless a superuser clears it sooner with **Merge all clear-cut groups**.

@@ -71,6 +71,10 @@ class Command(BaseCommand):
 				{},
 			),  # 6c. Author positions and institutions from OpenAlex, for articles with a DOI and authors
 			(
+				"merge_author_candidates",
+				{"limit": 500},
+			),  # 6c-ii. Merge clear-cut duplicate authors (same OpenAlex ID, same name, no conflict), capped per run so the backlog clears over several runs
+			(
 				"rebuild_labs",
 				{},
 			),  # 6d. Group authors into labs from the authorships just fetched (writes nothing when nothing changed; refuses to delete over half the labs)
