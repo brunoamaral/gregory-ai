@@ -143,6 +143,43 @@ class Authors(models.Model):
 		]
 
 
+class AuthorMergeDismissal(models.Model):
+	"""A superuser's "not the same person" on a group of author rows sharing an OpenAlex ID.
+
+	It hides the group from the merge candidates screen and the merge command only while the
+	group still has exactly ``author_ids``: if a row joins or leaves the group, it shows again.
+	Nothing exposes this outside the admin screen.
+	"""
+
+	openalex_id = models.CharField(max_length=20, db_index=True)
+	author_ids = models.JSONField(help_text="Sorted author_ids of the group when it was dismissed.")
+	dismissed_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		null=True,
+		blank=True,
+		related_name="+",
+	)
+	dismissed_at = models.DateTimeField(auto_now_add=True)
+	note = models.TextField(blank=True, default="")
+
+	class Meta:
+		db_table = "author_merge_dismissals"
+
+	def __str__(self):
+		return f"{self.openalex_id}: {self.author_ids}"
+
+
+class AuthorMergeCandidate(Authors):
+	"""Proxy of Authors: it exists only to give the superuser-only "Author merge candidates"
+	screen an entry in the admin index. No rows of its own, no table."""
+
+	class Meta:
+		proxy = True
+		verbose_name = "author merge candidate"
+		verbose_name_plural = "author merge candidates"
+
+
 class CategoryType(models.TextChoices):
 	MANUAL = "manual", "Manual"
 	AUTOMATIC = "automatic", "Automatic"

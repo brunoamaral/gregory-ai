@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+{% if total %}
+<p>
+	<strong>{{ total }}</strong> clear-cut group{{ total|pluralize }} would be merged. In each, the survivor is the
+	row with an ORCID, then the one with the most articles, then the lowest ID; the other rows are
+	deleted. <strong>This cannot be undone</strong> and the removed rows' pages stop existing.
+	Dismissed, "names differ" and blocked groups are never touched.
+</p>
+<p>
+	Each click merges up to {{ batch_size }} groups (fewer if it runs long) and says how many are left.
+	About {{ batches }} click{{ batches|pluralize }} in all.
+</p>
+<table>
+	<thead><tr><th>OpenAlex</th><th>Rows</th><th>Articles</th><th>Keeps</th></tr></thead>
+	<tbody>
+		{% for group in sample %}
+		<tr>
+			<td>{{ group.openalex_id }}</td>
+			<td>{{ group.names }} (IDs {{ group.ids|join:", " }})</td>
+			<td>{{ group.total_articles }}</td>
+			<td>{{ group.survivor_id }}</td>
+		</tr>
+		{% endfor %}
+	</tbody>
+</table>
+<p>First {{ sample|length }} of {{ total }} shown.</p>
+<form method="post">
+	{% csrf_token %}
+	<div class="submit-row">
+		<input type="submit" value="Merge the next batch" class="default">
+		<a href="{{ cancel_url }}" class="button cancel-link">Cancel</a>
+	</div>
+</form>
+{% else %}
+<p>There are no clear-cut groups left to merge.</p>
+<p><a href="{{ cancel_url }}">Back to the candidates</a></p>
+{% endif %}
+{% endblock %}
