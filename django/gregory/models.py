@@ -16,6 +16,7 @@ from organizations.models import Organization, OrganizationUser
 from simple_history.models import HistoricalRecords
 import base64
 from django.db.models.functions import Lower
+from gregory.utils.author_names import name_key as author_name_key
 from gregory.utils.trial_field_normalizers import (
 	NORMALIZED_TRIAL_FIELDS,
 	SponsorType,
@@ -95,17 +96,32 @@ class Authors(models.Model):
 				  "this author's authorships, a tie going to the most recent article. Not unique: "
 				  "two rows with the same value are probably the same person.",
 	)
+	name_key = models.CharField(
+		max_length=310,
+		blank=True,
+		default="",
+		db_index=True,
+		editable=False,
+		help_text="Normalised 'given|family' key (accents, case, dots and hyphens ignored) "
+				  "used by the importers to match spelling variants. Set by save().",
+	)
 	# Optimized uppercase column for fast text search
 	ufull_name = GeneratedField(
 		expression=Upper("full_name"), output_field=models.TextField(), db_persist=True
 	)
 	# openalex_id is recomputed in bulk after each OpenAlex fetch; tracking it would make
 	# history attribute that churn to whichever unrelated save came next.
-	history = HistoricalRecords(excluded_fields=["openalex_id"])
+	history = HistoricalRecords(excluded_fields=["openalex_id", "name_key"])
 
 	def save(self, *args, **kwargs):
 		# Auto-populate full_name from given_name and family_name
 		self.full_name = f"{self.given_name} {self.family_name}".strip()
+		self.name_key = author_name_key(self.given_name, self.family_name)
+		update_fields = kwargs.get("update_fields")
+		if update_fields is not None and (
+			"given_name" in update_fields or "family_name" in update_fields
+		):
+			kwargs["update_fields"] = {*update_fields, "name_key"}
 		super().save(*args, **kwargs)
 
 	def __str__(self):

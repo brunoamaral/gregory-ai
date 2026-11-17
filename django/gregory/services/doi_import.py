@@ -14,6 +14,7 @@ from django.utils import timezone
 from gregory.classes import SciencePaper
 from gregory.functions import normalize_orcid
 from gregory.models import Articles, Authors, Sources
+from gregory.utils.authors import find_authors_by_name
 from gregory.utils.registry_utils import merge_links
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ def normalize_doi(doi: str) -> str:
 def resolve_author(author_data: dict) -> Authors | None:
 	"""Get-or-create the Authors row matching a CrossRef author dict, without
 	attaching it to any article. ORCID (when present) takes priority over name
-	matching; falls back to exact given/family name lookup. Returns None when
+	matching; falls back to the shared name lookup (exact, then name_key). Returns None when
 	the author data is unusable (missing name) or ambiguous (multiple existing
 	authors share the same name).
 	"""
@@ -81,17 +82,17 @@ def resolve_author(author_data: dict) -> Authors | None:
 			author_obj.save()
 		return author_obj
 
-	try:
-		return Authors.objects.get(given_name=given_name, family_name=family_name)
-	except Authors.DoesNotExist:
-		return Authors.objects.create(
-			given_name=given_name, family_name=family_name, ORCID=orcid
-		)
-	except Authors.MultipleObjectsReturned:
+	matches = find_authors_by_name(given_name, family_name)
+	if len(matches) == 1:
+		return matches[0]
+	if len(matches) > 1:
 		logger.warning(
 			"Multiple authors for %s %s — skipping", given_name, family_name
 		)
 		return None
+	return Authors.objects.create(
+		given_name=given_name, family_name=family_name, ORCID=orcid
+	)
 
 
 def _process_authors(article: Articles, authors_data: list) -> int:

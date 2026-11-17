@@ -1,6 +1,7 @@
 """Author matching shared by get_authors (CrossRef) and the PubMed record writer."""
 
 from gregory.models import Authors
+from gregory.utils.author_names import name_key
 
 CREATED = "created"
 UPDATED = "updated"
@@ -8,13 +9,29 @@ EXISTING = "existing"
 AMBIGUOUS = "ambiguous"
 
 
+def find_authors_by_name(given_name, family_name):
+	"""Existing no-ORCID matches for a name, as a list.
+
+	Exact given and family name first. If none, rows whose ``name_key`` equals the
+	name's key (accents, case, dots and hyphens ignored). A name whose key is empty
+	never matches on it. The caller decides what one, several or no matches mean.
+	"""
+	exact = list(Authors.objects.filter(given_name=given_name, family_name=family_name).order_by("pk"))
+	if exact:
+		return exact
+	key = name_key(given_name, family_name)
+	if not key:
+		return []
+	return list(Authors.objects.filter(name_key=key).order_by("pk"))
+
+
 def get_or_create_author(given_name, family_name, orcid=None):
 	"""Find or create the Authors row for a name (and ORCID, when known).
 
 	Returns ``(author, status)``. Matching is ORCID first: an ORCID match is the
 	author, and a changed name is written onto it (status ``updated``). Without an
-	ORCID the match is by exact given and family name. Two rows with the same name
-	can't be told apart, so the result is ``(None, "ambiguous")``.
+	ORCID the match is by exact given and family name, then by ``name_key``. Several
+	rows matching can't be told apart, so the result is ``(None, "ambiguous")``.
 
 	Callers pass non-empty names and an already normalised ORCID.
 	"""
@@ -32,14 +49,14 @@ def get_or_create_author(given_name, family_name, orcid=None):
 			return author, UPDATED
 		return author, EXISTING
 
-	try:
-		return Authors.objects.get(given_name=given_name, family_name=family_name), EXISTING
-	except Authors.DoesNotExist:
-		return (
-			Authors.objects.create(
-				given_name=given_name, family_name=family_name, ORCID=orcid
-			),
-			CREATED,
-		)
-	except Authors.MultipleObjectsReturned:
+	matches = find_authors_by_name(given_name, family_name)
+	if len(matches) == 1:
+		return matches[0], EXISTING
+	if len(matches) > 1:
 		return None, AMBIGUOUS
+	return (
+		Authors.objects.create(
+			given_name=given_name, family_name=family_name, ORCID=orcid
+		),
+		CREATED,
+	)
