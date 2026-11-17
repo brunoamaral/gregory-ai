@@ -3819,7 +3819,7 @@ class AuthorsAdmin(admin.ModelAdmin):
 	inlines = [AuthorArticlesInline]
 	readonly_fields = ["biography", "recheck_orcid_button"]
 	# Filled by fetch_openalex_authorships; the author form is unchanged.
-	exclude = ["openalex_id"]
+	exclude = ["openalex_id", "name_key"]
 	actions = [
 		"merge_selected_authors",
 		"assign_selected_authors_to_lab",
