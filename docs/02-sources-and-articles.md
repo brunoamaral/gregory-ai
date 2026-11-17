@@ -132,6 +132,29 @@ This uses the same `SciencePaper.refresh()` CrossRef/Unpaywall client as the
 `update_articles_info` pipeline command — see
 [gregory/services/crossref_refresh.py](../django/gregory/services/crossref_refresh.py).
 
+### How importers match authors
+
+Every importer that creates authors (the feed reader, DOI import, `get_authors` and the
+PubMed record writer) uses the same rules:
+
+1. **With an ORCID**, the author is found by ORCID only. A no-ORCID row is never given an
+   ORCID, and a name that differs from the stored one never matches on its own.
+2. **Without an ORCID**, an exact given-name plus family-name match wins. If there is none,
+   the author is matched on `Authors.name_key`, a normalised `given|family` key that ignores
+   accents, case, dots, hyphens and apostrophes ("Belgin Koçer", "Belgin Kocer" and
+   "Belgin KOÇER", or "J Helen Cross" and "J. Helen Cross", are one author). Letters of any
+   script are kept. Initials alone do not match ("J Cross" is not "Jane Cross"), and a
+   name whose key is empty is never matched on it.
+3. **One match** is used. **Several exact matches** are handled as before: the feed reader
+   takes the one with an ORCID, else the first; DOI import and `get_authors` skip the author
+   with a warning. **Several rows on the key** is not a match: a new row is created, as before
+   the key existed, so the author is never dropped from the article (the duplicate shows up
+   among the author merge candidates once OpenAlex links it). **No match** creates a new row.
+
+The key is set by `Authors.save()` (and backfilled by migration `0138_authors_name_key`).
+The normaliser is `gregory/utils/author_names.py`; the shared lookup is
+`find_authors_by_name` in `gregory/utils/authors.py`.
+
 ### Author positions and institutions (OpenAlex)
 
 `fetch_openalex_authorships` asks [OpenAlex](https://openalex.org) for each article that

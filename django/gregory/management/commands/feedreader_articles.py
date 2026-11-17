@@ -2,10 +2,10 @@ import logging
 from gregory.management.base import GregoryBaseCommand
 from gregory.models import Articles, Sources, Authors
 from gregory.functions import normalize_orcid
+from gregory.utils.authors import find_authors_by_name
 from crossref.restful import Works, Etiquette
 from dateutil.parser import parse
 from dateutil.tz import gettz
-from django.core.exceptions import MultipleObjectsReturned
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from gregory.classes import SciencePaper
@@ -1300,31 +1300,24 @@ class Command(GregoryBaseCommand):
 		self, given_name: str, family_name: str, orcid: str
 	) -> Authors:
 		"""Get or create an author object."""
-		try:
-			if orcid:  # If ORCID is present, use it as primary key
-				author_obj, author_created = Authors.objects.get_or_create(
-					ORCID=orcid,
-					defaults={
-						"given_name": given_name or "",
-						"family_name": family_name or "",
-					},
-				)
-			else:  # If no ORCID, use given_name and family_name
-				if not given_name or not family_name:
-					return None
-
-				author_obj, author_created = Authors.objects.get_or_create(
-					given_name=given_name,
-					family_name=family_name,
-					defaults={"ORCID": orcid},
-				)
-
+		if orcid:  # If ORCID is present, use it as primary key
+			author_obj, _created = Authors.objects.get_or_create(
+				ORCID=orcid,
+				defaults={
+					"given_name": given_name or "",
+					"family_name": family_name or "",
+				},
+			)
 			return author_obj
 
-		except MultipleObjectsReturned:
-			# Handle multiple authors case
-			authors = Authors.objects.filter(
-				given_name=given_name, family_name=family_name
-			)
-			# Use the first author with an ORCID, if available
-			return next((author for author in authors if author.ORCID), authors.first())
+		# No ORCID: match on the name (exact, then name_key).
+		if not given_name or not family_name:
+			return None
+
+		matches = find_authors_by_name(given_name, family_name)
+		if not matches:
+			return Authors.objects.create(given_name=given_name, family_name=family_name)
+		if len(matches) == 1:
+			return matches[0]
+		# Several rows share the name: use the first with an ORCID, if any.
+		return next((a for a in matches if a.ORCID), matches[0])
