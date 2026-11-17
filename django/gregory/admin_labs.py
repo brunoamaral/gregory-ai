@@ -242,11 +242,22 @@ class LabMemberFormSet(BaseInlineFormSet):
 		return membership
 
 
-def save_manual_memberships(formset):
-	"""Save an inline formset of memberships, marking every added or changed row manual."""
+def save_manual_memberships(formset, *, pin_deleted=False):
+	"""Save an inline formset of memberships, marking every added or changed row manual.
+
+	A deleted row is deleted, which lets the next rebuild place the author again. With
+	``pin_deleted`` it is kept as a manual row with no lab instead, so the rebuild doesn't
+	put the author straight back.
+	"""
 	instances = formset.save(commit=False)
 	for obj in formset.deleted_objects:
-		obj.delete()
+		if pin_deleted:
+			obj.lab = None
+			obj.same_institution = None
+			obj.source = MANUAL
+			obj.save()
+		else:
+			obj.delete()
 	for obj in instances:
 		obj.source = MANUAL
 		obj.save()
@@ -264,7 +275,9 @@ class LabMemberInline(SuperuserOnlyAdminMixin, admin.TabularInline):
 	extra = 0
 	autocomplete_fields = ["author"]
 	verbose_name = "member"
-	verbose_name_plural = "members (adding or changing a row makes it manual)"
+	verbose_name_plural = (
+		"members (adding or changing a row makes it manual; deleting a row pins the author to no lab)"
+	)
 	fields = [
 		"author",
 		"role",
@@ -435,7 +448,9 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 
 	def save_formset(self, request, form, formset, change):
 		if formset.model is LabMembership:
-			save_manual_memberships(formset)
+			# Removing a member here means "not in this lab": pin them to no lab, or the
+			# next rebuild would put them back.
+			save_manual_memberships(formset, pin_deleted=True)
 		else:
 			super().save_formset(request, form, formset, change)
 

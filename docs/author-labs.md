@@ -51,7 +51,8 @@ To add a lab, use **Add lab**. A head is required, and the head gets a manual he
 
 - **Fix a lab**: edit it as above. Manual edits survive every rebuild.
 - **Place one author**: open the author. The **Lab** section holds the lab, role and core or external. Saving it makes the placement manual.
-- **Pin an author to no lab**: on the author page leave the lab empty and pick a role, or select authors in the list and use **Remove selected authors from their lab**. The rebuild will not put them back in a lab.
+- **Remove a member from a lab**: on the lab's page, tick delete on their row and save. The author is pinned to no lab, so the rebuild doesn't put them back.
+- **Pin an author to no lab**: remove them on the lab's page as above, or on the author page leave the lab empty and pick a role, or select authors in the list and use **Remove selected authors from their lab**. The rebuild will not put them back in a lab.
 - **Place several authors**: select them in the authors list and use **Assign selected authors to a lab…**, then pick the lab and the role. Anyone who already has a placement is moved. Lab heads are skipped, with a message: change a head on the lab's page.
 - **Merge labs**: select two or more labs and use **Merge selected labs**, then pick the one that survives. The others' memberships move to it as manual memberships, a head of a merged-away lab becomes a member, the other labs are deleted and the survivor becomes manual. It can't be undone.
 - **Reset an author to computed**: delete the membership row in the author's Lab section. The next rebuild decides again.

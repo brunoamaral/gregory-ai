@@ -439,6 +439,24 @@ class MemberInlineTests(LabAdminCase):
 		membership.refresh_from_db()
 		self.assertEqual((membership.same_institution, membership.source), (True, MANUAL))
 
+	def test_deleting_a_row_pins_the_author_to_no_lab_and_a_rebuild_leaves_that_alone(self):
+		member = author(3)
+		join(self.lab, member)
+		url = reverse("admin:gregory_lab_change", args=[self.lab.pk])
+		data = post_data(self.client.get(url))
+		data["memberships-0-DELETE"] = "on"
+		self.assertEqual(self.client.post(url, data).status_code, 302)
+		membership = self.lab_membership(member)
+		self.assertEqual((membership.lab, membership.source), (None, MANUAL))
+		# The rebuild would put the member back in the lab.
+		rebuilt = LabsResult()
+		rebuilt.labs[self.head.pk] = LabResult(self.head.pk, [self.head.pk], None, 3)
+		rebuilt.assignments[self.head.pk] = Assignment(self.head.pk, self.head.pk, "head", None, 3, 2025)
+		rebuilt.assignments[member.pk] = Assignment(member.pk, self.head.pk, "member", True, 2, 2024)
+		apply_labs(rebuilt)
+		membership = self.lab_membership(member)
+		self.assertEqual((membership.lab, membership.source), (None, MANUAL))
+
 	def test_a_rebuild_leaves_an_inline_edit_alone(self):
 		newcomer = author(3)
 		self._post_inline([{"author": newcomer.pk}])
