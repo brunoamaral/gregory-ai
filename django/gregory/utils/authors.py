@@ -12,9 +12,11 @@ AMBIGUOUS = "ambiguous"
 def find_authors_by_name(given_name, family_name):
 	"""Existing no-ORCID matches for a name, as a list.
 
-	Exact given and family name first. If none, rows whose ``name_key`` equals the
-	name's key (accents, case, dots and hyphens ignored). A name whose key is empty
-	never matches on it. The caller decides what one, several or no matches mean.
+	Exact given and family name first; the caller decides what several exact matches
+	mean. If none, the one row whose ``name_key`` equals the name's key (accents,
+	case, dots and hyphens ignored). Several rows on the key is not a match: the
+	caller creates a row, as it did before ``name_key`` existed, rather than dropping
+	the author from the article. A name whose key is empty never matches on it.
 	"""
 	exact = list(Authors.objects.filter(given_name=given_name, family_name=family_name).order_by("pk"))
 	if exact:
@@ -22,7 +24,8 @@ def find_authors_by_name(given_name, family_name):
 	key = name_key(given_name, family_name)
 	if not key:
 		return []
-	return list(Authors.objects.filter(name_key=key).order_by("pk"))
+	loose = list(Authors.objects.filter(name_key=key).order_by("pk")[:2])
+	return loose if len(loose) == 1 else []
 
 
 def get_or_create_author(given_name, family_name, orcid=None):

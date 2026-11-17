@@ -78,6 +78,11 @@ class FindAuthorsTests(TestCase):
 		Authors.objects.create(given_name="---", family_name="Doe")
 		self.assertEqual(find_authors_by_name("???", "Doe"), [])
 
+	def test_several_on_the_key_is_no_match(self):
+		Authors.objects.create(given_name="Belgin", family_name="Koçer")
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		self.assertEqual(find_authors_by_name("Belgin", "KOÇER"), [])
+
 	def test_initial_does_not_match_full_name(self):
 		Authors.objects.create(given_name="Jane", family_name="Cross")
 		self.assertEqual(find_authors_by_name("J", "Cross"), [])
@@ -90,10 +95,16 @@ class UtilsImporterTests(TestCase):
 		self.assertEqual((author, status), (a, EXISTING))
 		self.assertEqual(Authors.objects.count(), 1)
 
-	def test_ambiguous(self):
+	def test_ambiguous_exact(self):
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		self.assertEqual(get_or_create_author("Belgin", "Kocer"), (None, AMBIGUOUS))
+
+	def test_several_on_the_key_creates_rather_than_drops(self):
 		Authors.objects.create(given_name="Belgin", family_name="Koçer")
 		Authors.objects.create(given_name="Belgin", family_name="Kocer")
-		self.assertEqual(get_or_create_author("Belgin", "KOÇER"), (None, AMBIGUOUS))
+		author, status = get_or_create_author("Belgin", "KOÇER")
+		self.assertEqual((author.family_name, status), ("KOÇER", CREATED))
 
 	def test_created_when_nothing_matches(self):
 		author, status = get_or_create_author("New", "Person")
@@ -114,11 +125,18 @@ class DoiImportTests(TestCase):
 		self.assertEqual(resolve_author({"given": "Belgin", "family": "Kocer"}), a)
 		self.assertEqual(Authors.objects.count(), 1)
 
-	def test_ambiguous_skips(self):
+	def test_ambiguous_exact_skips(self):
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		self.assertIsNone(resolve_author({"given": "Belgin", "family": "Kocer"}))
+		self.assertEqual(Authors.objects.count(), 2)
+
+	def test_several_on_the_key_creates_rather_than_drops(self):
 		Authors.objects.create(given_name="Belgin", family_name="Koçer")
 		Authors.objects.create(given_name="Belgin", family_name="Kocer")
-		self.assertIsNone(resolve_author({"given": "Belgin", "family": "KOÇER"}))
-		self.assertEqual(Authors.objects.count(), 2)
+		author = resolve_author({"given": "Belgin", "family": "KOÇER"})
+		self.assertEqual(author.family_name, "KOÇER")
+		self.assertEqual(Authors.objects.count(), 3)
 
 	def test_creates_when_none(self):
 		author = resolve_author({"given": "New", "family": "Person"})
@@ -134,15 +152,22 @@ class FeedreaderTests(TestCase):
 		self.assertEqual(self.cmd.get_or_create_author("belgin", "Kocer", None), a)
 		self.assertEqual(Authors.objects.count(), 1)
 
-	def test_several_prefers_orcid_else_first(self):
-		first = Authors.objects.create(given_name="Belgin", family_name="Koçer")
+	def test_several_exact_prefers_orcid_else_first(self):
+		first = Authors.objects.create(given_name="Belgin", family_name="Kocer")
 		with_orcid = Authors.objects.create(
 			given_name="Belgin", family_name="Kocer", ORCID="0000-0002-1825-0097"
 		)
-		self.assertEqual(self.cmd.get_or_create_author("Belgin", "KOÇER", None), with_orcid)
+		self.assertEqual(self.cmd.get_or_create_author("Belgin", "Kocer", None), with_orcid)
 		with_orcid.delete()
-		Authors.objects.create(given_name="Belgin", family_name="KOCER")
-		self.assertEqual(self.cmd.get_or_create_author("Belgin", "Kocér", None), first)
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		self.assertEqual(self.cmd.get_or_create_author("Belgin", "Kocer", None), first)
+
+	def test_several_on_the_key_creates_rather_than_picks(self):
+		Authors.objects.create(given_name="Belgin", family_name="Koçer")
+		Authors.objects.create(given_name="Belgin", family_name="Kocer")
+		author = self.cmd.get_or_create_author("Belgin", "KOÇER", None)
+		self.assertEqual(author.family_name, "KOÇER")
+		self.assertEqual(Authors.objects.count(), 3)
 
 	def test_orcid_path_unchanged(self):
 		Authors.objects.create(given_name="Jane", family_name="Doe")

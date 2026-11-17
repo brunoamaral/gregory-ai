@@ -145,9 +145,11 @@ PubMed record writer) uses the same rules:
    "Belgin KOÇER", or "J Helen Cross" and "J. Helen Cross", are one author). Letters of any
    script are kept. Initials alone do not match ("J Cross" is not "Jane Cross"), and a
    name whose key is empty is never matched on it.
-3. **One match** is used. **Several matches** are handled as before: the feed reader takes
-   the one with an ORCID, else the first; DOI import and `get_authors` skip the author with
-   a warning. **No match** creates a new row.
+3. **One match** is used. **Several exact matches** are handled as before: the feed reader
+   takes the one with an ORCID, else the first; DOI import and `get_authors` skip the author
+   with a warning. **Several rows on the key** is not a match: a new row is created, as before
+   the key existed, so the author is never dropped from the article (the duplicate shows up
+   among the author merge candidates once OpenAlex links it). **No match** creates a new row.
 
 The key is set by `Authors.save()` (and backfilled by migration `0138_authors_name_key`).
 The normaliser is `gregory/utils/author_names.py`; the shared lookup is
