@@ -54,8 +54,27 @@ class NormaliseAndClassifyTests(SimpleTestCase):
 		self.assertEqual(svc.normalise_name(None), "")
 		self.assertEqual(svc.normalise_name("Müller"), svc.normalise_name("MULLER"))
 
+	def test_given_names_agree(self):
+		agree = [
+			("maria pia", "m p"), ("maria pia", "mp"), ("mariapia", "maria pia"), ("maria", "maria pia"),
+			("randy", "rh"), ("jiawei", "jia wei"), ("j", "jun"), ("samar farouk", "sf"),
+		]
+		for a, b in agree:
+			self.assertTrue(svc.given_names_agree(a, b), (a, b))
+		differ = [("jun", "jing"), ("shihong", "shiliang"), ("leonard c", "leonard s"), ("rosa", "rossella")]
+		for a, b in differ:
+			self.assertFalse(svc.given_names_agree(a, b), (a, b))
+		self.assertEqual(svc.normalise_name("Aslı"), "asli")
+
+	def test_same_initial_but_different_given_names_need_review(self):
+		rows = [row(1, "Jun", "Wang"), row(2, "Jing", "Wang"), row(3, "J", "Wang")]
+		self.assertFalse(svc.names_agree(rows))
+		self.assertEqual(svc.classify_rows(rows)[0], svc.NAMES_DIFFER)
+
 	def test_names_agree(self):
-		self.assertTrue(svc.names_agree([row(1, "Ana", "Silva"), row(2, "A.", "silva"), row(3, "Ánna", "SILVA")]))
+		self.assertTrue(svc.names_agree([row(1, "Ana", "Silva"), row(2, "A.", "silva"), row(3, "ÁNA", "SILVA")]))
+		# Same initial, different names: review, not clear-cut.
+		self.assertFalse(svc.names_agree([row(1, "Ana", "Silva"), row(2, "Ánna", "Silva")]))
 		self.assertFalse(svc.names_agree([row(1, "Ana", "Silva"), row(2, "Bea", "Silva")]))
 		self.assertFalse(svc.names_agree([row(1, "Ana", "Silva"), row(2, "Ana", "Silva Costa")]))
 		self.assertFalse(svc.names_agree([row(1, "Ana", "Silva"), row(2, "", "Silva")]))

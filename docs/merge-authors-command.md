@@ -212,7 +212,7 @@ Each group is one of:
 
 | Class | Meaning |
 | --- | --- |
-| **Clear-cut** | No ORCID conflict, no outreach conflict, every row has a family name and a given name, all rows have the same normalised family name (accents, case, hyphens and dots ignored) and the same first letter of the given name. |
+| **Clear-cut** | No ORCID conflict, no outreach conflict, every row has a family name and a given name, all rows have the same normalised family name (accents, case, hyphens and dots ignored), and every two given names agree: the same letters once spaces are dropped ("Jiawei" and "Jia Wei"), or name by name where an initial stands for a name and two or three letters can be glued initials ("M P", "MP", "Maria" and "Maria Pia" agree; "Jun" and "Jing", or "Leonard C" and "Leonard S", don't). The pipeline merges these without asking, so the rule leans towards review: on dev about 2% of groups that share a family name and first initial still go to review. |
 | **Names differ** | No conflict, but the names do not fit that rule (for example "Samar Farouk Ahmed" and "S. Ahmed Farouk"). Read them before merging. |
 | **Blocked** | Two different ORCIDs, or two rows with an outreach row for the same site. The reason is shown and the group cannot be merged from the screen or the command; fix the data first (for example remove a wrong ORCID) or leave it. |
 | **Dismissed** | A group a superuser marked "Not the same person". |

@@ -4,7 +4,9 @@ Candidates are computed live, never stored. A group is every row with the same n
 ``Authors.openalex_id``, two rows or more. Each group is classified:
 
 * ``clear_cut``: no ORCID or outreach conflict, every row has a family and a given name, all
-  rows share the normalised family name and the first letter of the normalised given name.
+  rows share the normalised family name, and every two given names agree (see
+  ``given_names_agree``: "M P", "MP", "Maria Pia" and "Mariapia" agree; "Shihong" and
+  "Shiliang" don't). The pipeline merges these unattended, so the rule leans to review.
 * ``names_differ``: no conflict, but the names don't satisfy that rule ("SF Ahmed" and
   "Samar Farouk Ahmed").
 * ``blocked``: two different ORCIDs, or two rows with an outreach row for the same site.
@@ -59,7 +61,7 @@ def normalise_name(value):
 	for ch in unicodedata.normalize("NFKD", value or ""):
 		if unicodedata.category(ch) == "Mn":
 			continue
-		ch = ch.casefold()
+		ch = ch.casefold().replace("\u0131", "i")  # dotless ı has no NFKD decomposition
 		if ch in "-.":
 			ch = " "
 		if ch == " " or ch.isalpha():
@@ -115,17 +117,60 @@ def default_survivor(rows):
 	return min(rows, key=lambda r: (not r.ORCID, -r.article_count, r.author_id)).author_id
 
 
+def _token_agrees(a, b):
+	"""Equal, or one is a single letter the other starts with."""
+	return a == b or (len(a) == 1 and b.startswith(a)) or (len(b) == 1 and a.startswith(b))
+
+
+def _tokens_agree(a, b):
+	"""Given-name token lists agree position by position, where a missing tail is fine
+	("Maria" and "Maria Pia") and a 2-3 letter token may be glued initials ("MP" and
+	"Maria Pia", "RH" and "Randy")."""
+	if not a or not b:
+		return True
+	if _token_agrees(a[0], b[0]) and _tokens_agree(a[1:], b[1:]):
+		return True
+	for x, y in ((a, b), (b, a)):
+		glued = x[0]
+		# "Jun" must not read as the initials J, U, N: a token with a vowel counts as glued
+		# initials only when there are at least two names on the other side to spell out.
+		looks_like_initials = not set(glued) & set("aeiouy") or len(y) >= 2
+		if 2 <= len(glued) <= 3 and looks_like_initials and all(
+			y[i].startswith(glued[i]) for i in range(min(len(glued), len(y)))
+		):
+			if _tokens_agree(x[1:], y[len(glued):]):
+				return True
+	return False
+
+
+def given_names_agree(a, b):
+	"""Two normalised given names could be the same person's: the same letters once spaces
+	are dropped ("Jiawei" and "Jia Wei"), or token by token with initials standing in for
+	names. "J" and "Jun" agree; "Jun" and "Jing" don't."""
+	if not a or not b:
+		return False
+	return a.replace(" ", "") == b.replace(" ", "") or _tokens_agree(a.split(), b.split())
+
+
 def names_agree(rows):
-	"""True when every row has both names and they share the family name and given initial."""
-	families, initials = set(), set()
+	"""True when every row has both names, they share the family name, and every two given
+	names agree."""
+	families, givens = set(), []
 	for row in rows:
 		family = normalise_name(row.family_name)
 		given = normalise_name(row.given_name)
 		if not family or not given:
 			return False
 		families.add(family)
-		initials.add(given[0])
-	return len(families) == 1 and len(initials) == 1
+		givens.append(given)
+	if len(families) != 1:
+		return False
+	unique = sorted(set(givens))
+	return all(
+		given_names_agree(unique[i], unique[j])
+		for i in range(len(unique))
+		for j in range(i + 1, len(unique))
+	)
 
 
 def classify_rows(rows, conflicting_sites=()):
