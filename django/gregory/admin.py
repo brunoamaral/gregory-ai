@@ -30,6 +30,18 @@ from .admin_filters import DateRangeFilter, SourceHealthFilter
 from .team_scope import can_edit, team_editable, user_team_ids
 from .services.author_merge import ConflictingOrcidError, merge_authors, shared_orcid
 from .services.medicine_linking import link_category
+from .admin_labs import (
+	AuthorLabMembershipInline,
+	HasLabFilter,
+	LabAdmin,
+	ProbableDuplicateFilter,
+	SuperuserOnlyAdminMixin,
+	article_lab_line,
+	assign_authors_to_lab,
+	author_lab_display,
+	remove_authors_from_lab,
+	save_manual_memberships,
+)
 from .utils.dailymed import label_page_url
 from .services.patent_trial_links import (
 	link_patent_trial,
@@ -53,6 +65,8 @@ from .models import (
 	Articles,
 	ArticleMeshHeading,
 	Institution,
+	Lab,
+	LabMembership,
 	MeshTerm,
 	PublicationType,
 	Medicine,
@@ -1892,7 +1906,8 @@ class ArticleAdmin(
 	def get_fieldsets(self, request, obj=None):
 		fieldsets = super().get_fieldsets(request, obj)
 		if request.user.is_superuser:
-			return fieldsets
+			# Lab data is superuser-only.
+			return [*fieldsets, ("Lab", {"fields": ("lab_line",)})]
 		# The CrossRef refresh is superuser-only (see crossref_refresh_view).
 		return [
 			(name, {**opts, "fields": tuple(f for f in opts["fields"] if f != "crossref_refresh_button")})
@@ -1910,6 +1925,10 @@ class ArticleAdmin(
 		)
 
 	crossref_refresh_button.short_description = "Refresh from CrossRef"
+
+	@admin.display(description="Lab of the last author")
+	def lab_line(self, obj):
+		return article_lab_line(obj)
 
 	@admin.display(description="PMID")
 	def pmid_link(self, obj):
@@ -1931,6 +1950,7 @@ class ArticleAdmin(
 		"pubmed_checked_at",
 		"language",
 		"keywords",
+		"lab_line",
 	]
 	search_fields = ["article_id", "title", "doi", "pmid"]
 	list_filter = [
@@ -3794,7 +3814,57 @@ class AuthorsAdmin(admin.ModelAdmin):
 	readonly_fields = ["biography", "recheck_orcid_button"]
 	# Filled by fetch_openalex_authorships; the author form is unchanged.
 	exclude = ["openalex_id"]
-	actions = ["merge_selected_authors"]
+	actions = [
+		"merge_selected_authors",
+		"assign_selected_authors_to_lab",
+		"remove_selected_authors_from_lab",
+	]
+
+	# Everything about labs below is superuser-only; for anyone else it doesn't render.
+
+	def has_lab_permission(self, request):
+		return request.user.is_superuser
+
+	def get_inlines(self, request, obj):
+		inlines = list(super().get_inlines(request, obj))
+		if request.user.is_superuser:
+			inlines.append(AuthorLabMembershipInline)
+		return inlines
+
+	def get_list_display(self, request):
+		display = list(super().get_list_display(request))
+		if request.user.is_superuser:
+			display.append("lab_display")
+		return display
+
+	def get_list_filter(self, request):
+		filters = list(super().get_list_filter(request))
+		if request.user.is_superuser:
+			filters += [HasLabFilter, ProbableDuplicateFilter]
+		return filters
+
+	def get_list_select_related(self, request):
+		if request.user.is_superuser:
+			return ("lab_membership__lab__head",)
+		return super().get_list_select_related(request)
+
+	@admin.display(description="Lab")
+	def lab_display(self, obj):
+		return author_lab_display(obj)
+
+	@admin.action(permissions=["lab"], description="Assign selected authors to a lab…")
+	def assign_selected_authors_to_lab(self, request, queryset):
+		return assign_authors_to_lab(self, request, queryset)
+
+	@admin.action(permissions=["lab"], description="Remove selected authors from their lab")
+	def remove_selected_authors_from_lab(self, request, queryset):
+		return remove_authors_from_lab(self, request, queryset)
+
+	def save_formset(self, request, form, formset, change):
+		if formset.model is LabMembership:
+			save_manual_memberships(formset)
+		else:
+			super().save_formset(request, form, formset, change)
 
 	def get_search_results(self, request, queryset, search_term):
 		id_list = self._parse_id_list(search_term)
@@ -6427,22 +6497,16 @@ class MedicineSubjectLinkAdmin(TeamEditMixin, admin.ModelAdmin):
 admin.site.register(Authors, AuthorsAdmin)
 
 
-class InstitutionAdmin(admin.ModelAdmin):
+class InstitutionAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 	"""Read-only and superuser-only: rows come from the OpenAlex fetch. Registered so the
-	autocompletes that later work on labs can search institutions by name and ROR."""
+	autocompletes that work on labs can search institutions by name and ROR."""
 
 	list_display = ["name", "country_code", "type", "ror", "openalex_id"]
 	list_filter = ["type", "country_code"]
 	search_fields = ["name", "ror"]
 	ordering = ["name"]
 
-	def has_module_permission(self, request):
-		return request.user.is_superuser
-
-	def has_view_permission(self, request, obj=None):
-		return request.user.is_superuser
-
-	def has_add_permission(self, request):
+	def has_add_permission(self, request, *args, **kwargs):
 		return False
 
 	def has_change_permission(self, request, obj=None):
@@ -6453,6 +6517,7 @@ class InstitutionAdmin(admin.ModelAdmin):
 
 
 admin.site.register(Institution, InstitutionAdmin)
+admin.site.register(Lab, LabAdmin)
 admin.site.register(Entities)
 admin.site.register(Sources, SourceAdmin)
 admin.site.register(Trials, TrialAdmin)

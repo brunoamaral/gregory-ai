@@ -16,6 +16,8 @@ Key terms used across GregoryAI documentation.
 
 **DOI** — Digital Object Identifier. Used by GregoryAI for de-duplication and for enriching article metadata from CrossRef.
 
+**Lab** — a senior author (the head) plus the people who repeatedly publish with them, computed from OpenAlex author positions and corrected by hand. A lab's members are core when they share an institution with the head and external otherwise; people who share only one paper are collaborators. Visible to superusers in the admin only. See [author-labs.md](author-labs.md).
+
 **List** — a named email list that subscribers opt into. A subscriber can belong to multiple lists. Lists are linked to a team and optionally scoped to specific subjects. See [subscriptions.md](subscriptions.md).
 
 **ML threshold** — a minimum probability score (0.0–1.0) that a single model's prediction must meet before that prediction counts towards the consensus. Default is 0.8. See [ml-consensus.md](ml-consensus.md).
