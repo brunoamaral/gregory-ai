@@ -66,6 +66,85 @@ class HideLabLinksOnDeleteMixin:
 		return to_delete, model_count, perms_needed, protected
 
 
+class TopLabsAdminMixin:
+	"""A read-only "Top labs" section on a subject's or category's change page, for superusers.
+
+	Editors open these pages too, so nothing here runs for them: the block is added per
+	request (never to the class-level lists) and is left out of their page, their form and
+	the queries they cause. Set ``top_labs_link_model`` and ``top_labs_topic_field``, the link
+	model's FK to the topic, which is also the name of the Labs list's filter.
+	"""
+
+	top_labs_link_model = None
+	top_labs_topic_field = None
+	top_labs_limit = 25
+
+	def _shows_top_labs(self, request, obj):
+		return bool(request.user.is_superuser and obj is not None and obj.pk)
+
+	def get_readonly_fields(self, request, obj=None):
+		readonly = list(super().get_readonly_fields(request, obj))
+		if self._shows_top_labs(request, obj) and "top_labs_block" not in readonly:
+			readonly.append("top_labs_block")
+		return readonly
+
+	def get_fieldsets(self, request, obj=None):
+		# Copies throughout: the base may hand back the class-level fieldsets.
+		fieldsets = []
+		for name, options in super().get_fieldsets(request, obj):
+			options = dict(options)
+			options["fields"] = [f for f in options["fields"] if f != "top_labs_block"]
+			fieldsets.append((name, options))
+		if self._shows_top_labs(request, obj):
+			fieldsets.append(("Top labs", {"fields": ("top_labs_block",)}))
+		return fieldsets
+
+	def top_labs_block(self, obj):
+		topic = {self.top_labs_topic_field: obj.pk, "is_hidden": False}
+		visible = self.top_labs_link_model.objects.filter(**topic)
+		links = list(
+			visible.select_related("lab__head", "lab__institution").order_by(
+				"-relevant_count", "-article_count", "pk"
+			)[: self.top_labs_limit]
+		)
+		if not links:
+			return "No linked labs yet."
+		total = len(links) if len(links) < self.top_labs_limit else visible.count()
+		rows = format_html_join(
+			"",
+			"<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+			(
+				(
+					format_html(
+						'<a href="{}">{}</a>',
+						reverse("admin:gregory_lab_change", args=[link.lab_id]),
+						str(link.lab),
+					),
+					author_name(link.lab.head) if link.lab.head_id else "-",
+					link.lab.institution.name if link.lab.institution_id else "-",
+					link.article_count,
+					link.relevant_count,
+					link.recent_article_count,
+					link.latest_article_year or "-",
+				)
+				for link in links
+			),
+		)
+		list_url = "{}?{}".format(
+			reverse("admin:gregory_lab_changelist"), urlencode({self.top_labs_topic_field: obj.pk})
+		)
+		return format_html(
+			"<table><thead><tr><th>Lab</th><th>Head</th><th>Institution</th><th>Papers</th>"
+			"<th>Relevant</th><th>Recent</th><th>Latest year</th></tr></thead><tbody>{}</tbody></table>"
+			'<p>{} in total. <a href="{}">See all in the Labs list</a></p>',
+			rows,
+			"1 linked lab" if total == 1 else f"{total} linked labs",
+			list_url,
+		)
+
+	top_labs_block.short_description = "Top labs"
+
+
 class SuperuserOnlyAdminMixin:
 	"""Module, view, add, change and delete permission for superusers and nobody else."""
 

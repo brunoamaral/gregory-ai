@@ -65,6 +65,12 @@ On the lab page you can correct them:
 
 A subject or category can't be changed on an existing row: add the right one instead. Your changes are recorded in the link's history. When two labs are merged, manual and hidden marks carry to the lab that remains, and hidden wins.
 
+### Top labs on subject and category pages
+
+The change page of a subject or a category has a read-only **Top labs** section for superusers, after the page's fields. It lists the 25 best visible links, ranked by relevant papers, then papers, then link order: the lab, its head, institution, papers, relevant, recent and latest year. Under the table are the total number of visible links and a link to the Labs list filtered by that subject or category. A topic with no links says "No linked labs yet." Hidden links are in neither the rows nor the total.
+
+The section shows only on a saved subject or category, never on the add page. Editors use these pages too, and they see no section and no lab data; the page runs no query on the lab tables for them, and they can save as before. Nothing in it can be edited: change links from the lab page.
+
 ## Fixing, pinning, merging and resetting
 
 - **Fix a lab**: edit it as above. Manual edits survive every rebuild.
