@@ -43,6 +43,7 @@ from .admin_labs import (
 	LabAdmin,
 	ProbableDuplicateFilter,
 	SuperuserOnlyAdminMixin,
+	TopLabsAdminMixin,
 	article_lab_line,
 	assign_authors_to_lab,
 	author_lab_display,
@@ -73,7 +74,9 @@ from .models import (
 	ArticleMeshHeading,
 	Institution,
 	Lab,
+	LabCategory,
 	LabMembership,
+	LabSubject,
 	MeshTerm,
 	PublicationType,
 	Medicine,
@@ -3481,7 +3484,12 @@ class SubjectAdminForm(forms.ModelForm):
 
 
 @admin.register(Subject)
-class SubjectAdmin(TeamEditMixin, OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin):
+class SubjectAdmin(
+	TopLabsAdminMixin, TeamEditMixin, OrganizationFilterMixin, ReassignToTeamMixin, admin.ModelAdmin
+):
+	top_labs_link_model = LabSubject
+	top_labs_topic_field = "subject"
+	top_labs_filter_param = "subject"
 	list_display = [
 		"formatted_subject_name",
 		"description",
@@ -4281,6 +4289,7 @@ class MedicineCategoryAssignmentInline(TeamEditInlineMixin, admin.TabularInline)
 
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(
+	TopLabsAdminMixin,
 	HideLabLinksOnDeleteMixin,
 	TeamEditMixin,
 	OrganizationFilterMixin,
@@ -4289,6 +4298,9 @@ class TeamCategoryAdmin(
 	admin.ModelAdmin,
 ):
 	form = TeamCategoryAdminForm
+	top_labs_link_model = LabCategory
+	top_labs_topic_field = "category"
+	top_labs_filter_param = "category"
 
 	def formfield_for_foreignkey(self, db_field, request, **kwargs):
 		# Without this the team picker lists, and accepts, every team, and a
