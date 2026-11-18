@@ -144,6 +144,43 @@ class SubjectsAndCategoriesSectionTests(TopicCase):
 		link = LabSubject.objects.get(lab=self.lab, subject=self.subject)
 		self.assertEqual((link.is_manual, link.article_count), (True, 5))
 
+	def test_hide_and_reset_do_nothing_on_a_new_row(self):
+		def edit(response, data):
+			self.add(
+				data,
+				self.formset(response, LabSubject, False),
+				subject=self.subject.pk,
+				hide="on",
+				reset="on",
+			)
+
+		self.assertEqual(self.post(edit=edit).status_code, 302)
+		link = LabSubject.objects.get(lab=self.lab, subject=self.subject)
+		self.assertEqual((link.is_manual, link.is_hidden), (True, False))
+		response = self.client.get(self.url())
+		empty = self.formset(response, LabSubject, False).empty_form
+		self.assertTrue(empty.fields["hide"].disabled)
+		self.assertTrue(empty.fields["reset"].disabled)
+
+	def test_a_category_row_offers_no_add_or_edit_of_the_category(self):
+		LabCategory.objects.create(lab=self.lab, category=self.cat_a, article_count=3)
+		response = self.client.get(self.url())
+		widget = self.formset(response, LabCategory, False).forms[0].fields["category"].widget
+		self.assertFalse(widget.can_add_related)
+		self.assertFalse(widget.can_change_related)
+		self.assertFalse(widget.can_delete_related)
+
+	def test_unhiding_a_link_added_in_the_same_save_keeps_it_manual(self):
+		LabSubject.objects.create(lab=self.lab, subject=self.subject, is_hidden=True)
+
+		def edit(response, data):
+			self.add(data, self.formset(response, LabSubject, False), subject=self.subject.pk)
+			data[f"{self.formset(response, LabSubject, True).prefix}-0-unhide"] = "on"
+
+		self.assertEqual(self.post(edit=edit).status_code, 302)
+		link = LabSubject.objects.get(lab=self.lab, subject=self.subject)
+		self.assertEqual((link.is_manual, link.is_hidden), (True, False))
+
 	def test_the_same_topic_twice_in_one_submission_is_refused(self):
 		def edit(response, data):
 			formset = self.formset(response, LabCategory, False)
@@ -309,6 +346,13 @@ class LabListTopicTests(TopicCase):
 		LabCategory.objects.filter(category=self.cat_b).update(is_hidden=True)
 		spec = [f for f in self.client.get(reverse(LIST)).context["cl"].filter_specs if getattr(f, "parameter_name", None) == "category"][0]
 		self.assertEqual([label for _, label in spec.lookup_choices], ["Alpha (Labs Team)"])
+
+	def test_a_chosen_category_with_no_visible_link_stays_in_the_filter(self):
+		LabCategory.objects.create(lab=self.lab, category=self.cat_d, is_hidden=True)
+		response = self.client.get(reverse(LIST), {"category": self.cat_d.pk})
+		self.assertEqual(response.context["cl"].result_count, 0)
+		self.assertContains(response, "Delta (Labs Team)")
+		self.assertNotContains(self.client.get(reverse(LIST)), "Delta (Labs Team)")
 
 	def test_the_category_filter_is_a_searchable_list_that_keeps_other_filters(self):
 		response = self.client.get(reverse(LIST), {"country": "GB"})

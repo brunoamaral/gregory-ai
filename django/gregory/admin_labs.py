@@ -145,10 +145,14 @@ class LabCategoryFilter(admin.SimpleListFilter):
 	template = "admin/gregory/lab/category_filter.html"
 
 	def lookups(self, request, model_admin):
+		# The chosen category stays listed after its last link is hidden, so the sidebar
+		# still explains an empty list.
+		visible_link = LabCategory.objects.filter(category=OuterRef("pk"), is_hidden=False)
 		categories = (
-			TeamCategory.objects.filter(lab_links__is_hidden=False)
+			TeamCategory.objects.filter(
+				Exists(visible_link) | Q(pk=_int_param(request, self.parameter_name))
+			)
 			.select_related("team")
-			.distinct()
 			.order_by("category_name", "pk")
 		)
 		return [(c.pk, _team_label(c.category_name, c.team)) for c in categories]
@@ -364,6 +368,10 @@ class LabTopicLinkForm(forms.ModelForm):
 			field = self.fields[self.topic_field]
 			field.queryset = field.queryset.filter(pk=getattr(self.instance, f"{self.topic_field}_id"))
 			field.disabled = True
+		else:
+			# A new row is always a visible, manual link: these only apply to stored ones.
+			for name in ("hide", "unhide", "reset"):
+				self.fields[name].disabled = True
 
 	def validate_unique(self):
 		# Adding a link the lab already has isn't an error: LabTopicLinkFormSet.save_new
@@ -420,6 +428,10 @@ class LabTopicLinkFormSet(BaseInlineFormSet):
 
 	def save_existing(self, form, instance, commit=True):
 		cleaned = form.cleaned_data
+		if not {"hide", "unhide", "reset"} & set(form.changed_data):
+			return instance
+		# The section saved before this one may have just changed this link.
+		instance.refresh_from_db(fields=["is_manual", "is_hidden"])
 		manual, hidden = instance.is_manual, instance.is_hidden
 		if cleaned.get("reset"):
 			manual, hidden = False, False
@@ -520,6 +532,15 @@ class LabCategoryInline(LabTopicLinkInline):
 	verbose_name = "category"
 	verbose_name_plural = "categories (adding one makes it manual; counts change with each pipeline run)"
 	fields = ["category", "papers", "relevant", "recent", "latest_year", "source", "hide", "reset"]
+
+	def formfield_for_dbfield(self, db_field, request, **kwargs):
+		field = super().formfield_for_dbfield(db_field, request, **kwargs)
+		if db_field.name == "category":
+			# Linking a lab is no place to create or edit a category. The view link stays.
+			field.widget.can_add_related = False
+			field.widget.can_change_related = False
+			field.widget.can_delete_related = False
+		return field
 
 
 class LabHiddenCategoryInline(LabCategoryInline):
