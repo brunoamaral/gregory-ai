@@ -172,6 +172,17 @@ class Command(BaseCommand):
 				self.style.ERROR(f"Error running refresh_article_relevance: {str(e)}")
 			)
 
+		# Link labs to subjects and categories. This reads memberships, category assignments and
+		# relevance, so it follows the steps that settle all three.
+		try:
+			self.stdout.write(self.style.SUCCESS("Running rebuild_lab_topics"))
+			call_command("rebuild_lab_topics")
+			self.stdout.write(self.style.SUCCESS("Finished running rebuild_lab_topics"))
+		except Exception as e:
+			self.stderr.write(
+				self.style.ERROR(f"Error running rebuild_lab_topics: {str(e)}")
+			)
+
 		# Run detect_trial_references over every article: links must follow
 		# trials that change after their articles were found.
 		try:

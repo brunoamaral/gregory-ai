@@ -37,6 +37,7 @@ from .services.author_merge import (
 from .admin_author_merge import register as register_author_merge_admin
 from .services.medicine_linking import link_category
 from .admin_labs import (
+	HideLabLinksOnDeleteMixin,
 	AuthorLabMembershipInline,
 	HasLabFilter,
 	LabAdmin,
@@ -4280,6 +4281,7 @@ class MedicineCategoryAssignmentInline(TeamEditInlineMixin, admin.TabularInline)
 
 @admin.register(TeamCategory)
 class TeamCategoryAdmin(
+	HideLabLinksOnDeleteMixin,
 	TeamEditMixin,
 	OrganizationFilterMixin,
 	ReassignToTeamMixin,

@@ -19,12 +19,14 @@ from django.forms.models import BaseInlineFormSet
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
+from django.utils.text import capfirst
 
 from .models import (
 	ArticleAuthorship,
 	Articles,
 	Authors,
 	Lab,
+	LabCategory,
 	LabMembership,
 	Subject,
 )
@@ -34,6 +36,32 @@ HEAD = LabMembership.Role.HEAD
 MEMBER = LabMembership.Role.MEMBER
 COLLABORATOR = LabMembership.Role.COLLABORATOR
 MANUAL = LabMembership.Source.MANUAL
+
+
+def _without_prefix(items, prefix):
+	"""A copy of a nested delete-confirmation list, leaving out entries starting with ``prefix``."""
+	kept = []
+	for item in items:
+		if isinstance(item, list):
+			nested = _without_prefix(item, prefix)
+			if nested:
+				kept.append(nested)
+		elif not str(item).startswith(prefix):
+			kept.append(item)
+	return kept
+
+
+class HideLabLinksOnDeleteMixin:
+	"""Keep lab links off a category's delete confirmation for anyone but a superuser. Editors
+	can delete categories, and Django lists every row a delete takes with it."""
+
+	def get_deleted_objects(self, objs, request):
+		to_delete, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+		if not request.user.is_superuser:
+			opts = LabCategory._meta
+			to_delete = _without_prefix(to_delete, f"{capfirst(opts.verbose_name)}: ")
+			model_count.pop(opts.verbose_name_plural, None)
+		return to_delete, model_count, perms_needed, protected
 
 
 class SuperuserOnlyAdminMixin:
