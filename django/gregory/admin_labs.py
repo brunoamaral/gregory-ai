@@ -71,23 +71,21 @@ class TopLabsAdminMixin:
 
 	Editors open these pages too, so nothing here runs for them: the block is added per
 	request (never to the class-level lists) and is left out of their page, their form and
-	the queries they cause. Set ``top_labs_link_model``, ``top_labs_topic_field`` (the link
-	model's FK to the topic) and ``top_labs_filter_param`` (the Labs list's filter parameter).
+	the queries they cause. Set ``top_labs_link_model`` and ``top_labs_topic_field``, the link
+	model's FK to the topic, which is also the name of the Labs list's filter.
 	"""
 
 	top_labs_link_model = None
 	top_labs_topic_field = None
-	top_labs_filter_param = None
 	top_labs_limit = 25
-	top_labs_field = "top_labs_block"
 
 	def _shows_top_labs(self, request, obj):
 		return bool(request.user.is_superuser and obj is not None and obj.pk)
 
 	def get_readonly_fields(self, request, obj=None):
 		readonly = list(super().get_readonly_fields(request, obj))
-		if self._shows_top_labs(request, obj) and self.top_labs_field not in readonly:
-			readonly.append(self.top_labs_field)
+		if self._shows_top_labs(request, obj) and "top_labs_block" not in readonly:
+			readonly.append("top_labs_block")
 		return readonly
 
 	def get_fieldsets(self, request, obj=None):
@@ -95,24 +93,11 @@ class TopLabsAdminMixin:
 		fieldsets = []
 		for name, options in super().get_fieldsets(request, obj):
 			options = dict(options)
-			options["fields"] = tuple(
-				self._without_top_labs(options.get("fields", ()))
-			)
+			options["fields"] = [f for f in options["fields"] if f != "top_labs_block"]
 			fieldsets.append((name, options))
 		if self._shows_top_labs(request, obj):
-			fieldsets.append(("Top labs", {"fields": (self.top_labs_field,)}))
+			fieldsets.append(("Top labs", {"fields": ("top_labs_block",)}))
 		return fieldsets
-
-	def _without_top_labs(self, fields):
-		# A fieldset row can itself be a tuple of fields shown side by side.
-		for field in fields:
-			if field == self.top_labs_field:
-				continue
-			if isinstance(field, (list, tuple)):
-				field = tuple(f for f in field if f != self.top_labs_field)
-				if not field:
-					continue
-			yield field
 
 	def top_labs_block(self, obj):
 		topic = {self.top_labs_topic_field: obj.pk, "is_hidden": False}
@@ -124,7 +109,7 @@ class TopLabsAdminMixin:
 		)
 		if not links:
 			return "No linked labs yet."
-		total = visible.count()
+		total = len(links) if len(links) < self.top_labs_limit else visible.count()
 		rows = format_html_join(
 			"",
 			"<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -135,7 +120,7 @@ class TopLabsAdminMixin:
 						reverse("admin:gregory_lab_change", args=[link.lab_id]),
 						str(link.lab),
 					),
-					link.lab.head.full_name if link.lab.head_id else "-",
+					author_name(link.lab.head) if link.lab.head_id else "-",
 					link.lab.institution.name if link.lab.institution_id else "-",
 					link.article_count,
 					link.relevant_count,
@@ -146,14 +131,14 @@ class TopLabsAdminMixin:
 			),
 		)
 		list_url = "{}?{}".format(
-			reverse("admin:gregory_lab_changelist"), urlencode({self.top_labs_filter_param: obj.pk})
+			reverse("admin:gregory_lab_changelist"), urlencode({self.top_labs_topic_field: obj.pk})
 		)
 		return format_html(
 			"<table><thead><tr><th>Lab</th><th>Head</th><th>Institution</th><th>Papers</th>"
 			"<th>Relevant</th><th>Recent</th><th>Latest year</th></tr></thead><tbody>{}</tbody></table>"
-			'<p>{} linked labs in total. <a href="{}">See all in the Labs list</a></p>',
+			'<p>{} in total. <a href="{}">See all in the Labs list</a></p>',
 			rows,
-			total,
+			"1 linked lab" if total == 1 else f"{total} linked labs",
 			list_url,
 		)
 

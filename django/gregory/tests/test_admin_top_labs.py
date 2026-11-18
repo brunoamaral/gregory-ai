@@ -82,11 +82,19 @@ class TopLabsSectionTests(TopLabsCase):
 			self.assertContains(response, f"Inst {field}")
 			self.assertContains(response, lab.head.full_name)
 			self.assertContains(response, "<td>2024</td>", html=True)
-			self.assertContains(response, "1 linked labs in total")
+			self.assertContains(response, "1 linked lab in total")
 			self.assertContains(
 				response, f'{reverse("admin:gregory_lab_changelist")}?{field}={topic.pk}'
 			)
 			self.assertContains(response, reverse("admin:gregory_lab_change", args=[lab.pk]))
+
+	def test_a_head_with_no_stored_full_name_shows_their_name(self):
+		head = author(70)
+		lab = make_lab(head)
+		type(head).objects.filter(pk=head.pk).update(full_name="")
+		LabSubject.objects.create(lab=lab, subject=self.subject, article_count=3)
+		response = self.client.get(reverse("admin:gregory_subject_change", args=[self.subject.pk]))
+		self.assertContains(response, f"<td>{head.given_name} {head.family_name}</td>", html=True)
 
 	def test_the_section_is_its_own_fieldset(self):
 		for _model, _field, topic, _other, name in self.kinds():
