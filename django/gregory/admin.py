@@ -3817,9 +3817,9 @@ class AuthorsAdmin(admin.ModelAdmin):
 	]
 	list_filter = ["country", ArticleCountFilter]
 	inlines = [AuthorArticlesInline]
-	readonly_fields = ["biography", "recheck_orcid_button"]
-	# Filled by fetch_openalex_authorships; the author form is unchanged.
-	exclude = ["openalex_id", "name_key"]
+	# openalex_id is set by fetch_openalex_authorships and name_key by Authors.save(), so both
+	# are shown but never edited here.
+	readonly_fields = ["biography", "recheck_orcid_button", "openalex_id", "name_key"]
 	actions = [
 		"merge_selected_authors",
 		"assign_selected_authors_to_lab",

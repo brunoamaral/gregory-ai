@@ -42,9 +42,9 @@ class InstitutionAdminTests(TestCase):
 			response = self.client.get(reverse(f"admin:gregory_institution_{name}", args=args))
 			self.assertEqual(response.status_code, 403, name)
 
-	def test_the_author_form_does_not_offer_the_openalex_id(self):
+	def test_the_author_form_shows_the_openalex_id_without_an_input(self):
 		author = Authors.objects.create(given_name="Jane", family_name="Smith", openalex_id="A1")
 		self.client.force_login(self.superuser)
 		response = self.client.get(reverse("admin:gregory_authors_change", args=[author.pk]))
 		self.assertEqual(response.status_code, 200)
-		self.assertNotContains(response, "openalex_id")
+		self.assertNotContains(response, 'name="openalex_id"')
