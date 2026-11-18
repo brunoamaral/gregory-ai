@@ -204,6 +204,16 @@ the API, feeds or MCP server exposes it.
   overrides that.
 - Run it by hand with `manage.py rebuild_labs --dry-run`, then `manage.py rebuild_labs`.
 
+`rebuild_lab_topics` then links each lab to the subjects and categories its head and members
+publish in, at 3 or more papers, and stores the paper, relevant and recent counts in
+`LabSubject` and `LabCategory`. It only reads articles and their relevance.
+
+- It runs in the `pipeline` command right after `refresh_article_relevance`, because it depends
+  on memberships, category assignments and relevance. It writes nothing when nothing changed.
+- It never changes a link a superuser added or hid, apart from keeping its counts current.
+- `--dry-run` prints what it would change. It refuses to delete more than half of either
+  table's computed links; `--force` overrides that.
+
 ---
 
 ## Endpoints by subject and category

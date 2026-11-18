@@ -13,6 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from simple_history.utils import bulk_create_with_history, bulk_update_with_history
 
@@ -22,6 +23,7 @@ from gregory.services.lab_grouping import (  # noqa: F401 (compute_labs re-expor
 	ROLE_MEMBER,
 	compute_labs,
 )
+from gregory.services.lab_topics import LINK_MODELS
 
 BATCH_SIZE = 1000
 REASON_HEAD_DELETED = "head was deleted"
@@ -295,9 +297,9 @@ def apply_labs(result, *, dry_run=False, force=False, now=None):
 					pk__in=members_to_delete[start : start + BATCH_SIZE]
 				).delete()
 			for start in range(0, len(labs_to_delete), BATCH_SIZE):
-				Lab.objects.filter(
-					pk__in=[lab.pk for lab in labs_to_delete[start : start + BATCH_SIZE]]
-				).delete()
+				lab_ids = [lab.pk for lab in labs_to_delete[start : start + BATCH_SIZE]]
+				_drop_computed_topic_links(lab_ids)
+				Lab.objects.filter(pk__in=lab_ids).delete()
 	return stats
 
 
@@ -314,8 +316,9 @@ def merge_labs(keep, remove):
 
 	The removed labs' memberships move to ``keep`` (an author has one membership row, so
 	none can collide), a removed head becoming a member. They are marked manual: a
-	rebuild would otherwise put them straight back. ``keep`` becomes manual. Returns the
-	number of memberships moved. Assumes it runs inside ``transaction.atomic()``.
+	rebuild would otherwise put them straight back. A superuser's added and hidden topic
+	links carry over too. ``keep`` becomes manual. Returns the number of memberships moved.
+	Assumes it runs inside ``transaction.atomic()``.
 	"""
 	remove = [lab for lab in remove if lab.pk != keep.pk]
 	moved = 0
@@ -327,11 +330,40 @@ def merge_labs(keep, remove):
 				membership.role = LabMembership.Role.MEMBER
 			membership.save()
 			moved += 1
+		_carry_topic_flags(lab, keep)
+		_drop_computed_topic_links([lab.pk])
 		lab.delete()
 	if not keep.is_manual:
 		keep.is_manual = True
 		keep.save()
 	return moved
+
+
+def _drop_computed_topic_links(lab_ids):
+	"""Delete the links of labs about to go that no person added or hid. A raw delete adds
+	nothing to the history, which is for what people change; flagged links go by cascade, so
+	their removal is recorded."""
+	for model, _topic in LINK_MODELS:
+		model.objects.filter(lab_id__in=lab_ids, is_manual=False, is_hidden=False)._raw_delete(
+			model.objects.db
+		)
+
+
+def _carry_topic_flags(lab, keep):
+	"""Give ``keep`` the added and hidden topic links of ``lab``. A link flagged on both labs
+	keeps both flags, so one hidden on either stays hidden. The next rebuild fills in counts."""
+	for model, topic in LINK_MODELS:
+		for link in model.objects.filter(lab=lab).filter(Q(is_manual=True) | Q(is_hidden=True)):
+			kept, created = model.objects.get_or_create(
+				lab=keep,
+				**{topic: getattr(link, topic)},
+				defaults={"is_manual": link.is_manual, "is_hidden": link.is_hidden},
+			)
+			is_manual = kept.is_manual or link.is_manual
+			is_hidden = kept.is_hidden or link.is_hidden
+			if not created and (is_manual, is_hidden) != (kept.is_manual, kept.is_hidden):
+				kept.is_manual, kept.is_hidden = is_manual, is_hidden
+				kept.save(update_fields=["is_manual", "is_hidden"])
 
 
 def merge_author_lab_rows(keep, remove):

@@ -1470,6 +1470,106 @@ class LabMembership(models.Model):
 		]
 
 
+# What a rebuild writes on a lab's topic link. Left out of the link's history, which records
+# what people change.
+LAB_TOPIC_COMPUTED_FIELDS = [
+	"article_count",
+	"relevant_count",
+	"recent_article_count",
+	"latest_article_year",
+	"computed_at",
+]
+
+
+class LabTopicLink(models.Model):
+	"""A lab's link to a topic, with the counts that rank it. Computed by
+	``rebuild_lab_topics``, which keeps a link at 3 or more papers by the lab's head and
+	members; a superuser can add or hide one, and rebuilds respect both. Only reads articles."""
+
+	article_count = models.PositiveIntegerField(
+		default=0,
+		help_text="Distinct papers in this topic with the lab's head or a member as an author.",
+	)
+	relevant_count = models.PositiveIntegerField(
+		default=0,
+		help_text="Of those, the papers relevant by a human or by AI (the API rule), per subject.",
+	)
+	recent_article_count = models.PositiveIntegerField(
+		default=0,
+		help_text="Of those, the papers dated from the start of the calendar year 4 years ago "
+				  "onwards. Ahead-of-print papers dated later count too.",
+	)
+	latest_article_year = models.PositiveSmallIntegerField(
+		null=True, blank=True, help_text="The latest publication year among those papers."
+	)
+	is_manual = models.BooleanField(
+		default=False,
+		help_text="A superuser added this link, so it stays below the paper threshold.",
+	)
+	is_hidden = models.BooleanField(
+		default=False,
+		help_text="A superuser hid this link. It stays stored, so a rebuild can't bring it back.",
+	)
+	computed_at = models.DateTimeField(
+		null=True,
+		blank=True,
+		help_text="When a rebuild last changed this link's counts. A rebuild that finds "
+				  "nothing new writes nothing, so this stays put.",
+	)
+
+	class Meta:
+		abstract = True
+
+
+class LabSubject(LabTopicLink):
+	"""A lab's link to a subject."""
+
+	lab = models.ForeignKey(Lab, on_delete=models.CASCADE, related_name="subject_links")
+	subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="lab_links")
+	history = HistoricalRecords(excluded_fields=LAB_TOPIC_COMPUTED_FIELDS)
+
+	def __str__(self):
+		return f"Lab {self.lab_id} in subject {self.subject_id}"
+
+	class Meta:
+		db_table = "lab_subjects"
+		constraints = [
+			models.UniqueConstraint(fields=["lab", "subject"], name="labsubject_unique")
+		]
+		indexes = [
+			models.Index(
+				fields=["subject", "-relevant_count", "-article_count"],
+				name="labsubject_rank_idx",
+			)
+		]
+
+
+class LabCategory(LabTopicLink):
+	"""A lab's link to a category."""
+
+	lab = models.ForeignKey(Lab, on_delete=models.CASCADE, related_name="category_links")
+	category = models.ForeignKey(
+		TeamCategory, on_delete=models.CASCADE, related_name="lab_links"
+	)
+	history = HistoricalRecords(excluded_fields=LAB_TOPIC_COMPUTED_FIELDS)
+
+	def __str__(self):
+		return f"Lab {self.lab_id} in category {self.category_id}"
+
+	class Meta:
+		db_table = "lab_categories"
+		verbose_name_plural = "lab categories"
+		constraints = [
+			models.UniqueConstraint(fields=["lab", "category"], name="labcategory_unique")
+		]
+		indexes = [
+			models.Index(
+				fields=["category", "-relevant_count", "-article_count"],
+				name="labcategory_rank_idx",
+			)
+		]
+
+
 class ArticleMeshHeading(models.Model):
 	"""One MeSH descriptor on an article, or one descriptor/qualifier pair (the
 	MEDLINE flattening). Replaced in full each time the article's record is fetched."""
