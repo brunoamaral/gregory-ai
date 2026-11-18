@@ -13,22 +13,24 @@ from django.contrib import admin, messages
 from django.contrib.admin.widgets import AutocompleteSelect
 from django.core.exceptions import ObjectDoesNotExist, PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, Exists, F, IntegerField, OuterRef, Subquery, Value
-from django.db.models.functions import Coalesce
+from django.db.models import Exists, F, FilteredRelation, Max, OuterRef, Prefetch, Q
 from django.forms.models import BaseInlineFormSet
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils.formats import date_format
 from django.utils.html import format_html, format_html_join
 from django.utils.text import capfirst
+from django.utils.timezone import localtime
 
 from .models import (
 	ArticleAuthorship,
-	Articles,
 	Authors,
 	Lab,
 	LabCategory,
 	LabMembership,
+	LabSubject,
 	Subject,
+	TeamCategory,
 )
 from .services.labs import merge_labs
 
@@ -109,31 +111,7 @@ def article_link(article):
 	)
 
 
-# --- subject ranking -------------------------------------------------------------------
-
-
-def lab_subject_counts(subject_id):
-	"""Two correlated subqueries over the lab being listed: the distinct articles in the
-	subject that have at least one author who is the lab's head or a member (not a
-	collaborator), and how many of those are relevant. "Relevant" is ``Articles.relevant``,
-	the flag the authors API's relevant count uses (``author_articles_count_subquery`` in
-	``api/views.py``)."""
-	articles = Articles.objects.filter(
-		subjects=subject_id,
-		authors__lab_membership__lab=OuterRef("pk"),
-		authors__lab_membership__role__in=[HEAD, MEMBER],
-	)
-
-	def count(queryset):
-		per_lab = (
-			queryset.order_by()
-			.values("authors__lab_membership__lab")
-			.annotate(n=Count("article_id", distinct=True))
-			.values("n")[:1]
-		)
-		return Coalesce(Subquery(per_lab, output_field=IntegerField()), Value(0))
-
-	return count(articles), count(articles.filter(relevant=True))
+# --- topic filters ---------------------------------------------------------------------
 
 
 def _int_param(request, name):
@@ -143,16 +121,40 @@ def _int_param(request, name):
 		return None
 
 
+def _team_label(name, team):
+	return f"{name} ({team.name})" if team else name
+
+
 class LabSubjectFilter(admin.SimpleListFilter):
 	title = "subject"
 	parameter_name = "subject"
 
 	def lookups(self, request, model_admin):
-		return list(Subject.objects.order_by("subject_name").values_list("pk", "subject_name"))
+		subjects = Subject.objects.select_related("team").order_by("subject_name")
+		return [(s.pk, _team_label(s.subject_name, s.team)) for s in subjects]
 
 	def queryset(self, request, queryset):
-		# Choosing a subject ranks the labs instead of narrowing them: LabAdmin.get_queryset
-		# adds the two counts and the order.
+		# Narrowing needs the link's counts too, so LabAdmin.get_queryset joins the link
+		# and adds the columns and the order.
+		return queryset
+
+
+class LabCategoryFilter(admin.SimpleListFilter):
+	title = "category"
+	parameter_name = "category"
+	template = "admin/gregory/lab/category_filter.html"
+
+	def lookups(self, request, model_admin):
+		categories = (
+			TeamCategory.objects.filter(lab_links__is_hidden=False)
+			.select_related("team")
+			.distinct()
+			.order_by("category_name", "pk")
+		)
+		return [(c.pk, _team_label(c.category_name, c.team)) for c in categories]
+
+	def queryset(self, request, queryset):
+		# As for the subject filter: LabAdmin.get_queryset does the narrowing.
 		return queryset
 
 
@@ -336,6 +338,197 @@ class LabMemberInline(SuperuserOnlyAdminMixin, admin.TabularInline):
 		return bool(obj.pk and obj.author.emails)
 
 
+# --- subjects and categories on the lab page ---------------------------------------------
+
+
+class SubjectChoiceField(forms.ModelChoiceField):
+	def label_from_instance(self, obj):
+		return _team_label(obj.subject_name, obj.team)
+
+
+class LabTopicLinkForm(forms.ModelForm):
+	"""One row of a lab's subjects or categories. The topic is chosen on new rows only.
+	``hide`` (visible rows), ``unhide`` (hidden rows) and ``reset`` aren't model fields:
+	LabTopicLinkFormSet.save_existing turns them into the two flags."""
+
+	hide = forms.BooleanField(required=False, label="Hide")
+	unhide = forms.BooleanField(required=False, label="Unhide")
+	reset = forms.BooleanField(required=False, label="Reset")
+
+	topic_field = ""
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		if self.instance.pk:
+			# Only the chosen topic is rendered, not every subject or category.
+			field = self.fields[self.topic_field]
+			field.queryset = field.queryset.filter(pk=getattr(self.instance, f"{self.topic_field}_id"))
+			field.disabled = True
+
+	def validate_unique(self):
+		# Adding a link the lab already has isn't an error: LabTopicLinkFormSet.save_new
+		# unhides it and marks it manual. Two identical rows in one submission still fail,
+		# in the formset's own check.
+		pass
+
+	def validate_constraints(self):
+		pass
+
+
+class LabSubjectLinkForm(LabTopicLinkForm):
+	topic_field = "subject"
+
+	class Meta:
+		model = LabSubject
+		fields = ["subject"]
+
+
+class LabCategoryLinkForm(LabTopicLinkForm):
+	topic_field = "category"
+
+	class Meta:
+		model = LabCategory
+		fields = ["category"]
+
+
+class LabTopicLinkFormSet(BaseInlineFormSet):
+	"""Added links are manual and unhidden, even when the lab already had the link. Each
+	existing row's hide, unhide and reset ticks become the two flags. Every write is a
+	model save, so history records it."""
+
+	def validate_unique(self):
+		# Only rows added in this submission can clash, with each other. A new row for a
+		# topic the lab already has is fine: save_new reuses the stored link.
+		seen = set()
+		for form in self.extra_forms:
+			topic = form.cleaned_data.get(form.topic_field) if form.is_valid() else None
+			if topic is None:
+				continue
+			if topic.pk in seen:
+				raise ValidationError(
+					"You added %(topic)s more than once.", params={"topic": str(topic)}
+				)
+			seen.add(topic.pk)
+
+	def save_new(self, form, commit=True):
+		link, _ = self.model.objects.update_or_create(
+			lab=self.instance,
+			**{form.topic_field: form.cleaned_data[form.topic_field]},
+			defaults={"is_manual": True, "is_hidden": False},
+		)
+		return link
+
+	def save_existing(self, form, instance, commit=True):
+		cleaned = form.cleaned_data
+		manual, hidden = instance.is_manual, instance.is_hidden
+		if cleaned.get("reset"):
+			manual, hidden = False, False
+		elif cleaned.get("hide"):
+			hidden = True
+		elif cleaned.get("unhide"):
+			hidden = False
+		changed = (manual, hidden) != (instance.is_manual, instance.is_hidden)
+		instance.is_manual, instance.is_hidden = manual, hidden
+		if commit and changed:
+			# Only the flags: a rebuild running now keeps the counts it writes.
+			instance.save(update_fields=["is_manual", "is_hidden"])
+		return instance
+
+
+class LabTopicLinkInline(SuperuserOnlyAdminMixin, admin.TabularInline):
+	"""A lab's visible, or hidden, links to one kind of topic. Counts are read-only."""
+
+	formset = LabTopicLinkFormSet
+	fk_name = "lab"
+	extra = 0
+	can_delete = False
+	hidden = False
+	topic_field = ""
+	name_field = ""
+	readonly_fields = ["papers", "relevant", "recent", "latest_year", "source"]
+
+	def has_add_permission(self, request, obj=None):
+		return request.user.is_superuser and not self.hidden
+
+	def get_queryset(self, request):
+		return (
+			super()
+			.get_queryset(request)
+			.filter(is_hidden=self.hidden)
+			.select_related(self.topic_field)
+			.order_by(
+				"-relevant_count", "-article_count", f"{self.topic_field}__{self.name_field}", "pk"
+			)
+		)
+
+	@admin.display(description="Papers")
+	def papers(self, obj):
+		return obj.article_count if obj.pk else "-"
+
+	@admin.display(description="Relevant")
+	def relevant(self, obj):
+		return obj.relevant_count if obj.pk else "-"
+
+	@admin.display(description="Recent")
+	def recent(self, obj):
+		return obj.recent_article_count if obj.pk else "-"
+
+	@admin.display(description="Latest year")
+	def latest_year(self, obj):
+		return (obj.latest_article_year or "-") if obj.pk else "-"
+
+	@admin.display(description="Source")
+	def source(self, obj):
+		if not obj.pk:
+			return "-"
+		return "Manual" if obj.is_manual else "Computed"
+
+
+class LabSubjectInline(LabTopicLinkInline):
+	model = LabSubject
+	form = LabSubjectLinkForm
+	topic_field = "subject"
+	name_field = "subject_name"
+	verbose_name = "subject"
+	verbose_name_plural = "subjects (adding one makes it manual; counts change with each pipeline run)"
+	fields = ["subject", "papers", "relevant", "recent", "latest_year", "source", "hide", "reset"]
+
+	def formfield_for_dbfield(self, db_field, request, **kwargs):
+		if db_field.name == "subject":
+			# A plain select: there are few subjects, and the admin's add and change
+			# links aren't wanted here.
+			return SubjectChoiceField(
+				queryset=Subject.objects.select_related("team").order_by("subject_name", "pk"),
+				label="Subject",
+			)
+		return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+
+class LabHiddenSubjectInline(LabSubjectInline):
+	hidden = True
+	verbose_name_plural = "hidden subjects (shown nowhere else; unhide to restore)"
+	fields = ["subject", "papers", "relevant", "recent", "latest_year", "source", "unhide", "reset"]
+	classes = ["collapse"]
+
+
+class LabCategoryInline(LabTopicLinkInline):
+	model = LabCategory
+	form = LabCategoryLinkForm
+	topic_field = "category"
+	name_field = "category_name"
+	autocomplete_fields = ["category"]
+	verbose_name = "category"
+	verbose_name_plural = "categories (adding one makes it manual; counts change with each pipeline run)"
+	fields = ["category", "papers", "relevant", "recent", "latest_year", "source", "hide", "reset"]
+
+
+class LabHiddenCategoryInline(LabCategoryInline):
+	hidden = True
+	verbose_name_plural = "hidden categories (shown nowhere else; unhide to restore)"
+	fields = ["category", "papers", "relevant", "recent", "latest_year", "source", "unhide", "reset"]
+	classes = ["collapse"]
+
+
 class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 	form = LabAdminForm
 	list_select_related = ("head", "institution")
@@ -347,11 +540,12 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 		"members_display",
 		"collaborator_count",
 		"last_author_articles",
+		"topics",
 		"needs_review",
 		"is_manual",
 	]
 	list_display_links = ["name_display"]
-	list_filter = [LabSubjectFilter, LabCountryFilter, "needs_review", "is_manual", LabSizeFilter]
+	list_filter = [LabSubjectFilter, LabCategoryFilter, LabCountryFilter, "needs_review", "is_manual", LabSizeFilter]
 	search_fields = ["name", "head__family_name", "head__given_name", "head__full_name", "institution__name"]
 	ordering = ["-last_author_articles", "pk"]
 	autocomplete_fields = ["head", "institution"]
@@ -359,6 +553,7 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 	readonly_fields = [
 		"counts_display",
 		"computed_at",
+		"topic_counts_changed",
 		"is_manual",
 		"needs_review",
 		"review_reason",
@@ -376,6 +571,7 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 				"fields": (
 					"counts_display",
 					"computed_at",
+					"topic_counts_changed",
 					"is_manual",
 					"needs_review",
 					"review_reason",
@@ -396,26 +592,63 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 
 	# -- list -----------------------------------------------------------------------------
 
+	TOPIC_FILTERS = {
+		"subject": ("subject_links", "subject_id"),
+		"category": ("category_links", "category_id"),
+	}
+
 	def get_queryset(self, request):
 		# ModelAdmin.get_queryset orders before we could annotate, and the ranking order
 		# names the annotations, so build the queryset here.
 		queryset = self.model._default_manager.get_queryset()
-		subject_id = _int_param(request, "subject")
-		if subject_id is not None:
-			articles, relevant = lab_subject_counts(subject_id)
-			queryset = queryset.annotate(articles_in_subject=articles, relevant_in_subject=relevant)
+		for kind, (relation, column) in self.TOPIC_FILTERS.items():
+			topic_id = _int_param(request, kind)
+			if topic_id is None:
+				continue
+			# The stored, visible link: one row per lab, because the pair is unique.
+			link = f"{kind}_link"
+			queryset = (
+				queryset.annotate(
+					**{
+						link: FilteredRelation(
+							relation,
+							condition=Q(**{f"{relation}__{column}": topic_id, f"{relation}__is_hidden": False}),
+						)
+					}
+				)
+				.filter(**{f"{link}__isnull": False})
+				.annotate(
+					**{
+						f"articles_in_{kind}": F(f"{link}__article_count"),
+						f"relevant_in_{kind}": F(f"{link}__relevant_count"),
+						f"recent_in_{kind}": F(f"{link}__recent_article_count"),
+					}
+				)
+			)
+		queryset = queryset.prefetch_related(
+			Prefetch(
+				"category_links",
+				LabCategory.objects.filter(is_hidden=False)
+				.select_related("category")
+				.order_by("-relevant_count", "-article_count", "category__category_name", "pk"),
+				to_attr="ranked_category_links",
+			)
+		)
 		ordering = self.get_ordering(request)
 		return queryset.order_by(*ordering) if ordering else queryset
 
 	def get_list_display(self, request):
 		display = list(super().get_list_display(request))
-		if _int_param(request, "subject") is not None:
-			display += ["articles_in_subject", "relevant_in_subject"]
+		for kind in self.TOPIC_FILTERS:
+			if _int_param(request, kind) is not None:
+				display += [f"articles_in_{kind}", f"relevant_in_{kind}", f"recent_in_{kind}"]
 		return display
 
 	def get_ordering(self, request):
-		if _int_param(request, "subject") is not None:
-			return ["-relevant_in_subject", "-articles_in_subject", "pk"]
+		# The narrower choice ranks: the category when both are chosen.
+		for kind in ("category", "subject"):
+			if _int_param(request, kind) is not None:
+				return [f"-relevant_in_{kind}", f"-articles_in_{kind}", "pk"]
 		return super().get_ordering(request)
 
 	@admin.display(description="Lab", ordering="name")
@@ -430,6 +663,12 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 	def members_display(self, obj):
 		return f"{obj.core_count} / {obj.member_count - obj.core_count}"
 
+	@admin.display(description="Topics")
+	def topics(self, obj):
+		# The first three of the prefetched visible category links, best first.
+		names = [link.category.category_name for link in obj.ranked_category_links[:3]]
+		return ", ".join(names) or "-"
+
 	@admin.display(description="Articles in subject", ordering="articles_in_subject")
 	def articles_in_subject(self, obj):
 		return obj.articles_in_subject
@@ -437,6 +676,22 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 	@admin.display(description="Relevant in subject", ordering="relevant_in_subject")
 	def relevant_in_subject(self, obj):
 		return obj.relevant_in_subject
+
+	@admin.display(description="Recent in subject", ordering="recent_in_subject")
+	def recent_in_subject(self, obj):
+		return obj.recent_in_subject
+
+	@admin.display(description="Articles in category", ordering="articles_in_category")
+	def articles_in_category(self, obj):
+		return obj.articles_in_category
+
+	@admin.display(description="Relevant in category", ordering="relevant_in_category")
+	def relevant_in_category(self, obj):
+		return obj.relevant_in_category
+
+	@admin.display(description="Recent in category", ordering="recent_in_category")
+	def recent_in_category(self, obj):
+		return obj.recent_in_category
 
 	# -- form -----------------------------------------------------------------------------
 
@@ -449,7 +704,13 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 		return super().get_inline_instances(request, obj)
 
 	def get_inlines(self, request, obj):
-		return [LabMemberInline]
+		return [
+			LabSubjectInline,
+			LabHiddenSubjectInline,
+			LabCategoryInline,
+			LabHiddenCategoryInline,
+			LabMemberInline,
+		]
 
 	def save_model(self, request, obj, form, change):
 		changed = set(form.changed_data)
@@ -479,6 +740,9 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 			# Removing a member here means "not in this lab": pin them to no lab, or the
 			# next rebuild would put them back.
 			save_manual_memberships(formset, pin_deleted=True)
+		elif formset.model in (LabSubject, LabCategory):
+			# Not memberships: the formset itself applies add, hide, unhide and reset.
+			formset.save()
 		else:
 			super().save_formset(request, form, formset, change)
 
@@ -491,6 +755,16 @@ class LabAdmin(SuperuserOnlyAdminMixin, admin.ModelAdmin):
 		if lab.head_id:
 			ids.add(lab.head_id)
 		return ids
+
+	@admin.display(description="Topic counts last changed")
+	def topic_counts_changed(self, obj):
+		# Not "last computed": a rebuild that finds no change writes nothing.
+		latest = [
+			obj.subject_links.aggregate(latest=Max("computed_at"))["latest"],
+			obj.category_links.aggregate(latest=Max("computed_at"))["latest"],
+		]
+		latest = [value for value in latest if value]
+		return date_format(localtime(max(latest)), "DATETIME_FORMAT") if latest else "-"
 
 	@admin.display(description="Counts")
 	def counts_display(self, obj):

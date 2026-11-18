@@ -31,21 +31,39 @@ Someone you placed by hand as a member or collaborator, or pinned to no lab, nev
 
 Open **Labs** in the admin. The columns are the lab name, head, institution, country, members as "core / external", collaborators, last-author papers, needs review and manual.
 
-- **Filters**: subject, country, needs review, manual, and number of members (1, 2 to 5, 6 to 15, 16 or more).
+- **Filters**: subject, category, country, needs review, manual, and number of members (1, 2 to 5, 6 to 15, 16 or more). The category filter has a search box above its list, because there are many categories. Its list holds the categories that at least one lab links to.
 - **Search**: lab name, head's name, institution name.
-- **Choosing a subject** adds two columns, "Articles in subject" and "Relevant in subject", and sorts by relevant, highest first. Both count distinct articles in that subject that have at least one author who is the lab's head or a member (collaborators don't count). An article with two members counts once. "Relevant" is the same flag the authors API uses for its relevant count.
+- **Topics** column: the lab's three best categories, best first, or a dash. It reads the stored category links (see below), hidden ones excluded.
+- **Choosing a subject or a category** shows only the labs with a visible link to it, and adds three columns: "Articles in subject", "Relevant in subject" and "Recent in subject" (or the same three for the category). All three are sortable. The list is ranked by relevant papers, then papers, then lab ID. With both chosen, only labs linked to both show, both sets of columns appear, and the category's numbers rank them, since a category is the narrower choice.
+- **What the numbers mean**: they are the stored counts of the link, from the head's and members' papers (collaborators don't count; a paper counts once per lab). "Recent" is the current calendar year and the four before it, plus papers dated later. **"Relevant in subject" changed meaning**: it used to count papers with the global relevant flag, which is true when a paper is relevant for any subject. It now counts papers relevant for that subject by a human or by AI, the rule behind the articles API's `relevant=true` filter, scoped to the one subject. For a category, a paper is relevant when it is relevant for any of the category's subjects. The numbers are as fresh as the last `rebuild_lab_topics` run, which the pipeline does each time.
 
 ## The lab page
 
 - **Edit** the name, head, institution and notes. Changing the name, head or institution makes the lab **manual**.
 - **Changing the head** gives the new head a manual head membership in this lab and turns the old head into a manual member. The new head can come from another lab. An author who already heads another lab can't be made head here: open that lab, or merge the two.
 - **Members**: an inline of the lab's members, with author, core or external, shared papers, last shared year, source, ORCID and whether we hold an email. Adding an author who is already in another lab moves them. Adding or changing a row makes it manual. The head is edited at the top of the page, not in this list.
+- **Subjects and Categories**: the lab's visible topic links, best first, with papers, relevant, recent, latest year and whether the link is computed or manual. The counts are read-only. See "Subjects and categories" below.
+- **Hidden subjects** and **Hidden categories**: collapsed sections with the links you hid.
+- **Topic counts last changed**, under "Computed data": the latest time a rebuild changed one of this lab's counts. A rebuild that finds nothing new writes nothing, so this can be old on a healthy lab.
 - **Naming hints**: the head's three most common printed affiliations, which often name the department or lab.
 - **Recent papers**: the ten latest papers with the head as last author, linked to their admin pages.
 - **Probable duplicates**: people in the lab who share an OpenAlex author ID, with a link to the authors list filtered to those IDs, where the existing "Merge selected authors" action applies.
 - **Collaborators**: collapsed and read-only, because a large lab can have over a hundred.
 
 To add a lab, use **Add lab**. A head is required, and the head gets a manual head membership.
+
+## Subjects and categories
+
+`rebuild_lab_topics` links each lab to the subjects and categories its head and members publish in. A link exists when the lab has 3 or more papers in the subject or category. Links are stored, not worked out when you look, so the Labs list stays fast; they update once per pipeline run. The command only reads articles and their relevance: it changes no article, relevance flag, prediction or category assignment.
+
+On the lab page you can correct them:
+
+- **Add**: in the Subjects section pick a subject from the list, or search for a category, then save. The link is marked manual and stays even with fewer than 3 papers (its counts may be 0). Adding a link that is hidden brings it back.
+- **Hide**: tick Hide on a row and save. The link moves to the collapsed Hidden section and shows nowhere else: not in the Labs list filters or the Topics column. A rebuild keeps updating its counts but never brings it back.
+- **Unhide**: tick Unhide on a row of the Hidden section and save.
+- **Reset**: tick Reset on any row and save. Both the manual and hidden marks clear. The next rebuild keeps the link only if it has 3 or more papers.
+
+A subject or category can't be changed on an existing row: add the right one instead. Your changes are recorded in the link's history. When two labs are merged, manual and hidden marks carry to the lab that remains, and hidden wins.
 
 ## Fixing, pinning, merging and resetting
 
