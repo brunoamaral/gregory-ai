@@ -1,0 +1,28 @@
+{% load i18n %}
+<details data-filter-title="{{ title }}" open>
+	<summary>
+		{% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}
+	</summary>
+	<input type="search" class="lab-category-search" placeholder="{% translate 'Search categories' %}"
+		aria-label="{% translate 'Search categories' %}" autocomplete="off" style="width: 90%; margin: 4px 0;">
+	<ul class="lab-category-choices" style="max-height: 16em; overflow-y: auto;">
+	{% for choice in choices %}
+		<li{% if choice.selected %} class="selected"{% endif %}>
+		<a href="{{ choice.query_string|iriencode }}">{{ choice.display }}</a></li>
+	{% endfor %}
+	</ul>
+	<script>
+		(function () {
+			var box = document.currentScript.parentNode;
+			var input = box.querySelector('.lab-category-search');
+			var items = box.querySelectorAll('.lab-category-choices li');
+			input.addEventListener('input', function () {
+				var term = input.value.trim().toLowerCase();
+				items.forEach(function (item) {
+					var matches = !term || item.textContent.toLowerCase().indexOf(term) !== -1;
+					item.style.display = matches ? '' : 'none';
+				});
+			});
+		})();
+	</script>
+</details>

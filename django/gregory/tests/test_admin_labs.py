@@ -1,4 +1,4 @@
-"""The labs admin: superuser-only, every edit manual, the subject ranking, the author and
+"""The labs admin: superuser-only, every edit manual, the subject filter, the author and
 article pages, and the author actions."""
 
 from django.contrib.admin.sites import site as admin_site
@@ -18,6 +18,7 @@ from gregory.models import (
 	Institution,
 	Lab,
 	LabMembership,
+	LabSubject,
 	Subject,
 	Team,
 )
@@ -254,32 +255,19 @@ class LabListTests(LabAdminCase):
 
 
 class SubjectRankingTests(LabAdminCase):
+	"""Choosing a subject reads the stored, visible links. The topic tests are in
+	test_admin_lab_topics.py."""
+
 	def setUp(self):
-		self.hA, self.mA, self.cA = author(1), author(2), author(3)
-		self.hB, self.mB = author(4), author(5)
-		self.labA = make_lab(self.hA)
-		join(self.labA, self.mA)
-		join(self.labA, self.cA, role=COLLABORATOR)
-		self.labB = make_lab(self.hB)
-		join(self.labB, self.mB)
-
-		def article(n, authors, subject, relevant):
-			a = Articles.objects.create(title=f"Paper {n}", link=f"https://example.com/rank-{n}")
-			a.subjects.add(subject)
-			a.authors.add(*authors)
-			Articles.objects.filter(pk=a.pk).update(relevant=relevant)
-			return a
-
-		# Lab A: one article with two of its people on it (counted once).
-		article(1, [self.hA, self.mA], self.subject, True)
-		# A collaborator's article doesn't count.
-		article(2, [self.cA], self.subject, True)
-		# Lab B: three articles in the subject, two relevant.
-		article(3, [self.mB], self.subject, True)
-		article(4, [self.hB], self.subject, False)
-		article(5, [self.hB, self.mB], self.subject, True)
-		# Another subject doesn't count for this one.
-		article(6, [self.hA], self.other_subject, True)
+		self.labA = make_lab(author(1))
+		self.labB = make_lab(author(4))
+		self.labC = make_lab(author(6))
+		link = LabSubject.objects.create
+		link(lab=self.labA, subject=self.subject, article_count=1, relevant_count=1, recent_article_count=1)
+		link(lab=self.labB, subject=self.subject, article_count=3, relevant_count=2, recent_article_count=0)
+		link(lab=self.labA, subject=self.other_subject, article_count=1, relevant_count=1)
+		# Lab C has no link, and a hidden link doesn't count.
+		link(lab=self.labC, subject=self.subject, article_count=9, relevant_count=9, is_hidden=True)
 
 	def test_counts_and_order(self):
 		self.login()
@@ -287,15 +275,13 @@ class SubjectRankingTests(LabAdminCase):
 		labs = list(self.client.get(url, {"subject": self.subject.pk}).context["cl"].result_list)
 		self.assertEqual([lab.pk for lab in labs], [self.labB.pk, self.labA.pk])
 		self.assertEqual(
-			[(l.articles_in_subject, l.relevant_in_subject) for l in labs], [(3, 2), (1, 1)]
+			[(l.articles_in_subject, l.relevant_in_subject, l.recent_in_subject) for l in labs],
+			[(3, 2, 0), (1, 1, 1)],
 		)
 		other = list(self.client.get(url, {"subject": self.other_subject.pk}).context["cl"].result_list)
-		self.assertEqual(
-			{l.pk: (l.articles_in_subject, l.relevant_in_subject) for l in other},
-			{self.labA.pk: (1, 1), self.labB.pk: (0, 0)},
-		)
+		self.assertEqual([(l.pk, l.articles_in_subject) for l in other], [(self.labA.pk, 1)])
 
-	def test_the_two_columns_only_appear_with_a_subject(self):
+	def test_the_columns_only_appear_with_a_subject(self):
 		self.login()
 		url = reverse("admin:gregory_lab_changelist")
 		self.assertNotContains(self.client.get(url), "Relevant in subject")
@@ -305,6 +291,7 @@ class SubjectRankingTests(LabAdminCase):
 		self.login()
 		response = self.client.get(reverse("admin:gregory_lab_changelist"), {"subject": "abc"})
 		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context["cl"].result_count, 3)
 
 
 class LabFormTests(LabAdminCase):
@@ -674,7 +661,7 @@ class LabPageBlockTests(LabAdminCase):
 		self.assertContains(self.response, "2020")
 
 	def test_the_member_inline_lists_the_member_not_the_head_or_collaborator(self):
-		inline = self.response.context["inline_admin_formsets"][0].formset
+		inline = [i.formset for i in self.response.context["inline_admin_formsets"] if i.formset.model is LabMembership][0]
 		self.assertEqual([f.instance.author_id for f in inline.forms], [self.twin.pk])
 
 
