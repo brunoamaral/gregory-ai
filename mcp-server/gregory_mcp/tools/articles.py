@@ -27,6 +27,7 @@ async def search_articles(
 	journal_slug: str | None = None,
 	doi: str | None = None,
 	author_id: int | None = None,
+	lab_id: int | None = None,
 	relevant: bool | None = None,
 	ml_threshold: float | None = None,
 	ml_score_min: float | None = None,
@@ -55,6 +56,12 @@ async def search_articles(
 	AND-ed, uppercase OR/NOT for alternatives/exclusion, "quoted phrases"
 	match contiguously, (parentheses) group. Use `title=`/`summary=` instead
 	of `search=` to match only one field.
+
+	`lab_id` keeps the papers of one research lab (from `search_labs`): those
+	with the lab's head or a member among the authors, each paper once.
+	Collaborators don't count. With `subject_id` or `category_id`, `count`
+	matches that topic's `articles` on `get_lab` (give or take papers added
+	since the lab's counts were last refreshed).
 
 	`ml_score_min` keeps articles whose `ml_score` (the score shown in
 	results) is at least that value — use it, with `ordering=-ml_score`, to
@@ -99,6 +106,7 @@ async def search_articles(
 		"journal_slug": journal_slug,
 		"doi": doi,
 		"author_id": author_id,
+		"lab_id": lab_id,
 		"relevant": relevant,
 		"ml_threshold": ml_threshold,
 		"ml_score_min": ml_score_min,

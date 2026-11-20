@@ -179,6 +179,24 @@ async def test_search_articles_last_days(mock_gregory):
 	assert mock_gregory.requests[0].url.params["last_days"] == "30"
 
 
+async def test_search_articles_lab_id_is_forwarded(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(lab_id=606, subject_id=1)
+
+	params = mock_gregory.requests[0].url.params
+	assert params["lab_id"] == "606"
+	assert params["subject_id"] == "1"
+
+
+async def test_search_articles_omits_lab_id_when_unset(mock_gregory):
+	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
+
+	await search_articles(search="x")
+
+	assert "lab_id" not in mock_gregory.requests[0].url.params
+
+
 async def test_search_articles_ml_score_min_is_forwarded(mock_gregory):
 	mock_gregory.set_handler(lambda request: httpx2.Response(200, json={"count": 0, "results": []}))
 
