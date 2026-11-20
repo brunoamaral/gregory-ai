@@ -33,6 +33,7 @@ from .models import (
 	TeamCategory,
 )
 from .services.labs import merge_labs
+from .utils.author_display import author_name
 
 HEAD = LabMembership.Role.HEAD
 MEMBER = LabMembership.Role.MEMBER
@@ -162,10 +163,6 @@ class SuperuserOnlyAdminMixin:
 
 	def has_delete_permission(self, request, obj=None):
 		return request.user.is_superuser
-
-
-def author_name(author):
-	return author.full_name or f"{author.given_name} {author.family_name}".strip()
 
 
 def core_label(same_institution):

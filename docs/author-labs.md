@@ -99,3 +99,11 @@ A lab gets **needs review** from a rebuild when it can't decide:
 - "head was deleted": the head's author row no longer exists. The rebuild does not guess a new head. Set one on the lab's page.
 
 The flag clears itself on a later rebuild once the reason no longer applies.
+
+## In the API
+
+`GET /labs/` and `GET /labs/{id}/` serve these labs to frontends; the parameters and fields are in [the API reference](03-api-and-rss-feeds.md#labs). A few things follow from the rest of this page:
+
+- Only the topic links a caller can see are shown, and a lab with none of them is not listed at all. A link you hid in the admin never appears. A category link also needs every one of the category's subjects to be visible to the caller, because its counts cover all of them.
+- `curated` is true for a manual lab: one a superuser created, named, re-headed, re-homed or merged. Computed labs, including ones that need review, are listed too; the review flag, its reason and the notes stay private.
+- Collaborators are never shown, only the head and the members.

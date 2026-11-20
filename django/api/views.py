@@ -48,6 +48,14 @@ from api.serializers import (
 	PublicSiteSerializer,
 	McpTenantSerializer,
 )
+from api.serializers.labs import LabSerializer
+from api.labs import (
+	lab_display_name_expr,
+	request_scope,
+	visible_category_links,
+	visible_labs_q,
+	visible_subject_links,
+)
 from api.pagination import (
 	CappedPageNumberPagination,
 	FlexiblePagination,
@@ -91,6 +99,8 @@ from gregory.utils.trial_field_normalizers import (
 	TrialStudyType,
 )
 from gregory.models import (
+	Lab,
+	LabMembership,
 	Articles,
 	ArticleMeshHeading,
 	ArticleCategoryAssignment,
@@ -134,6 +144,7 @@ from api.filters import (
 	PatentFilter,
 	MedicineFilter,
 	MedicineEventFilter,
+	LabFilter,
 )
 from rest_framework.response import Response
 from rest_framework.renderers import BrowsableAPIRenderer, JSONRenderer
@@ -4477,6 +4488,75 @@ _AUTHORS_BY_TEAM_CATEGORY_PARAMS = [
 		description="Team category ID. One of category_slug/category_id is required.",
 	),
 ]
+
+
+class LabViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	Research labs: a head, the people who publish with them, and the subjects and
+	categories they work on, with how much they have published there.
+
+	# Visibility:
+
+	A lab is listed when it has at least one visible link to a subject or a category.
+	A subject link is visible when the caller can see the subject. A category link is
+	visible only when the caller can see **every** subject of the category (stricter than
+	`/categories/`, because a link's counts include the articles of all the category's
+	subjects). Hidden links never appear. A lab that is not visible returns `404`.
+
+	# Query Parameters:
+
+	- **subject_id** - labs with a visible link to this subject
+	- **category_id** - labs with a visible link to this category (both: linked to both)
+	- **search** - lab, head or institution name (case-insensitive)
+	- **country** - institution country code
+	- **author_id** - the lab this author heads or belongs to
+	- **min_recent_articles** - at least this many recent articles on the chosen topic
+	  (requires `subject_id` or `category_id`)
+	- **ordering** - `name` (default), `articles`, `relevant_articles`, `recent_articles`,
+	  `member_count`, each with an optional `-`. The three count orderings need a topic filter.
+
+	# Pagination:
+	Standard `page` pagination (10 per page); there is no `all_results`. JSON only, no CSV.
+	"""
+
+	serializer_class = LabSerializer
+	renderer_classes = (JSONRenderer, BrowsableAPIRenderer)
+	permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+	pagination_class = CappedPageNumberPagination
+	filter_backends = [django_filters.DjangoFilterBackend]
+	filterset_class = LabFilter
+
+	def get_queryset(self):
+		scope = request_scope(self.request)
+		person_links = ("-relevant_count", "-article_count")
+		return (
+			Lab.objects.filter(visible_labs_q(scope))
+			.select_related("head", "institution")
+			.annotate(display_name=lab_display_name_expr())
+			.prefetch_related(
+				Prefetch(
+					"subject_links",
+					queryset=visible_subject_links(scope)
+					.select_related("subject")
+					.order_by(*person_links, "subject__subject_name", "pk"),
+					to_attr="visible_subject_links",
+				),
+				Prefetch(
+					"category_links",
+					queryset=visible_category_links(scope)
+					.select_related("category")
+					.order_by(*person_links, "category__category_name", "pk"),
+					to_attr="visible_category_links",
+				),
+				Prefetch(
+					"memberships",
+					queryset=LabMembership.objects.filter(role=LabMembership.Role.MEMBER)
+					.select_related("author")
+					.order_by("-shared_articles", "author_id"),
+					to_attr="member_rows",
+				),
+			)
+		)
 
 
 @extend_schema_view(
