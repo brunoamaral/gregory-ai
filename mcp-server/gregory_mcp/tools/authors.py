@@ -37,6 +37,10 @@ async def search_authors(
 	`sort_by=article_count` ranks authors by their article count (add
 	`subject_id` to scope which articles count); default order for it is
 	descending, ascending for everything else.
+
+	Each author has a `lab` ({id, name, role}, role being `head` or `member`),
+	or null when they are a collaborator, in no lab, or in a lab this site
+	can't show. Use `get_lab` for the lab itself.
 	"""
 	clamped_page = clamp_page(page)
 	params = {
@@ -49,6 +53,8 @@ async def search_authors(
 		"subject_id": subject_id,
 		"sort_by": sort_by,
 		"order": order,
+		# Always sent, never an argument: each result carries its lab or null.
+		"include": "lab",
 		"page": clamped_page,
 	}
 	data = await get_client().get("/authors/", params)
@@ -62,7 +68,11 @@ async def search_authors(
 
 async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 	"""Fetch the full record for one author by ID: affiliations, ORCID
-	metadata, and article counts.
+	metadata, article counts, and their research lab.
+
+	`lab` is {id, name, role, head} (role is `head` or `member`), or null when
+	the author is a collaborator, in no lab, or in a lab this site can't show.
+	Call `get_lab` with its `id` for the members and topics.
 
 	Args:
 		author_id: The author's ID.
@@ -78,7 +88,7 @@ async def get_author(author_id: int, include_coauthors: bool = False) -> dict:
 		ToolError: If the author can't be found.
 	"""
 	try:
-		author = await get_client().get(f"/authors/{author_id}/")
+		author = await get_client().get(f"/authors/{author_id}/", {"include": "lab"})
 	except GregoryAPIError as exc:
 		# See get_article's identical comment — Django's 404 deliberately
 		# doesn't distinguish "doesn't exist" from "out of this site's scope".

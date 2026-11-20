@@ -4,7 +4,7 @@
 
 `mcp-server/` is an [MCP](https://modelcontextprotocol.io/) server that lets LLM
 clients (Claude Code, Claude Desktop, etc.) query the GregoryAI REST API — articles,
-clinical trials, authors, subjects, categories, and sponsors — without hand-writing HTTP
+clinical trials, authors, research labs, subjects, categories, and sponsors — without hand-writing HTTP
 calls. It is a thin, stateless proxy: no database access, no ORM. The anonymous endpoint
 (`/mcp`) is read-only: every request it can issue is a `GET`. Signed-in editors get a
 second endpoint, `/mcp/editor`, that can also edit a site's article content — see
@@ -67,7 +67,7 @@ re-checks within a minute).
 
 ## Tools
 
-Ten task-shaped tools, plus two for patents on sites that have them and two for medicines (EMA and
+Twelve task-shaped tools, plus two for patents on sites that have them and two for medicines (EMA and
 FDA) on sites that have those, rather than a 1:1 mirror of every API endpoint — a large tool list
 crowds context and degrades model tool selection. The patent and medicine tools are offered per
 site: see [Patents](#patents) and [Medicines](#medicines).
@@ -79,8 +79,10 @@ site: see [Patents](#patents) and [Medicines](#medicines).
 | `get_article` | `GET /articles/{article_id}/` | Full record. |
 | `search_trials` | `GET /trials/` | `search` (title, summary and scientific title) plus `recruitment_status_normalized`, `phase_normalized`, `study_type_normalized`, country, region, sponsor, `age_eligible`, `inclusion_gender_normalized`, registration dates, registry IDs (`nct`, `euct`, `eudract`, `ctis` — any common format, matched against the trial's registry record, secondary ids and sponsor study code, not just the exact stored value), `acronym`, `has_results`, `therapeutic_areas`, and on a site with patents `has_patent_link` (+ `include_subject_links`). Results include `identifiers_normalized`, the canonical id list a registry-ID filter actually matched against. |
 | `get_trial` | `GET /trials/{trial_id}/` | Full record, incl. eligibility text and results detail. On a site with patents it also lists `patent_links` (see [Patents](#patents)); `include_subject_links` widens them. |
-| `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. |
-| `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default: the top 10 co-authors plus `coauthors_total`. |
+| `search_authors` | `GET /authors/` | Name, ORCID, country, subject scope, `sort_by`/`order`. Fixed page size (10) — this endpoint doesn't support `page_size`. Always asks for `include=lab`: each result carries `lab` as `{id, name, role}`, or `null` (see [Labs](#labs)). |
+| `get_author` | `GET /authors/{id}/` (+ `/coauthors/`) | Co-authors optional (`include_coauthors`), off by default: the top 10 co-authors plus `coauthors_total`. Always asks for `include=lab`, so the record carries `lab` as `{id, name, role, head}`, or `null` (see [Labs](#labs)). |
+| `search_labs` | `GET /labs/` | `subject_id`, `category_id`, `search`, `country`, `author_id`, `min_recent_articles`, `ordering`, `page`. Compact results, 10 a page. See [Labs](#labs). |
+| `get_lab` | `GET /labs/{id}/` | Full record: members, institution and every topic link. See [Labs](#labs). |
 | `list_categories` | `GET /categories/` | Fetches every page — a small, slow-changing taxonomy. Does not expose `ordering=authors_count_annotated`; that sort is expensive. Each row carries `category_description` (null when unset) and `patents_count_total` (0 on a site without patents). |
 | `list_sponsors` | `GET /sponsors/` | Paginated, not fetched in full — sponsors can number in the thousands. Each row carries `patents_count`; `include_patent_applicants` also lists sponsors that only appear as patent applicants. |
 | `get_stats` | `GET /stats/`, `/articles/stats/`, `/trials/stats/`, `/patents/stats/` | `scope` selects which (`global`, `articles`, `trials`, `patents`). |
@@ -97,6 +99,17 @@ behind `relevant=true`: a paper counts only when enough models (per the subject'
 setting) classed it relevant, and they only do so at or above their prediction cutoff (0.8 by
 default), so `ml_threshold` below that cutoff acts as the cutoff. `relevant` and `ml_threshold`
 are scoped to `subject_id` when given; `ml_score` itself is not.
+
+### Labs
+
+`search_labs` and `get_lab` read the lab endpoints (`GET /labs/` and `GET /labs/{id}/`; see [author-labs.md](author-labs.md) for what a lab is). They are read-only, offered to every caller on every site, and need no per-site setting. A site whose topics have no visible lab links just gets an empty list.
+
+- **Visibility follows `/labs/`.** The server calls the API as an anonymous, site-scoped client, so only labs with a topic link the site can see are returned, and a category counts only when all of its subjects are in the site's scope. `get_lab` answers a lab outside the site's scope exactly like one that doesn't exist.
+- **Compact results.** `search_labs` returns `{count, next_page, labs}`. Each lab has `id`, `name`, `curated`, `head` (`author_id`, `full_name`), `institution` (`name`, `country_code`), `member_count` and `top_categories`. It leaves out the members, ORCID iDs, institution IDs, the other topic links, `latest_article_year` and `topics_last_changed`; `get_lab` returns the full record unchanged.
+- **`top_categories`** holds at most 3 categories, each with the lab's `articles`, `relevant_articles` and `recent_articles` there. The API's ranking is kept, except that with `category_id` that category comes first (when the lab has it). With `subject_id`, a lab that has that subject also carries `subject_link` with the same counts; without it there is no `subject_link`.
+- **Bad combinations are caught early.** A count ordering (`articles`, `relevant_articles` or `recent_articles`, with or without `-`) and `min_recent_articles` are counts for one topic, so without `subject_id` or `category_id` the tool raises a `ToolError` naming the missing argument, without calling the API (which would answer `400`).
+- **The lab on the author tools.** `search_authors` and `get_author` always send `include=lab`. In `search_authors` each author's `lab` is `{id, name, role}` (`role` is `head` or `member`). In `get_author` it is the API's `{id, name, role, head}`. It is `null` for a collaborator, an author in no lab, or a lab the site can't show. `lab` is not an argument, and the schema-contract test records `include` as sent by the tool itself.
+- **No intent logging** on `search_labs`, for the same reason as `search_authors`: labs are named after people and institutions.
 
 ### Patents
 
@@ -247,11 +260,11 @@ names and static advice text.
 
 ### Payload shaping
 
-`search_articles` / `search_trials` / `search_patents` / `search_medicines` / `list_medicine_drugs` / `search_authors` return a compact projection — id,
+`search_articles` / `search_trials` / `search_patents` / `search_medicines` / `list_medicine_drugs` / `search_authors` / `search_labs` return a compact projection — id,
 title, date, a few key fields, and a summary truncated to ~400 characters — not the full
 record. A ten-result search with full abstracts and nested author lists is a very large
 response, and most searches are followed by a `get_*` read of one or two records anyway.
-`get_article` / `get_trial` / `get_patent` / `get_medicine` / `get_author` return the full record, minus team data:
+`get_article` / `get_trial` / `get_patent` / `get_medicine` / `get_author` / `get_lab` return the full record, minus team data:
 `get_article`, `get_trial`, `get_patent` and `get_medicine` drop every `teams` and `team_id` key, at any depth
 (`compact.strip_team_data`). A tenant sees its site's scope, and no tool takes a team, so
 team plumbing is noise to the model. `categories` (the record's category tags) stays.
@@ -271,7 +284,7 @@ server — see [Risks](#risks).
 
 ### Not-found errors
 
-`get_article`, `get_trial`, `get_patent`, `get_medicine` and `get_author` turn a `404` from their endpoint into a clear
+`get_article`, `get_trial`, `get_patent`, `get_medicine`, `get_author` and `get_lab` turn a `404` from their endpoint into a clear
 `ToolError` naming the record — e.g. `Article 123 was not found.` — rather than the
 generic upstream error text. Django returns `404` both for a record that doesn't exist and
 one outside this site's scope (see [Tenant resolution](#tenant-resolution-site_id)),
@@ -688,7 +701,7 @@ curl -s --max-time 10 -X POST https://<host>/mcp \
        "io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
 
-Expect a JSON-RPC result listing all the tools (ten, plus two on a site with patents and two more on a site with medicines). This is the check that matters: it is a
+Expect a JSON-RPC result listing all the tools (twelve, plus two on a site with patents and two more on a site with medicines). This is the check that matters: it is a
 POST, which is what real clients use, and it is what proves the routing above is right.
 
 To confirm rate limiting is applied and returns `429` rather than nginx's default `503`,
@@ -808,8 +821,8 @@ and site (`MCP_SOURCE_CREATES_PER_DAY`, `MCP_SOURCE_PREVIEWS_PER_HOUR`), apart f
 
 | Sign-in | Tools |
 |:---|:---|
-| Public tier (no editor grant) | the ten read tools, exactly as on `/mcp` |
-| Editor, read-only grant | the ten read tools plus `get_history` |
+| Public tier (no editor grant) | the twelve read tools, exactly as on `/mcp` |
+| Editor, read-only grant | the twelve read tools plus `get_history` |
 | Editor with the edit scope | all of those plus six write tools |
 | Editor with the edit scope and `sources:add` | all of those plus three source tools |
 
@@ -847,7 +860,7 @@ answer is never served to `/mcp`.
 
 The editor tools are grouped by what they do, not by the record they act on: the tools that can both
 add and remove take a boolean for the direction (`linked`, `assigned`, required, with no default) instead
-of being two tools, which keeps the editor list at 17 tools with the read tools (on a site that has patents, two more; see [Patents](#patents)). They were
+of being two tools, which keeps the editor list at 19 tools with the read tools (on a site that has patents, two more; see [Patents](#patents)). They were
 `get_article_history`, `update_article_editorial`, `link_trial_to_article` / `unlink_trial_from_article` and
 `assign_article_category` / `unassign_article_category`; the old names are gone, with no aliases (see
 [the changelog entry](changelog/mcp-editor-tool-merge.md)).

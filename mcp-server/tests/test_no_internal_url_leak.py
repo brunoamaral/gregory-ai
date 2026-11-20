@@ -16,6 +16,7 @@ import pytest
 
 from gregory_mcp.tools.articles import search_articles
 from gregory_mcp.tools.authors import search_authors
+from gregory_mcp.tools.labs import search_labs
 from gregory_mcp.tools.catalog import list_sponsors
 from gregory_mcp.tools.trials import search_trials
 from tests.conftest import TEST_SETTINGS
@@ -43,6 +44,7 @@ PAGINATED_TOOLS = [
 	(search_articles, {}),
 	(search_trials, {}),
 	(search_authors, {}),
+	(search_labs, {}),
 	(list_sponsors, {}),
 ]
 

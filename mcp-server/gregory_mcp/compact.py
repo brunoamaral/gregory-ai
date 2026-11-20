@@ -255,4 +255,55 @@ def compact_author(author: dict[str, Any]) -> dict[str, Any]:
 		"country": author.get("country"),
 		"articles_count": author.get("articles_count"),
 		"relevant_articles_count": author.get("relevant_articles_count"),
+		"lab": _compact_author_lab(author.get("lab")),
 	}
+
+
+def _compact_author_lab(lab: dict[str, Any] | None) -> dict[str, Any] | None:
+	"""An author's lab as ID, name and role. The head is left out: `get_lab`
+	has it, and a search result only needs to say which lab."""
+	if not lab:
+		return None
+	return {"id": lab.get("id"), "name": lab.get("name"), "role": lab.get("role")}
+
+
+_LAB_COUNT_KEYS = ("articles", "relevant_articles", "recent_articles")
+_TOP_CATEGORIES = 3
+
+
+def compact_lab(lab: dict[str, Any], *, category_id: int | None = None, subject_id: int | None = None) -> dict[str, Any]:
+	"""A search-result lab: who and where, how big, and its leading topics.
+
+	Leaves out the members, every ORCID iD, institution IDs, the links beyond
+	the top categories, `latest_article_year` and `topics_last_changed`;
+	`get_lab` has them all. The API already ranks `categories`, so the first
+	three are kept, except that a category the caller filtered on moves to the
+	front (the list still holds at most three).
+	"""
+	head = lab.get("head")
+	institution = lab.get("institution")
+	categories = list(lab.get("categories") or [])
+	if category_id is not None:
+		chosen = [c for c in categories if c.get("id") == category_id]
+		categories = chosen + [c for c in categories if c.get("id") != category_id]
+	row: dict[str, Any] = {
+		"id": lab.get("id"),
+		"name": lab.get("name"),
+		"curated": lab.get("curated"),
+		"head": {"author_id": head.get("author_id"), "full_name": head.get("full_name")} if head else None,
+		"institution": (
+			{"name": institution.get("name"), "country_code": institution.get("country_code")} if institution else None
+		),
+		"member_count": lab.get("member_count"),
+		"top_categories": [_lab_link(c) for c in categories[:_TOP_CATEGORIES]],
+	}
+	if subject_id is not None:
+		for subject in lab.get("subjects") or []:
+			if subject.get("id") == subject_id:
+				row["subject_link"] = _lab_link(subject)
+				break
+	return row
+
+
+def _lab_link(link: dict[str, Any]) -> dict[str, Any]:
+	return {"id": link.get("id"), "name": link.get("name"), **{k: link.get(k) for k in _LAB_COUNT_KEYS}}

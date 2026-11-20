@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from gregory_mcp.tools import articles, authors, catalog, medicines, patents, trials
+from gregory_mcp.tools import articles, authors, catalog, labs, medicines, patents, trials
 
 SCHEMA_PATH = Path(__file__).resolve().parents[2] / "django" / "schema.yml"
 
@@ -48,6 +48,7 @@ TOOL_ENDPOINTS = [
 	(medicines.search_medicines, "/medicines/", set()),
 	(medicines.list_medicine_drugs, "/medicines/drugs/", set()),
 	(authors.search_authors, "/authors/", set()),
+	(labs.search_labs, "/labs/", set()),
 	(catalog.list_subjects, "/subjects/", set()),
 	(catalog.list_categories, "/categories/", set()),
 	(catalog.list_sponsors, "/sponsors/", set()),
@@ -59,6 +60,7 @@ DETAIL_ENDPOINTS = [
 	(patents.get_patent, "/patents/{patent_id}/"),
 	(medicines.get_medicine, "/medicines/{id}/"),
 	(authors.get_author, "/authors/{id}/"),
+	(labs.get_lab, "/labs/{id}/"),
 ]
 
 
@@ -222,8 +224,7 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"date_from",
 		"date_to",
 		"timeframe",
-		# ?include=lab (author's lab summary): lab data in the MCP server gets its
-		# own spec after the REST API settles, so search_authors leaves it out.
+		# Sent by the tool itself (always `lab`), not an argument.
 		"include",
 	},
 	"/subjects/": {
