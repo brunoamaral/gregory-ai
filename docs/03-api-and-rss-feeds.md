@@ -545,6 +545,7 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `subjects` | comma-separated integers | Articles tagged with **all** the listed subjects (AND), e.g. `?subjects=1,3` |
 | `subjects_any` | comma-separated integers | Articles tagged with **any** of the listed subjects (OR), e.g. `?subjects_any=1,3` |
 | `author_id` | integer | Filter by author |
+| `lab_id` | integer | Papers with the lab's head or one of its members among the authors, each paper once. Collaborators don't count. An unknown lab, or one the caller can't see on `/labs/`, returns no articles (not an error). See [Lab papers](#lab-papers) |
 | `doi` | string | Exact DOI match (case-insensitive) |
 | `pmid` | string | Exact PubMed ID match (digits only), e.g. `?pmid=38812345` |
 | `category_slug` | string | Filter by category slug |
@@ -587,6 +588,7 @@ GET /articles/?relevant=true&ml_threshold=0.9
 GET /articles/?subject_id=1&ml_score_min=0.7&ordering=-ml_score
 GET /articles/?relevant=true&last_days=15
 GET /articles/?team_id=1&search=stem+cells
+GET /articles/?lab_id=606&team_id=1&ordering=-published_date&page_size=5
 GET /articles/?format=csv&all_results=true
 GET /articles/?has_clinical_trials=true
 GET /articles/?published_date_after=2023-01-01&published_date_before=2023-12-31
@@ -641,7 +643,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `author_id`, `doi`, `pmid`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `title`, `summary`, `ordering`, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `author_id`, `lab_id`, `doi`, `pmid`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `title`, `summary`, `ordering`, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `POST /articles/edit/` | `doi` *(req)*, `takeaways`, `summary_plain_english`, `access`, `retracted`, `kind` | Edit an existing article, API key required — see [below](#post-articlesedit) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
@@ -1043,6 +1045,8 @@ Every trial response includes a nested, read-only `sponsor` object resolved from
 
 A lab is a head (a senior author) and the people who repeatedly publish with them, plus the subjects and categories they work on and how much they have published there. Labs are computed from authorship data and corrected by superusers in the admin; how that works is in [author-labs.md](author-labs.md). The API only reads the stored result. It never writes, and it never computes anything per request beyond scoping and filtering.
 
+A lab's papers are listed by `/articles/?lab_id=`; see [Lab papers](#lab-papers).
+
 ### Which labs a caller sees
 
 The usual site rules apply: the caller's visible subjects are the same as on `/articles/`.
@@ -1112,6 +1116,21 @@ With it, each author gets a `lab` summary:
 - `lab` is `null` (present, not absent) for a collaborator, for an author with no lab or pinned to none, and for an author whose lab the caller cannot see, by the visibility rules of [Which labs a caller sees](#which-labs-a-caller-sees). `head` is `null` when the head's author row was deleted.
 - It is a summary: fetch `GET /labs/{id}/` for the members, topics and institution.
 - The cost is one extra query and one subquery per page, whatever the page size.
+
+### Lab papers
+
+`lab_id` on `GET /articles/`, `GET /articles/search/` (a query parameter, or a body field on POST) and `GET /articles/stats/` keeps the papers with the lab's head or one of its members among the authors:
+
+```bash
+GET /articles/?lab_id=412&team_id=1&ordering=-published_date&page_size=5
+GET /articles/?lab_id=412&subject_id=1
+```
+
+- Who counts is the same as for a link's `articles`: every author row with the role head or member, duplicate rows of one person included. Collaborators don't count. A paper by several of the lab's people is listed, and counted, once.
+- So `/articles/?lab_id=412&subject_id=1` counts what `subjects[].articles` of `/labs/412/` counts for subject 1, and `category_id` what `categories[].articles` counts. The link counts are stored, though, and refreshed by each pipeline run (`rebuild_lab_topics`), while `lab_id` reads live data: between runs, new papers or a superuser's membership change can make them differ by a few. For a "view all {n}" label, use the `count` of the `lab_id` query itself.
+- It combines with every other article filter, `ordering`, pagination and `format=csv`, under the usual visibility rules: papers on subjects the caller can't see stay hidden.
+- A non-integer value is `400`. An unknown lab, a lab with no head or members, and a lab the caller can't see on `/labs/` (see [Which labs a caller sees](#which-labs-a-caller-sees)) all return `200` with no articles.
+- The cost is one small query for the lab's people, then an ordinary filter on the article list.
 
 ---
 

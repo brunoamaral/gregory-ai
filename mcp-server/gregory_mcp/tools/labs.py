@@ -111,6 +111,7 @@ async def get_lab(lab_id: int) -> dict:
 	`relevant_articles` means relevant by a human or by AI. `recent_articles`
 	counts papers from the start of the calendar year four years ago onwards.
 	Categories that include a subject outside this site's scope are left out.
+	To list the lab's papers, call `search_articles` with `lab_id`.
 
 	Args:
 		lab_id: The lab's ID, from `search_labs` or an author's `lab`.

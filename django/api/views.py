@@ -1672,6 +1672,7 @@ class ArticleViewSet(
 	- **subjects** - comma-separated list of subject IDs with AND semantics — returns only articles tagged with *all* listed subjects (e.g., `?subjects=1,2`)
 	- **subjects_any** - comma-separated list of subject IDs with OR semantics — returns articles tagged with *any* of the listed subjects (e.g., `?subjects_any=1,2`)
 	- **author_id** - filter by author ID
+	- **lab_id** - papers by the lab's head or members, each once (see /labs/); an unknown or invisible lab returns no articles
 	- **category_slug** - filter by category slug
 	- **category_id** - filter by category ID
 	- **journal_slug** - filter by journal (convert spaces to dashes)
@@ -5227,6 +5228,7 @@ class ArticleSearchView(
 	published_date_after / published_date_before, relevant, subjects,
 	open_access:
 	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
+	- A lab's papers in a subject: /articles/search/?team_id=1&subject_id=1&lab_id=606
 
 	Prefer GET where practical — it's cacheable and linkable. POST exists for
 	`search` strings with long boolean expressions that would exceed practical
