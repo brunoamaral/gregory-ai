@@ -1368,6 +1368,7 @@ paths:
         - **date_from** - filter articles from this date (YYYY-MM-DD)
         - **date_to** - filter articles to this date (YYYY-MM-DD)
         - **timeframe** - 'year', 'month', 'week' (relative to current date)
+        - **include** - `lab` adds a `lab` summary to each author (head or member only)
 
         # Examples:
 
@@ -1452,6 +1453,17 @@ paths:
         schema:
           type: string
         description: Case-insensitive substring match against the given (first) name.
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - lab
+        description: Opt in to extra content. Comma-separated; `lab` adds a `lab`
+          summary to each author (`id`, `name`, `role` head or member, and `head`),
+          or `null` for a collaborator, an author in no lab, or a lab the caller cannot
+          see. Without it the key is absent. Unknown values return 400. Ignored for
+          CSV output.
       - in: query
         name: orcid
         schema:
@@ -1558,6 +1570,7 @@ paths:
         - **date_from** - filter articles from this date (YYYY-MM-DD)
         - **date_to** - filter articles to this date (YYYY-MM-DD)
         - **timeframe** - 'year', 'month', 'week' (relative to current date)
+        - **include** - `lab` adds a `lab` summary to each author (head or member only)
 
         # Examples:
 
@@ -1597,6 +1610,17 @@ paths:
           type: integer
         description: Author ID (Authors.author_id).
         required: true
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - lab
+        description: Opt in to extra content. Comma-separated; `lab` adds a `lab`
+          summary to each author (`id`, `name`, `role` head or member, and `head`),
+          or `null` for a collaborator, an author in no lab, or a lab the caller cannot
+          see. Without it the key is absent. Unknown values return 400. Ignored for
+          CSV output.
       tags:
       - authors
       security:
@@ -1756,7 +1780,8 @@ paths:
         Supports both GET and POST requests with required team_id and subject_id
         parameters. Filtering by full_name is case-insensitive and allows partial
         matches. Pagination and CSV export options mirror the article search
-        endpoint.
+        endpoint. `include=lab` (query parameter, or a body field on POST) adds each
+        author's lab summary; CSV output never carries it.
       parameters:
       - in: query
         name: author_id
@@ -1790,6 +1815,17 @@ paths:
         schema:
           type: string
         description: Case-insensitive substring match against the given (first) name.
+      - in: query
+        name: include
+        schema:
+          type: string
+          enum:
+          - lab
+        description: Opt in to extra content. Comma-separated; `lab` adds a `lab`
+          summary to each author (`id`, `name`, `role` head or member, and `head`),
+          or `null` for a collaborator, an author in no lab, or a lab the caller cannot
+          see. Without it the key is absent. Unknown values return 400. Ignored for
+          CSV output.
       - in: query
         name: orcid
         schema:
@@ -1850,7 +1886,8 @@ paths:
         Supports both GET and POST requests with required team_id and subject_id
         parameters. Filtering by full_name is case-insensitive and allows partial
         matches. Pagination and CSV export options mirror the article search
-        endpoint.
+        endpoint. `include=lab` (query parameter, or a body field on POST) adds each
+        author's lab summary; CSV output never carries it.
       parameters:
       - in: query
         name: format
@@ -1873,6 +1910,15 @@ paths:
                 subject_id:
                   type: integer
                   description: Required. Subject ID to scope authors by.
+                include:
+                  type: string
+                  enum:
+                  - lab
+                  description: Opt in to extra content. Comma-separated; `lab` adds
+                    a `lab` summary to each author (`id`, `name`, `role` head or member,
+                    and `head`), or `null` for a collaborator, an author in no lab,
+                    or a lab the caller cannot see. Without it the key is absent.
+                    Unknown values return 400. Ignored for CSV output.
                 full_name:
                   type: string
                   description: Case-insensitive substring match against the author's
@@ -10121,6 +10167,11 @@ components:
             host the request was made to rather than a single configured domain.
             The scheme follows X-Forwarded-Proto when a proxy sets it.
           readOnly: true
+        lab:
+          allOf:
+          - $ref: '#/components/schemas/AuthorLab'
+          nullable: true
+          readOnly: true
       required:
       - articles_count
       - articles_list
@@ -10128,7 +10179,38 @@ components:
       - country
       - family_name
       - given_name
+      - lab
       - relevant_articles_count
+    AuthorLab:
+      type: object
+      description: 'The author''s lab, a summary: fetch ``/labs/{id}/`` for the rest.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        head:
+          allOf:
+          - $ref: '#/components/schemas/AuthorLabHead'
+          nullable: true
+      required:
+      - head
+      - id
+      - name
+      - role
+    AuthorLabHead:
+      type: object
+      description: The head, as shown inside an author's ``lab`` summary.
+      properties:
+        author_id:
+          type: integer
+        full_name:
+          type: string
+      required:
+      - author_id
+      - full_name
     BasisEnum:
       enum:
       - category
@@ -13355,6 +13437,14 @@ components:
       - subject_id
       - updated_at
       - updated_by
+    RoleEnum:
+      enum:
+      - head
+      - member
+      type: string
+      description: |-
+        * `head` - head
+        * `member` - member
     Source:
       type: object
       properties:

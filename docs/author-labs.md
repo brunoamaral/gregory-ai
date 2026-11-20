@@ -1,6 +1,6 @@
 # Author labs
 
-A guide for superusers. Labs group authors around a senior author, using the author positions that OpenAlex reports for each paper. Everything here lives in the Django admin and is visible to superusers only: no lab data appears in the API, the MCP server, the RSS feeds or any serializer, and editors see none of the lab screens, columns, filters or actions.
+A guide for superusers. Labs group authors around a senior author, using the author positions that OpenAlex reports for each paper. Managing labs happens in the Django admin and is for superusers only: editors see none of the lab screens, columns, filters or actions. Frontends can read labs through the API (see [In the API](#in-the-api)), scoped to the caller's site. No lab data appears in the MCP server or the RSS feeds.
 
 The tables are described in [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#lab). The two commands behind this are `fetch_openalex_authorships` (author positions and institutions) and `rebuild_labs` (the grouping); both run in the pipeline, in that order. A third, `rebuild_lab_topics`, runs later in the pipeline, after relevance is refreshed, and stores which subjects and categories each lab publishes in.
 
@@ -107,3 +107,4 @@ The flag clears itself on a later rebuild once the reason no longer applies.
 - Only the topic links a caller can see are shown, and a lab with none of them is not listed at all. A link you hid in the admin never appears. A category link also needs every one of the category's subjects to be visible to the caller, because its counts cover all of them.
 - `curated` is true for a manual lab: one a superuser created, named, re-headed, re-homed or merged. Computed labs, including ones that need review, are listed too; the review flag, its reason and the notes stay private.
 - Collaborators are never shown, only the head and the members.
+- `GET /authors/?include=lab` (also `/authors/{id}/` and `/authors/search/`) adds a short `lab` summary to each author: the lab's id and name, the author's role (head or member) and the head. It is `null` for a collaborator, an author in no lab, or a lab the caller cannot see, using the same visibility rule as `/labs/`.

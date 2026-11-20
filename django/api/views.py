@@ -50,6 +50,7 @@ from api.serializers import (
 )
 from api.serializers.labs import LabSerializer
 from api.labs import (
+	with_author_lab,
 	lab_display_name_expr,
 	request_scope,
 	visible_category_links,
@@ -1555,6 +1556,19 @@ _INCLUDE_PARAM = OpenApiParameter(
 		"articles, one per organisation on trials (see "
 		"docs/03-api-and-rss-feeds.md). Unknown values return 400. Ignored for "
 		"CSV output."
+	),
+)
+
+_AUTHOR_INCLUDE_PARAM = OpenApiParameter(
+	"include",
+	OpenApiTypes.STR,
+	OpenApiParameter.QUERY,
+	enum=["lab"],
+	description=(
+		"Opt in to extra content. Comma-separated; `lab` adds a `lab` summary to each "
+		"author (`id`, `name`, `role` head or member, and `head`), or `null` for a "
+		"collaborator, an author in no lab, or a lab the caller cannot see. Without it "
+		"the key is absent. Unknown values return 400. Ignored for CSV output."
 	),
 )
 
@@ -4560,8 +4574,8 @@ class LabViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 @extend_schema_view(
-	list=extend_schema(parameters=_AUTHORS_LIST_PARAMS),
-	retrieve=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
+	list=extend_schema(parameters=[*_AUTHORS_LIST_PARAMS, _AUTHOR_INCLUDE_PARAM]),
+	retrieve=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM, _AUTHOR_INCLUDE_PARAM]),
 	coauthors=extend_schema(parameters=[_AUTHOR_ID_PATH_PARAM]),
 	by_team_subject=extend_schema(parameters=_AUTHORS_BY_TEAM_SUBJECT_PARAMS),
 	by_team_category=extend_schema(parameters=_AUTHORS_BY_TEAM_CATEGORY_PARAMS),
@@ -4588,6 +4602,7 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 	- **date_from** - filter articles from this date (YYYY-MM-DD)
 	- **date_to** - filter articles to this date (YYYY-MM-DD)
 	- **timeframe** - 'year', 'month', 'week' (relative to current date)
+	- **include** - `lab` adds a `lab` summary to each author (head or member only)
 
 	# Examples:
 
@@ -4857,7 +4872,7 @@ class AuthorsViewSet(viewsets.ReadOnlyModelViewSet):
 			order_prefix = "-" if order == "desc" else ""
 			queryset = queryset.order_by(f"{order_prefix}{sort_by}")
 
-		return queryset
+		return with_author_lab(queryset, self.request)
 
 	def list(self, request, *args, **kwargs):
 		queryset = self.filter_queryset(self.get_queryset())
@@ -5698,7 +5713,8 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 	Supports both GET and POST requests with required team_id and subject_id
 	parameters. Filtering by full_name is case-insensitive and allows partial
 	matches. Pagination and CSV export options mirror the article search
-	endpoint.
+	endpoint. `include=lab` (query parameter, or a body field on POST) adds each
+	author's lab summary; CSV output never carries it.
 	"""
 
 	serializer_class = AuthorSerializer
@@ -5782,7 +5798,7 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 				)
 			)
 
-			return queryset
+			return with_author_lab(queryset, self.request)
 		except (AttributeError, TypeError, ValueError) as e:
 			# Malformed search params (e.g. a non-string full_name from a JSON
 			# POST body): return no matches, but log it so a genuine bug can't
@@ -5799,6 +5815,11 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 				"properties": {
 					"team_id": {"type": "integer", "description": "Required. Team ID to scope authors by."},
 					"subject_id": {"type": "integer", "description": "Required. Subject ID to scope authors by."},
+					"include": {
+						"type": "string",
+						"enum": ["lab"],
+						"description": _AUTHOR_INCLUDE_PARAM.description,
+					},
 					**filterset_request_schema(AuthorFilter)["properties"],
 				},
 				"required": ["team_id", "subject_id"],
@@ -5835,6 +5856,7 @@ class AuthorSearchView(BodyParamsAsQueryParamsMixin, generics.ListAPIView):
 		self._check_subject_visibility(subject_id)
 		return self.list(request, *args, **kwargs)
 
+	@extend_schema(parameters=[_AUTHOR_INCLUDE_PARAM])
 	def get(self, request, *args, **kwargs):
 		# Validate required parameters for GET requests
 		team_id = request.query_params.get("team_id")

@@ -133,3 +133,19 @@ class LabSerializer(serializers.ModelSerializer):
 		if not stamps:
 			return None
 		return serializers.DateTimeField().to_representation(max(stamps))
+
+
+class AuthorLabHeadSerializer(serializers.Serializer):
+	"""The head, as shown inside an author's ``lab`` summary."""
+
+	author_id = serializers.IntegerField()
+	full_name = serializers.CharField()
+
+
+class AuthorLabSerializer(serializers.Serializer):
+	"""The author's lab, a summary: fetch ``/labs/{id}/`` for the rest."""
+
+	id = serializers.IntegerField()
+	name = serializers.CharField()
+	role = serializers.ChoiceField(choices=["head", "member"])
+	head = AuthorLabHeadSerializer(allow_null=True)

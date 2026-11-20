@@ -40,10 +40,13 @@ a list endpoint resolves once however many rows it serialises.
 from rest_framework.exceptions import ValidationError
 
 #: Values ``?include=`` accepts. Comma-separated, so it can grow. ``claims`` is
-#: for patents only (``/patents/{id}/``) and is ignored by every other endpoint.
-INCLUDE_CHOICES = ("editorial", "claims")
+#: for patents only (``/patents/{id}/``) and ``lab`` for authors only
+#: (``/authors/``, ``/authors/{id}/``, ``/authors/search/``); every other
+#: endpoint ignores a value that is not its own.
+INCLUDE_CHOICES = ("editorial", "claims", "lab")
 
 _INCLUDE_ATTR = "_editorial_requested"
+_LAB_ATTR = "_lab_requested"
 _ORG_IDS_ATTR = "_editorial_org_ids"
 _ORG_NAMES_ATTR = "_editorial_org_names"
 _SITE_IDS_ATTR = "_editorial_site_ids"
@@ -96,6 +99,20 @@ def claims_requested(request) -> bool:
 	if request is None:
 		return False
 	return "claims" in parse_include(request)
+
+
+def lab_requested(request) -> bool:
+	"""True when the caller asked for ``?include=lab`` (author endpoints) and the
+	output is not CSV. Validates ``include`` even for CSV, like ``editorial_requested``."""
+	if request is None:
+		return False
+	cached = getattr(request, _LAB_ATTR, None)
+	if cached is not None:
+		return cached
+	values = parse_include(request)
+	result = "lab" in values and not _is_csv(request)
+	setattr(request, _LAB_ATTR, result)
+	return result
 
 
 def editorial_org_ids(request) -> list:

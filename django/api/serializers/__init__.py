@@ -3,6 +3,7 @@ from typing import Optional
 from drf_spectacular.utils import extend_schema_field, inline_serializer
 from rest_framework import serializers
 from gregory.models import (
+	Lab,
 	Articles,
 	ArticleMeshHeading,
 	Trials,
@@ -47,9 +48,12 @@ from api.editorial import (
 	editorial_site_ids,
 	editorial_sites,
 	is_editor_request,
+	lab_requested,
 	patent_editorial_site_ids,
 	patent_site_contents,
 )
+from api.labs import author_lab_summary, request_scope, visible_labs_q
+from api.serializers.labs import AuthorLabSerializer
 from api.serializers.mixins import ScopedSerializerMixin
 from api.category_counts import category_authors_counts, category_top_authors
 from api.patent_links import visible_patent_trial_links_queryset
@@ -1172,6 +1176,7 @@ class AuthorSerializer(serializers.ModelSerializer):
 	relevant_articles_count = serializers.SerializerMethodField()
 	country = serializers.SerializerMethodField()
 	articles_list = serializers.SerializerMethodField()
+	lab = serializers.SerializerMethodField()
 
 	class Meta:
 		model = Authors
@@ -1193,7 +1198,33 @@ class AuthorSerializer(serializers.ModelSerializer):
 			"articles_count",
 			"relevant_articles_count",
 			"articles_list",
+			"lab",
 		]
+
+	def to_representation(self, instance):
+		ret = super().to_representation(instance)
+		# ``lab`` is declared so it appears in the schema, but only callers who
+		# asked with ?include=lab get the key (absent, not null, otherwise).
+		if not lab_requested(self.context.get("request")):
+			ret.pop("lab", None)
+		return ret
+
+	@extend_schema_field(AuthorLabSerializer(allow_null=True))
+	def get_lab(self, obj):
+		"""The author's lab (``?include=lab`` only): ``id``, ``name``, ``role``
+		(head or member) and ``head``. ``null`` for a collaborator, an author in no
+		lab, or a lab the caller cannot see."""
+		request = self.context.get("request")
+		if not lab_requested(request):
+			return None  # popped in to_representation
+		membership = getattr(obj, "lab_membership", None)  # absent row: AttributeError subclass
+		visible = getattr(obj, "lab_visible", None)
+		if visible is None and membership is not None and membership.lab_id is not None:
+			# Not annotated by the view (a serializer used on its own): ask once.
+			visible = Lab.objects.filter(pk=membership.lab_id).filter(
+				visible_labs_q(request_scope(request))
+			).exists()
+		return author_lab_summary(membership, visible)
 
 	def get_articles_count(self, obj) -> int:
 		# The queryset always annotates a (correctly subject-scoped) article_count,

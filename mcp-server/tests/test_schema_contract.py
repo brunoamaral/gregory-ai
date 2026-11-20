@@ -222,6 +222,9 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"date_from",
 		"date_to",
 		"timeframe",
+		# ?include=lab (author's lab summary): lab data in the MCP server gets its
+		# own spec after the REST API settles, so search_authors leaves it out.
+		"include",
 	},
 	"/subjects/": {
 		"format",
