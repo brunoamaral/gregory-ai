@@ -658,6 +658,8 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Categories | `GET /categories/` | `team_id`, `subject_id`, `subjects_any`, `category_id`, `category_terms`, `get_categories`, `search`, `ordering` (`category_name`, `id`, `article_count_annotated`, `trials_count_annotated`, `authors_count_annotated`), `include_authors`, `max_authors`, `monthly_counts`, `ml_threshold`, `date_from`, `date_to`, `timeframe`, pagination | `ordering=authors_count_annotated` is the expensive sort — see [Categories ordering](#categories-ordering). Each category carries `patents_count_total`, scoped to the caller's [patent scope](#patents), and `medicines_count`, scoped to its [medicine scope](#which-sites-show-medicines) |
 | Categories | `GET /categories/{id}/` | `id` (path) | Includes `category_terms` and `category_exclude_terms` |
 | Categories | `GET /categories/{id}/authors/` | `id` (path), `min_articles`, `sort_by` (`articles_count`, `author_name`), `order` (`asc`, `desc`), `date_from`, `date_to`, `timeframe`, pagination | Author stats for a category, counting only the articles the caller can see — see [Category authors](#category-authors) |
+| Labs | `GET /labs/` | `subject_id`, `category_id`, `search`, `country`, `author_id`, `min_recent_articles`, `ordering` (`name`, `articles`, `relevant_articles`, `recent_articles`, `member_count`), `page` | Research labs with their head, members and topic links. Only labs with a visible topic link; the count orderings and `min_recent_articles` need a topic filter. JSON only, no CSV, no `all_results`. See [Labs](#labs) |
+| Labs | `GET /labs/{id}/` | `id` (path) | One lab, the same object. `404` when the lab has no link the caller can see |
 | Sources | `GET /sources/` | `source_id`, `team_id`, `subject_id`, `active`, `source_for`, `link`, `search`, `ordering` (`name`, `source_id`), pagination | `search` matches name and description; `link` is a case-insensitive substring of the feed or search URL; `active=true\|false` filters on whether the pipeline polls it. `source_for` is `science paper`, `news article`, `trials` or `patents` (patent sources feed the staff-only patent records; see [patents.md](patents.md)). |
 | Sources | `GET /sources/{id}/` | `id` (path) | |
 | Sponsors | `GET /sponsors/` | `sponsor_type`, `subject_id`, `subjects_any`, `include_patent_applicants`, `search`, `ordering` (`name`, `trials_count`), pagination | Canonical, deduplicated sponsor entities — see [Sponsor canonicalization](#sponsor-canonicalization) below. Each row carries `trials_count` and `patents_count`; `include_patent_applicants=true` also lists sponsors that only applied for patents ([Patents](#patents)). `subject_id` / `subjects_any` keep sponsors with at least one trial in the subject(s) |
@@ -1034,6 +1036,67 @@ Every trial response includes a nested, read-only `sponsor` object resolved from
 ```
 
 `sponsor` is `null` when the raw string hasn't been resolved to a canonical entity yet (tracked by the `no_sponsor` count on `/trials/stats/`). Filter trials by canonical sponsor with `sponsor_id` or `sponsor_slug` (both listed above), and browse the full canonical list at `GET /sponsors/`.
+
+---
+
+## Labs
+
+A lab is a head (a senior author) and the people who repeatedly publish with them, plus the subjects and categories they work on and how much they have published there. Labs are computed from authorship data and corrected by superusers in the admin; how that works is in [author-labs.md](author-labs.md). The API only reads the stored result. It never writes, and it never computes anything per request beyond scoping and filtering.
+
+### Which labs a caller sees
+
+The usual site rules apply: the caller's visible subjects are the same as on `/articles/`.
+
+- A **subject link** is visible when it is not hidden and the caller can see its subject.
+- A **category link** is visible when it is not hidden, the category has at least one subject, and the caller can see **every** subject of the category. This is stricter than `/categories/`, which needs only one visible subject. A link's counts include the articles of all the category's subjects, so showing a category that also covers a subject the caller cannot see would leak counts from another site's articles.
+- A lab is **visible** when it has at least one visible link. Any other lab is absent from `/labs/` and the filters, and `GET /labs/{id}/` returns `404` for it. Labs that need review are included.
+- Hidden links, and the lab's links to topics the caller cannot see, never appear in any field.
+- Once a lab is visible, its head and members are shown in full, even if some of their papers are on subjects the caller cannot see. Their article counts are not shown here: `/authors/` scopes those.
+
+### `GET /labs/`
+
+Paginated with `count`, `next`, `previous` and `results` (10 per page, `page`). There is no `all_results` and no CSV.
+
+| Parameter | Meaning |
+|:----------|:--------|
+| `subject_id` | Labs with a visible link to this subject. An unknown or invisible subject gives an empty list |
+| `category_id` | Labs with a visible link to this category (see the category rule above). With `subject_id` too, labs linked to both |
+| `search` | Case-insensitive substring of the lab's name, its head's name or its institution's name |
+| `country` | Institution country code, exact, case-insensitive |
+| `author_id` | The lab this author heads or is a member of. A lab the author only collaborates with does not count |
+| `min_recent_articles` | Labs whose link to the chosen topic has at least this many recent articles. With both topic filters it applies to the category |
+| `ordering` | `name` (default), `articles`, `relevant_articles`, `recent_articles` or `member_count`, each with an optional `-` for descending |
+
+Errors: a non-integer ID or a negative `min_recent_articles` is `400`. So is `min_recent_articles`, or any of the three count orderings, without `subject_id` or `category_id`, because they filter and sort by the chosen topic link's counts (with both filters, the category's). An unknown `ordering` value is also `400` here, unlike the endpoints that ignore it.
+
+`name` sorts by the display name, case-insensitively. Ties always fall back to the lab ID, so pages are stable.
+
+### Fields
+
+```json
+{
+  "id": 412,
+  "name": "Silva lab",
+  "curated": true,
+  "head": {"author_id": 380002, "full_name": "Ana Silva", "orcid": "0000-0002-1825-0097"},
+  "institution": {"name": "Universidade de Lisboa", "country_code": "PT", "openalex_id": "I141596103", "ror": "01c27hj86"},
+  "member_count": 7,
+  "members": [{"author_id": 380115, "full_name": "Rui Costa", "orcid": null}],
+  "subjects": [{"id": 1, "name": "Multiple Sclerosis", "articles": 31, "relevant_articles": 6, "recent_articles": 9, "latest_article_year": 2026}],
+  "categories": [{"id": 14, "name": "Remyelination", "slug": "remyelination", "articles": 12, "relevant_articles": 4, "recent_articles": 3, "latest_article_year": 2025}],
+  "topics_last_changed": "2026-11-19T08:25:11Z"
+}
+```
+
+- `name` is never blank: the lab's own name, else the head's full name followed by "lab", else "Lab" and the ID.
+- `curated` is true when a superuser created, named, re-headed, re-homed or merged the lab. False means a computed grouping. Review state and notes are private.
+- `head` is `null` when the head's author row was deleted. `institution` is `null` when the lab has none. Empty ORCID, OpenAlex, ROR and country values are `null`.
+- `members` are the people with the member role, ordered by papers shared with the head, then author ID. The head is not repeated, collaborators are never listed, and duplicate author rows of one person are listed as stored. `member_count` is the stored count, which counts duplicates once, so it can be lower than the length of `members`.
+- `subjects` and `categories` are the visible links, ranked by relevant articles, then articles, then name.
+- `articles` counts papers in the topic with the head or a member as an author. `relevant_articles` counts those relevant by a human or by AI (the `/articles/?relevant=true` rule, per subject; a category's paper is relevant when it is relevant for one of the category's subjects). `recent_articles` counts papers from the start of the calendar year four years ago onwards, ahead-of-print ones included. `latest_article_year` is the latest publication year.
+- `topics_last_changed` is the latest time a rebuild changed one of the visible links, or `null` when none has set one.
+
+The counts are stored per link and are not recomputed per site. That is why the category rule above hides a category instead of recounting it.
 
 ---
 

@@ -4458,6 +4458,172 @@ paths:
               schema:
                 $ref: '#/components/schemas/EditorError'
           description: ''
+  /labs/:
+    get:
+      operationId: labs_list
+      description: |-
+        Research labs: a head, the people who publish with them, and the subjects and
+        categories they work on, with how much they have published there.
+
+        # Visibility:
+
+        A lab is listed when it has at least one visible link to a subject or a category.
+        A subject link is visible when the caller can see the subject. A category link is
+        visible only when the caller can see **every** subject of the category (stricter than
+        `/categories/`, because a link's counts include the articles of all the category's
+        subjects). Hidden links never appear. A lab that is not visible returns `404`.
+
+        # Query Parameters:
+
+        - **subject_id** - labs with a visible link to this subject
+        - **category_id** - labs with a visible link to this category (both: linked to both)
+        - **search** - lab, head or institution name (case-insensitive)
+        - **country** - institution country code
+        - **author_id** - the lab this author heads or belongs to
+        - **min_recent_articles** - at least this many recent articles on the chosen topic
+          (requires `subject_id` or `category_id`)
+        - **ordering** - `name` (default), `articles`, `relevant_articles`, `recent_articles`,
+          `member_count`, each with an optional `-`. The three count orderings need a topic filter.
+
+        # Pagination:
+        Standard `page` pagination (10 per page); there is no `all_results`. JSON only, no CSV.
+      parameters:
+      - in: query
+        name: author_id
+        schema:
+          type: number
+        description: The lab this author heads or is a member of. A lab the author
+          only collaborates with does not count.
+      - in: query
+        name: category_id
+        schema:
+          type: number
+        description: Labs with a visible link to this category. A category is visible
+          only when the caller can see all of its subjects. With subject_id, labs
+          linked to both.
+      - in: query
+        name: country
+        schema:
+          type: string
+        description: Institution country code (ISO 3166-1 alpha-2), exact, case-insensitive.
+      - in: query
+        name: min_recent_articles
+        schema:
+          type: number
+        description: Keeps labs whose link to the chosen topic has at least this many
+          recent articles. Requires subject_id or category_id (400 otherwise). With
+          both, it applies to the category.
+      - in: query
+        name: ordering
+        schema:
+          type: string
+          enum:
+          - -articles
+          - -member_count
+          - -name
+          - -recent_articles
+          - -relevant_articles
+          - articles
+          - member_count
+          - name
+          - recent_articles
+          - relevant_articles
+        description: |-
+          Sort field, prefix with `-` for descending. Default: name. articles, relevant_articles and recent_articles sort by the chosen topic link's counts and need subject_id or category_id (400 otherwise); with both they use the category's. Ties fall back to the lab ID.
+
+          * `name` - name
+          * `articles` - articles
+          * `relevant_articles` - relevant_articles
+          * `recent_articles` - recent_articles
+          * `member_count` - member_count
+          * `-name` - -name
+          * `-articles` - -articles
+          * `-relevant_articles` - -relevant_articles
+          * `-recent_articles` - -recent_articles
+          * `-member_count` - -member_count
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Case-insensitive substring match against the lab's name, its
+          head's name or its institution's name.
+      - in: query
+        name: subject_id
+        schema:
+          type: number
+        description: Labs with a visible link to this subject. An unknown subject,
+          or one the caller cannot see, gives an empty list. With category_id, labs
+          linked to both.
+      tags:
+      - labs
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLabList'
+          description: ''
+  /labs/{id}/:
+    get:
+      operationId: labs_retrieve
+      description: |-
+        Research labs: a head, the people who publish with them, and the subjects and
+        categories they work on, with how much they have published there.
+
+        # Visibility:
+
+        A lab is listed when it has at least one visible link to a subject or a category.
+        A subject link is visible when the caller can see the subject. A category link is
+        visible only when the caller can see **every** subject of the category (stricter than
+        `/categories/`, because a link's counts include the articles of all the category's
+        subjects). Hidden links never appear. A lab that is not visible returns `404`.
+
+        # Query Parameters:
+
+        - **subject_id** - labs with a visible link to this subject
+        - **category_id** - labs with a visible link to this category (both: linked to both)
+        - **search** - lab, head or institution name (case-insensitive)
+        - **country** - institution country code
+        - **author_id** - the lab this author heads or belongs to
+        - **min_recent_articles** - at least this many recent articles on the chosen topic
+          (requires `subject_id` or `category_id`)
+        - **ordering** - `name` (default), `articles`, `relevant_articles`, `recent_articles`,
+          `member_count`, each with an optional `-`. The three count orderings need a topic filter.
+
+        # Pagination:
+        Standard `page` pagination (10 per page); there is no `all_results`. JSON only, no CSV.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this lab.
+        required: true
+      tags:
+      - labs
+      security:
+      - basicAuth: []
+      - cookieAuth: []
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lab'
+          description: ''
   /medicines/:
     get:
       operationId: medicines_list
@@ -11129,6 +11295,188 @@ components:
         * `relevance` - relevance
         * `trial_link` - trial_link
         * `category` - category
+    Lab:
+      type: object
+      description: |-
+        A lab as the public API shows it. Expects the queryset built by ``LabViewSet``:
+        the visible links and the members arrive prefetched and already scoped to the caller.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        curated:
+          type: boolean
+          readOnly: true
+        head:
+          allOf:
+          - $ref: '#/components/schemas/LabPerson'
+          readOnly: true
+          nullable: true
+        institution:
+          allOf:
+          - $ref: '#/components/schemas/LabInstitution'
+          readOnly: true
+          nullable: true
+        member_count:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: People with the role member, not counting the head. Duplicate
+            author rows of one person count once.
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabMember'
+          readOnly: true
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabSubjectLink'
+          readOnly: true
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabCategoryLink'
+          readOnly: true
+        topics_last_changed:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+      required:
+      - categories
+      - curated
+      - head
+      - id
+      - institution
+      - members
+      - name
+      - subjects
+      - topics_last_changed
+    LabCategoryLink:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+        articles:
+          type: integer
+          readOnly: true
+        relevant_articles:
+          type: integer
+          readOnly: true
+        recent_articles:
+          type: integer
+          readOnly: true
+        latest_article_year:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - articles
+      - id
+      - latest_article_year
+      - name
+      - recent_articles
+      - relevant_articles
+      - slug
+    LabInstitution:
+      type: object
+      properties:
+        name:
+          type: string
+          readOnly: true
+        country_code:
+          type: string
+          readOnly: true
+          nullable: true
+        openalex_id:
+          type: string
+          readOnly: true
+          nullable: true
+        ror:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - country_code
+      - name
+      - openalex_id
+      - ror
+    LabMember:
+      type: object
+      description: A LabMembership row, shown as the person it points to.
+      properties:
+        author_id:
+          type: integer
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - author_id
+      - full_name
+      - orcid
+    LabPerson:
+      type: object
+      description: The lab's head.
+      properties:
+        author_id:
+          type: integer
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        orcid:
+          type: string
+          readOnly: true
+          nullable: true
+      required:
+      - author_id
+      - full_name
+      - orcid
+    LabSubjectLink:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        articles:
+          type: integer
+          readOnly: true
+        relevant_articles:
+          type: integer
+          readOnly: true
+        recent_articles:
+          type: integer
+          readOnly: true
+        latest_article_year:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - articles
+      - id
+      - latest_article_year
+      - name
+      - recent_articles
+      - relevant_articles
     LinkTypeEnum:
       enum:
       - manual
@@ -12251,6 +12599,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedLabList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lab'
     PaginatedMedicineDrugList:
       type: object
       required:

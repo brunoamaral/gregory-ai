@@ -2,9 +2,10 @@ import re
 
 from django_filters import rest_framework as filters
 from django.db import models
-from django.db.models import Exists, F, Func, OuterRef, Q, Value
+from django.db.models import Exists, F, FilteredRelation, Func, OuterRef, Q, Value
 from django.db.models.fields.json import KeyTextTransform
-from django.db.models.functions import Upper
+from django.db.models.functions import Lower, Upper
+from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django import forms
 from datetime import datetime, timedelta
@@ -30,12 +31,15 @@ from gregory.models import (
 	MedicineCategoryAssignment,
 	MedicineEvent,
 	MedicineSubjectLink,
+	Lab,
+	LabMembership,
 )
 from api.medicine_scope import (
 	category_has_subject,
 	tracked_condition,
 	visible_subject_ids_of,
 )
+from api.labs import category_subjects_visible_q, request_scope
 from api.patent_links import visible_patent_trial_links_queryset
 from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -2741,3 +2745,168 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		if not value:
 			return queryset
 		return queryset.filter(medicine__substance_key=value)
+
+
+class _IntegerFilter(filters.NumberFilter):
+	"""A whole-number filter: a non-integer value is a 400, like the other ID filters."""
+
+	field_class = forms.IntegerField
+
+
+LAB_COUNT_ORDERINGS = ("articles", "relevant_articles", "recent_articles")
+LAB_ORDERING_FIELDS = ("name", *LAB_COUNT_ORDERINGS, "member_count")
+LAB_ORDERING_CHOICES = [(f, f) for f in LAB_ORDERING_FIELDS] + [(f"-{f}", f"-{f}") for f in LAB_ORDERING_FIELDS]
+
+# ordering name -> the topic annotation the count orderings sort by
+_LAB_TOPIC_ORDER = {
+	"articles": "topic_articles",
+	"relevant_articles": "topic_relevant_articles",
+	"recent_articles": "topic_recent_articles",
+}
+
+
+class LabFilter(filters.FilterSet):
+	"""Filters and ordering for ``/labs/``.
+
+	The viewset has already restricted the queryset to labs the caller can see and
+	annotated ``display_name``. A topic filter keeps the labs with a *visible* link to
+	that topic and exposes the link's counts (``topic_*``) for ``min_recent_articles``
+	and the count orderings. With both topic filters the category's counts win."""
+
+	subject_id = _IntegerFilter(
+		method="filter_subject_id",
+		label="Subject ID",
+		help_text="Labs with a visible link to this subject. An unknown subject, or one the "
+		"caller cannot see, gives an empty list. With category_id, labs linked to both.",
+	)
+	category_id = _IntegerFilter(
+		method="filter_category_id",
+		label="Category ID",
+		help_text="Labs with a visible link to this category. A category is visible only when "
+		"the caller can see all of its subjects. With subject_id, labs linked to both.",
+	)
+	search = filters.CharFilter(
+		method="filter_search",
+		label="Search",
+		help_text="Case-insensitive substring match against the lab's name, its head's name "
+		"or its institution's name.",
+	)
+	country = filters.CharFilter(
+		method="filter_country",
+		label="Country",
+		help_text="Institution country code (ISO 3166-1 alpha-2), exact, case-insensitive.",
+	)
+	author_id = _IntegerFilter(
+		method="filter_author_id",
+		label="Author ID",
+		help_text="The lab this author heads or is a member of. A lab the author only "
+		"collaborates with does not count.",
+	)
+	min_recent_articles = _IntegerFilter(
+		method="filter_noop",
+		min_value=0,
+		label="Minimum recent articles",
+		help_text="Keeps labs whose link to the chosen topic has at least this many recent "
+		"articles. Requires subject_id or category_id (400 otherwise). With both, it applies "
+		"to the category.",
+	)
+	ordering = filters.ChoiceFilter(
+		method="filter_noop",
+		choices=LAB_ORDERING_CHOICES,
+		label="Ordering",
+		help_text="Sort field, prefix with `-` for descending. Default: name. articles, "
+		"relevant_articles and recent_articles sort by the chosen topic link's counts and "
+		"need subject_id or category_id (400 otherwise); with both they use the category's. "
+		"Ties fall back to the lab ID.",
+	)
+
+	class Meta:
+		model = Lab
+		fields = []
+
+	def _link_alias(self, queryset, alias, relation, ref, value, visible):
+		condition = Q(**{f"{relation}__{ref}": value, f"{relation}__is_hidden": False})
+		queryset = queryset.annotate(**{alias: FilteredRelation(relation, condition=condition)})
+		if not visible:
+			return queryset.none()
+		return queryset.filter(**{f"{alias}__isnull": False})
+
+	def filter_subject_id(self, queryset, name, value):
+		scope = request_scope(self.request)
+		visible = scope is None or value in scope
+		return self._link_alias(queryset, "subject_link", "subject_links", "subject_id", value, visible)
+
+	def filter_category_id(self, queryset, name, value):
+		visible = TeamCategory.objects.filter(pk=value).filter(
+			category_subjects_visible_q(request_scope(self.request))
+		).exists()
+		return self._link_alias(queryset, "category_link", "category_links", "category_id", value, visible)
+
+	def filter_search(self, queryset, name, value):
+		value = (value or "").strip()
+		if not value:
+			return queryset
+		return queryset.filter(
+			Q(display_name__icontains=value)
+			| Q(head__full_name__icontains=value)
+			| Q(institution__name__icontains=value)
+		)
+
+	def filter_country(self, queryset, name, value):
+		return queryset.filter(institution__country_code__iexact=value.strip()) if value else queryset
+
+	def filter_author_id(self, queryset, name, value):
+		return queryset.filter(
+			Exists(
+				LabMembership.objects.filter(
+					lab_id=OuterRef("pk"),
+					author_id=value,
+					role__in=[LabMembership.Role.HEAD, LabMembership.Role.MEMBER],
+				)
+			)
+		)
+
+	def filter_noop(self, queryset, name, value):
+		# min_recent_articles and ordering need the topic annotations, so
+		# filter_queryset applies them once the other filters have run.
+		return queryset
+
+	def filter_queryset(self, queryset):
+		data = self.form.cleaned_data
+		subject_id = data.get("subject_id")
+		category_id = data.get("category_id")
+		min_recent = data.get("min_recent_articles")
+		ordering = data.get("ordering") or "name"
+		field = ordering.lstrip("-")
+		has_topic = subject_id is not None or category_id is not None
+		if not has_topic:
+			if min_recent is not None:
+				raise ValidationError(
+					{"min_recent_articles": "Requires subject_id or category_id."}
+				)
+			if field in LAB_COUNT_ORDERINGS:
+				raise ValidationError(
+					{"ordering": f"Ordering by {field} requires subject_id or category_id."}
+				)
+
+		queryset = super().filter_queryset(queryset)
+
+		if has_topic:
+			link = "category_link" if category_id is not None else "subject_link"
+			queryset = queryset.annotate(
+				topic_articles=F(f"{link}__article_count"),
+				topic_relevant_articles=F(f"{link}__relevant_count"),
+				topic_recent_articles=F(f"{link}__recent_article_count"),
+			)
+			if min_recent is not None:
+				queryset = queryset.filter(topic_recent_articles__gte=min_recent)
+
+		descending = ordering.startswith("-")
+		if field == "name":
+			key = Lower("display_name")
+		elif field == "member_count":
+			key = F("member_count")
+		else:
+			key = F(_LAB_TOPIC_ORDER[field])
+		key = key.desc() if descending else key.asc()
+		return queryset.order_by(key, "pk")

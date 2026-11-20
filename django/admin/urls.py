@@ -29,6 +29,7 @@ from drf_spectacular.views import (
 from api.views import (
 	ArticleViewSet,
 	AuthorsViewSet,
+	LabViewSet,
 	SourceViewSet,
 	TrialViewSet,
 	SponsorViewSet,
@@ -122,6 +123,7 @@ router = routers.DefaultRouter()
 router.register(r"articles", ArticleViewSet)
 router.register(r"authors", AuthorsViewSet, basename="authors")
 router.register(r"categories", CategoryViewSet, basename="categories")
+router.register(r"labs", LabViewSet, basename="labs")
 router.register(r"sources", SourceViewSet)
 router.register(r"trials", TrialViewSet)
 router.register(r"subjects", SubjectsViewSet)
