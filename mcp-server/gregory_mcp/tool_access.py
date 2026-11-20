@@ -6,8 +6,8 @@ editor address") and on the site it is for:
 
 | Sign-in                          | Tools                                        |
 |:---------------------------------|:---------------------------------------------|
-| Anonymous, or public tier        | the ten read tools, exactly as on `/mcp`     |
-| Editor, read-only grant          | the ten read tools plus `get_history`        |
+| Anonymous, or public tier        | the twelve read tools, exactly as on `/mcp`  |
+| Editor, read-only grant          | the twelve read tools plus `get_history`     |
 | Editor with the edit scope       | all of those plus the six write tools        |
 | Editor with the sources scope    | all of those plus the three source tools     |
 
@@ -52,6 +52,8 @@ READ_TOOLS = frozenset(
 		"list_categories",
 		"list_sponsors",
 		"get_stats",
+		"search_labs",
+		"get_lab",
 	}
 )
 #: Offered only on a tenant with `patents_enabled`.

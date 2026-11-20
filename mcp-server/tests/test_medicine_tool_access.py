@@ -68,9 +68,9 @@ def test_the_medicine_tools_are_named():
 	assert MEDICINE_READ_TOOLS == {"search_medicines", "list_medicine_drugs", "get_medicine"}
 	assert MEDICINE_EDIT_TOOL == "set_medicine_link"
 	assert MEDICINE_TOOLS == MEDICINE_READ_TOOLS | {"set_medicine_link"}
-	# The ten and the six stay what they were.
+	# The twelve and the six stay what they were.
 	assert not MEDICINE_TOOLS & (READ_TOOLS | WRITE_TOOLS | PATENT_TOOLS | {HISTORY_TOOL})
-	assert len(READ_TOOLS) == 10 and len(WRITE_TOOLS) == 6
+	assert len(READ_TOOLS) == 12 and len(WRITE_TOOLS) == 6
 
 
 @pytest.mark.parametrize("tenant", [None, _tenant(), _tenant(medicines_enabled=False)])
@@ -127,7 +127,7 @@ async def test_anonymous_mcp_hides_the_medicine_tools_without_medicines(mock_gre
 async def test_anonymous_mcp_lists_the_two_read_tools_with_medicines(mock_gregory):
 	names = await _anonymous_tools(mock_gregory, **WITH)
 	assert names == READ_TOOLS | MEDICINE_READ_TOOLS
-	assert len(names) == 13
+	assert len(names) == 15
 
 
 async def test_no_listed_description_points_at_a_hidden_medicine_tool(mock_gregory):

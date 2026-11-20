@@ -26,7 +26,8 @@ protection here is exposure duration and review, not content reduction:
 
 Not collected on search_authors — an intent phrased around a named person
 would reintroduce exactly what that tool's own carve-out removes (see the
-plan's "not logged at any phase").
+plan's "not logged at any phase"). Not collected on search_labs either: labs
+are named after their head and an institution, so the same reasoning holds.
 """
 
 from __future__ import annotations

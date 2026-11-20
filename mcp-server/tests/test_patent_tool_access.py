@@ -56,7 +56,7 @@ def _editor(*, can_edit: bool = True, tier: str = "editor") -> EditorSession:
 
 def test_patent_tools_are_named():
 	assert PATENT_TOOLS == {"search_patents", "get_patent"}
-	assert not PATENT_TOOLS & READ_TOOLS  # the ten stay the ten
+	assert not PATENT_TOOLS & READ_TOOLS  # the twelve stay the twelve
 
 
 @pytest.mark.parametrize("tenant", [None, _tenant(), _tenant(patents_enabled=False)])
@@ -119,7 +119,7 @@ async def test_no_listed_description_points_at_a_hidden_patent_tool(mock_gregory
 async def test_anonymous_mcp_lists_the_patent_tools_with_patents(mock_gregory):
 	_, names = await _anonymous_tools(mock_gregory, **WITH)
 	assert names == READ_TOOLS | PATENT_TOOLS
-	assert len(names) == 12
+	assert len(names) == 14
 
 
 @pytest.mark.parametrize("tool,args", [("search_patents", {}), ("get_patent", {"patent_id": 1})])

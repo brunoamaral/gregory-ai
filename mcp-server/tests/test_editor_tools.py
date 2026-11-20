@@ -160,11 +160,11 @@ async def test_editor_with_edit_scope_sees_every_tool(django):
 
 
 async def test_tool_counts_per_tier(django):
-	"""The merge keeps the editor list short: 10 for the public tier, 11 with
-	history, 17 with the six write tools."""
-	assert len(await _tool_names("public")) == 10
-	assert len(await _tool_names("readonly")) == 11
-	assert len(await _tool_names("editor")) == 17
+	"""The merge keeps the editor list short: 12 for the public tier, 13 with
+	history, 19 with the six write tools."""
+	assert len(await _tool_names("public")) == 12
+	assert len(await _tool_names("readonly")) == 13
+	assert len(await _tool_names("editor")) == 19
 	assert len(WRITE_TOOLS) == 6
 
 
