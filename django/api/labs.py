@@ -7,10 +7,12 @@ only the subject scoping: hidden links never show in either case. An empty set i
 not ``None``: it means the caller can see nothing.
 """
 
-from django.db.models import CharField, Exists, Func, OuterRef, Q, Value
+from django.db.models import CharField, Exists, Func, OuterRef, Prefetch, Q, Value
 from django.db.models.functions import Cast, Coalesce, Concat, NullIf, Trim
 
-from gregory.models import LabCategory, LabSubject, TeamCategory
+from api.editorial import lab_requested
+from gregory.models import Lab, LabCategory, LabMembership, LabSubject, TeamCategory
+from gregory.utils.author_display import author_name
 
 _CATEGORY_SUBJECTS = TeamCategory.subjects.through
 
@@ -100,3 +102,43 @@ def lab_display_name(lab):
 		if name:
 			return f"{name} lab"
 	return f"Lab {lab.pk}"
+
+
+def author_lab_summary(membership, lab_visible):
+	"""The ``lab`` object of ``/authors/?include=lab``, or None.
+
+	``membership`` is the author's LabMembership (or None), with its lab and the lab's
+	head loaded; ``lab_visible`` says whether the caller can see that lab. A collaborator,
+	an author pinned to no lab and an author whose lab is invisible all give None."""
+	if membership is None or membership.lab_id is None or not lab_visible:
+		return None
+	if membership.role not in ("head", "member"):
+		return None
+	lab = membership.lab
+	head = lab.head
+	return {
+		"id": lab.pk,
+		"name": lab_display_name(lab),
+		"role": membership.role,
+		"head": None if head is None else {"author_id": head.pk, "full_name": author_name(head)},
+	}
+
+
+def with_author_lab(queryset, request):
+	"""Add what ``/authors/?include=lab`` needs to an Authors queryset: the membership,
+	lab and head (one extra query), and whether the caller can see the lab (the same
+	``visible_labs_q`` as ``/labs/``). Nothing is added unless the caller asked."""
+	if not lab_requested(request):
+		return queryset
+	visible = Exists(
+		Lab.objects.filter(memberships__author_id=OuterRef("pk")).filter(
+			visible_labs_q(request_scope(request))
+		)
+	)
+	# The membership is prefetched, not joined, so the paginator's COUNT(*) stays join-free.
+	return queryset.annotate(lab_visible=visible).prefetch_related(
+		Prefetch(
+			"lab_membership",
+			queryset=LabMembership.objects.select_related("lab__head"),
+		)
+	)

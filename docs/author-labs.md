@@ -107,3 +107,4 @@ The flag clears itself on a later rebuild once the reason no longer applies.
 - Only the topic links a caller can see are shown, and a lab with none of them is not listed at all. A link you hid in the admin never appears. A category link also needs every one of the category's subjects to be visible to the caller, because its counts cover all of them.
 - `curated` is true for a manual lab: one a superuser created, named, re-headed, re-homed or merged. Computed labs, including ones that need review, are listed too; the review flag, its reason and the notes stay private.
 - Collaborators are never shown, only the head and the members.
+- `GET /authors/?include=lab` (also `/authors/{id}/` and `/authors/search/`) adds a short `lab` summary to each author: the lab's id and name, the author's role (head or member) and the head. It is `null` for a collaborator, an author in no lab, or a lab the caller cannot see, using the same visibility rule as `/labs/`.

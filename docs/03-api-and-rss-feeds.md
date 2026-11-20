@@ -627,7 +627,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 - **Which site** (articles) is decided by the caller, never by a parameter: an API key gets its own site, a logged-in user gets every site owned by an organisation they belong to, and an anonymous caller gets the `api_public` site resolved from `?site_id=`, `Origin`, `Referer` or the single public site (see [Resolving a site for an anonymous caller](#resolving-a-site-for-an-anonymous-caller)). An API key whose site is missing, or belongs to a different organisation, gets `[]`. `?team_id=` has no effect, and there is no way to request another site's content.
 - **Which organisation** (trials) follows the same rule: an API key gets its own organisation, a logged-in user gets every organisation they belong to, and an anonymous caller gets the organisation that owns the resolved site.
 - Anonymous and API-key callers get 0 or 1 entries; a logged-in user whose organisations own two sites gets 2 on articles.
-- `?include=` is a comma-separated list; `editorial` is the value for articles and trials. `claims` is also accepted but does something only on a single patent (see [Patents](#patents)); on other endpoints it is ignored. An unknown value returns 400.
+- `?include=` is a comma-separated list; `editorial` is the value for articles and trials. `claims` is also accepted but does something only on a single patent (see [Patents](#patents)), and `lab` only on the author endpoints (see [Author lab include](#author-lab-include)); on other endpoints they are ignored. An unknown value returns 400.
 - `?has_takeaways=true|false` filters on the same site(s) (articles) or organisation(s) (trials) and doesn't need `include=editorial`. Empty-string takeaways count as missing.
 - Responses already vary by `Origin` whenever site resolution depends on it, so caches in front of the API must honour `Vary: Origin`.
 
@@ -648,9 +648,9 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Articles | `GET /articles/stats/` | Same filters as `GET /articles/` | Aggregate counts over the filtered set: `total`, `by_access` (NULL folded into `unknown`), `relevant`, `retracted`, `missing_doi`, `by_subject`. Cached for `STATS_CACHE_TTL` seconds |
 | Articles | `GET /articles/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `format`, `all_results`, plus every `GET /articles/` filter (`published_date_after`, `published_date_before`, `relevant`, `subjects`, …) | See [Search endpoints](#search-endpoints) below |
 | Articles | `POST /articles/search/` | Request **body** accepts the same fields as `GET /articles/search/`: `team_id`, `subject_id`, `title`, `summary`, `search`, `ordering`, `page`, `page_size`, `all_results`, plus every `GET /articles/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints) |
-| Authors | `GET /authors/` | `author_id`, `full_name`, `given_name`, `family_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `subjects_any`, `category_slug`, `category_id`, `date_from`, `date_to`, `timeframe`, `page`, `page_size` | `page * page_size` above 10,000 returns 400, same as `/articles/` and `/trials/` — but there is **no** `all_results` bypass here (see [authors-api.md](authors-api.md#pagination-limits)); use `/authors/search/` for bulk/team-scoped reads |
-| Authors | `GET /authors/{id}/` | `id` (path) | |
-| Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results`, plus every `GET /authors/` filter (`author_id`, `orcid`, `country`, `given_name`, `family_name`) | See [Search endpoints](#search-endpoints) below |
+| Authors | `GET /authors/` | `author_id`, `full_name`, `given_name`, `family_name`, `orcid`, `country`, `sort_by`, `order`, `team_id`, `subject_id`, `subjects_any`, `category_slug`, `category_id`, `date_from`, `date_to`, `timeframe`, `include`, `page`, `page_size` | `page * page_size` above 10,000 returns 400, same as `/articles/` and `/trials/` — but there is **no** `all_results` bypass here (see [authors-api.md](authors-api.md#pagination-limits)); use `/authors/search/` for bulk/team-scoped reads |
+| Authors | `GET /authors/{id}/` | `id` (path), `include` | `include=lab` adds the author's [lab](#author-lab-include) |
+| Authors | `GET /authors/search/` | `team_id` *(req)*, `subject_id` *(req)*, `full_name`, `format`, `all_results`, `include`, plus every `GET /authors/` filter (`author_id`, `orcid`, `country`, `given_name`, `family_name`) | See [Search endpoints](#search-endpoints) below |
 | Authors | `POST /authors/search/` | Request **body** accepts the same fields as `GET /authors/search/`: `team_id`, `subject_id`, `full_name`, `page`, `page_size`, `all_results`, plus every `GET /authors/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints). Results are always ordered by `author_id`; this endpoint has no `ordering` support |
 | Authors | `GET /authors/by_team_subject/` | `team_id` *(req)*, `subject_id` *(req)* | |
 | Authors | `GET /authors/by_team_category/` | `team_id` *(req)*, `category_slug` or `category_id` *(req)* | |
@@ -1097,6 +1097,21 @@ Errors: a non-integer ID or a negative `min_recent_articles` is `400`. So is `mi
 - `topics_last_changed` is the latest time a rebuild changed one of the visible links, or `null` when none has set one.
 
 The counts are stored per link and are not recomputed per site. That is why the category rule above hides a category instead of recounting it.
+
+### Author lab include
+
+`GET /authors/`, `GET /authors/{id}/` and `GET /authors/search/` (a query parameter, or an `include` field in the POST body) accept `?include=lab`. It is off by default: without it the `lab` key is absent from every author and nothing extra is queried. It can be combined with the other values (`?include=editorial,lab`), and an unknown value is `400`. CSV output never carries it.
+
+With it, each author gets a `lab` summary:
+
+```json
+"lab": {"id": 412, "name": "Silva lab", "role": "member", "head": {"author_id": 380002, "full_name": "Ana Silva"}}
+```
+
+- `role` is `head` or `member`. `name` follows the same rule as `/labs/`, so the two always agree.
+- `lab` is `null` (present, not absent) for a collaborator, for an author with no lab or pinned to none, and for an author whose lab the caller cannot see, by the visibility rules of [Which labs a caller sees](#which-labs-a-caller-sees). `head` is `null` when the head's author row was deleted.
+- It is a summary: fetch `GET /labs/{id}/` for the members, topics and institution.
+- The cost is one extra query and one subquery per page, whatever the page size.
 
 ---
 
