@@ -39,7 +39,7 @@ from api.medicine_scope import (
 	tracked_condition,
 	visible_subject_ids_of,
 )
-from api.labs import category_subjects_visible_q, request_scope
+from api.labs import category_subjects_visible_q, head_name_expr, request_scope
 from api.patent_links import visible_patent_trial_links_queryset
 from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -2846,9 +2846,10 @@ class LabFilter(filters.FilterSet):
 		value = (value or "").strip()
 		if not value:
 			return queryset
-		return queryset.filter(
+		# head_name falls back to given plus family name, like the display name does.
+		return queryset.alias(head_name=head_name_expr()).filter(
 			Q(display_name__icontains=value)
-			| Q(head__full_name__icontains=value)
+			| Q(head_name__icontains=value)
 			| Q(institution__name__icontains=value)
 		)
 

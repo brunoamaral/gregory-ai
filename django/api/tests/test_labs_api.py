@@ -15,7 +15,13 @@ from django.test.utils import CaptureQueriesContext
 from django.utils.timezone import now
 from rest_framework.test import APIClient, APIRequestFactory
 
-from api.labs import visible_category_links, visible_labs_q, visible_subject_links
+from api.labs import (
+	lab_display_name,
+	lab_display_name_expr,
+	visible_category_links,
+	visible_labs_q,
+	visible_subject_links,
+)
 from api.models import APIAccessScheme
 from api.tests.visibility_helpers import private_site_publishing, publish_subjects
 from api.views import LabViewSet
@@ -556,6 +562,19 @@ class FilterTests(LabApiBase):
 
 	def test_search_matches_head_name_even_when_lab_is_named(self):
 		self.assertEqual(self.ids(self.get("/labs/", search="silva")), [self.lab_a.id])
+
+	def test_search_matches_a_head_with_no_stored_full_name(self):
+		Authors.objects.filter(pk=self.head_a.pk).update(full_name="")
+		self.assertEqual(self.ids(self.get("/labs/", search="silva")), [self.lab_a.id])
+
+	def test_the_python_and_sql_names_agree_on_a_blank_full_name(self):
+		head = make_author(given="Rui", family="Costa")
+		Authors.objects.filter(pk=head.pk).update(full_name="  ")
+		lab = make_lab(head=head)
+		annotated = Lab.objects.annotate(display_name=lab_display_name_expr()).get(pk=lab.pk)
+		lab.head.refresh_from_db()
+		self.assertEqual(annotated.display_name, "Rui Costa lab")
+		self.assertEqual(lab_display_name(lab), "Rui Costa lab")
 
 	def test_country_is_exact_and_case_insensitive(self):
 		self.assertEqual(self.ids(self.get("/labs/", country="pt")), [self.lab_a.id])

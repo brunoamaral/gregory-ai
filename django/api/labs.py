@@ -11,7 +11,6 @@ from django.db.models import CharField, Exists, Func, OuterRef, Q, Value
 from django.db.models.functions import Cast, Coalesce, Concat, NullIf, Trim
 
 from gregory.models import LabCategory, LabSubject, TeamCategory
-from gregory.utils.author_display import author_name
 
 _CATEGORY_SUBJECTS = TeamCategory.subjects.through
 
@@ -95,7 +94,9 @@ def lab_display_name(lab):
 	if lab.name and lab.name.strip():
 		return lab.name.strip()
 	if lab.head_id:
-		name = author_name(lab.head).strip()
+		# Trim before falling back, as head_name_expr does in SQL.
+		head = lab.head
+		name = (head.full_name or "").strip() or f"{head.given_name} {head.family_name}".strip()
 		if name:
 			return f"{name} lab"
 	return f"Lab {lab.pk}"
