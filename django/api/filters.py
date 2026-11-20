@@ -39,7 +39,7 @@ from api.medicine_scope import (
 	tracked_condition,
 	visible_subject_ids_of,
 )
-from api.labs import category_subjects_visible_q, head_name_expr, request_scope
+from api.labs import category_subjects_visible_q, head_name_expr, request_scope, visible_labs_q
 from api.patent_links import visible_patent_trial_links_queryset
 from gregory.utils.patent_numbers import publication_number_q
 from api.editorial import editorial_org_ids, editorial_site_ids
@@ -96,6 +96,12 @@ def _like_prefix(prefix):
 	Escapes LIKE's own wildcards so a typed ``_`` or ``%`` is literal."""
 	escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 	return escaped + "%"
+
+
+class _IntegerFilter(filters.NumberFilter):
+	"""A whole-number filter: a non-integer value is a 400, like the other ID filters."""
+
+	field_class = forms.IntegerField
 
 
 class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
@@ -358,6 +364,15 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Author ID",
 		help_text="Filter by author ID (see /authors/).",
 	)
+	lab_id = _IntegerFilter(
+		method="filter_lab_id",
+		label="Lab ID",
+		help_text=(
+			"Papers with the lab's head or one of its members among the authors (see "
+			"/labs/), each paper once. Collaborators do not count. An unknown lab, or one "
+			"/labs/ does not show the caller, returns no articles."
+		),
+	)
 	doi = filters.CharFilter(
 		method="filter_doi",
 		label="DOI",
@@ -555,6 +570,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"summary",
 			"search",
 			"author_id",
+			"lab_id",
 			"doi",
 			"pmid",
 			"category_slug",
@@ -577,6 +593,31 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"published_date_after",
 			"published_date_before",
 		]
+
+	def filter_lab_id(self, queryset, name, value):
+		"""Papers by the lab's head or members, matching the lab's ``articles`` counts on
+		/labs/ (see ``gregory.services.lab_topics``): every author row with the role head
+		or member counts, duplicates of one person included, and a paper counts once.
+
+		The author IDs are fetched first and passed as a list: a few dozen rows, and
+		Postgres plans the literal list far better than a membership subquery (about
+		3 ms against 500 ms on a large lab). ``pk__in`` keeps each paper once without a
+		DISTINCT. A lab the caller cannot see on /labs/ matches nothing."""
+		author_ids = list(
+			LabMembership.objects.filter(
+				lab__in=Lab.objects.filter(pk=value).filter(
+					visible_labs_q(request_scope(self.request))
+				),
+				role__in=[LabMembership.Role.HEAD, LabMembership.Role.MEMBER],
+			).values_list("author_id", flat=True)
+		)
+		if not author_ids:
+			return queryset.none()
+		return queryset.filter(
+			pk__in=Articles.authors.through.objects.filter(authors_id__in=author_ids).values(
+				"articles_id"
+			)
+		)
 
 	def filter_doi(self, queryset, name, value):
 		"""
@@ -2745,12 +2786,6 @@ class MedicineEventFilter(MedicineLinkFilterMixin, filters.FilterSet):
 		if not value:
 			return queryset
 		return queryset.filter(medicine__substance_key=value)
-
-
-class _IntegerFilter(filters.NumberFilter):
-	"""A whole-number filter: a non-integer value is a 400, like the other ID filters."""
-
-	field_class = forms.IntegerField
 
 
 LAB_COUNT_ORDERINGS = ("articles", "relevant_articles", "recent_articles")
