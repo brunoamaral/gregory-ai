@@ -1,6 +1,6 @@
 # Author labs
 
-A guide for superusers. Labs group authors around a senior author, using the author positions that OpenAlex reports for each paper. Everything here lives in the Django admin and is visible to superusers only: no lab data appears in the API, the MCP server, the RSS feeds or any serializer, and editors see none of the lab screens, columns, filters or actions.
+A guide for superusers. Labs group authors around a senior author, using the author positions that OpenAlex reports for each paper. Managing labs happens in the Django admin and is for superusers only: editors see none of the lab screens, columns, filters or actions. Frontends can read labs through the API (see [In the API](#in-the-api)), scoped to the caller's site. No lab data appears in the MCP server or the RSS feeds.
 
 The tables are described in [02.1-database-tables-and-fields.md](02.1-database-tables-and-fields.md#lab). The two commands behind this are `fetch_openalex_authorships` (author positions and institutions) and `rebuild_labs` (the grouping); both run in the pipeline, in that order. A third, `rebuild_lab_topics`, runs later in the pipeline, after relevance is refreshed, and stores which subjects and categories each lab publishes in.
 
