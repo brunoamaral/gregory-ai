@@ -23,7 +23,7 @@ from django.utils.text import slugify
 from rest_framework.test import APIClient
 
 from api.tests.visibility_helpers import publish_subjects
-from gregory.models import Articles, Patents, Subject, Team, Trials
+from gregory.models import Articles, OrganizationApiSettings, Patents, Subject, Team, Trials
 from mcpauth.tests.helpers import make_org
 
 MOMENTS = {
@@ -39,6 +39,8 @@ class DiscoveryDateFilterTests(TestCase):
 	@classmethod
 	def setUpTestData(cls):
 		org = make_org("Discovery Org")
+		# The search endpoints also need the team's organisation to be visible.
+		OrganizationApiSettings.objects.filter(organization=org).update(make_api_public=True)
 		team = Team.objects.create(organization=org, name="Discovery team", slug="discovery-team")
 		cls.subject = Subject.objects.create(
 			team=team, subject_name="Discovery Subject", subject_slug="discovery-subject"
@@ -53,12 +55,14 @@ class DiscoveryDateFilterTests(TestCase):
 				title=f"article {key}", link=f"https://a.test/{key}"
 			)
 			article.subjects.add(cls.subject)
+			article.teams.add(team)  # the search endpoints filter on team_id
 			Articles.objects.filter(pk=article.pk).update(discovery_date=moment)
 
 			trial = Trials.objects.create(
 				title=f"trial {key}", link=f"https://t.test/{slugify(key)}"
 			)
 			trial.subjects.add(cls.subject)
+			trial.teams.add(team)
 			Trials.objects.filter(pk=trial.pk).update(discovery_date=moment)
 
 			patent = Patents.objects.create(title=f"patent {key}")
@@ -183,7 +187,21 @@ class DiscoveryDateFilterTests(TestCase):
 				self.assertEqual(response.data["total"], 3)
 
 	def test_invalid_values_return_400(self):
-		bad = ["2026-02-30", "2026-13-01", "yesterday", "17/11/2026", "2026-11-17T25:00:00Z"]
+		bad = [
+			"2026-02-30",
+			"2026-13-01",
+			"yesterday",
+			"17/11/2026",
+			"2026-11-17T25:00:00Z",
+			# Django's own parsers accept these; the filter does not.
+			"20261117",
+			"2026-W47",
+			"2026-1-7",
+			"2026-11-17T08",
+			"\u0662\u0660\u0662\u0666-\u0661\u0661-\u0661\u0667",  # Arabic-Indic digits
+			# A '+' offset sent unencoded arrives as a space.
+			"2026-11-17T09:05:00 01:00",
+		]
 		for path in ("/articles/", "/trials/", "/patents/"):
 			for value in bad:
 				for param in ("discovery_date_after", "discovery_date_before"):
@@ -191,3 +209,51 @@ class DiscoveryDateFilterTests(TestCase):
 						response = self.client.get(path, {"site_id": self.site.pk, param: value})
 						self.assertEqual(response.status_code, 400, response.content)
 						self.assertIn(param, response.data)
+
+	def test_last_representable_day_is_not_a_500(self):
+		# 9999-12-31 has no next midnight to stop before; it means "no upper
+		# limit" rather than an overflow.
+		for path in ("/articles/", "/trials/", "/patents/"):
+			with self.subTest(path=path):
+				response = self.client.get(
+					path, {"site_id": self.site.pk, "discovery_date_before": "9999-12-31"}
+				)
+				self.assertEqual(response.status_code, 200, response.content)
+				self.assertEqual(response.data["count"], len(MOMENTS))
+
+	def test_published_date_before_last_representable_day_is_not_a_500(self):
+		response = self.client.get(
+			"/articles/", {"site_id": self.site.pk, "published_date_before": "9999-12-31"}
+		)
+		self.assertEqual(response.status_code, 200, response.content)
+
+	def test_post_search_body(self):
+		for path, noun in (("/articles/search/", "article"), ("/trials/search/", "trial")):
+			with self.subTest(path=path):
+				response = self.client.post(
+					path,
+					{
+						"team_id": self.subject.team_id,
+						"subject_id": self.subject.pk,
+						"site_id": self.site.pk,
+						"discovery_date_after": "2026-11-17",
+						"discovery_date_before": "2026-11-23",
+					},
+					format="json",
+				)
+				self.assertEqual(response.status_code, 200, response.content)
+				self.assertEqual(
+					sorted(r["title"][len(noun) + 1:] for r in response.data["results"]),
+					sorted(["tue_early", "tue_send", "mon_end"]),
+				)
+				bad = self.client.post(
+					path,
+					{
+						"team_id": self.subject.team_id,
+						"subject_id": self.subject.pk,
+						"site_id": self.site.pk,
+						"discovery_date_after": "2026-W47",
+					},
+					format="json",
+				)
+				self.assertEqual(bad.status_code, 400, bad.content)

@@ -1704,7 +1704,7 @@ class ArticleViewSet(
 	Invalid or non-ISO-8601 dates return **400 Bad Request**.
 	- **published_date_after** - articles published on or after this date (YYYY-MM-DD, inclusive)
 	- **published_date_before** - articles published on or before this date (YYYY-MM-DD, inclusive — the full day is included)
-	- **discovery_date_after** / **discovery_date_before** - articles Gregory first found in this window: a date (YYYY-MM-DD, whole days) or an ISO 8601 datetime (exact), both inclusive
+	- **discovery_date_after** / **discovery_date_before** - articles Gregory first found in this window: a date (YYYY-MM-DD) or an ISO 8601 datetime, inclusive; a date `_before` includes the whole day
 
 	# Stats Endpoint:
 	`GET /articles/stats/` returns aggregate counts over the filtered queryset: `total`
@@ -2750,7 +2750,7 @@ class TrialViewSet(
 	Invalid or non-ISO-8601 dates return **400 Bad Request**.
 	- **date_registration_after** - trials registered on or after this date (YYYY-MM-DD, inclusive)
 	- **date_registration_before** - trials registered on or before this date (YYYY-MM-DD, inclusive)
-	- **discovery_date_after** / **discovery_date_before** - trials Gregory first found in this window: a date (YYYY-MM-DD, whole days) or an ISO 8601 datetime (exact), both inclusive
+	- **discovery_date_after** / **discovery_date_before** - trials Gregory first found in this window: a date (YYYY-MM-DD) or an ISO 8601 datetime, inclusive; a date `_before` includes the whole day
 
 	# Examples:
 	- All trials as CSV: `/trials/?format=csv&all_results=true`

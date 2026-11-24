@@ -9,7 +9,7 @@ from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django import forms
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from drf_spectacular.utils import extend_schema_field
 from gregory.models import (
 	Articles,
@@ -123,7 +123,14 @@ class _DateOrDateTimeField(forms.Field):
 	datetime, so the filter can tell a whole day from an exact moment. A
 	datetime without an offset is read in settings.TIME_ZONE (UTC). Anything
 	else, including an impossible date such as 2026-02-30, is a 400.
+
+	Django's parsers accept far more than that (``20261117``, ISO week dates
+	such as ``2026-W47``, ``2026-11-17T08``, non-ASCII digits), so the shape is
+	checked first: a week date would otherwise be read silently as its Monday.
 	"""
+
+	_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+	_DATETIME_RE = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", re.ASCII)
 
 	default_error_messages = {
 		"invalid": "Enter a date (YYYY-MM-DD) or an ISO 8601 datetime.",
@@ -133,11 +140,12 @@ class _DateOrDateTimeField(forms.Field):
 		if value in self.empty_values:
 			return None
 		value = str(value).strip()
+		moment = None
 		try:
-			day = parse_date(value)
-			if day is not None:
-				return (day, None)
-			moment = parse_datetime(value)
+			if self._DATE_RE.fullmatch(value):
+				return (parse_date(value), None)
+			if self._DATETIME_RE.match(value):
+				moment = parse_datetime(value)
 		except ValueError:
 			moment = None
 		if moment is None:
@@ -181,6 +189,9 @@ class DateOrDateTimeFilter(filters.Filter):
 			start = _start_of_day(day) if day is not None else moment
 			return qs.filter(**{f"{self.field_name}__gte": start})
 		if day is not None:
+			if day == date.max:
+				# No next midnight to stop before: the whole calendar is in range.
+				return qs.filter(**{f"{self.field_name}__isnull": False})
 			end = _start_of_day(day + timedelta(days=1))
 			return qs.filter(**{f"{self.field_name}__lt": end})
 		return qs.filter(**{f"{self.field_name}__lte": moment})
@@ -991,6 +1002,9 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 	def filter_published_date_before(self, queryset, name, value):
 		# Strict less-than start of next day keeps whole-day inclusive semantics
 		# while allowing the btree index on published_date to be used.
+		if value == date.max:
+			# 9999-12-31 has no next day; everything dated is on or before it.
+			return queryset.filter(published_date__isnull=False)
 		next_day = value + timedelta(days=1)
 		end = timezone.make_aware(datetime(next_day.year, next_day.month, next_day.day))
 		return queryset.filter(published_date__lt=end)
