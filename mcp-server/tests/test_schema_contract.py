@@ -117,6 +117,12 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"subjects_any",  # multi-subject AND/OR; subject_id covers the common case
 		"week",
 		"year",  # legacy ISO-week filtering; published_date_after/before covers this better
+		# Fixed discovery-date window (weekly-digest spec, PR #1000) for
+		# frontend "last week's research" pages that need a cacheable,
+		# repeatable URL. A model asking for recent work is served by
+		# `last_days` and `published_date_after`; revisit if an MCP use case appears.
+		"discovery_date_after",
+		"discovery_date_before",
 		# Decision E, MCP multi-tenancy audit (2026-09-16): site-scoped API
 		# visibility (#858-#868) means Django now scopes every caller by
 		# site first, so team_id can no longer widen a result set -- it had
@@ -138,6 +144,13 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"family_id",
 		"site_id",
 		"include_public",
+		# Fixed discovery-date window (weekly-digest spec, PR #1000) for
+		# frontend "last week's research" pages that need a cacheable,
+		# repeatable URL. A model asking for recent work is served by
+		# `publication_date_after` (discovery_date is import time for
+		# patents, so it is the wrong signal for "new" anyway); revisit if an MCP use case appears.
+		"discovery_date_after",
+		"discovery_date_before",
 	},
 	# Not exposed by search_medicines. The three flag filters are left out to keep
 	# the tool small: every row carries `advanced_therapy`, `orphan_medicine` and
@@ -180,6 +193,12 @@ KNOWN_UNEXPOSED_PARAMS = {
 		"subjects",
 		"subjects_any",
 		"trial_id",  # redundant with get_trial(trial_id)
+		# Fixed discovery-date window (weekly-digest spec, PR #1000) for
+		# frontend "last week's research" pages that need a cacheable,
+		# repeatable URL. A model asking for recent work is served by
+		# `date_registration_after`; revisit if an MCP use case appears.
+		"discovery_date_after",
+		"discovery_date_before",
 		"source_register",  # niche — registry name (e.g. "ClinicalTrials.gov")
 		"internal_number",  # niche — WHO internal number
 		"identifiers",  # generic multi-registry filter; nct covers the common case
