@@ -598,7 +598,9 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"marked not relevant stays out however confident the models are "
 			"(the rule the RSS feeds use). Scoped like relevant=. On the list "
 			"it has no effect without relevant=; on /articles/stats/ it also "
-			"sets the rule behind the relevant count. Invalid values return 400."
+			"sets the rule behind the relevant count. ml_threshold is a separate "
+			"filter on what the models say, so adding it also drops articles "
+			"only an editor marked relevant. Invalid values return 400."
 		),
 	)
 	ml_threshold = filters.NumberFilter(
@@ -829,6 +831,14 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		except (ValueError, TypeError):
 			return default  # Use default if conversion fails
 
+	def _relevance_rule_is_editorial(self):
+		"""Whether ``relevance_rule=editorial`` was asked for. Read from the
+		request, like ml_threshold, because /articles/stats/ calls
+		filter_relevant directly on an unvalidated filter instance. An invalid
+		value never gets this far: relevance_rule's ChoiceFilter turns it into
+		a 400 when the list or stats queryset is filtered first."""
+		return self.request.GET.get("relevance_rule") == "editorial"
+
 	def _request_subject_ids(self):
 		"""
 		Collect the subject IDs the current request already scopes the query
@@ -894,13 +904,10 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		"""
 		subject_ids = self._request_subject_ids()
 		threshold = self._parse_ml_threshold(0.8)
-		# Read from the request, like ml_threshold, because /articles/stats/
-		# calls this method directly on an unvalidated filter instance. An
-		# invalid value never gets here: relevance_rule's ChoiceFilter turns
-		# it into a 400 when the list or stats queryset is filtered first.
-		editorial = self.request.GET.get("relevance_rule") == "editorial"
 		relevant_q = relevant_articles_q(
-			subject_ids, threshold, editor_verdict_wins=editorial
+			subject_ids,
+			threshold,
+			editor_verdict_wins=self._relevance_rule_is_editorial(),
 		)
 
 		if value:
