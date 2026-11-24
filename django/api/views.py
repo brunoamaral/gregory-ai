@@ -1704,6 +1704,7 @@ class ArticleViewSet(
 	Invalid or non-ISO-8601 dates return **400 Bad Request**.
 	- **published_date_after** - articles published on or after this date (YYYY-MM-DD, inclusive)
 	- **published_date_before** - articles published on or before this date (YYYY-MM-DD, inclusive — the full day is included)
+	- **discovery_date_after** / **discovery_date_before** - articles Gregory first found in this window: a date (YYYY-MM-DD, whole days) or an ISO 8601 datetime (exact), both inclusive
 
 	# Stats Endpoint:
 	`GET /articles/stats/` returns aggregate counts over the filtered queryset: `total`
@@ -2749,6 +2750,7 @@ class TrialViewSet(
 	Invalid or non-ISO-8601 dates return **400 Bad Request**.
 	- **date_registration_after** - trials registered on or after this date (YYYY-MM-DD, inclusive)
 	- **date_registration_before** - trials registered on or before this date (YYYY-MM-DD, inclusive)
+	- **discovery_date_after** / **discovery_date_before** - trials Gregory first found in this window: a date (YYYY-MM-DD, whole days) or an ISO 8601 datetime (exact), both inclusive
 
 	# Examples:
 	- All trials as CSV: `/trials/?format=csv&all_results=true`
@@ -3477,6 +3479,7 @@ class PatentViewSet(
 	- **applicant** - case-insensitive substring of an applicant's published name; for applicants not linked to a sponsor
 	- **priority_date_after** / **priority_date_before** - earliest priority date, inclusive, `YYYY-MM-DD` (invalid dates return 400)
 	- **publication_date_after** / **publication_date_before** - earliest publication date, inclusive
+	- **discovery_date_after** / **discovery_date_before** - when Gregory imported the family (a date or an ISO 8601 datetime, inclusive); backfills make this "imported", not "new"
 	- **has_grant** - `true`/`false`; a heuristic on kind codes, not legal status
 	- **cpc** - CPC class prefix match against any of the family's classes; comma-separated, OR (`?cpc=A61K31,A61P25/28`)
 	- **publication_number** - any member publication, in any common format (`EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`); without a kind code (`EP4123456`) it matches every kind. Comma-separated, OR
@@ -5225,7 +5228,8 @@ class ArticleSearchView(
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, article_id)
 
 	Every other ArticleFilter field also applies here, e.g.
-	published_date_after / published_date_before, relevant, subjects,
+	published_date_after / published_date_before, discovery_date_after /
+	discovery_date_before, relevant, subjects,
 	open_access:
 	- Published in 2023: /articles/search/?team_id=1&subject_id=1&published_date_after=2023-01-01&published_date_before=2023-12-31
 	- A lab's papers in a subject: /articles/search/?team_id=1&subject_id=1&lab_id=606
@@ -5484,7 +5488,8 @@ class TrialSearchView(
 	- ordering: Order results by field (e.g., -discovery_date, -published_date, title, trial_id, -last_updated)
 
 	Every other TrialFilter field also applies here, e.g.
-	date_registration_after / date_registration_before, has_results,
+	date_registration_after / date_registration_before, discovery_date_after /
+	discovery_date_before, has_results,
 	phase_normalized, country, sponsor_id:
 	- Registered in 2024: /trials/search/?team_id=1&subject_id=1&date_registration_after=2024-01-01&date_registration_before=2024-12-31
 

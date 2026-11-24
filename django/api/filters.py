@@ -7,8 +7,10 @@ from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Lower, Upper
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 from django import forms
 from datetime import datetime, timedelta
+from drf_spectacular.utils import extend_schema_field
 from gregory.models import (
 	Articles,
 	Trials,
@@ -112,6 +114,103 @@ class ChoiceInFilter(filters.BaseInFilter, filters.ChoiceFilter):
 	supplies the CSV splitting; ChoiceFilter validates each item against `choices`.
 	Backward compatible: a lone value still works.
 	"""
+
+
+class _DateOrDateTimeField(forms.Field):
+	"""A ``YYYY-MM-DD`` date or an ISO 8601 datetime.
+
+	Cleans to ``(date, None)`` for a date and ``(None, aware datetime)`` for a
+	datetime, so the filter can tell a whole day from an exact moment. A
+	datetime without an offset is read in settings.TIME_ZONE (UTC). Anything
+	else, including an impossible date such as 2026-02-30, is a 400.
+	"""
+
+	default_error_messages = {
+		"invalid": "Enter a date (YYYY-MM-DD) or an ISO 8601 datetime.",
+	}
+
+	def to_python(self, value):
+		if value in self.empty_values:
+			return None
+		value = str(value).strip()
+		try:
+			day = parse_date(value)
+			if day is not None:
+				return (day, None)
+			moment = parse_datetime(value)
+		except ValueError:
+			moment = None
+		if moment is None:
+			raise forms.ValidationError(self.error_messages["invalid"], code="invalid")
+		if timezone.is_naive(moment):
+			moment = timezone.make_aware(moment)
+		return (None, moment)
+
+
+def _start_of_day(day):
+	return timezone.make_aware(datetime(day.year, day.month, day.day))
+
+
+class DateOrDateTimeFilter(filters.Filter):
+	"""Bound a datetime column by a date or a datetime.
+
+	``bound="after"`` is inclusive: from the start of the day, or from the exact
+	moment. ``bound="before"`` includes the whole day for a date (strictly before
+	the next midnight, which keeps the column's btree index usable) and is
+	inclusive of the exact moment for a datetime.
+	"""
+
+	field_class = _DateOrDateTimeField
+
+	def __init__(self, *args, bound, **kwargs):
+		if bound not in ("after", "before"):
+			raise ValueError("bound must be 'after' or 'before'")
+		self.bound = bound
+		super().__init__(*args, **kwargs)
+		# A schema override makes drf-spectacular skip help_text, so carry it
+		# in the override itself. Plain string: it takes a date or a datetime.
+		extend_schema_field(
+			{"type": "string", "description": self.extra.get("help_text", "")}
+		)(self)
+
+	def filter(self, qs, value):
+		if value is None:
+			return qs
+		day, moment = value
+		if self.bound == "after":
+			start = _start_of_day(day) if day is not None else moment
+			return qs.filter(**{f"{self.field_name}__gte": start})
+		if day is not None:
+			end = _start_of_day(day + timedelta(days=1))
+			return qs.filter(**{f"{self.field_name}__lt": end})
+		return qs.filter(**{f"{self.field_name}__lte": moment})
+
+
+def _discovery_date_filters(noun):
+	"""The ``discovery_date_after`` / ``discovery_date_before`` pair, worded for
+	``noun`` (e.g. "Articles")."""
+	after = DateOrDateTimeFilter(
+		field_name="discovery_date",
+		bound="after",
+		label="Discovered on or after (YYYY-MM-DD or ISO 8601 datetime)",
+		help_text=(
+			f"{noun} Gregory first found on or after this date (YYYY-MM-DD, from the "
+			"start of the day) or moment (ISO 8601 datetime such as "
+			"2026-11-17T08:00:00Z; without an offset it is read in the server's "
+			"time zone, UTC). Inclusive. Invalid values return 400 Bad Request."
+		),
+	)
+	before = DateOrDateTimeFilter(
+		field_name="discovery_date",
+		bound="before",
+		label="Discovered on or before (YYYY-MM-DD or ISO 8601 datetime)",
+		help_text=(
+			f"{noun} Gregory first found on or before this date (YYYY-MM-DD, the whole "
+			"day included) or moment (ISO 8601 datetime, inclusive). Invalid values "
+			"return 400 Bad Request."
+		),
+	)
+	return after, before
 
 
 def ml_relevant_articles_q(threshold=0.8, subject_ids=None, *, exclude_manual_irrelevant=False):
@@ -543,6 +642,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		label="Has takeaways",
 		help_text=_HAS_TAKEAWAYS_HELP_ARTICLES,
 	)
+	discovery_date_after, discovery_date_before = _discovery_date_filters("Articles")
 	published_date_after = filters.DateFilter(
 		method="filter_published_date_after",
 		input_formats=["%Y-%m-%d"],
@@ -592,6 +692,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"has_takeaways",
 			"published_date_after",
 			"published_date_before",
+			"discovery_date_after",
+			"discovery_date_before",
 		]
 
 	def filter_lab_id(self, queryset, name, value):
@@ -1320,6 +1422,7 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 	)
 
 	# Date-range filters
+	discovery_date_after, discovery_date_before = _discovery_date_filters("Trials")
 	date_registration_after = filters.DateFilter(
 		field_name="date_registration",
 		lookup_expr="gte",
@@ -1408,6 +1511,8 @@ class TrialFilter(SubjectFilterMixin, filters.FilterSet):
 			"has_results",
 			"date_registration_after",
 			"date_registration_before",
+			"discovery_date_after",
+			"discovery_date_before",
 			"has_takeaways",
 			"has_patent_link",
 			"include_subject_links",
@@ -2069,6 +2174,7 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 			"with applicant_sponsor_id."
 		),
 	)
+	discovery_date_after, discovery_date_before = _discovery_date_filters("Patent families")
 	priority_date_after = filters.DateFilter(
 		field_name="earliest_priority_date",
 		lookup_expr="gte",
@@ -2176,6 +2282,8 @@ class PatentFilter(SubjectFilterMixin, filters.FilterSet):
 			"priority_date_before",
 			"publication_date_after",
 			"publication_date_before",
+			"discovery_date_after",
+			"discovery_date_before",
 			"has_grant",
 			"cpc",
 			"publication_number",

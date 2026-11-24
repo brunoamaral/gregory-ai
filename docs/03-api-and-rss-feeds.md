@@ -568,6 +568,8 @@ The `/articles/` endpoint supports the following filters. Multiple parameters ca
 | `year` | integer | Year for week filtering |
 | `published_date_after` | date (YYYY-MM-DD) | Articles published on or after this date (inclusive). Returns 400 for invalid dates. |
 | `published_date_before` | date (YYYY-MM-DD) | Articles published on or before this date (inclusive — the full day is included). Returns 400 for invalid dates. |
+| `discovery_date_after` | date (YYYY-MM-DD) or ISO 8601 datetime | Articles Gregory first found on or after this day (from midnight) or moment, inclusive. A datetime without an offset is read in the server's time zone (UTC). Use `Z` or URL-encode `+` in offsets. Returns 400 for invalid values. Unlike `last_days`, the window doesn't move with the time of the request |
+| `discovery_date_before` | date (YYYY-MM-DD) or ISO 8601 datetime | Articles Gregory first found on or before this day (the whole day included) or moment (inclusive). Returns 400 for invalid values |
 | `ordering` | string | Order results (e.g., `-published_date`, `title`) |
 | `page` | integer | Page number. `page * page_size` above 10,000 returns 400 — use `all_results=true` for deep/bulk reads instead (optionally with `format=csv`; `format=csv` alone is still paginated and subject to this same limit) |
 | `page_size` | integer | Items per page (max 100) |
@@ -593,7 +595,23 @@ GET /articles/?format=csv&all_results=true
 GET /articles/?has_clinical_trials=true
 GET /articles/?published_date_after=2023-01-01&published_date_before=2023-12-31
 GET /articles/?team_id=1&subjects=1,3&published_date_after=2022-06-01&format=csv&all_results=true
+GET /articles/?subject_id=1&discovery_date_after=2026-11-17&discovery_date_before=2026-11-23
 ```
+
+### Recipe: last week's research
+
+A page that shows one week of new research for a subject, like the weekly digest email, needs two calls. For the week of Tuesday 17 to Monday 23 November 2026:
+
+```bash
+GET /articles/?site_id=3&subject_id=1&relevant=true&discovery_date_after=2026-11-17&discovery_date_before=2026-11-23&published_date_after=2026-08-19&ordering=-ml_score
+GET /trials/?site_id=3&subject_id=1&discovery_date_after=2026-11-17&discovery_date_before=2026-11-23&date_registration_after=2026-08-19&ordering=recruiting_first
+```
+
+- `discovery_date_*` is when Gregory first found the record, so the same URL always returns the same week and past weeks stay reachable. Pass datetimes (`2026-11-17T08:05:00Z`) to cut at a precise moment, such as when the email goes out.
+- `published_date_after` and `date_registration_after` (window start minus 90 days) leave out old records that a backfill found this week. The email applies the same 90-day guard.
+- Trials have no relevance score. `ordering=recruiting_first` lists recruiting trials first, then the newest, as the email does.
+- Swap `subject_id` for `category_id` or `category_slug` for a topic page. Add `include=editorial` for takeaways.
+- `relevant=true` here is the API rule (relevant by a human or by AI), not the email's stricter rule, so an article an editor rejected can still appear when the models say yes.
 
 ---
 
@@ -643,7 +661,7 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 
 | Model | Endpoint | Parameters | Notes |
 |:------|:---------|:-----------|:------|
-| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `author_id`, `lab_id`, `doi`, `pmid`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `title`, `summary`, `ordering`, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, pagination | |
+| Articles | `GET /articles/` | `include`, `has_takeaways`, `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `author_id`, `lab_id`, `doi`, `pmid`, `category_slug`, `category_id`, `category_modality`, `journal_slug`, `source_id`, `search`, `title`, `summary`, `ordering`, `relevant`, `ml_threshold`, `ml_score_min`, `open_access`, `last_days`, `week`, `year`, `has_clinical_trials`, `published_date_after`, `published_date_before`, `discovery_date_after`, `discovery_date_before`, pagination | |
 | Articles | `POST /articles/post/` | `title`, `link`, `doi`, `summary`, `source_id`, `kind` | Create article — see [response codes below](#post-articlespost-response-codes) |
 | Articles | `POST /articles/edit/` | `doi` *(req)*, `takeaways`, `summary_plain_english`, `access`, `retracted`, `kind` | Edit an existing article, API key required — see [below](#post-articlesedit) |
 | Articles | `GET /articles/{id}/` | `id` (path) | |
@@ -671,14 +689,14 @@ Trials still carry editorial content **per organisation**, and each trial entry 
 | Teams | `GET /teams/` | Standard pagination | |
 | Teams | `GET /teams/{id}/` | `id` (path) | |
 | Teams | `GET /teams/{id}/subjects/{subject_id}/categories/` | `id`, `subject_id` (path) | |
-| Trials | `GET /trials/` | `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `category_id`, `category_slug`, `category_modality`, `source_id`, `status`, `search`, `title`, `summary`, `ordering`, `has_patent_link`, `include_subject_links`, trial-specific filters, pagination | See parameter details below |
+| Trials | `GET /trials/` | `team_id`, `site_id`, `subject_id`, `subjects`, `subjects_any`, `category_id`, `category_slug`, `category_modality`, `source_id`, `status`, `search`, `title`, `summary`, `ordering`, `has_patent_link`, `include_subject_links`, `discovery_date_after`, `discovery_date_before`, trial-specific filters, pagination | See parameter details below |
 | Trials | `POST /trials/edit/` | `identifiers` *(req)*, `takeaways`, `summary_plain_english` | Edit a trial's editorial content for the key's organisation, API key required — see [below](#post-trialsedit) |
 | Trials | `GET /trials/{id}/` | `id` (path), `include_subject_links` | Adds `trial_sites` and `patent_links` ([Patents](#patents)) |
 | Trials | `GET /trials/stats/` | Same filters as `GET /trials/` | Totals per `recruitment_status_normalized` bucket (not_yet_recruiting, recruiting, enrolling_by_invitation, active_not_recruiting, not_recruiting, suspended, completed, terminated, withdrawn, unknown, other — always present, 0 when empty) plus `no_status`, `by_subject`, `by_phase` (per `TrialPhase` + `no_phase`), `by_region` (per `TrialRegion` + `no_region`), `by_country` (`[{country, count}]`, null-country entry last), `by_year` (`[{year, count}]`, null-year entry last), `by_sponsor` (top 25 `[{sponsor_id, slug, name, sponsor_type, count}]`) + `no_sponsor`, `by_sponsor_type` (per `SponsorType` + `no_type`), `by_modality` (per `CategoryModality` + `no_modality`, joined over `categories.modality` — **not** a partition of `total`: a trial in two categories of different modalities is counted once per modality, and `no_modality` conflates "no category at all" with "category not yet curated with a modality"), `by_study_type` (per `TrialStudyType` + `no_study_type`; `no_study_type` is large — ~13.2k globally — mostly legacy rows with no `source_register` rather than a normalization gap), and `by_sex` (per `TrialSexEligibility` + `no_sex_data`; `no_sex_data` is large — ~46% globally — same legacy-rows caveat as `no_study_type`) over the filtered set. Replaces the `stats` block formerly embedded in `GET /trials/` list responses (breaking change). Cached for `STATS_CACHE_TTL` seconds |
 | Trials | `GET /trials/search/` | `team_id` *(req)*, `subject_id` *(req)*, `title`, `summary`, `search`, `status`, `format`, `all_results`, plus every `GET /trials/` filter (`date_registration_after`, `date_registration_before`, `phase_normalized`, `country`, …) | See [Search endpoints](#search-endpoints) below |
 | Trials | `POST /trials/search/` | Request **body** accepts the same fields as `GET /trials/search/`: `team_id`, `subject_id`, `title`, `summary`, `search`, `status`, `ordering`, `page`, `page_size`, `all_results`, plus every `GET /trials/` filter | See [GET vs POST](#get-vs-post-on-search-endpoints) |
 | Trials | `GET /trials/sites/` | Same filters as `GET /trials/`, plus `latitude__isnull` (`true`/`false`) | Flat, paginated `TrialSite` listing across the filtered trial set: `{trial_id, name, city, country, latitude, longitude}` per row — for a site-level pin map. `trial_sites` itself is detail-only (appears on `GET /trials/{id}/`, never on the list/CSV/search responses). Pagination is mandatory here — `?all_results=true` returns 400; max `page_size` is 500 |
-| Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
+| Patents | `GET /patents/` | `search`, `title`, `summary`, `subject_id`, `site_id`, `category_id`, `category_slug`, `category_modality`, `applicant_sponsor_id`, `applicant_sponsor_slug`, `applicant`, `priority_date_after`, `priority_date_before`, `publication_date_after`, `publication_date_before`, `discovery_date_after`, `discovery_date_before`, `has_grant`, `cpc`, `publication_number`, `family_id`, `has_trial_link`, `include_subject_links`, `ordering`, pagination | Patent families — only through sites with `patents_enabled`. JSON only: no CSV, no `all_results`. See [Patents](#patents) |
 | Patents | `GET /patents/{id}/` | `id` (path), `include=claims`, `include_subject_links` | Adds `publications`, `inventors`, `ipc_classes`, `links`, `trial_links`; `claims` only with `include=claims` |
 | Patents | `GET /patents/stats/` | Same filters as `GET /patents/` | `total`, `with_grant`, `with_trial_link`, `by_priority_year`. Cached for `STATS_CACHE_TTL` seconds |
 | Medicines | `GET /medicines/` | `category_id` (one or a comma-separated list), `category_slug`, `subject_id`, `site_id`, `tracked`, `regulator`, `substance`, `substance_key`, `name`, `status`, `opinion_status`, `advanced_therapy`, `orphan_medicine`, `is_combination`, `authorised_after`, `authorised_before`, `include_generics`, `ordering`, pagination | EMA-authorised human medicines and FDA-approved drugs and biologics (NDAs and BLAs) — only through sites with `medicines_enabled`, only those linked to a category in scope or approved for a subject in scope. Generics, biosimilars and duplicate products are hidden unless `include_generics=true`. JSON only: no CSV, no `all_results`. See [Medicines](#medicines) |
@@ -748,6 +766,7 @@ implemented and the one precedence rule to know.
 | `ordering` | articles, trials | ✅ | ✅ | Not supported on `/authors/search/`, which always orders by `author_id`. |
 | `published_date_after` / `published_date_before` | articles | ✅ | ✅ | Publication date range — same semantics as on `GET /articles/`. |
 | `date_registration_after` / `date_registration_before` | trials | ✅ | ✅ | Registration date range — same semantics as on `GET /trials/`. |
+| `discovery_date_after` / `discovery_date_before` | articles, trials | ✅ | ✅ | When Gregory first found the record — same semantics as on `GET /articles/`. |
 | Any other list-endpoint filter | articles, trials, authors | ✅ | ✅ | `relevant`, `subjects`, `open_access`, `phase_normalized`, `country`, `sponsor_id`, `orcid`, … — the search endpoints mount the same `ArticleFilter` / `TrialFilter` / `AuthorFilter` as the list endpoints, so every filter defined there applies. |
 
 Trials' `search` also reads `scientific_title` because trials from registries other than
@@ -956,6 +975,7 @@ Results are cached for `STATS_CACHE_TTL` seconds (default 600 s / 10 min) using 
 | `has_results` | `true`/`false`: results posted, by any of the registry signals (`results_posted`, a results completion date, a results link, or results-available = `Yes`) |
 | `date_registration_after` | Date (`YYYY-MM-DD`): trials registered on or after this date (inclusive). Returns 400 for invalid dates |
 | `date_registration_before` | Date (`YYYY-MM-DD`): trials registered on or before this date (inclusive). Returns 400 for invalid dates |
+| `discovery_date_after` / `discovery_date_before` | When Gregory first found the trial: a date (`YYYY-MM-DD`, whole days) or an ISO 8601 datetime (exact), both inclusive — same rules as on `/articles/`. Trials with no discovery date are left out by either bound. Returns 400 for invalid values |
 
 ### Registry identifier filters
 
@@ -1168,6 +1188,7 @@ Every parameter is optional.
 | `applicant` | Case-insensitive substring of an applicant's name as published; for applicants not linked to a sponsor |
 | `priority_date_after`, `priority_date_before` | `earliest_priority_date`, inclusive, `YYYY-MM-DD`. Invalid dates are `400` |
 | `publication_date_after`, `publication_date_before` | `earliest_publication_date`, same rules |
+| `discovery_date_after`, `discovery_date_before` | When Gregory imported the family: a date or an ISO 8601 datetime, as on `/articles/`. The importer backfills history, so this is "imported this week", not "new this week": for new families use `publication_date_after` |
 | `has_grant` | `true`/`false`. A heuristic on kind codes, not legal status |
 | `cpc` | Prefix match against any of the family's CPC classes: `A61K31`, `A61P25/28`. Comma-separated, OR. Spaces are ignored |
 | `publication_number` | Any member publication, in any common format: `EP4123456A1`, `EP 4123456 A1`, `EP-4123456-A1`. Without a kind code (`EP4123456`) it matches every kind. Matches on the stored country, number and kind, never as a prefix: `EP123` does not find `EP1234567`. Comma-separated, OR |
