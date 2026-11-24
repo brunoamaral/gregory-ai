@@ -123,6 +123,11 @@ KNOWN_UNEXPOSED_PARAMS = {
 		# `last_days` and `published_date_after`; revisit if an MCP use case appears.
 		"discovery_date_after",
 		"discovery_date_before",
+		# Opt-in editorial relevance rule for frontend pages (weekly-digest
+		# spec, PR 2). search_articles keeps the API's human-OR-AI `relevant`;
+		# whether a model should see editor rejections is a separate MCP
+		# decision. Revisit with that.
+		"relevance_rule",
 		# Decision E, MCP multi-tenancy audit (2026-09-16): site-scoped API
 		# visibility (#858-#868) means Django now scopes every caller by
 		# site first, so team_id can no longer widen a result set -- it had

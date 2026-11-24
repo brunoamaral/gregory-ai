@@ -583,6 +583,26 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"picking up relevance decided by an unrelated subject."
 		),
 	)
+	relevance_rule = filters.ChoiceFilter(
+		method="filter_relevance_rule",
+		choices=(
+			("api", "api"),
+			("editorial", "editorial"),
+		),
+		label="Relevance rule",
+		help_text=(
+			"Which rule relevant= uses. api (the default): relevant by a human "
+			"OR by AI — an editor marked it relevant, or the ML consensus says "
+			"so, even where an editor marked it not relevant. editorial: an "
+			"editor's verdict wins for each subject, so an article an editor "
+			"marked not relevant stays out however confident the models are "
+			"(the rule the RSS feeds use). Scoped like relevant=. On the list "
+			"it has no effect without relevant=; on /articles/stats/ it also "
+			"sets the rule behind the relevant count. ml_threshold is a separate "
+			"filter on what the models say, so adding it also drops articles "
+			"only an editor marked relevant. Invalid values return 400."
+		),
+	)
 	ml_threshold = filters.NumberFilter(
 		method="filter_ml_threshold",
 		label="ML Threshold (0.0-1.0)",
@@ -693,6 +713,7 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"subject_id",
 			"source_id",
 			"relevant",
+			"relevance_rule",
 			"ml_threshold",
 			"ml_score_min",
 			"open_access",
@@ -810,6 +831,14 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		except (ValueError, TypeError):
 			return default  # Use default if conversion fails
 
+	def _relevance_rule_is_editorial(self):
+		"""Whether ``relevance_rule=editorial`` was asked for. Read from the
+		request, like ml_threshold, because /articles/stats/ calls
+		filter_relevant directly on an unvalidated filter instance. An invalid
+		value never gets this far: relevance_rule's ChoiceFilter turns it into
+		a 400 when the list or stats queryset is filtered first."""
+		return self.request.GET.get("relevance_rule") == "editorial"
+
 	def _request_subject_ids(self):
 		"""
 		Collect the subject IDs the current request already scopes the query
@@ -864,7 +893,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		relevant" does not hide an ML "yes" here. That is deliberate: the API
 		is raw material and each frontend decides how to use it. Editorial
 		surfaces (relevant-only sitemaps, RSS feeds) use the stricter rule;
-		see relevant_articles_q.
+		see relevant_articles_q. A frontend that wants that stricter rule
+		opts in with relevance_rule=editorial; the default never changes.
 		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
 
 		When subject_id, subjects, and/or subjects_any is provided, only checks
@@ -875,12 +905,19 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		subject_ids = self._request_subject_ids()
 		threshold = self._parse_ml_threshold(0.8)
 		relevant_q = relevant_articles_q(
-			subject_ids, threshold, editor_verdict_wins=False
+			subject_ids,
+			threshold,
+			editor_verdict_wins=self._relevance_rule_is_editorial(),
 		)
 
 		if value:
 			return queryset.filter(relevant_q)
 		return queryset.exclude(relevant_q)
+
+	def filter_relevance_rule(self, queryset, name, value):
+		"""No-op on the rows: read by filter_relevant. Declared so the value
+		is validated (400 on anything but api/editorial) and documented."""
+		return queryset
 
 	def filter_ml_threshold(self, queryset, name, value):
 		"""

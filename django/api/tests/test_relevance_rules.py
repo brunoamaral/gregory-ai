@@ -13,7 +13,7 @@ Either way an article is relevant when it is relevant for at least one subject
 in play, and ``relevant=false`` is the exact complement of ``relevant=true``.
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -269,3 +269,131 @@ class RelevanceRulesTests(TestCase):
 				).values_list("article_id", flat=True)
 			)
 			self.assertEqual(len(pks), len(set(pks)))
+
+	# --- relevance_rule=editorial: the editorial rule, opted into on the API ---
+
+	def _editorial_ids(self, subject_ids):
+		return {
+			a
+			for a in Articles.objects.filter(
+				relevant_articles_q(subject_ids=subject_ids)
+			).values_list("article_id", flat=True)
+		} & {a.article_id for a in self.all_articles}
+
+	def test_relevance_rule_editorial_matches_the_editorial_rule(self):
+		everything = {a.article_id for a in self.all_articles}
+		cases = (
+			("", None),
+			(f"subject_id={self.s1.id}", [self.s1.id]),
+			(f"subject_id={self.s2.id}", [self.s2.id]),
+			(f"subjects_any={self.s1.id},{self.s2.id}", [self.s1.id, self.s2.id]),
+		)
+		for scope, subject_ids in cases:
+			with self.subTest(scope=scope):
+				sep = "&" if scope else ""
+				wanted = self._editorial_ids(subject_ids)
+				got = self._ids(f"{scope}{sep}relevant=true&relevance_rule=editorial")
+				self.assertEqual(got & everything, wanted)
+				# relevant=false stays the exact complement under the same rule.
+				rest = self._ids(f"{scope}{sep}relevant=false&relevance_rule=editorial")
+				self.assertEqual(rest & everything, everything - wanted)
+
+	def test_relevance_rule_editorial_hides_an_editor_rejection(self):
+		query = f"subject_id={self.s1.id}&relevant=true"
+		self.assertIn(self.ml_yes_editor_no.article_id, self._ids(query))
+		self.assertNotIn(
+			self.ml_yes_editor_no.article_id,
+			self._ids(f"{query}&relevance_rule=editorial"),
+		)
+
+	def test_relevance_rule_api_is_the_default(self):
+		for scope in ("", f"subject_id={self.s1.id}&"):
+			with self.subTest(scope=scope):
+				self.assertEqual(
+					self._ids(f"{scope}relevant=true&relevance_rule=api"),
+					self._ids(f"{scope}relevant=true"),
+				)
+
+	def test_relevance_rule_alone_filters_nothing(self):
+		self.assertEqual(self._ids("relevance_rule=editorial"), self._ids(""))
+
+	def test_relevance_rule_invalid_value_is_400(self):
+		for path in ("/articles/", "/articles/stats/"):
+			for value in ("strict", "EDITORIAL", "true"):
+				with self.subTest(path=path, value=value):
+					response = self.client.get(
+						path, {"relevant": "true", "relevance_rule": value}
+					)
+					self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+					self.assertIn("relevance_rule", response.data)
+
+	# A real cache, so a stats cache key that ignored relevance_rule would
+	# hand the editorial request the api count and fail here.
+	@override_settings(
+		CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+	)
+	def test_relevance_rule_sets_the_stats_relevant_count(self):
+		scope = {"subject_id": self.s1.id}
+		api = self.client.get("/articles/stats/", scope)
+		editorial = self.client.get(
+			"/articles/stats/", {**scope, "relevance_rule": "editorial"}
+		)
+		self.assertEqual(api.status_code, status.HTTP_200_OK)
+		self.assertEqual(editorial.status_code, status.HTTP_200_OK)
+		self.assertEqual(
+			api.data["relevant"], len(self._ids(f"subject_id={self.s1.id}&relevant=true"))
+		)
+		self.assertEqual(editorial.data["relevant"], len(self._editorial_ids([self.s1.id])))
+		self.assertLess(editorial.data["relevant"], api.data["relevant"])
+
+	def test_relevance_rule_in_a_post_search_body(self):
+		response = self.client.post(
+			"/articles/search/",
+			{
+				"team_id": self.team.id,
+				"subject_id": self.s1.id,
+				"relevant": True,
+				"relevance_rule": "editorial",
+			},
+			format="json",
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		got = {r["article_id"] for r in response.data["results"]}
+		self.assertEqual(got, self._editorial_ids([self.s1.id]))
+
+	def test_relevance_rule_in_a_get_search(self):
+		response = self.client.get(
+			"/articles/search/",
+			{
+				"team_id": self.team.id,
+				"subject_id": self.s1.id,
+				"relevant": "true",
+				"relevance_rule": "editorial",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		got = {r["article_id"] for r in response.data["results"]}
+		self.assertEqual(got, self._editorial_ids([self.s1.id]))
+
+	def test_relevance_rule_invalid_value_is_400_on_search(self):
+		params = {
+			"team_id": self.team.id,
+			"subject_id": self.s1.id,
+			"relevant": "true",
+			"relevance_rule": "strict",
+		}
+		get = self.client.get("/articles/search/", params)
+		post = self.client.post("/articles/search/", params, format="json")
+		self.assertEqual(get.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(post.status_code, status.HTTP_400_BAD_REQUEST)
+
+	def test_ml_threshold_still_filters_on_the_models_under_editorial(self):
+		"""Documented: ml_threshold is its own filter on what the models say,
+		so with it an editor-only yes drops out under either rule."""
+		query = f"subject_id={self.s1.id}&relevant=true&relevance_rule=editorial"
+		self.assertIn(self.editor_yes_ml_no.article_id, self._ids(query))
+		with_threshold = self._ids(f"{query}&ml_threshold=0.8")
+		self.assertNotIn(self.editor_yes_ml_no.article_id, with_threshold)
+		# The editor's no still wins over the ML yes.
+		self.assertNotIn(self.ml_yes_editor_no.article_id, with_threshold)
+		self.assertIn(self.ml_only.article_id, with_threshold)
