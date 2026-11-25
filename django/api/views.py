@@ -1691,9 +1691,9 @@ class ArticleViewSet(
 	- **all_results** - set to 'true' to bypass pagination and get all results (useful for CSV export)
 
 	# Special Article Types:
-	- **relevant** - filter for relevant articles (true/false). When combined with **subject_id**, relevance is scoped to that specific subject — only articles that are relevant *for that subject* (via ML predictions or manual marking) are returned. Without subject_id, relevance is checked across all subjects.
+	- **relevant** - filter for relevant articles (true/false). Relevance only counts for the subjects the caller can see (the site's scope): a verdict or ML consensus on a subject outside it never makes an article relevant. When combined with **subject_id** (or **subjects** / **subjects_any**), relevance is further scoped to those subjects — only articles that are relevant *for one of them* (via ML predictions or manual marking) are returned.
 	- **relevance_rule** - `api` (default: relevant by a human OR by AI) or `editorial` (an editor's "not relevant" for a subject beats an ML "yes", the rule the RSS feeds use). Sets the rule behind `relevant` and the stats `relevant` count; no effect on the list without `relevant`. Adding `ml_threshold` also keeps only what the models agree on. Other values return 400
-	- **ml_threshold** - the consensus rule behind `relevant=true`, with a custom confidence (float 0.0-1.0, e.g., 0.9). An article matches when enough models (per its subject's ML consensus setting: any, majority or all) classed it relevant with at least this probability. A model classes an article relevant only at or above the cutoff its prediction run used (0.8 by default), so values below that cutoff return the same articles as the cutoff. Subjects with ML predictions turned off never match. Scoped to subject_id when provided; defaults to 0.8 when `relevant=true` and this is omitted. To filter on the displayed `ml_score` instead, use **ml_score_min**.
+	- **ml_threshold** - the consensus rule behind `relevant=true`, with a custom confidence (float 0.0-1.0, e.g., 0.9). An article matches when enough models (per its subject's ML consensus setting: any, majority or all) classed it relevant with at least this probability. A model classes an article relevant only at or above the cutoff its prediction run used (0.8 by default), so values below that cutoff return the same articles as the cutoff. Subjects with ML predictions turned off never match. Scoped like **relevant** (visible subjects, narrowed to subject_id when provided); defaults to 0.8 when `relevant=true` and this is omitted. To filter on the displayed `ml_score` instead, use **ml_score_min**.
 	- **ml_score_min** - only articles whose `ml_score` (the score shown on each article) is at least this value (float 0.0-1.0, inclusive). Articles without an `ml_score` are left out. Applies no consensus rule and is not scoped by subject_id. Values outside 0.0-1.0 and non-numeric values return **400 Bad Request**.
 	- **open_access** - filter for open access articles (true/false)
 	- **last_days** - filter for articles from last N days (number)
@@ -1717,7 +1717,8 @@ class ArticleViewSet(
 	exactly like the equivalent list request. The `relevant` count uses the same semantics
 	as the list's `?relevant=true` filter: when `subject_id` is present it counts articles
 	relevant *for that subject* (manual review or ML consensus, honoring `ml_threshold`),
-	not articles merely relevant for some other subject. Results are cached server-side for
+	not articles merely relevant for some other subject; without one it counts relevance
+	for the caller's visible subjects only. Results are cached server-side for
 	STATS_CACHE_TTL seconds (default 600).
 
 	# Response Fields:

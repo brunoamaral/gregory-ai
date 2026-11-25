@@ -573,14 +573,13 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		method="filter_relevant",
 		label="Relevant",
 		help_text=(
-			"Filter for relevant articles (true/false). When combined with "
-			"subject_id, subjects, and/or subjects_any, relevance is scoped to "
-			"that subject or subjects — only articles relevant *for one of "
-			"those subjects* (via ML predictions or manual marking) are "
-			"returned. Without any of those, relevance is checked across every "
-			"subject in the database, so a caller that also scopes the query by "
-			"subject should always pass the same subject(s) here to avoid "
-			"picking up relevance decided by an unrelated subject."
+			"Filter for relevant articles (true/false). Relevance only counts "
+			"for the subjects the caller can see (the site's scope): an editor "
+			"verdict or ML consensus on a subject outside it never makes an "
+			"article relevant. When combined with subject_id, subjects, and/or "
+			"subjects_any, relevance is further scoped to those of the subjects "
+			"the caller can see — only articles relevant *for one of them* (via "
+			"ML predictions or manual marking) are returned."
 		),
 	)
 	relevance_rule = filters.ChoiceFilter(
@@ -614,7 +613,8 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 			"at or above the cutoff its prediction run used (0.8 by default), so "
 			"values below that cutoff return the same articles as the cutoff. "
 			"Subjects with ML "
-			"predictions turned off never match. Scoped to "
+			"predictions turned off never match. Scoped like relevant=: only "
+			"the subjects the caller can see count, narrowed to "
 			"subject_id/subjects/subjects_any when provided. Defaults to 0.8 "
 			"when relevant=true and this is omitted. To filter on the displayed "
 			"ml_score instead, use ml_score_min."
@@ -855,8 +855,9 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		back to the whole database -- an article could be returned as
 		"relevant" on the strength of ML consensus reached for a completely
 		different, unrelated subject. Returns ``None`` when the request names
-		no subject at all, which preserves the original "check every
-		auto_predict subject" behaviour for an unscoped request.
+		no subject at all. Relevance filters do not call this directly: they
+		go through ``_relevance_subject_ids``, which also applies the caller's
+		visible scope.
 		"""
 		ids = set()
 		subject_id = self.request.GET.get("subject_id")
@@ -879,6 +880,37 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 					continue
 		return sorted(ids) if ids else None
 
+	def _relevance_subject_ids(self):
+		"""
+		The subjects whose relevance may count for this request: the ones it
+		names (``_request_subject_ids``), kept to the ones the caller can see
+		(``request.visible_subject_ids``, the site scope set by
+		``VisibleOrgMiddleware``).
+
+		Without the visible scope, a request that names no subject would
+		read editor verdicts and ML consensus for every subject in the
+		database. The article itself is visible (it carries a visible
+		subject), but another site's editor "yes", or the models' consensus
+		on a subject this site does not cover, would make it count as
+		relevant here. Naming a subject outside the scope does not widen it
+		either: that subject's verdicts are not the caller's to read, so
+		the scope comes out empty and nothing counts as relevant.
+
+		Returns ``None`` (every subject) only when no visibility scope is
+		attached to the request at all -- code paths that bypass the
+		middleware, as SubjectVisibilityMixin does. A scope adds no join:
+		both halves of the rule already loop over or filter by subject ids,
+		and a smaller list means fewer per-subject ML subqueries.
+		"""
+		named = self._request_subject_ids()
+		visible = getattr(self.request, "visible_subject_ids", None)
+		if visible is None:
+			return named
+		visible = set(visible)
+		if named is None:
+			return sorted(visible)
+		return sorted(visible.intersection(named))
+
 	def _get_ml_relevant_articles_query(self, threshold=0.8, subject_ids=None):
 		"""Build a database-level query to find ML-relevant articles based on consensus logic.
 
@@ -897,12 +929,13 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 		opts in with relevance_rule=editorial; the default never changes.
 		Uses ml_threshold parameter if provided, otherwise defaults to 0.8
 
-		When subject_id, subjects, and/or subjects_any is provided, only checks
-		relevance for those specific subjects (see _request_subject_ids).
+		Relevance only counts for the subjects the caller can see; when
+		subject_id, subjects, and/or subjects_any is provided, only for those
+		of them (see _relevance_subject_ids).
 
 		relevant=false is the exact complement of relevant=true.
 		"""
-		subject_ids = self._request_subject_ids()
+		subject_ids = self._relevance_subject_ids()
 		threshold = self._parse_ml_threshold(0.8)
 		relevant_q = relevant_articles_q(
 			subject_ids,
@@ -930,8 +963,9 @@ class ArticleFilter(SubjectFilterMixin, filters.FilterSet):
 				# Invalid threshold, return empty queryset
 				return queryset.none()
 
-			# Scope to subject_id/subjects/subjects_any if provided
-			subject_ids = self._request_subject_ids()
+			# Scope to the visible subjects, and to subject_id/subjects/
+			# subjects_any if provided
+			subject_ids = self._relevance_subject_ids()
 
 			# Use efficient database-level query instead of Python loop
 			ml_relevant_q = self._get_ml_relevant_articles_query(
